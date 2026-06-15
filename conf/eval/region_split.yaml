@@ -6,4 +6,4 @@
 # trajectories, sparse transverse — so a fixed NN-scaled band captures ~nothing).
 kind: region_split
 near_percentile: 10.0
-distance_cache: Pendulum_20260609b_8f70cffb056147db813e959091a95e0c/Pendulum_pmp_value_samples_256_20260609b_region_distances.npz
+distance_cache: Pendulum_20260610_0849d5863f0c4b25ba5809e8937b0d64/Pendulum_pmp_value_samples_256_20260610_region_distances.npz
