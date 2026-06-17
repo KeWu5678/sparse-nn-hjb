@@ -2,24 +2,30 @@
 
 Region split scored over the **full dataset** on the live as-fit model. `near` = lowest 10% of samples by distance to the switching set; `far` = the rest. See `README.md` for the error-metric rationale.
 
+## Value samples & regions of attraction (Fig. 2 left/middle)
+
+Left: a 3D scatter of the raw training value samples (no interpolation), on the same state-plane extent as the right panel. Right: the regions of attraction to the (periodic) upright equilibria — PMP characteristics filled by nearest-point classification — separated by the nonsmooth switching curves. After Han & Yang (arXiv:2312.17467), Fig. 2 left/middle.
+
+![value samples & regions of attraction](figures/figure2_value_and_switching.png)
+
 ## Mean per-sample L1 (primary)
 
 `near/far` > 1 ⇒ worse at the switching set. Region mean per-sample L1 (absolute) error / global mean ‖true‖ — count-fair and robust to the V→0 interior.
 
-Mean per-sample L1 over the full dataset — count-fair, robust to V→0
+Mean per-sample L1 over the full dataset — count-fair, robust to V→0. All runs use `profile` insertion; rows are grouped by activation, comparing the two models (semiconcave vs signed) side by side.
 
-| kind        | insertion | activation   | loss | gamma | neurons | near L1  | far L1   | near/far |
-| ----------- | --------- | ------------ | ---- | ----- | ------- | -------- | -------- | -------- |
-| semiconcave | profile   | softplus     | h1   | 0     | 12      | 5.27e-01 | 1.79e-01 | 2.94     |
-| semiconcave | profile   | tanh         | h1   | 1     | 39      | 2.82e-01 | 8.62e-02 | 3.27     |
-| semiconcave | profile   | matern52     | h1   | 1     | 37      | 2.79e-01 | 6.72e-02 | 4.15     |
-| semiconcave | profile   | gelu_squared | h1   | 1     | 18      | 1.98e-01 | 4.55e-02 | 4.36     |
-| semiconcave | profile   | gaussian     | h1   | 0     | 16      | 2.41e-01 | 5.12e-02 | 4.71     |
-| signed      | profile   | softplus     | h1   | 1     | 117     | 2.97e-01 | 1.06e-01 | 2.79     |
-| signed      | profile   | gaussian     | h1   | 0     | 128     | 7.74e-02 | 2.42e-02 | 3.20     |
-| signed      | profile   | gelu_squared | h1   | 1     | 58      | 2.15e-01 | 6.73e-02 | 3.20     |
-| signed      | profile   | tanh         | h1   | 0     | 116     | 2.14e-01 | 4.53e-02 | 4.71     |
-| signed      | profile   | matern52     | h1   | 1     | 112     | 1.73e-01 | 2.96e-02 | 5.83     |
+| activation   | kind        | loss | gamma | neurons | near L1  | far L1   | near/far |
+| ------------ | ----------- | ---- | ----- | ------- | -------- | -------- | -------- |
+| gaussian     | semiconcave | h1   | 1     | 47      | 2.84e+00 | 8.99e-01 | 3.16     |
+| gaussian     | signed      | h1   | 1     | 130     | 1.32e+00 | 3.78e-01 | 3.50     |
+| gelu_squared | semiconcave | h1   | 0     | 32      | 2.81e+00 | 9.02e-01 | 3.12     |
+| gelu_squared | signed      | h1   | 0     | 48      | 2.74e+00 | 8.42e-01 | 3.25     |
+| matern52     | semiconcave | h1   | 0     | 45      | 2.81e+00 | 8.73e-01 | 3.22     |
+| matern52     | signed      | h1   | 1     | 145     | 5.73e-01 | 1.65e-01 | 3.47     |
+| softplus     | semiconcave | h1   | 0     | 16      | 2.76e+00 | 8.56e-01 | 3.22     |
+| softplus     | signed      | h1   | 0     | 83      | 2.77e+00 | 8.39e-01 | 3.30     |
+| tanh         | semiconcave | h1   | 1     | 57      | 2.84e+00 | 9.23e-01 | 3.08     |
+| tanh         | signed      | h1   | 1     | 139     | 1.78e+00 | 5.34e-01 | 3.33     |
 
 ## Error vs distance to switching set (diagnostic)
 
@@ -31,13 +37,13 @@ Relative H1 (kept for continuity — confounded by the V→0 interior)
 
 | kind        | insertion | activation   | loss | gamma | neurons | near H1  | far H1   | near/far |
 | ----------- | --------- | ------------ | ---- | ----- | ------- | -------- | -------- | -------- |
-| semiconcave | profile   | softplus     | h1   | 0     | 12      | 1.81e-01 | 2.47e-01 | 0.73     |
-| semiconcave | profile   | tanh         | h1   | 1     | 39      | 1.15e-01 | 1.26e-01 | 0.91     |
-| semiconcave | profile   | gelu_squared | h1   | 1     | 18      | 7.85e-02 | 7.23e-02 | 1.09     |
-| semiconcave | profile   | gaussian     | h1   | 0     | 16      | 8.29e-02 | 6.95e-02 | 1.19     |
-| semiconcave | profile   | matern52     | h1   | 1     | 37      | 1.38e-01 | 1.07e-01 | 1.29     |
-| signed      | profile   | gelu_squared | h1   | 1     | 58      | 9.40e-02 | 1.03e-01 | 0.92     |
-| signed      | profile   | softplus     | h1   | 1     | 117     | 1.35e-01 | 1.32e-01 | 1.02     |
-| signed      | profile   | gaussian     | h1   | 0     | 128     | 4.07e-02 | 3.64e-02 | 1.12     |
-| signed      | profile   | tanh         | h1   | 0     | 116     | 7.29e-02 | 6.23e-02 | 1.17     |
-| signed      | profile   | matern52     | h1   | 1     | 112     | 7.20e-02 | 5.10e-02 | 1.41     |
+| semiconcave | profile   | softplus     | h1   | 0     | 16      | 1.00e+00 | 9.92e-01 | 1.01     |
+| semiconcave | profile   | tanh         | h1   | 1     | 57      | 9.97e-01 | 9.77e-01 | 1.02     |
+| semiconcave | profile   | gelu_squared | h1   | 0     | 32      | 9.87e-01 | 9.66e-01 | 1.02     |
+| semiconcave | profile   | gaussian     | h1   | 1     | 47      | 9.99e-01 | 9.70e-01 | 1.03     |
+| semiconcave | profile   | matern52     | h1   | 0     | 45      | 1.01e+00 | 9.76e-01 | 1.03     |
+| signed      | profile   | softplus     | h1   | 0     | 83      | 1.01e+00 | 9.86e-01 | 1.02     |
+| signed      | profile   | gelu_squared | h1   | 0     | 48      | 9.94e-01 | 9.43e-01 | 1.05     |
+| signed      | profile   | tanh         | h1   | 1     | 139     | 6.81e-01 | 5.94e-01 | 1.15     |
+| signed      | profile   | matern52     | h1   | 1     | 145     | 2.76e-01 | 2.17e-01 | 1.27     |
+| signed      | profile   | gaussian     | h1   | 1     | 130     | 5.13e-01 | 4.04e-01 | 1.27     |
