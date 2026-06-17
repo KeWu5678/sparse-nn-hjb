@@ -5,14 +5,14 @@ set -euxo pipefail
 # under systemd. Logs go to the journal (journalctl -u mlflow).
 
 dnf update -y
-dnf install -y python3 python3-pip
+dnf install -y python${python_minor} python${python_minor}-pip
 
-python3 -m venv /opt/mlflow/venv
+python${python_minor} -m venv /opt/mlflow/venv
 /opt/mlflow/venv/bin/pip install --upgrade pip
 %{ if mlflow_version != "" ~}
 /opt/mlflow/venv/bin/pip install "mlflow==${mlflow_version}"
 %{ else ~}
-/opt/mlflow/venv/bin/pip install mlflow
+/opt/mlflow/venv/bin/pip install "${mlflow_package_spec}"
 %{ endif ~}
 
 cat > /etc/systemd/system/mlflow.service <<'UNIT'

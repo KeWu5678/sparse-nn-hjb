@@ -61,6 +61,11 @@ make mlflow-deploy
 
 This runs `terraform init` and `terraform apply` in `deploy/terraform`.
 
+The bootstrap environment is intentionally aligned with the repository
+`pyproject.toml`: Terraform defaults to Python `3.12` and installs
+`mlflow>=2.20`. Use `mlflow_version` only when you need to pin an exact server
+version for a migration or rollback.
+
 `user_data` runs only when an instance is first created. If you already deployed
 an older MLflow instance and only change `user_data.sh.tftpl`, `terraform apply`
 will not rewrite the running systemd service on that instance. Recreate the
