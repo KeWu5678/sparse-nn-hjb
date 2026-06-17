@@ -94,9 +94,11 @@ penaltypowers:  ## sweep: data × homogeneous activation × penalty power × gam
 	  hydra.sweep.dir=rawdata/logs/multirun/penaltypowers \
 	  env.verbose=$(VERBOSE) \
 	  env.seed=42 \
-	  data=vdp,pendulum \
+	  data=vdp\
+	  model.kind=signed \
+	  model.insertion=finite_step \
 	  model.activation=$(HOMOGENEOUS_ACTIVATIONS) \
 	  model.power=2.0,2.01,3.0,4.0,5.0 \
-	  model.gamma=0,0.01,0.1,1,10 \
+	  model.gamma=0,0.1,1,10 \
 	  'model.loss_weights=[1.0,0.0],[1.0,1.0]'
 	$(PY) experiments/penaltypowers/analysis.py
