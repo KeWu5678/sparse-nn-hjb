@@ -29,6 +29,65 @@ from .metric import _load_results
 logger = logging.getLogger(__name__)
 
 
+def _repel_labels(ax, xs, ys, labels, *, fontsize=7, max_iter=300, pad=1.5,
+                  max_radius=48.0, spring=0.08):
+    """Annotate each (x, y) with its label, then iteratively push the text boxes
+    apart in display space so they don't overlap. A thin leader line tethers each
+    label back to its point. Each label is clamped within ``max_radius`` points of
+    its anchor (so dense clusters can't push labels off to infinity) and pulled
+    back toward a baseline offset by a weak ``spring``. Pure matplotlib."""
+    base = (0.0, 9.0)
+    anns = [
+        ax.annotate(
+            text, xy=(x, y), xytext=base, textcoords="offset points",
+            fontsize=fontsize, ha="center", va="center", zorder=4,
+            arrowprops=dict(arrowstyle="-", lw=0.4, color="0.6", shrinkA=0, shrinkB=2),
+        )
+        for x, y, text in zip(xs, ys, labels)
+    ]
+    fig = ax.figure
+    fig.canvas.draw()
+    if len(anns) < 2:
+        return anns
+    pt_per_px = 72.0 / fig.dpi
+    renderer = fig.canvas.get_renderer()
+    for _ in range(max_iter):
+        bboxes = [a.get_window_extent(renderer) for a in anns]
+        shifts = [[0.0, 0.0] for _ in anns]
+        overlap = False
+        for i in range(len(anns)):
+            bi = bboxes[i]
+            cix, ciy = (bi.x0 + bi.x1) / 2, (bi.y0 + bi.y1) / 2
+            for j in range(i + 1, len(anns)):
+                bj = bboxes[j]
+                ox = min(bi.x1, bj.x1) - max(bi.x0, bj.x0) + 2 * pad
+                oy = min(bi.y1, bj.y1) - max(bi.y0, bj.y0) + 2 * pad
+                if ox > 0 and oy > 0:
+                    overlap = True
+                    cjx, cjy = (bj.x0 + bj.x1) / 2, (bj.y0 + bj.y1) / 2
+                    ddx, ddy = cix - cjx, ciy - cjy
+                    if ddx == 0 and ddy == 0:
+                        ddy = 1.0
+                    dist = (ddx ** 2 + ddy ** 2) ** 0.5 or 1.0
+                    mag = min(ox, oy) / 2.0
+                    ux, uy = ddx / dist, ddy / dist
+                    shifts[i][0] += ux * mag; shifts[i][1] += uy * mag
+                    shifts[j][0] -= ux * mag; shifts[j][1] -= uy * mag
+        if not overlap:
+            break
+        for a, (sx, sy) in zip(anns, shifts):
+            px, py = a.get_position()
+            # repulsion (px -> pt) + weak spring back toward the baseline offset
+            nx = px + sx * pt_per_px + spring * (base[0] - px)
+            ny = py + sy * pt_per_px + spring * (base[1] - py)
+            # hard clamp so a crowded cluster can never push a label to infinity
+            r = (nx ** 2 + ny ** 2) ** 0.5
+            if r > max_radius:
+                nx, ny = nx * max_radius / r, ny * max_radius / r
+            a.set_position((nx, ny))
+    return anns
+
+
 def plot_score_tradeoff(
     rows: Sequence[dict[str, Any]],
     *,
@@ -43,12 +102,12 @@ def plot_score_tradeoff(
     show_plot: bool = False,
 ):
     """Scatter of experiment summary rows (x vs y), labeled and optionally colored by a third column."""
-    fig, ax = plt.subplots(figsize=(7, 4.5), dpi=150)
+    fig, ax = plt.subplots(figsize=(8, 5), dpi=150)
     if color:
         color_values = [str(row.get(color, "")) for row in rows]
         categories = list(dict.fromkeys(color_values))
-        cmap = plt.get_cmap("tab10")
-        palette = {cat: cmap(i % 10) for i, cat in enumerate(categories)}
+        cmap = plt.get_cmap("tab10" if len(categories) <= 10 else "tab20")
+        palette = {cat: cmap(i % cmap.N) for i, cat in enumerate(categories)}
         colors = [palette[value] for value in color_values]
     else:
         categories = []
@@ -57,22 +116,25 @@ def plot_score_tradeoff(
 
     xs = [float(row[x]) for row in rows]
     ys = [float(row[y]) for row in rows]
-    ax.scatter(xs, ys, s=52, c=colors, edgecolor="white", linewidth=0.7, zorder=3)
-    for row, x_val, y_val in zip(rows, xs, ys):
-        ax.annotate(str(row.get(label, "")), (x_val, y_val), xytext=(5, 4),
-                    textcoords="offset points", fontsize=7)
+    ax.scatter(xs, ys, s=52, c=colors, edgecolor="white", linewidth=0.7,
+               alpha=0.9, zorder=3)
+    _repel_labels(ax, xs, ys, [str(row.get(label, "")) for row in rows])
     if categories:
         handles = [
             plt.Line2D([0], [0], marker="o", color="w", markerfacecolor=palette[cat],
                        markeredgecolor="white", markersize=7, label=f"{color}={cat}")
             for cat in categories
         ]
-        ax.legend(handles=handles, fontsize=8, frameon=False)
+        ax.legend(handles=handles, fontsize=8, frameon=False, loc="upper left",
+                  bbox_to_anchor=(1.01, 1.0), borderaxespad=0.0)
     ax.set_title(title)
     ax.set_xlabel(xlabel or x)
     ax.set_ylabel(ylabel or y)
     ax.grid(True, alpha=0.25)
-    fig.tight_layout()
+    if not categories:
+        # tight_layout can't account for a legend placed outside the axes;
+        # bbox_inches="tight" at savefig handles that case instead.
+        fig.tight_layout()
     if save_path is not None:
         save_path = os.fspath(save_path)
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
@@ -100,19 +162,30 @@ def _get_field(dataset: Any, name: str) -> np.ndarray:
     )
 
 
-def plot_vdp_value_scatter3d(
+def plot_value_scatter3d(
     dataset: Any,
     *,
-    title: str = "VDP dataset: value function V(x₀)",
-    s: float = 30.0,
-    alpha: float = 0.8,
+    ax: Optional[Any] = None,
+    title: str = "Value samples V(x)",
+    s: float = 8.0,
+    alpha: float = 0.85,
     cmap: str = "viridis",
+    xlim: Optional[Tuple[float, float]] = None,
+    ylim: Optional[Tuple[float, float]] = None,
     elev: float = 30.0,
-    azim: float = 45.0,
+    azim: float = -120.0,
+    colorbar: bool = True,
     save_path: Optional[str] = None,
     show: bool = True,
 ) -> Tuple[plt.Figure, Any]:
-    """3D scatter of dataset samples (x[0], x[1], V), colored by value."""
+    """3D scatter of dataset samples ``(x[0], x[1], V)``, colored by value.
+
+    Experiment-agnostic: works on any dataset exposing ``x`` (N, 2) and ``v`` (N,)
+    fields. Plots the raw samples only — no surface, no interpolation — so it shows
+    exactly the training data and its support. ``xlim``/``ylim`` set the state-plane
+    extent (e.g. to match a companion phase-plane panel). Pass ``ax`` (a 3D axis)
+    to compose into a multi-panel figure.
+    """
     x = _get_field(dataset, "x")
     v = _get_field(dataset, "v")
 
@@ -123,24 +196,119 @@ def plot_vdp_value_scatter3d(
     if v.shape[0] != x.shape[0]:
         raise ValueError(f"Mismatched lengths: x has {x.shape[0]} rows, v has {v.shape[0]} entries")
 
-    x0_0 = x[:, 0]
-    x0_1 = x[:, 1]
+    if ax is None:
+        fig = plt.figure(figsize=(8, 6.5))
+        ax = fig.add_subplot(111, projection="3d")
+    else:
+        fig = ax.figure
 
-    fig = plt.figure(figsize=(10, 8))
-    ax = fig.add_subplot(111, projection="3d")
-    sc = ax.scatter(x0_0, x0_1, v, c=v, cmap=cmap, s=s, alpha=alpha)
-    cbar = fig.colorbar(sc, ax=ax, shrink=0.7)
-    cbar.set_label("Value function V")
+    sc = ax.scatter(x[:, 0], x[:, 1], v, c=v, cmap=cmap, s=s, alpha=alpha,
+                    depthshade=True)
+    if colorbar:
+        cbar = fig.colorbar(sc, ax=ax, shrink=0.6, pad=0.1)
+        cbar.set_label("V(x)")
 
-    ax.set_xlabel("x₀[0]")
-    ax.set_ylabel("x₀[1]")
-    ax.set_zlabel("V(x₀)")
+    if xlim is not None:
+        ax.set_xlim(*xlim)
+    if ylim is not None:
+        ax.set_ylim(*ylim)
+    ax.set_xlabel("x[0]")
+    ax.set_ylabel("x[1]")
+    ax.set_zlabel("V(x)")
     ax.set_title(title)
     ax.view_init(elev=elev, azim=azim)
-    plt.tight_layout()
+    fig.tight_layout()
 
     if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+        fig.savefig(save_path, dpi=300, bbox_inches="tight")
+    if show:
+        plt.show()
+    return fig, ax
+
+
+def plot_nonsmooth_curve(
+    curve: "str | os.PathLike[str] | dict[str, Any]",
+    *,
+    dataset: Any = None,
+    distance: Optional[np.ndarray] = None,
+    near_percentile: float = 10.0,
+    ax: Optional[plt.Axes] = None,
+    title: str = "Switching set & smooth basin",
+    curve_color: str = "k",
+    save_path: Optional[str] = None,
+    show: bool = True,
+) -> Tuple[plt.Figure, plt.Axes]:
+    """2D switching-set arms + smooth basin over the state plane.
+
+    Reproduces the middle panel of Fig. 2 in Han & Yang (arXiv:2312.17467) — the
+    nonsmooth curves of the pendulum value function and the smooth region of
+    attraction to the upright equilibrium. ``curve`` is a path to (or mapping of) a
+    nonsmooth-curve ``npz`` exposing ``points`` (n, 2) spiral-arm samples, optional
+    ``value_levels`` (n,), and ``basin`` (m, 2) boundary ring (see
+    ``src.OpenLoop.pendulum.nonsmooth.NonsmoothCurve``).
+
+    If ``dataset`` (and optionally per-sample ``distance`` to the switching set) is
+    given, the value samples are overlaid: the lowest ``near_percentile``% by
+    distance are highlighted as the near region, the rest drawn faintly. Pass
+    ``ax`` to compose into a multi-panel figure.
+    """
+    if hasattr(curve, "keys"):
+        points = np.asarray(curve["points"])
+        value_levels = np.asarray(curve["value_levels"]) if "value_levels" in curve else None
+        basin = np.asarray(curve["basin"]) if "basin" in curve else None
+    else:
+        with np.load(os.fspath(curve)) as data:
+            points = np.asarray(data["points"])
+            value_levels = np.asarray(data["value_levels"]) if "value_levels" in data.files else None
+            basin = np.asarray(data["basin"]) if "basin" in data.files else None
+
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(6.5, 6))
+    else:
+        fig = ax.figure
+
+    # Optional sample overlay, split near/far by distance to the switching set.
+    if dataset is not None:
+        x = np.asarray(_get_field(dataset, "x"))
+        if distance is not None:
+            d = np.asarray(distance).reshape(-1)
+            thresh = float(np.percentile(d, near_percentile))
+            near = d <= thresh
+            ax.scatter(x[~near, 0], x[~near, 1], s=4, c="0.8", label="far samples", zorder=1)
+            ax.scatter(x[near, 0], x[near, 1], s=7, c="#d62728",
+                       label=f"near (≤{near_percentile:g}%)", zorder=2)
+        else:
+            ax.scatter(x[:, 0], x[:, 1], s=4, c="0.8", label="samples", zorder=1)
+
+    # Smooth basin boundary (closed ring).
+    if basin is not None and basin.shape[0] >= 3:
+        ring = np.vstack([basin, basin[:1]])
+        ax.plot(ring[:, 0], ring[:, 1], "-", color="#1f77b4", lw=1.8,
+                label="smooth basin", zorder=3)
+
+    # Switching-set spiral arms drawn as connected curves (the nonsmooth curves the
+    # value function is non-differentiable across). The arms are stored as 4 equal
+    # blocks tracked across value levels (see NonsmoothCurve), so connect each block
+    # in stored order; fall back to a single polyline if the layout differs.
+    if points.size:
+        n = points.shape[0]
+        arm_len = n // 4
+        arms = ([points[i * arm_len:(i + 1) * arm_len] for i in range(4)]
+                if arm_len >= 2 and n == 4 * arm_len else [points])
+        for k, arm in enumerate(arms):
+            ax.plot(arm[:, 0], arm[:, 1], "-", color=curve_color, lw=2.2, zorder=4,
+                    label="switching set" if k == 0 else None)
+
+    ax.set_xlabel("x[0]")
+    ax.set_ylabel("x[1]")
+    ax.set_title(title)
+    ax.set_aspect("equal", adjustable="datalim")
+    ax.legend(fontsize=8, loc="best", framealpha=0.9)
+    ax.grid(True, alpha=0.25)
+    fig.tight_layout()
+
+    if save_path:
+        fig.savefig(save_path, dpi=300, bbox_inches="tight")
     if show:
         plt.show()
     return fig, ax
@@ -403,44 +571,176 @@ def plot_inner_weight_pairwise_distance(
     return fig, axes_list
 
 
-def plot_model_value_surface(
-    pkl_path: str | os.PathLike[str],
+def plot_regions_of_attraction(
+    points: np.ndarray,
+    labels: np.ndarray,
     *,
-    gamma_index: int = 0,
-    grid_n: int = 100,
+    curve_arms: "Optional[Sequence[np.ndarray]]" = None,
+    region_labels: "Optional[Sequence[str]]" = None,
+    curve_label: str = "switching set",
+    ax: Optional[plt.Axes] = None,
+    domain: Tuple[float, float, float, float] = (-10.0, 10.0, -8.0, 8.0),
+    grid_n: int = 400,
+    region_colors: Sequence[str] = ("#c9b3de", "#f3b0a0", "#a9c8e8", "#f3e0a0", "#a9dca0", "#f0c0e0"),
+    curve_color: str = "k",
+    curve_lw: float = 0.9,
+    title: str = "Regions of attraction & switching set",
+    save_path: Optional[str] = None,
+    show: bool = True,
+) -> Tuple[plt.Figure, plt.Axes]:
+    """Filled regions of attraction (nearest-point fill) + switching curves.
+
+    Reproduces the middle panel of Fig. 2 in Han & Yang (arXiv:2312.17467): the
+    colored regions of attraction to the (periodic) equilibria, separated by the
+    nonsmooth switching curves. ``points`` (N, 2) are scattered samples — e.g. PMP
+    trajectory states tiled across periods — and ``labels`` (N,) their integer
+    region id; each grid cell is colored by its nearest point's label, a Voronoi
+    fill that turns the characteristics into solid basins. ``curve_arms`` is an
+    optional iterable of (m, 2) polylines (the switching-set arms, tiled) drawn on
+    top. ``region_labels[i]`` names region id ``i`` in a legend (with the switching
+    set, ``curve_label``); omit for no legend. Pass ``ax`` to compose into a
+    multi-panel figure.
+    """
+    from scipy.spatial import cKDTree
+    from matplotlib.colors import ListedColormap
+    from matplotlib.patches import Patch
+    from matplotlib.lines import Line2D
+
+    points = np.asarray(points, dtype=np.float64)
+    labels = np.asarray(labels)
+    x0, x1, y0, y1 = domain
+
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(7, 5))
+    else:
+        fig = ax.figure
+
+    nx = int(grid_n)
+    ny = max(2, int(round(grid_n * (y1 - y0) / (x1 - x0))))
+    gx = np.linspace(x0, x1, nx)
+    gy = np.linspace(y0, y1, ny)
+    GX, GY = np.meshgrid(gx, gy)
+    _, idx = cKDTree(points).query(np.column_stack([GX.ravel(), GY.ravel()]), k=1)
+    region = labels[idx].reshape(GX.shape)
+
+    n_regions = int(labels.max()) + 1 if labels.size else 1
+    colors = [region_colors[i % len(region_colors)] for i in range(n_regions)]
+    ax.pcolormesh(GX, GY, region, cmap=ListedColormap(colors), shading="auto",
+                  vmin=-0.5, vmax=n_regions - 0.5)
+
+    drew_curve = False
+    for arm in curve_arms or ():
+        arm = np.asarray(arm)
+        if arm.shape[0] >= 2:
+            ax.plot(arm[:, 0], arm[:, 1], "-", color=curve_color, lw=curve_lw, zorder=4)
+            drew_curve = True
+
+    if region_labels is not None:
+        handles = [Patch(facecolor=colors[i], edgecolor="none", label=region_labels[i])
+                   for i in range(min(n_regions, len(region_labels)))]
+        if drew_curve:
+            handles.append(Line2D([0], [0], color=curve_color, lw=curve_lw, label=curve_label))
+        ax.legend(handles=handles, fontsize=7, loc="upper right", framealpha=0.9,
+                  title="region of attraction →")
+
+    ax.set_xlim(x0, x1)
+    ax.set_ylim(y0, y1)
+    ax.set_aspect("equal")
+    ax.set_xlabel("x[0]")
+    ax.set_ylabel("x[1]")
+    ax.set_title(title)
+    fig.tight_layout()
+
+    if save_path:
+        fig.savefig(save_path, dpi=300, bbox_inches="tight")
+    if show:
+        plt.show()
+    return fig, ax
+
+
+def _best_iteration_atoms(history: Any, run_index: int = 0) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Best-iteration ``(a, b, u)`` from a fit result, robust to its container.
+
+    Accepts a single ``History`` object (attribute access), a dict-like run, or a
+    list/tuple of either (selecting ``run_index``). Returns inner weights ``a``
+    (n, d), inner bias ``b`` (n,), and outer weights ``u`` (1, n).
+    """
+    if isinstance(history, (list, tuple)):
+        history = history[run_index]
+
+    def field(name: str) -> Any:
+        if hasattr(history, name):
+            return getattr(history, name)
+        if hasattr(history, "__getitem__"):
+            try:
+                return history[name]
+            except (KeyError, TypeError, IndexError):
+                pass
+        raise AttributeError(f"fit result exposes no '{name}' (got {type(history).__name__})")
+
+    best_it = int(field("best_iteration"))
+    iw = field("inner_weights")[best_it]
+    a = np.asarray(iw["weight"])                       # (n, d)
+    b = np.asarray(iw["bias"])                         # (n,)
+    u = np.asarray(field("outer_weights")[best_it])    # (1, n)
+    return a, b, u
+
+
+def plot_model_value_surface(
+    history: "Any | str | os.PathLike[str]",
+    *,
+    activation: "str | Any" = "relu",
+    power: float = 1.0,
+    x_scale: "Optional[Sequence[float]]" = None,
+    v_scale: float = 1.0,
+    run_index: int = 0,
+    grid_n: int = 120,
     x_range: Optional[Tuple[float, float]] = None,
     y_range: Optional[Tuple[float, float]] = None,
     dataset: Any = None,
+    ax: Optional[Any] = None,
     title: Optional[str] = None,
     cmap: str = "viridis",
     elev: float = 30.0,
-    azim: float = 45.0,
+    azim: float = -120.0,
+    colorbar: bool = True,
     save_path: Optional[str] = None,
     show: bool = True,
 ) -> Tuple[plt.Figure, Any]:
-    """3D surface of the learned V(x) evaluated on a 2D grid, loaded from a result pickle."""
+    """3D surface of the learned V(x) — the fitted network evaluated on a 2D grid.
+
+    Reproduces the left panel of Fig. 2 in Han & Yang (arXiv:2312.17467): the value
+    function as a surface, here the model's *learned* approximation (not the data
+    samples). Rebuilds a :class:`ShallowNetwork` from a fit result's best-iteration
+    atoms — ``history`` may be a ``History`` object, a path to its pickle, or a list
+    of runs (``run_index`` selects one). ``activation`` (a name resolved via
+    ``src.config.activations.get_activation``, or a callable) and ``power`` must
+    match the run's config, as they are not stored on the ``History``.
+
+    If training used max-abs normalization, pass ``x_scale`` (per-dim) and
+    ``v_scale`` so the grid is normalized before the forward pass and the output
+    rescaled back to physical units — the surface is then drawn over the physical
+    state plane. Pass ``ax`` (a 3D axis) to compose into a multi-panel figure.
+
+    Note: ``semiconcave`` models do not round-trip through ``History`` faithfully
+    (the lossy atom record drops structure — issue #19); use a ``signed`` run here.
+    """
+    import pickle
     from src.models.net import ShallowNetwork
 
-    result_list = _load_results(pkl_path)
-    if gamma_index >= len(result_list):
-        raise IndexError(f"gamma_index={gamma_index} but only {len(result_list)} runs in file")
-    run = result_list[gamma_index]
+    if isinstance(history, (str, os.PathLike)):
+        with open(os.fspath(history), "rb") as f:
+            history = pickle.load(f)
 
-    # Extract best-iteration weights
-    best_it = run["best_iteration"]
-    iw = run["inner_weights"][best_it]
-    a = np.asarray(iw["weight"])       # (n_neurons, d)
-    b = np.asarray(iw["bias"])         # (n_neurons,)
-    u = np.asarray(run["outer_weights"][best_it])  # (1, n_neurons)
-
+    a, b, u = _best_iteration_atoms(history, run_index)
     n_neurons, d = a.shape
     if d != 2:
         raise ValueError(f"Expected 2D input, got d={d}. This function only supports 2D plots.")
 
-    activation = run.get("activation", torch.relu)
-    power = run.get("power", 1.0)
+    if isinstance(activation, str):
+        from src.config.activations import get_activation
+        activation = get_activation(activation)
 
-    # Build network and load weights
     net = ShallowNetwork(
         layer_sizes=[d, n_neurons, 1],
         activation=activation,
@@ -451,7 +751,7 @@ def plot_model_value_surface(
     )
     net.eval()
 
-    # Determine grid range
+    # Determine grid range (physical units).
     if x_range is None or y_range is None:
         if dataset is not None:
             x_data = np.asarray(_get_field(dataset, "x"))
@@ -463,107 +763,40 @@ def plot_model_value_surface(
             x_range = x_range or (-3.0, 3.0)
             y_range = y_range or (-3.0, 3.0)
 
-    # Evaluate on grid
     x0 = np.linspace(x_range[0], x_range[1], grid_n)
     x1 = np.linspace(y_range[0], y_range[1], grid_n)
     X0, X1 = np.meshgrid(x0, x1)
-    grid_points = np.column_stack([X0.ravel(), X1.ravel()])  # (grid_n^2, 2)
+    grid_points = np.column_stack([X0.ravel(), X1.ravel()])  # (grid_n^2, 2), physical
 
+    # The network was fit on normalized samples (x / x_scale, v / v_scale): feed
+    # normalized grid points and rescale the prediction back to physical units.
+    scale = np.ones(d) if x_scale is None else np.asarray(x_scale, dtype=np.float64).reshape(d)
     with torch.no_grad():
-        V = net(torch.tensor(grid_points, dtype=torch.float64)).numpy().reshape(grid_n, grid_n)
+        V = net(torch.tensor(grid_points / scale, dtype=torch.float64)).numpy().reshape(grid_n, grid_n)
+    V = V * float(v_scale)
 
-    # Plot
-    gamma = run.get("gamma", None)
-    if title is None:
-        title = f"Learned V(x) — gamma={gamma:g}, {n_neurons} neurons" if gamma is not None else f"Learned V(x) — {n_neurons} neurons"
+    if ax is None:
+        fig = plt.figure(figsize=(8, 6.5))
+        ax = fig.add_subplot(111, projection="3d")
+    else:
+        fig = ax.figure
 
-    fig = plt.figure(figsize=(10, 8))
-    ax = fig.add_subplot(111, projection="3d")
-    ax.plot_surface(X0, X1, V, cmap=cmap, alpha=0.9, edgecolor="none")
+    surf = ax.plot_surface(X0, X1, V, cmap=cmap, alpha=0.95, edgecolor="none",
+                           rcount=grid_n, ccount=grid_n)
+    if colorbar:
+        cbar = fig.colorbar(surf, ax=ax, shrink=0.6, pad=0.1)
+        cbar.set_label("V(x)")
     ax.set_xlabel("x[0]")
     ax.set_ylabel("x[1]")
     ax.set_zlabel("V(x)")
-    ax.set_title(title)
+    ax.set_title(title or f"Learned V(x) — {n_neurons} neurons")
     ax.view_init(elev=elev, azim=azim)
-    plt.tight_layout()
+    fig.tight_layout()
 
     if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+        fig.savefig(save_path, dpi=300, bbox_inches="tight")
     if show:
         plt.show()
     return fig, ax
 
-
-def plot_loss_vs_neurons_by_gamma(
-    results: Sequence[dict] | str | os.PathLike[str],
-    *,
-    loss: str = "valid",
-    metric: str = "loss",
-    ax: Optional[plt.Axes] = None,
-    logy: bool = False,
-    legend: bool = True,
-) -> Tuple[plt.Figure, plt.Axes]:
-    """Best-so-far metric vs neuron count over PDAP iterations, one line per gamma."""
-    if loss not in {"valid", "train"}:
-        raise ValueError(f"loss must be 'valid' or 'train', got {loss!r}")
-    if metric not in {"loss", "err_l2", "err_h1"}:
-        raise ValueError(f"metric must be 'loss', 'err_l2', or 'err_h1', got {metric!r}")
-
-    suffix = "val" if loss == "valid" else "train"
-    if metric == "loss":
-        metric_key = f"{suffix}_loss" if suffix == "train" else "val_loss"
-    else:
-        metric_key = f"{metric}_{suffix}"
-
-    _YLABEL = {"loss": "Best-so-far loss", "err_l2": "Relative L2 error", "err_h1": "Relative H1 error"}
-    _TITLE = {"loss": "Loss vs neurons", "err_l2": "L2 error vs neurons", "err_h1": "H1 error vs neurons"}
-
-    result_list = _load_results(results)
-
-    if ax is None:
-        fig, ax = plt.subplots(figsize=(10, 6))
-    else:
-        fig = ax.figure
-
-    for r in result_list:
-        g = r["gamma"]
-        hist = r.get(metric_key)
-        if hist is None:
-            continue
-        metric_hist = np.asarray(hist, dtype=float).reshape(-1)
-        safe = np.where(np.isfinite(metric_hist), metric_hist, np.inf)
-        if safe.size == 0 or not np.any(np.isfinite(safe)):
-            continue
-
-        best_so_far = np.minimum.accumulate(safe)
-        inner_weights = r["inner_weights"]
-        T = min(len(best_so_far), len(inner_weights))
-
-        neurons = np.array([inner_weights[t]["weight"].shape[0] for t in range(T)], dtype=float)
-        values = best_so_far[:T]
-        finite = np.isfinite(neurons) & np.isfinite(values)
-        if not np.any(finite):
-            continue
-
-        xs, ys = neurons[finite], values[finite]
-        ax.plot(xs, ys, marker="o", markersize=4, label=fr"$\gamma$={g:g}")
-        ax.annotate(f"{xs[-1]:.0f}", (xs[-1], ys[-1]), textcoords="offset points", xytext=(4, 4), fontsize=8, fontweight="bold")
-
-    ax.set_xlabel("Neuron count")
-    ax.set_ylabel(_YLABEL[metric])
-    ax.set_title(_TITLE[metric])
-    ax.xaxis.set_major_locator(MaxNLocator(integer=True))
-    ax.grid(True, alpha=0.25)
-    if logy:
-        ax.set_yscale("log")
-    else:
-        fmt = ScalarFormatter(useMathText=True)
-        fmt.set_scientific(True)
-        fmt.set_powerlimits((0, 0))
-        fmt.set_useOffset(False)
-        ax.yaxis.set_major_formatter(fmt)
-    if legend:
-        ax.legend(frameon=False)
-    fig.tight_layout()
-    return fig, ax
 

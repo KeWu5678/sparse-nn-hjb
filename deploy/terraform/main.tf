@@ -98,8 +98,10 @@ resource "aws_instance" "mlflow" {
   vpc_security_group_ids = [aws_security_group.mlflow.id]
 
   user_data = templatefile("${path.module}/user_data.sh.tftpl", {
-    mlflow_port    = var.mlflow_port
-    mlflow_version = var.mlflow_version
+    mlflow_package_spec = var.mlflow_package_spec
+    mlflow_port         = var.mlflow_port
+    mlflow_version      = var.mlflow_version
+    python_minor        = var.python_minor
   })
 
   # Do NOT replace the instance when the bootstrap script changes: replacement

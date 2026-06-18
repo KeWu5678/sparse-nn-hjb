@@ -28,8 +28,20 @@ variable "mlflow_port" {
   default     = 5000
 }
 
+variable "python_minor" {
+  description = "Python minor version used for the MLflow server venv. Keep aligned with pyproject.toml requires-python."
+  type        = string
+  default     = "3.12"
+}
+
+variable "mlflow_package_spec" {
+  description = "MLflow pip requirement for the server. Keep aligned with pyproject.toml dependencies."
+  type        = string
+  default     = "mlflow>=2.20"
+}
+
 variable "mlflow_version" {
-  description = "MLflow version to pip-install. Empty string installs the latest release."
+  description = "Optional exact MLflow version override. Empty string uses mlflow_package_spec."
   type        = string
   default     = ""
 }

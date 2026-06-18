@@ -1,0 +1,18 @@
+# @package _global_
+# region_split_pendulum: profile each activation's accuracy in the smooth region
+# vs the switching region of the pendulum value function. This study is
+# pendulum-specific, so it pins data=pendulum (which in turn auto-selects the
+# region_split eval via conf/data/pendulum.yaml) rather than leaving data to a CLI
+# sweep. Swept axes via CLI: model.kind, model.activation, model.gamma — see
+# `make region_split_pendulum`.
+defaults:
+  - override /data: pendulum
+
+name: region_split_pendulum
+
+model:
+  power: 1.0
+  alpha: 1e-4
+
+data:
+  normalize: true
