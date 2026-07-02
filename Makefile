@@ -155,4 +155,3 @@ baseline_relu_l1:  ## relu + L1 (power=1, gamma=0) over alpha on $(DATA) -> seri
 	  model.alpha=1e-1,1e-2,1e-3,1e-4,1e-5,1e-6 \
 	  'model.loss_weights=[1.0,1.0]'
 	$(PY) "$(BASELINE_DIR_$(DATA))/analysis.py" $(DATA)
-	
