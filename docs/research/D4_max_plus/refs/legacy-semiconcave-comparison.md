@@ -1,3 +1,8 @@
+# Legacy: semiconcave vs signed fitting comparison
+
+> Migrated verbatim from `autoresearch/SemiconcaveFittingComparison/SUMMARY.md`
+> on 2026-07-02; the autoresearch tree is archived in `outdated/`.
+
 # Semiconcave Fitting Comparison - Summary
 
 This experiment asks whether a semiconcavity-aware model family improves sparse

@@ -23,7 +23,7 @@ curated experiment summaries are now the source of truth; the legacy
    comes from leaky squared-ReLU / squared-ReLU families with spherical
    parameterization. They beat smooth activations in near-discontinuity error
    and preserve the expected near/far localization pattern.
-   Legacy summary: [`autoresearch/ActivationSearch/data:analytical/SUMMARY.md`](</Users/chaoruiz/Documents/Repos/SparseNNforHJB/autoresearch/ActivationSearch/data:analytical/SUMMARY.md>)
+   Legacy summary: [research/D3_harmonic_analysis/refs/legacy-analytical-search.md](research/D3_harmonic_analysis/refs/legacy-analytical-search.md)
 
 4. Semiconcave versus signed comparison.
    Semiconcavity-aware modeling is competitive on the VDP reference data, but
@@ -32,10 +32,12 @@ curated experiment summaries are now the source of truth; the legacy
    score, and the later semiconcave-labeled rerun is split again. This belongs
    in the curated research log because the conclusion is about model choice, not
    a single benchmark score.
-   Legacy summary: [`autoresearch/SemiconcaveFittingComparison/SUMMARY.md`](</Users/chaoruiz/Documents/Repos/SparseNNforHJB/autoresearch/SemiconcaveFittingComparison/SUMMARY.md>)
+   Legacy summary: [research/D4_max_plus/refs/legacy-semiconcave-comparison.md](research/D4_max_plus/refs/legacy-semiconcave-comparison.md)
 
 ## Migration Note
 
 The old `autoresearch` summaries were consolidated into the curated experiment
-tree and the Markdown experiment readouts. New work should extend those
-curated paths instead of adding new provenance logs under `autoresearch/`.
+tree and the Markdown experiment readouts; the two still-cited legacy summaries
+(directions 3–4) were migrated verbatim into `docs/research/*/refs/` and the
+remaining `autoresearch/` tree was archived under `outdated/` (2026-07-02).
+New work should extend the curated experiment paths.
