@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pytest
 import torch
 from hydra import compose, initialize
 
@@ -9,6 +10,7 @@ import src.config.store  # noqa: F401  — registers `config_schema`
 from src.config import get_activation, get_use_sphere
 from src.data import load_value_samples
 from src.models import build_model
+from src.paths import DATA_DIR
 from src.PDAP import PDAP
 
 
@@ -81,6 +83,8 @@ def test_build_model_from_loaded_dataset() -> None:
     """Loading the configured dataset and building the model gives input_dim=2."""
     with initialize(version_base=None, config_path="../conf"):
         cfg = compose(config_name="config", overrides=["env.verbose=false"])
+    if not (DATA_DIR / cfg.data.path).exists():
+        pytest.skip(f"dataset not present (rawdata/ is gitignored): {cfg.data.path}")
     data = load_value_samples(cfg.data.path)
     model = build_model(cfg, input_dim=data["x"].shape[1])
     assert model.input_dim == 2

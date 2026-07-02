@@ -1,6 +1,6 @@
 # SparseNNforHJB
 
-[![CI](https://github.com/kewu5678/nnforhjb/actions/workflows/ci.yml/badge.svg)](https://github.com/kewu5678/nnforhjb/actions/workflows/ci.yml)
+[![CI](https://github.com/KeWu5678/sparse-nn-hjb/actions/workflows/ci.yml/badge.svg)](https://github.com/KeWu5678/sparse-nn-hjb/actions/workflows/ci.yml)
 
 Sparse shallow neural networks for Hamilton–Jacobi–Bellman (HJB) value
 functions, trained from value/gradient samples with a primal–dual proximal
