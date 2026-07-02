@@ -203,7 +203,7 @@ def main() -> int:
         + ", ".join(s["description"].split(" — ", maxsplit=1)[0] for s in missing)
         + "."
     )
-    results_name = f"results_{dataset}.md" if dataset != "vdp" else "results.md"
+    results_name = "results.md"  # per-dataset baseline dir; dataset is implied
     (OUTPUT_DIR / results_name).write_text(
         f"# neuron_h1_frontier Results ({dataset})\n\n"
         "Best achievable relative H1 error vs. network size (number of neurons), "
