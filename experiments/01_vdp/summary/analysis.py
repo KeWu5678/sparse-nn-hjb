@@ -48,7 +48,7 @@ GAMMA1 = 1.0                       # Algorithm 1 log-penalty operating point
 _H1 = [1.0, 1.0]
 PROBLEM = VdpOptimalControlProblem()
 
-from src.plotstyle import PALETTE
+from src.plotstyle import PALETTE, style_frontier_axes
 from src.plotstyle import apply_publication_style as _apply_publication_style
 
 
@@ -56,8 +56,7 @@ def _finalize(fig, stem: str, *, tight: bool = True, **kw) -> str:
     if tight:
         fig.tight_layout(pad=2.0)
     FIG.mkdir(parents=True, exist_ok=True)
-    for ext in ("png", "pdf"):
-        fig.savefig(FIG / f"{stem}.{ext}", dpi=300, **kw)
+    fig.savefig(FIG / f"{stem}.png", dpi=300, **kw)
     plt.close(fig)
     return f"figures/{stem}.png"
 
@@ -71,9 +70,12 @@ ALGO1 = {
     "softplus": (r"$\mathrm{softplus}$",  PALETTE["blue_main"],  "-",  "softplus"),
     "gaussian": (r"$e^{-x^2}$",           PALETTE["red_strong"], ":",  "gaussian"),
 }
+# Fifth series color, local to this summary (the shared PALETTE has five
+# entries and four are already taken by the other curves).
+_GOLD = "#C77F0A"
 ALGO2 = {
     "relu2": (r"$\mathrm{ReLU}^2$", PALETTE["violet"], "-.", 2.0),
-    "relu5": (r"$\mathrm{ReLU}^5$", PALETTE["gold"],   (0, (3, 1, 1, 1)), 5.0),
+    "relu5": (r"$\mathrm{ReLU}^5$", _GOLD,             (0, (3, 1, 1, 1)), 5.0),
 }
 
 
@@ -171,13 +173,14 @@ def plot_frontier(ch) -> str:
     for key, spec in order:
         label, color, ls = _FRONTIER_LABEL[key], spec[key][1], spec[key][2]
         ns, h1 = _trajectory(ch[key]["result_path"])
-        ax.plot(ns, h1, color=color, ls=ls, lw=2.4, label=label,
-                marker="o", ms=3.5, markevery=max(1, len(ns) // 12))
+        ax.plot(ns, h1, color=color, ls=ls, lw=1.6, label=label,
+                marker="o", ms=6.0, mec="0.15", mew=0.8,
+                markevery=max(1, len(ns) // 12))
     ax.set_xlabel("number of neurons")
     ax.set_ylabel(r"best relative $H^1$ error")
     ax.set_yscale("log")
-    ax.legend(loc="upper right")
-    return _finalize(fig, "frontier")
+    style_frontier_axes(ax, legend_ncol=3)
+    return _finalize(fig, "frontier", bbox_inches="tight")
 
 
 # --------------------------------------------------------------------------- #

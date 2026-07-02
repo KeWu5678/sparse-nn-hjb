@@ -62,7 +62,7 @@ def _finalize_figure(fig, out_path, formats=None, dpi: int = 300, close: bool = 
                      pad: float = 2.0, tight: bool = True, **kwargs) -> list[Path]:
     out_path = Path(out_path)
     if formats is None:
-        formats = [out_path.suffix.lstrip(".")] if out_path.suffix else ["pdf", "png"]
+        formats = [out_path.suffix.lstrip(".")] if out_path.suffix else ["png"]
     if tight:
         fig.tight_layout(pad=pad)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -314,7 +314,7 @@ def plot_activation_shapes() -> str:
         if col == 0:
             ax.legend(loc="upper left")
     _finalize_figure(fig, OUTPUT_DIR / _SHAPE_FIG.with_suffix(""),
-                     formats=["png", "pdf"], dpi=300)
+                     formats=["png"], dpi=300)
     return _SHAPE_FIG.as_posix()
 
 
@@ -354,7 +354,7 @@ def plot_derivative_distribution(rows, samples, norm) -> dict[str, Any]:
         ax.set_xlabel(r"$\sigma'(z)$")
         ax.set_ylabel("Density")
         rel = Path("figures") / f"derivative_distribution_{name}.png"
-        _finalize_figure(fig, OUTPUT_DIR / rel.with_suffix(""), formats=["png", "pdf"], dpi=300)
+        _finalize_figure(fig, OUTPUT_DIR / rel.with_suffix(""), formats=["png"], dpi=300)
         figs[name] = rel.as_posix()
     return {"figures": figs, "near_zero": near_zero, "neurons": neurons}
 
@@ -379,7 +379,7 @@ def plot_value_surfaces(rows, samples, norm) -> dict[str, str]:
         )
         rel = Path("figures") / f"value_surface_{name}.png"
         _finalize_figure(fig, OUTPUT_DIR / rel.with_suffix(""),
-                         formats=["png", "pdf"], dpi=300, tight=False,
+                         formats=["png"], dpi=300, tight=False,
                          bbox_inches="tight", pad_inches=0.05)
         paths[name] = rel.as_posix()
     return paths
@@ -425,7 +425,7 @@ def plot_control_synthesis(rows, samples, norm):
     axes[1].set_xlabel(r"time $t$"); axes[1].set_ylabel(r"$|u(t)|$")
     axes[1].set_xlim(0.0, _PLOT_T); axes[1].set_ylim(bottom=0.0)
     _finalize_figure(fig, OUTPUT_DIR / _CTRL_FIG.with_suffix(""),
-                     formats=["png", "pdf"], dpi=300)
+                     formats=["png"], dpi=300)
 
     cost_rows = []
     for k in ["true"] + REPS:
@@ -511,7 +511,7 @@ def plot_alpha_gamma_tradeoff(rows) -> str:
     ax.legend(handles=g_handles, title="penalty $\\gamma$", loc="center right")
     ax.set_xlabel("Neurons"); ax.set_ylabel(r"Relative $H^1$")
     _finalize_figure(fig, OUTPUT_DIR / _TRADEOFF_FIG.with_suffix(""),
-                     formats=["png", "pdf"], dpi=300)
+                     formats=["png"], dpi=300)
     return _TRADEOFF_FIG.as_posix()
 
 

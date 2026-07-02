@@ -77,7 +77,7 @@ def _finalize_figure(fig, out_path, formats=None, dpi: int = 300, close: bool = 
                      pad: float = 2.0, tight: bool = True, **kwargs) -> list[Path]:
     out_path = Path(out_path)
     if formats is None:
-        formats = [out_path.suffix.lstrip(".")] if out_path.suffix else ["pdf", "png"]
+        formats = [out_path.suffix.lstrip(".")] if out_path.suffix else ["png"]
     if tight:
         fig.tight_layout(pad=pad)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -200,7 +200,7 @@ def plot_penalty_shape() -> str:
     axes[1].set_ylabel(r"penalty $\varphi(c)=|c|^{\,q},\; q=2/(p{+}1)$")
     axes[1].set_xlim(0, 2); axes[1].legend(loc="lower right")
     _finalize_figure(fig, OUTPUT_DIR / _SHAPE_FIG.with_suffix(""),
-                     formats=["png", "pdf"], dpi=300)
+                     formats=["png"], dpi=300)
     return _SHAPE_FIG.as_posix()
 
 
@@ -225,7 +225,7 @@ def plot_value_surfaces(rows, samples, norm) -> dict[float, str]:
         _surface_onto(ax, rows, p, samples, norm)
         rel = Path("figures") / f"value_surface_p{int(p)}.png"
         _finalize_figure(fig, OUTPUT_DIR / rel.with_suffix(""),
-                         formats=["png", "pdf"], dpi=300, tight=False,
+                         formats=["png"], dpi=300, tight=False,
                          bbox_inches="tight", pad_inches=0.05)
         paths[p] = rel.as_posix()
     return paths
@@ -240,7 +240,7 @@ def plot_power_surfaces_row(rows, samples, norm) -> str:
         ax = fig.add_subplot(1, 3, i + 1, projection="3d")
         _surface_onto(ax, rows, p, samples, norm)
     _finalize_figure(fig, OUTPUT_DIR / _SURFACES_FIG.with_suffix(""),
-                     formats=["png", "pdf"], dpi=300, tight=False,
+                     formats=["png"], dpi=300, tight=False,
                      bbox_inches="tight", pad_inches=0.1)
     return _SURFACES_FIG.as_posix()
 
@@ -280,7 +280,7 @@ def plot_control_synthesis(rows, samples, norm):
     axes[1].set_xlabel(r"time $t$"); axes[1].set_ylabel(r"$|u(t)|$")
     axes[1].set_xlim(0.0, _PLOT_T); axes[1].set_ylim(bottom=0.0)
     _finalize_figure(fig, OUTPUT_DIR / _CTRL_FIG.with_suffix(""),
-                     formats=["png", "pdf"], dpi=300)
+                     formats=["png"], dpi=300)
 
     cost_rows = []
     for k in ["true"] + POWERS:
@@ -334,7 +334,7 @@ def plot_power_alpha_tradeoff(rows) -> str:
     ax.set_xlabel("Neurons"); ax.set_ylabel(r"Relative $H^1$")
     ax.legend(title="power", loc="upper right")
     _finalize_figure(fig, OUTPUT_DIR / _TRADEOFF_FIG.with_suffix(""),
-                     formats=["png", "pdf"], dpi=300)
+                     formats=["png"], dpi=300)
     return _TRADEOFF_FIG.as_posix()
 
 

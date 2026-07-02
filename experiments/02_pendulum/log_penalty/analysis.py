@@ -56,7 +56,7 @@ def _finalize_figure(fig, out_path, formats=None, dpi: int = 300, close: bool = 
                      pad: float = 2.0, tight: bool = True, **kwargs) -> list[Path]:
     out_path = Path(out_path)
     if formats is None:
-        formats = [out_path.suffix.lstrip(".")] if out_path.suffix else ["pdf", "png"]
+        formats = [out_path.suffix.lstrip(".")] if out_path.suffix else ["png"]
     if tight:
         fig.tight_layout(pad=pad)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -225,7 +225,7 @@ def plot_activation_shapes() -> str:
         if col == 0:
             ax.legend(loc="upper left")
     _finalize_figure(fig, OUTPUT_DIR / _SHAPE_FIG.with_suffix(""),
-                     formats=["png", "pdf"], dpi=300)
+                     formats=["png"], dpi=300)
     return _SHAPE_FIG.as_posix()
 
 
@@ -256,7 +256,7 @@ def plot_value_surfaces(rows: list[dict[str, Any]], samples, norm) -> dict[str, 
         )
         rel = Path("figures") / f"value_surface_{name}.png"
         _finalize_figure(fig, OUTPUT_DIR / rel.with_suffix(""),
-                         formats=["png", "pdf"], dpi=300, tight=False,
+                         formats=["png"], dpi=300, tight=False,
                          bbox_inches="tight", pad_inches=0.05)
         paths[name] = rel.as_posix()
     return paths
@@ -330,7 +330,7 @@ def plot_control_synthesis(rows, samples, norm):
     axes[1].set_xlim(0, _ROLL_T); axes[1].set_ylim(-_U_CLIP - 2, _U_CLIP + 2)
     axes[1].legend(loc="upper right")
     _finalize_figure(fig, OUTPUT_DIR / _CTRL_FIG.with_suffix(""),
-                     formats=["png", "pdf"], dpi=300)
+                     formats=["png"], dpi=300)
 
     cost_rows = []
     for k in ["true"] + REPS:
@@ -417,7 +417,7 @@ def plot_alpha_gamma_tradeoff(rows: list[dict[str, Any]]) -> str:
     ax.legend(handles=g_handles, title="penalty $\\gamma$", loc="lower left")
     ax.set_xlabel("Neurons"); ax.set_ylabel(r"Relative $H^1$")
     _finalize_figure(fig, OUTPUT_DIR / _TRADEOFF_FIG.with_suffix(""),
-                     formats=["png", "pdf"], dpi=300)
+                     formats=["png"], dpi=300)
     return _TRADEOFF_FIG.as_posix()
 
 

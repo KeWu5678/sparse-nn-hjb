@@ -37,7 +37,7 @@ MULTIRUN_DIR = REPO_ROOT / "rawdata" / "logs" / "multirun" / EXPERIMENT
 # comparison here (the region_split sweep is H1-only).
 RELU_MULTIRUN_DIR = REPO_ROOT / "rawdata" / "logs" / "multirun" / "penaltypowers" / "pendulum"
 DATASET_STEM = "Pendulum_pmp_value_samples_2000"
-OUTPUT_DIR = REPO_ROOT / "experiments" / EXPERIMENT
+OUTPUT_DIR = Path(__file__).resolve().parent
 
 _LOSS_LABEL = {(1.0, 0.0): "l2", (1.0, 1.0): "h1"}
 _N_BINS = 30

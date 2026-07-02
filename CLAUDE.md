@@ -53,6 +53,10 @@ skills cover the same conventions.
   install).
 - **Axes**: hide top and right spines, `axes.linewidth` 1.0,
   `legend.frameon = False`, `axes.formatter.use_mathtext = True`.
+- **Frontier plots are the one exception** (neuron/H1 frontiers): boxed axes
+  (all four spines), dotted grid, dash-dot lines with dark-edged markers, and a
+  framed legend row centred **below** the axes — apply via
+  `src.plotstyle.style_frontier_axes(ax)` and save with `bbox_inches="tight"`.
 - **Export**: save **only** `.png` at `dpi=300`. Current consumers use PNG —
   the thesis (`papar/Mthesis.tex`, `\includegraphics{plot/*.png}`) and the
   markdown result docs — so do not generate companion PDFs unless explicitly

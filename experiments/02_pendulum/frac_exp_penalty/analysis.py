@@ -69,7 +69,7 @@ def _finalize_figure(fig, out_path, formats=None, dpi: int = 300, close: bool = 
                      pad: float = 2.0, tight: bool = True, **kwargs) -> list[Path]:
     out_path = Path(out_path)
     if formats is None:
-        formats = [out_path.suffix.lstrip(".")] if out_path.suffix else ["pdf", "png"]
+        formats = [out_path.suffix.lstrip(".")] if out_path.suffix else ["png"]
     if tight:
         fig.tight_layout(pad=pad)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -189,7 +189,7 @@ def plot_penalty_shape() -> str:
     axes[1].set_ylabel(r"penalty $\varphi(c)=|c|^{\,q},\; q=2/(p{+}1)$")
     axes[1].set_xlim(0, 2); axes[1].legend(loc="lower right")
     _finalize_figure(fig, OUTPUT_DIR / _SHAPE_FIG.with_suffix(""),
-                     formats=["png", "pdf"], dpi=300)
+                     formats=["png"], dpi=300)
     return _SHAPE_FIG.as_posix()
 
 
@@ -220,7 +220,7 @@ def plot_value_surfaces(rows, samples, norm) -> dict[float, str]:
         )
         rel = Path("figures") / f"value_surface_p{int(p)}.png"
         _finalize_figure(fig, OUTPUT_DIR / rel.with_suffix(""),
-                         formats=["png", "pdf"], dpi=300, tight=False,
+                         formats=["png"], dpi=300, tight=False,
                          bbox_inches="tight", pad_inches=0.05)
         paths[p] = rel.as_posix()
     return paths
@@ -298,7 +298,7 @@ def plot_control_synthesis(rows, samples, norm):
     axes[1].set_xlim(0, _ROLL_T); axes[1].set_ylim(-_U_CLIP - 2, _U_CLIP + 2)
     axes[1].legend(loc="upper right")
     _finalize_figure(fig, OUTPUT_DIR / _CTRL_FIG.with_suffix(""),
-                     formats=["png", "pdf"], dpi=300)
+                     formats=["png"], dpi=300)
 
     cost_rows = []
     for k in ["true"] + POWERS:
@@ -360,7 +360,7 @@ def plot_power_alpha_tradeoff(rows) -> str:
     ax.legend(handles=a_handles, title=r"penalty $\alpha$", loc="upper right")
     ax.set_xlabel("Neurons"); ax.set_ylabel(r"far value-L1")
     _finalize_figure(fig, OUTPUT_DIR / _TRADEOFF_FIG.with_suffix(""),
-                     formats=["png", "pdf"], dpi=300)
+                     formats=["png"], dpi=300)
     return _TRADEOFF_FIG.as_posix()
 
 

@@ -167,16 +167,14 @@ def _best_iteration_atoms(history: Any, run_index: int = 0) -> Tuple[np.ndarray,
 # ---------------------------------------------------------------------------- #
 # Neuron / H1 frontier
 # ---------------------------------------------------------------------------- #
-# Shared publication style for frontier plots. Applied via rc_context so the
-# module leaves global rcParams untouched.
+# Shared publication style for frontier plots (boxed variant — see
+# src.plotstyle.style_frontier_axes). Applied via rc_context so the module
+# leaves global rcParams untouched.
 _FRONTIER_RC = {
     "font.family": ["serif"],
     "font.serif": ["CMU Serif", "Computer Modern Roman", "cmr10", "DejaVu Serif"],
     "font.size": 12,
-    "axes.spines.right": False,
-    "axes.spines.top": False,
     "axes.linewidth": 1.0,
-    "legend.frameon": False,
     "mathtext.fontset": "cm",
     "axes.formatter.use_mathtext": True,
     "text.usetex": False,
@@ -932,17 +930,16 @@ def plot_neuron_h1_frontier(
             if ns.size == 0:
                 logger.warning("frontier: no points for %r — skipping", s.get("label"))
                 continue
-            ax.plot(ns, h1, ls=s.get("ls", "-"), lw=2.2, color=s["color"],
-                    marker=s["marker"], ms=4.8, mfc=s["color"], mec=s["color"],
-                    mew=0.8, label=s["label"], clip_on=False, zorder=3)
+            ax.plot(ns, h1, ls=s.get("ls", "-."), lw=1.6, color=s["color"],
+                    marker=s["marker"], ms=7.5, mfc=s["color"], mec="0.15",
+                    mew=0.8, label=s["label"], zorder=3)
             drawn += 1
         ax.set_yscale("log")
         ax.set_xlabel(xlabel)
         ax.set_ylabel(ylabel)
-        ax.grid(False)
         ax.set_xlim(left=0)
-        ax.legend(loc="upper right", fontsize=9.5, ncol=2, handletextpad=0.45,
-                  columnspacing=0.9)
+        from src.plotstyle import style_frontier_axes
+        style_frontier_axes(ax)
         fig.tight_layout(pad=2.0)
         if save_path is not None:
             save_path = os.fspath(save_path)
