@@ -24,10 +24,10 @@ import torch
 
 from ..config.activations import get_use_sphere
 from ..models.signed import SignedModel
-from .insertion import profile_threshold, finite_step
-from .warmstart import warm_start
-from .ssn_solve import ssn_solve, Objective, SolverConfig
 from .history import History
+from .insertion import finite_step, profile_threshold
+from .ssn_solve import Objective, SolverConfig, ssn_solve
+from .warmstart import warm_start
 
 logger = logging.getLogger(__name__)
 

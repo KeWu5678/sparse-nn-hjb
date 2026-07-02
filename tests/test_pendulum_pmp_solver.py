@@ -119,7 +119,7 @@ def test_optimal_control_satisfies_stationarity() -> None:
         ]
     )
 
-    controls = problem.minimizing_control(costates)
+    controls = problem.feedback_from_gradient(costates)
 
     assert np.allclose(
         controls,

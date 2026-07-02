@@ -5,8 +5,9 @@ import torch
 from torch import Tensor
 from torch.nn.utils import parameters_to_vector, vector_to_parameters
 from torch.optim import Optimizer
-from .prox import _compute_prox, _compute_dprox
-from .penalty import _penalty_grad, _nonconvex_correction, _nonconvex_correction_dd
+
+from .penalty import _nonconvex_correction, _nonconvex_correction_dd, _penalty_grad
+from .prox import _compute_dprox, _compute_prox
 from .strategies import solve_levenberg_marquardt, solve_steihaug_cg
 
 logger = logging.getLogger(__name__)

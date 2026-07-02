@@ -26,10 +26,10 @@ import numpy as np
 import pytest
 import torch
 
-from src.PDAP import PDAP
 from src.config.schema import EnvConfig, ExperimentConfig, ModelConfig, TrainingConfig
 from src.data import split_value_samples
 from src.models import build_model
+from src.PDAP import PDAP
 
 GOLDEN_PATH = Path(__file__).parent / "fixtures" / "pdap_golden.npz"
 SEED = 123

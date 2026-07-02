@@ -9,7 +9,7 @@ import math
 
 import torch
 
-from .penalty import _dphi, _ddphi
+from .penalty import _ddphi, _dphi
 
 
 def _compute_prox_q_half(v, mu):

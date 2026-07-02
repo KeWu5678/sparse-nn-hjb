@@ -10,8 +10,8 @@ prediction, the linear-in-theta feature maps, and the loss objective. The SSN
 solve, warm start, and evaluation live in the trainer.
 """
 
-from typing import Optional, Tuple
 import logging
+from typing import Optional, Tuple
 
 import torch
 

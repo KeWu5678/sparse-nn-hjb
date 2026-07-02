@@ -5,9 +5,9 @@ Each model represents V(x):
   * ``SemiconcaveModel`` — semiconcave  V = 0.5 C ||x||^2 - g(x), convex g
 """
 
-from .net import ShallowNetwork
-from .signed import SignedModel
-from .semiconcave import SemiconcaveModel
 from .build import build_model
+from .net import ShallowNetwork
+from .semiconcave import SemiconcaveModel
+from .signed import SignedModel
 
 __all__ = ["ShallowNetwork", "SignedModel", "SemiconcaveModel", "build_model"]

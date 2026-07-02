@@ -218,7 +218,9 @@ def _plot_error_vs_distance(
 # Publication house style (CLAUDE.md): palette only, serif + cm mathtext, no
 # in-figure titles/annotations (captions carry the identifying info), top/right
 # spines hidden, frameless legends, PNG-only at 300 dpi.
-from src.plotstyle import PALETTE, apply_publication_style as _apply_publication_style
+from src.plotstyle import PALETTE
+from src.plotstyle import apply_publication_style as _apply_publication_style
+
 # The compared models (all signed, H1 loss, best run per cell by far L1).
 _MODEL_STYLE = {
     "gaussian": (PALETTE["blue_main"], "-"),
@@ -259,9 +261,11 @@ def select_models(best: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
 
 def _build_net(row: dict[str, Any]):
     import pickle
+
     import torch  # noqa: F401
-    from src.models.net import ShallowNetwork
+
     from src.config.activations import get_activation
+    from src.models.net import ShallowNetwork
     from src.plots import _best_iteration_atoms
 
     with open(row["result_path"], "rb") as f:
@@ -296,7 +300,8 @@ def _load_geometry(best: list[dict[str, Any]]):
     ``rawt`` holds the tiled raw points for envelope queries.
     """
     import pickle
-    from src.data import load_value_samples, ValueSampleNormalizer
+
+    from src.data import ValueSampleNormalizer, load_value_samples
     from src.OpenLoop.pendulum.nonsmooth import NonsmoothCurve, restrict_trajectory_to_curve
 
     data_rel = next(r["data_path"] for r in best)
@@ -776,11 +781,13 @@ def _common_pool_scores(pool, curve) -> list[dict[str, Any]] | None:
     if not CAPACITY_DIR.exists():
         return None
     import pickle
+
     import torch
     from scipy.spatial import cKDTree
-    from src.data import load_value_samples, ValueSampleNormalizer
-    from src.models.net import ShallowNetwork
+
     from src.config.activations import get_activation
+    from src.data import ValueSampleNormalizer, load_value_samples
+    from src.models.net import ShallowNetwork
     from src.plots import _best_iteration_atoms
 
     X, V, DV = pool["x"], pool["v"], pool["dv"]
@@ -869,6 +876,7 @@ def fig_feedback_split(models: dict[str, dict[str, Any]], nets: dict[str, Any], 
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     from scipy.spatial import cKDTree
+
     from src.OpenLoop.pendulum.problem import PendulumSwingUpProblem
 
     _apply_publication_style()
@@ -991,8 +999,9 @@ def fig_learned_surfaces(best: list[dict[str, Any]], norm) -> dict[str, str]:
     """Learned value surface, one PNG per signed H1 model in the surface gallery."""
     import matplotlib
     matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
     import matplotlib as mpl
+    import matplotlib.pyplot as plt
+
     from src.plots import plot_model_value_surface
 
     picked = {

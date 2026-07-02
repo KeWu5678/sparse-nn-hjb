@@ -26,7 +26,6 @@ import sys
 from pathlib import Path
 from typing import Any
 
-import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -36,11 +35,11 @@ REPO_ROOT = OUTPUT_DIR.parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from src.data import load_value_samples, ValueSampleNormalizer
 from src.config.activations import get_activation
+from src.data import ValueSampleNormalizer, load_value_samples
 from src.models.net import ShallowNetwork
-from src.plots import _best_iteration_atoms, frontier_penalty_label
 from src.OpenLoop.vdp.problem import VdpOptimalControlProblem
+from src.plots import _best_iteration_atoms, frontier_penalty_label
 
 MULTIRUN = REPO_ROOT / "rawdata" / "logs" / "multirun"
 FIG = OUTPUT_DIR / "figures"
@@ -49,7 +48,8 @@ GAMMA1 = 1.0                       # Algorithm 1 log-penalty operating point
 _H1 = [1.0, 1.0]
 PROBLEM = VdpOptimalControlProblem()
 
-from src.plotstyle import PALETTE, apply_publication_style as _apply_publication_style
+from src.plotstyle import PALETTE
+from src.plotstyle import apply_publication_style as _apply_publication_style
 
 
 def _finalize(fig, stem: str, *, tight: bool = True, **kw) -> str:

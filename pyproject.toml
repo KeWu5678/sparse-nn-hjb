@@ -30,6 +30,8 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest-cov>=6.0",
+    "ruff>=0.8",
+    "pre-commit>=4.0",
 ]
 
 [build-system]
@@ -41,3 +43,25 @@ include = ["src*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["outdated", "rawdata", "notebook", "papar", "deploy"]
+
+[tool.ruff.lint]
+# Correctness-focused: pyflakes/pycodestyle errors, bugbear, import sorting.
+# E702 stays off — compact `set_xlabel(...); set_ylabel(...)` lines are the
+# house idiom in plotting code. B905/B023 stay off — numpy-heavy zips and
+# plotting closures over loop variables are pervasive and intentional.
+select = ["E4", "E7", "E9", "F", "B", "I"]
+ignore = ["E702", "B905", "B023", "E741", "E731"]
+# Experiment/investigation scripts import after sys.path/mpl.use setup.
+[tool.ruff.lint.per-file-ignores]
+"experiments/**" = ["E402", "F841"]
+"scripts/**" = ["E402"]
+# One-off throwaway diagnostics; keep import-order churn out of them.
+"scripts/investigation/**" = ["I001"]
+"docs/**" = ["E402"]
+# mpl.use("Agg") must precede the pyplot import.
+"src/plots.py" = ["E402"]

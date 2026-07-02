@@ -1,8 +1,8 @@
 import torch
 
+from src.models.semiconcave import SemiconcaveModel
 from src.PDAP.history import History
 from src.PDAP.ssn_solve import Objective
-from src.models.semiconcave import SemiconcaveModel
 
 
 def test_history_summary_metrics_uses_best_iteration() -> None:

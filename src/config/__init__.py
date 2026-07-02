@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
+from .activations import ACTIVATIONS, get_activation, get_use_sphere
 from .schema import (
-    ModelConfig,
-    TrainingConfig,
     DataConfig,
     EnvConfig,
     ExperimentConfig,
+    ModelConfig,
+    TrainingConfig,
 )
-from .activations import ACTIVATIONS, get_activation, get_use_sphere
 from .store import register_configs
 
 __all__ = [

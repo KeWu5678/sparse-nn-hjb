@@ -24,7 +24,6 @@ import sys
 from pathlib import Path
 from typing import Any
 
-import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -34,12 +33,12 @@ REPO_ROOT = OUTPUT_DIR.parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from src.metric import format_table
-from src.data import load_value_samples, ValueSampleNormalizer
 from src.config.activations import get_activation
+from src.data import ValueSampleNormalizer, load_value_samples
+from src.metric import format_table
 from src.models.net import ShallowNetwork
-from src.plots import _best_iteration_atoms, plot_model_value_surface
 from src.OpenLoop.vdp.problem import VdpOptimalControlProblem
+from src.plots import _best_iteration_atoms, plot_model_value_surface
 
 EXPERIMENT = "penaltypowers"
 MULTIRUN_DIR = REPO_ROOT / "rawdata" / "logs" / "multirun" / EXPERIMENT
@@ -50,7 +49,8 @@ _LOSS_LABEL = {(1.0, 0.0): "l2", (1.0, 1.0): "h1"}
 # swept only for the frontier in the parameter discussion.
 _FIXED_ALPHA = 1e-5
 
-from src.plotstyle import PALETTE, apply_publication_style as _apply_publication_style
+from src.plotstyle import PALETTE
+from src.plotstyle import apply_publication_style as _apply_publication_style
 
 # All swept powers (tables) and the three representatives (figures).
 POWERS_ALL = [2.0, 2.01, 3.0, 4.0, 5.0]

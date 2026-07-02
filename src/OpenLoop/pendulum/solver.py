@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import datetime
-import json
 from pathlib import Path
 from typing import Callable
 from uuid import uuid4
@@ -17,13 +17,13 @@ from src.OpenLoop.pendulum.nonsmooth import (
     restrict_trajectory_to_curve,
 )
 from src.OpenLoop.pendulum.problem import PendulumSwingUpProblem
-from src.OpenLoop.value_samples import ValueSamples
 from src.OpenLoop.pendulum.trajectories import (
     PmpTrajectory,
     adaptive_boundary_angles,
     integrate_pmp_trajectory,
     uniform_boundary_angles,
 )
+from src.OpenLoop.value_samples import ValueSamples
 from src.paths import DATA_DIR
 
 
@@ -43,6 +43,12 @@ class PendulumPmpSolverConfig:
     boundary_distance_power: float = 0.8
     contour_delta: float = 1.0
     periodic_copies: int = 0
+    # Value cap on the switching-set arms used to build the upright smooth basin.
+    # The reference's hand-tuned trim (boundary_spiral(1:1252)) reaches value ~57
+    # (theta-dot ~7.7), matching Han & Yang Fig. 2; 35 (the earlier default) trims
+    # to value ~31 / theta-dot ~3.5 — too small. The assembly is unstable at some
+    # caps (e.g. 65, 95 collapse); 50 is validated for these parameters (issue #18).
+    basin_value_max: float = 50.0
 
     def __post_init__(self) -> None:
         if self.epsilon <= 0.0:
@@ -63,6 +69,8 @@ class PendulumPmpSolverConfig:
             raise ValueError("contour_delta must be positive")
         if self.periodic_copies < 0:
             raise ValueError("periodic_copies must be nonnegative")
+        if self.basin_value_max <= self.epsilon:
+            raise ValueError("basin_value_max must be larger than epsilon")
 
 
 @dataclass(frozen=True)
@@ -228,6 +236,7 @@ class PendulumPmpSolver:
             trajectories,
             value_delta=self.config.contour_delta,
             value_max=self.config.value_max,
+            basin_value_max=self.config.basin_value_max,
         )
 
     def build_value_samples(

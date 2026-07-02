@@ -50,7 +50,6 @@ from scipy.interpolate import (  # noqa: E402
 from scipy.spatial import cKDTree  # noqa: E402
 
 from src.OpenLoop.pendulum.nonsmooth import (  # noqa: E402
-    NonsmoothCurve,
     compute_nonsmooth_curve,
     restrict_trajectory_to_curve,
 )
@@ -84,7 +83,7 @@ _N_PERIODS = 3                         # +/- periods to tile for the regions plo
 # this is for visualisation only — it does not affect the wired training samples.
 _REGIONS_CAP = 80.0
 
-from src.plotstyle import PALETTE, apply_publication_style as _apply_publication_style
+from src.plotstyle import apply_publication_style as _apply_publication_style
 
 # MATLAB default line-color cycle (the paper cycles these per trajectory).
 _MATLAB_CYCLE = ["#0072BD", "#D95319", "#EDB120", "#7E2F8E", "#77AC30", "#4DBEEE", "#A2142F"]
