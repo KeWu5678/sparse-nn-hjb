@@ -62,6 +62,7 @@ ignore = ["E702", "B905", "B023", "E741", "E731"]
 "scripts/**" = ["E402"]
 # One-off throwaway diagnostics; keep import-order churn out of them.
 "scripts/investigation/**" = ["I001"]
-"docs/**" = ["E402"]
+# Theory-check scripts are dense derivation one-liners; only hard errors.
+"docs/**" = ["E4", "E7", "I001", "B007", "F841"]
 # mpl.use("Agg") must precede the pyplot import.
 "src/plots.py" = ["E402"]
