@@ -1,7 +1,11 @@
 # CLAIMS — registry (categorization + format)
 
 Every claim is a formal mathematical statement in a **uniform format**. A *proved*
-claim is a usable **leg** for other claims. Definitions: `CONTEXT.md`. Goals: `OVERVIEW.md`.
+claim is a usable **leg** for other claims. Definitions: `NOTATION.md`. Goals: `OVERVIEW.md`.
+
+> **Legacy names** (only in the old `refs/` detail docs, if you open them): T1 = `budget_1d`,
+> T2 = `curved_switching_rnorm`, T3 = `cone_free_convex`, T4 = `minplus_curved`,
+> T5/T5-d1 = `certificate_dichotomy`. The descriptive names above are canonical; ignore "Tn".
 
 ## Claim format (each `claims/<name>.md`)
 ```
@@ -23,11 +27,11 @@ uses:  <proved claims this leg depends on>
 | `correction_cost` (flat part) | $g$ piecewise-linear ($K$ pieces) ⟹ $N^+(g)=K$ | D1 |
 | `correction_cost` (curved part) | curved switching ⟹ $N^+(g)=\infty$ ($d=2$) | D1 |
 | `activation_quadratic_cost` | $\sigma''=0$ a.e. ⟺ quadratic $\Theta(1/\varepsilon)$-costly (else $O(d)$) | D1 |
-| `separation_flat` (current goal, proved instance) | curved bulk + flat/polyhedral $g$ ⟹ ratio $\Theta(1/(K\varepsilon))\to\infty$ | D1 |
+| `separation_flat` | curved bulk + flat/polyhedral $g$ ⟹ ratio $\Theta(1/(K\varepsilon))\to\infty$ | D1 |
 | `separation_1d_convex` ($d=1$, general convex $g$) | ratio $=\int|g''|/\int|V''|$; more sparse $\iff \int|g''|<\int|V''|$ | D1 |
-| `budget_1d` (T1) | $\mathrm{bud}(g)\le\mathrm{Lip}(g)|\partial\Omega|$, indep. of #shocks | D3 |
-| `curved_switching_rnorm` (T2) | curved switching ⟹ ridge $\mathcal R$-norm $=\infty$ ($d=2$) | D3 |
-| `cone_free_convex` (T3) | $g$ convex ⟹ cone free in **curvature-mass** sense (signed cancel. raises $\int\Delta$), all $d$ | D1 |
+| `budget_1d` | $\mathrm{bud}(g)\le\mathrm{Lip}(g)|\partial\Omega|$, indep. of #shocks | D3 |
+| `curved_switching_rnorm` | curved switching ⟹ ridge $\mathcal R$-norm $=\infty$ ($d=2$) | D3 |
+| `cone_free_convex` | $g$ convex ⟹ cone free in **curvature-mass** sense (signed cancel. raises $\int\Delta$), all $d$ | D1 |
 | `certificate_dichotomy` (d=1 only) | cone one-sided ⟹ contact-region ratio $\to 2$ | D2 |
 
 ### REFUTED (do not reuse; recorded so we don't recircle)

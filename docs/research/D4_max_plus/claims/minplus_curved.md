@@ -19,7 +19,7 @@ with `signed_lower_bound` gives the divergent separation on curved switching set
 **uses (when closed).** `signed_lower_bound`, max-plus rank theory (McEneaney, Gaubert).
 
 **caveat.** This is a **different architecture** from the repo cone-ridge model — pursue only
-for the curved-switching frontier (`separation_general`), not the current goal.
+for the curved-switching frontier (`separation_general`), not the current main line.
 
-**attempts.** Parked; framed via T4 (`../refs/t4-minplus-capacity.md`). Refs:
+**attempts.** Parked; framed via the min-plus capacity note (`../refs/t4-minplus-capacity.md`). Refs:
 `curse-free-max-plus`, `Gaubert–McEneaney–Qu`.

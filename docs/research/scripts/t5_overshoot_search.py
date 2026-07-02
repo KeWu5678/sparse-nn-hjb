@@ -29,10 +29,11 @@ A single interior overshoot (C_tilde > 0 and max q_cone > alpha + tol) refutes
 the conjecture; none across thousands supports it.
 """
 
-import numpy as np
-from numpy.linalg import lstsq
-from sklearn.linear_model import Lasso
 import warnings
+
+import numpy as np
+from sklearn.linear_model import Lasso
+
 warnings.filterwarnings("ignore")
 
 N = 120

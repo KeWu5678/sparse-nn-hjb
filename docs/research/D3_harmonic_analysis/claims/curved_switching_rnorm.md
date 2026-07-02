@@ -1,4 +1,4 @@
-# curved_switching_rnorm  (T2)
+# curved_switching_rnorm
 
 **status:** proved ($d=2$; $d\ge3$ modulo gaps)
 

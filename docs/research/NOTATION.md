@@ -1,4 +1,4 @@
-# CONTEXT — agreed terms & notation
+# NOTATION — agreed terms & notation (theory program)
 
 Glossary only. Goals → `OVERVIEW.md`; claims → `CLAIMS.md`. Tags: [repo] in code,
 [ref] reference paper, [domain] standard OC/HJB, [session] agreed here.

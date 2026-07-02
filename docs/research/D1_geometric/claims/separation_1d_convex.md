@@ -42,5 +42,5 @@ value functions have a dominant curved bulk) is exactly the regime where semicon
 
 **attempts.** 1-D is clean (signed deriv = any $n$-step). $d\ge2$ → `separation_general`:
 same *structure* (compare $\int|D^2g|$ vs $\int|D^2V|$) but needs (i) cone-free in $d\ge2$
-(T3: $\gamma^+(g)=\gamma(g)$ for convex $g$), and (ii) the $d\ge2$ convex-function gradient
+(`cone_free_convex`: $\gamma^+(g)=\gamma(g)$ for convex $g$), and (ii) the $d\ge2$ convex-function gradient
 approximation rate (may be $n^{-2/d}$, not $n^{-1}$ — Gruber polytopal). Open.

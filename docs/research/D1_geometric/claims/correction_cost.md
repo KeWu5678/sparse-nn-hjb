@@ -12,12 +12,12 @@
 
 **proof.** (flat) $g=\sum_{i\le K}c_i(w_i\!\cdot\!x-b_i)_+$ is exactly $K$ nonneg atoms; $\nabla g$
 piecewise-constant with $K$ jumps, no $\varepsilon$-dependence. (curved) $\gamma^+(g)\ge\|g\|_{\mathcal R}=\infty$
-by `curved_switching_rnorm` (T2): a curved kink has non-integrable Radon derivative; nonneg
+by `curved_switching_rnorm`: a curved kink has non-integrable Radon derivative; nonneg
 is more constrained than signed, so $\gamma^+\ge$ signed $\mathcal R$-norm $=\infty$ ⟹ no finite-rate
 ridge representation. Confirmed empirically: `../../scripts/curved_vs_flat_switching.py`
 ($(\|x\|-1)_+$ plateaus at relGrad 0.14, 124 atoms). $\square$
 
-**uses.** `budget_1d` (T1, the finite-curvature-mass bound); `curved_switching_rnorm` (T2).
+**uses.** `budget_1d` (the finite-curvature-mass bound); `curved_switching_rnorm`.
 
 **attempts.** 1. "budget→rate in all $d$" overstated — true only $d=1$ ($\mathrm{bud}=\gamma^+$ there);
 $d\ge2$ they differ (bud finite, $\gamma^+$ can be $\infty$) — that gap **is** case 2. 2. Curved

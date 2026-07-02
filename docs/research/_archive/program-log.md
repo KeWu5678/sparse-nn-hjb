@@ -1,7 +1,7 @@
 ---
 name: semiconcave-theory-program
 description: Theory program proving why semiconcave/min networks beat ridge nets on HJB value functions; T2 draft in docs/research/t2-separation-draft.md
-metadata: 
+metadata:
   node_type: memory
   type: project
   originSessionId: ca4ff4ed-bb58-477b-89ad-ca74f6f71544
@@ -10,7 +10,7 @@ metadata:
 Research program (started 2026-06-10) to prove the semiconcave architecture's
 sparsity advantage for HJB value functions. Full draft: `docs/research/t2-separation-draft.md`.
 
-PROBLEM LOCKED 2026-06-17 (user-agreed, in docs/research/CONTEXT.md §1): TARGET =
+PROBLEM LOCKED 2026-06-17 (user-agreed, in docs/research/NOTATION.md §1): TARGET =
 general C-semiconcave V = ½C‖x‖² − g, g convex (arbitrary; smooth OR kinks/switching
 set). ACTIVATION CONDITION: OPEN. (C1) atom convexity (t↦σ(t)^p convex) was proposed then
 REFUTED 2026-06-17 by faithful activationsearch data: tanh (NON-convex atom) cone 2 vs
@@ -56,7 +56,7 @@ reading. Free head = SEPARATE null-space feature (η⊥{½‖x‖²,x,1}), not i
 next step (partial-source/Bregman). TO VERIFY: cone μ† for real HJB g meets sep-from-∂Θ;
 measure signed-spreading vs cone-concentration on clustered target (falsifiable §4 prediction).
 
-BUDGET DEFINED 2026-06-17 (CONTEXT.md, user asked): bud(g) := ‖D²g‖_M = total mass of
+BUDGET DEFINED 2026-06-17 (NOTATION.md, user asked): bud(g) := ‖D²g‖_M = total mass of
 Hessian (Alexandrov) measure of convex correction g = ∫_Ω tr(dD²g) = ∫_∂Ω ∂_n g (g convex)
 ≤ Lip(g)|∂Ω| ≈ C|Ω|+2L. Property of g ALONE (no activation). ALWAYS FINITE for semiconcave V,
 indep of switching complexity. d-dim form of T1. DISTINCT from γ⁺(g) = nonneg RIDGE variation
@@ -114,11 +114,11 @@ open 2×2 {F1,F2}×{variational,algorithmic}. NEXT: work dual certificate per mo
 which makes γ_signed≫γ_semiconcave. RECOMMENDED STATEMENT: under σ-condition(TBD), general
 C-semiconcave V has γ_semiconcave(V)<∞ while γ_signed(V)=∞/≫; subsumes T2 + Theorem A-d.
 
-VOCABULARY AUTHORITY: docs/research/CONTEXT.md (created 2026-06-17, user-requested).
+VOCABULARY AUTHORITY: docs/research/NOTATION.md (created 2026-06-17, user-requested).
 §1 = agreed terms only (may use freely); §2 = Claude coinages awaiting ratification
 (bulk[drop], Q, κ_σ, Tier1/2) — do NOT use until approved; §3 = retired (capacity/
 selection, the variation-norm/broad-atom churn). Consult/maintain it before introducing
-any term. Distinct from repo-root CONTEXT.md (open-loop domain language).
+any term. Distinct from repo-root NOTATION.md (open-loop domain language).
 
 ⚠ REWIND 2026-06-17 01:20 (user, repeated reliability complaint about churn/flip-flops):
 TRUSTED BASELINE = docs/research/sparsity-gap-real-setting.md (mtime 06-16 17:22) and

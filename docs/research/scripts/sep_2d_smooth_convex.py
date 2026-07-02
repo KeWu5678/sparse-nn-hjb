@@ -4,10 +4,14 @@ C chosen so D^2V = C I - D^2g >~ 1.5 I (V strongly curved). Faithful repo PDAP.
 Measure N(semiconcave) vs N(signed) across accuracy; check semiconcave more sparse and
 compare to the curvature ratio  ∫|D^2 g| / ∫|D^2 V|  (the d=1 predictor).
 """
-import sys, time, numpy as np
+import sys
+import time
 from pathlib import Path
+
+import numpy as np
 from hydra import compose, initialize_config_dir
 from hydra.core.global_hydra import GlobalHydra
+
 ROOT = Path('/Users/chaoruiz/Documents/Repos/SparseNNforHJB'); sys.path.insert(0,str(ROOT))
 import src.config.store  # noqa
 from src.data import normalize_value_samples, split_value_samples

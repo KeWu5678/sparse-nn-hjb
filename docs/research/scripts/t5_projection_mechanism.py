@@ -20,10 +20,12 @@ semiconcave structure (convex, oscillatory, convex-kink) — proving the
 mechanism is not a semiconcavity effect.
 """
 
+import warnings
+
 import numpy as np
 from numpy.linalg import lstsq
 from sklearn.linear_model import Lasso
-import warnings
+
 warnings.filterwarnings("ignore")
 
 N = 300

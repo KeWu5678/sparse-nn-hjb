@@ -3,6 +3,7 @@ for every direction w (i.e. ∂_b^2 R{g} = ∫_{line} wᵀ D²g w ds ≥ 0). The
 of g''≥0. Used by cone_free_convex.md (T3). Nonconvex g is a control (should fail)."""
 import numpy as np
 
+
 def radon_b(g_fn, w, bs, S=400, L=3.0):
     wp = np.array([-w[1], w[0]]); s = np.linspace(-L, L, S)
     return np.array([np.mean(g_fn(b*w[None,:] + s[:,None]*wp[None,:]))*(2*L) for b in bs])

@@ -1,4 +1,4 @@
-# budget_1d  (T1)
+# budget_1d
 
 **status:** proved
 

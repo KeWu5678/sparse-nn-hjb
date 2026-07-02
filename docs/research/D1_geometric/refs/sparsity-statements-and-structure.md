@@ -3,7 +3,7 @@
 Literature-grounded synthesis, 2026-06-17. Answers two questions:
 (1) what statement does one *propose* to establish a sparsity effect, and
 (2) what is the structural difference in the two models' inductive bias.
-Vocabulary per `CONTEXT.md`. Papers in `~/Documents/NotePaper/MasterThesis/`.
+Vocabulary per `NOTATION.md`. Papers in `~/Documents/NotePaper/MasterThesis/`.
 
 ## 0. The closest paper is NOT a sparsity result
 
@@ -56,7 +56,7 @@ directly; it proves a **variation-norm gap**.
 
 ## 2. The structural difference in inductive bias — TWO features × TWO layers
 
-Template A's certificate lens, applied to our exact models (`CONTEXT.md` §1),
+Template A's certificate lens, applied to our exact models (`NOTATION.md` §1),
 shows the bias differs in **two independent structural inputs**:
 
 **Feature 1 — null space (unpenalized subspace).** Penalty acts only on atoms $c_i$.

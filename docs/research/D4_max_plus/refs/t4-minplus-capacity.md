@@ -235,7 +235,7 @@ the favorable-HJB mechanism of T4(d).
 
 ## Repo predictions (three-way; $v_d$ and ridge test functions)
 
-| model (ideal dictionary) | on $v_d$ (T2) | on $s(w \cdot x)$ (T2′) | status |
+| model (ideal dictionary) | on $v_d$ | on $s(w \cdot x)$ (T2′) | status |
 |---|---|---|---|
 | `SignedModel` — signed $\sigma_k$ ridges | weight cost $\to \infty$ (T2 B) | $\sim$1 atom, 1-D rates | proved ($d=2$) / cited |
 | `SemiconcaveModel` max-affine limit — shared-Hessian paraboloids | kinks cheap, $\Omega(n^{-2/d})$ on smooth branches (Lemma P Cor 2) | $\Omega(n^{-2/d})$ (Lemma P Cor 1) | **proved** |

@@ -5,6 +5,7 @@
 monotonicity of ∇h. This script confirms it on a NON-quadratic curved V.)
 """
 import numpy as np
+
 rng = np.random.default_rng(0)
 d = 2; c = 0.7
 # V = c/2|x|^2 + sum a_i softplus(w_i·x - b_i), a_i>=0 (convex h) => D^2V >= cI

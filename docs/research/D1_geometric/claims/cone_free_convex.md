@@ -1,4 +1,4 @@
-# cone_free_convex  (T3)
+# cone_free_convex
 
 **status:** **proved** in the curvature-mass ($\int\Delta$) sense (the count-governing cost, all
 $d$); variation-norm version ($\gamma^+=\gamma$) proved $d=1$, $d=2$ numerics $1.00$.
@@ -28,11 +28,24 @@ that sets the count** — cone-free for the count, *given* count $\sim$ curvatur
 Crucially this argument **avoids the Radon ramp-filter obstruction** that blocks the
 variation-norm route.
 
-## Supporting: Radon-convexity (PROVED, verified)
-$g$ convex $\Rightarrow \partial_b^2\mathcal R\{g\}(w,b)=\int_{\{w\cdot x=b\}}w^\top D^2g\,w\ge0$ ($\mathcal R\{g\}$ convex
-in $b$) — the $d\ge2$ generalization of $g''\ge0$. Verified `../../scripts/radon_convexity_check.py`
-(4 convex g $\ge0$; nonconvex control $-47.9$). Closes $d=1$ ($\mathcal R$ measure $=g''$); does not by
-itself close the *variation-norm* $d\ge2$ case (representing measure needs $\partial_b^{d+1}\mathcal R$).
+## Supporting lemma: Radon-convexity (PROVED)
+**Lemma.** $g$ convex $\Rightarrow \partial_b^2\mathcal R\{g\}(w,b)=\int_{\{w\cdot x=b\}}w^\top D^2g\,w\ge0$, i.e.
+$\mathcal R\{g\}$ is convex in $b$ for every direction $w$ — the $d\ge2$ generalization of $g''\ge0$.
+
+**Proof.** Fix a unit $w$ and parametrize the hyperplane $\{w\cdot x=b\}$ by $y\in w^\perp$ via $x=bw+y$:
+$$\mathcal R\{g\}(w,b)=\int_{w^\perp} g(bw+y)\,dy.$$
+Since $\partial_b(bw+y)=w$, the chain rule gives
+$$\partial_b\mathcal R\{g\}(w,b)=\int_{w^\perp} w\!\cdot\!\nabla g(bw+y)\,dy,\qquad
+\partial_b^2\mathcal R\{g\}(w,b)=\int_{w^\perp} w^\top D^2g(bw+y)\,w\,dy.$$
+$g$ convex $\Rightarrow D^2g\succeq0$ (Alexandrov), so the integrand $w^\top D^2g\,w\ge0$ pointwise;
+hence $\partial_b^2\mathcal R\{g\}\ge0$. For non-smooth convex $g$, $D^2g$ is a PSD matrix-valued Radon
+measure and the identity holds distributionally ($w^\top D^2g\,w$ restricted to the $b$-slice is a
+nonnegative measure in $b$). $\blacksquare$
+
+(Numerically confirmed `../../scripts/radon_convexity_check.py`: $\min_{w,b}\partial_b^2\mathcal R\ge0$ for 4
+convex $g$; nonconvex control $-47.9$.) Closes $d=1$ ($\mathcal R$ measure $=g''$); does **not** by itself
+close the *variation-norm* $d\ge2$ case (representing measure needs $\partial_b^{d+1}\mathcal R$, whose sign
+$\partial_b^2\mathcal R\ge0$ does not control — see the obstruction note above).
 
 ## Variation-norm version ($\gamma^+=\gamma$)
 $d=1$: proved ($g(x)=\text{affine}+\int(x-t)_+g''(t)dt$, $g''\ge0$). $d=2$: $\gamma^+/\gamma=1.00$ exact

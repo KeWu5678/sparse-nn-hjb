@@ -1,10 +1,10 @@
-# separation_flat  (proved instance of the current goal)
+# separation_flat
 
 **status:** proved (all $d$, 2026-06-17)
 
-The current goal (OVERVIEW) is the divergence for **general convex $g$**, which holds iff
-$N^+(g,\varepsilon)=o(1/\varepsilon)$. This claim is the proved instance: $g$ flat/polyhedral ⟹ $N^+=K=O(1)$
-⟹ $\Theta(1/(K\varepsilon))$. (Smooth $g$: constant ratio. Curved switching: `separation_general`.)
+A proved special case of the ultimate goal (`separation_general`): the divergence holds iff
+$N^+(g,\varepsilon)=o(1/\varepsilon)$, and here $g$ flat/polyhedral ⟹ $N^+=K=O(1)$ ⟹ $\Theta(1/(K\varepsilon))$.
+(Smooth $g$: constant ratio. Curved switching: `separation_general`.)
 
 **statement.** Let $\sigma=\mathrm{ReLU}$; $V=\tfrac{C}{2}\|x\|^2-g$ with a ball $B$ where
 $D^2V\succeq cI>0$ (curved bulk) and $g$ piecewise-linear with $K$ pieces (flat switching set).

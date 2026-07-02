@@ -13,12 +13,12 @@ Open claim: `claims/minplus_curved.md`.
 - The repo model is a **ridge** cone, not min-of-paraboloids — so this is a *different
   architecture*, off the main line.
 - min suffices only for **finitely-min-representable** $V$ (clean case: $v_d$ = min of $2d$
-  paraboloids, T2). Not a universal fix — rotationally-symmetric $(\|x\|-1)_+$ likely needs
+  paraboloids; `curved_switching_rnorm`). Not a universal fix — rotationally-symmetric $(\|x\|-1)_+$ likely needs
   a continuum of paraboloids in min too. "Which HJB $V$ are finitely-min-representable" =
   open (max-plus rank).
 
-**Why not current.** The current goal fixes flat switching ($\gamma^+<\infty$, ridges work).
+**Why parked.** The current main line fixes flat switching ($\gamma^+<\infty$, ridges work).
 Curved switching is the next frontier; only *then* does this machinery become the main line.
 
-**Detail / log.** `refs/t4-minplus-capacity.md` (T4); external refs `curse-free-max-plus`,
+**Detail / log.** `refs/t4-minplus-capacity.md`; external refs `curse-free-max-plus`,
 `Gaubert–McEneaney–Qu`, `CDC-max-plus-complexity bounds`.

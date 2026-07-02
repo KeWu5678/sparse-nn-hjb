@@ -21,10 +21,12 @@ Counts are CONTINUUM (merged) contact regions; raw grid atoms cluster (~1/alpha)
 and are not the invariant.
 """
 
+import warnings
+
 import numpy as np
 from numpy.linalg import lstsq
 from sklearn.linear_model import Lasso
-import warnings
+
 warnings.filterwarnings("ignore")
 
 N = 300

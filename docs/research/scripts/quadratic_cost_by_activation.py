@@ -9,11 +9,14 @@ activation tells us:
   slope ~ 0  / tiny n        -> quadratic is cheap       -> the real gap is SELECTION
 Decisive for whether Theorem A-d generalizes to the activations we actually use.
 """
-import sys, time
-import numpy as np
+import sys
+import time
 from pathlib import Path
+
+import numpy as np
 from hydra import compose, initialize_config_dir
 from hydra.core.global_hydra import GlobalHydra
+
 ROOT = Path('/Users/chaoruiz/Documents/Repos/SparseNNforHJB'); sys.path.insert(0, str(ROOT))
 import src.config.store  # noqa
 from src.data import normalize_value_samples, split_value_samples
@@ -49,8 +52,7 @@ ALPHAS=np.logspace(-1.0,-4.0,10)
 print(f"PROBE 1 fit = {dt:.1f}s; full ~ {dt*len(ACTS)*len(ALPHAS):.0f}s ({dt*len(ACTS)*len(ALPHAS)/60:.1f} min)", flush=True)
 if dt>15: print("ABORT slow"); raise SystemExit
 
-print(f"\n# n_signed(eps) = N_sigma(pure quadratic, eps), repo PDAP, gamma=0")
-import math
+print("\n# n_signed(eps) = N_sigma(pure quadratic, eps), repo PDAP, gamma=0")
 for act in ACTS:
     pts=[]
     for a in ALPHAS:

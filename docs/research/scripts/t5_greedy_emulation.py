@@ -131,7 +131,7 @@ for sigma in (0.0, 0.05):
               f"   bulk slope of fit = {bulk_slope(fit):+.3f} (target {C_TRUE})")
         if mode == "signed":
             eps_list = [e for e, b in sel[:12]]
-            print(f"         first 12 selections (eps, b): "
+            print("         first 12 selections (eps, b): "
                   + ", ".join(f"({int(e):+d},{b:.2f})" for e, b in sel[:12]))
             n_pos = sum(1 for e in eps_list if e > 0)
             print(f"         eps balance in first 12: {n_pos}+ / "

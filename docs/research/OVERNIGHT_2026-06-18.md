@@ -24,7 +24,7 @@ signed wins, because it exploits the cancellation $Cx-g'$ the fixed nonneg head 
 - **flat/polyhedral $g$:** the divergent sub-case ($e_{\text{semi}}=0$ at finite $K$) =
   `separation_flat` (already proved).
 
-## Cone constraint is FREE for convex g (T3) — new support
+## Cone constraint is FREE for convex g — new support
 `D1_geometric/claims/cone_free_convex.md`: $\gamma^+(g)=\gamma(g)$ for convex $g$. **Proved $d=1$**; **$d=2$
 numerics give ratio exactly $1.00$ for 7/7 smooth convex targets** including anisotropic, rotated,
 and varying-Hessian ($x^4$) stress cases (`scripts/t3_cone_free_2d.py`). This removes one of the
@@ -33,9 +33,9 @@ two $d\ge2$ obstacles — the cone (nonneg) costs nothing for convex $g$.
 ## What's PROVED now (legs)
 $d=1$ current goal (general convex $g$); `head_reduction`, `signed_lower_bound` (general curved
 $V$, all $d$), `correction_cost`, `activation_quadratic_cost`, `separation_flat`, `cone_free_convex`
-($d=1$), T1, T2, `certificate_dichotomy` ($d=1$).
+($d=1$), `budget_1d`, `curved_switching_rnorm`, `certificate_dichotomy` ($d=1$).
 
-## Cone-free (T3) — NOW PROVED (curvature-mass sense), gap shrunk to one rate
+## Cone-free — NOW PROVED (curvature-mass sense), gap shrunk to one rate
 Attacked `cone_free_convex`. **Variation-norm route hit the Radon ramp-filter obstruction**
 (open $d\ge2$). **Curvature-mass route succeeds — PROVED, all $d$:** Jordan-split any signed
 rep $\mu=\mu^+-\mu^-$, $g=h^+-h^-$ ($h^\pm$ convex); since $\Delta h\ge0$ for nonneg,

@@ -10,10 +10,14 @@ advantage = S/C. Test: does advantage correlate with Q?  If yes, the condition i
 "sigma-atoms have high quadratic cost", stated precisely. Multi-property tags printed
 so the condition can be read off (monotone? bounded? growth? sigma'' sign).
 """
-import sys, time, numpy as np
+import sys
+import time
 from pathlib import Path
+
+import numpy as np
 from hydra import compose, initialize_config_dir
 from hydra.core.global_hydra import GlobalHydra
+
 ROOT = Path('/Users/chaoruiz/Documents/Repos/SparseNNforHJB'); sys.path.insert(0, str(ROOT))
 import src.config.store  # noqa
 from src.data import load_value_samples, normalize_value_samples, split_value_samples

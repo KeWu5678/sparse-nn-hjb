@@ -4,7 +4,7 @@
 (`Inverse problem in the space of measures.pdf`, Prop 3.6, source cond. 4.2–4.4, rate
 Rmk 4.3) to derive a *structural* property of the semiconcave model that makes its
 solution sparse, **with a convergence rate**. New relative to T5-d1 (which was the
-$d=1$ certificate dichotomy, no source condition / no rate). Vocabulary per CONTEXT.md.
+$d=1$ certificate dichotomy, no source condition / no rate). Vocabulary per NOTATION.md.
 
 ## Setup in the Bredies framework
 

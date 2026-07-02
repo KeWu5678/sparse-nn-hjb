@@ -6,11 +6,14 @@ the O(1) convex correction). Hence n_signed/n_cone = Theta(1/eps) -> diverges.
 Confirm by the SLOPE of log n vs log(1/eps): signed slope ~ +1 (or steeper),
 cone slope ~ 0. No subtraction (that probe is confounded) -- just the two curves.
 """
-import sys, time
-import numpy as np
+import sys
+import time
 from pathlib import Path
+
+import numpy as np
 from hydra import compose, initialize_config_dir
 from hydra.core.global_hydra import GlobalHydra
+
 ROOT = Path('/Users/chaoruiz/Documents/Repos/SparseNNforHJB'); sys.path.insert(0, str(ROOT))
 import src.config.store  # noqa
 from src.data import load_value_samples, normalize_value_samples, split_value_samples
@@ -53,7 +56,6 @@ for kind in ('semiconcave','signed'):
 print("\n# n(eps) at matched accuracy (min neurons reaching relGrad <= target)")
 print(f"{'target':>7} {'cone':>5} {'signed':>7} {'ratio':>6}")
 tgts = [0.35,0.30,0.25,0.22,0.20,0.18]
-import math
 rows=[]
 def minn(pts,t):
     ok=[n for gr,n in pts if gr<=t]; return min(ok) if ok else None

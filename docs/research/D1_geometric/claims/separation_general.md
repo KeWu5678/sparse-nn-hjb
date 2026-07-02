@@ -12,7 +12,7 @@ $$N(\text{semiconcave},V,\varepsilon)\ \le\ N(\text{signed},V,\varepsilon),\quad
   more sparse $\iff \int|g''|<\int|V''|$ ($V$ more curved than $g$).
 - signed side $\Omega(1/\varepsilon)$: **proved** any curved $V$, all $d$ (`signed_lower_bound`).
 - semiconcave side: $N(\text{semiconcave})=N^+(g)$ (`head_reduction`); cone constraint **free**
-  for convex $g$ — `cone_free_convex` (T3) now **PROVED in the curvature-mass sense** (the
+  for convex $g$ — `cone_free_convex` now **PROVED in the curvature-mass sense** (the
   count-governing cost): signed cancellation strictly raises $\int\Delta$, so nonneg is optimal
   (avoids the ramp-filter obstruction). [variation-norm $\gamma^+=\gamma$: $d=1$ proved, $d=2$ num. $1.00$.]
 - **$d=2$ smooth convex $g$: NUMERICALLY CONFIRMED** (`../../scripts/sep_2d_smooth_convex.py`,
@@ -23,7 +23,7 @@ $$N(\text{semiconcave},V,\varepsilon)\ \le\ N(\text{signed},V,\varepsilon),\quad
   *ratio* is the curvature ratio. **With cone-free now proved (curvature-mass sense), the
   general-$d$ analytic proof needs only ONE thing: the matched $n^{-1}$ rate (count $\sim
   \int|D^2\cdot|/\varepsilon$ in $d\ge2$).**
-- **curved switching set:** $N^+(g)=\infty$ for the **ridge** model (`correction_cost`/T2) ⟹
+- **curved switching set:** $N^+(g)=\infty$ for the **ridge** model (`correction_cost`) ⟹
   needs the min architecture (D4 `minplus_curved`).
 - activation: best-$n$-term needs $\sigma=$ReLU; carry to ReLU²/smooth = penalized regime (D2).
 

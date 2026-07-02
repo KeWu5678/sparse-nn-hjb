@@ -4,7 +4,7 @@
 
 **statement.** Let $V=\tfrac{C}{2}\|x\|^2-g$ on bounded $\Omega\subset\mathbb{R}^d$ with $g$ convex;
 cone (semiconcave) model with quadratic head; cost $N(M,V,\varepsilon)$ = gradient-$L^2$
-best-$n$-term (CONTEXT.md). Then
+best-$n$-term (NOTATION.md). Then
 $$N(\text{semiconcave},V,\varepsilon)=N^+(g,\varepsilon),\quad\text{independent of }C,$$
 where $N^+(g,\varepsilon)$ = fewest **nonnegative** atoms approximating $g$ to gradient error $\varepsilon$.
 

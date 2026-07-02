@@ -101,5 +101,5 @@ for sigma in (0.0, 0.05):
             line_s.append(f"{frac:4.0%}:{ks if ks else '--':>3}")
             line_c.append(f"{frac:4.0%}:{kc if kc else '--':>3}")
         print(f"  [{view}]")
-        print(f"    signed : " + "  ".join(line_s))
-        print(f"    cone   : " + "  ".join(line_c))
+        print("    signed : " + "  ".join(line_s))
+        print("    cone   : " + "  ".join(line_c))

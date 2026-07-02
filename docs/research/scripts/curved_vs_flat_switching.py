@@ -8,10 +8,14 @@ Both have finite curvature budget (Prop B). Predict: cone N(eps) bounded for FLA
 growing for CURVED -- confirming gamma+(g)=inf on curved switching sets (the gap in
 semiconcave-rate.md (d)).  Faithful repo PDAP; timing-probed.
 """
-import sys, time, numpy as np
+import sys
+import time
 from pathlib import Path
+
+import numpy as np
 from hydra import compose, initialize_config_dir
 from hydra.core.global_hydra import GlobalHydra
+
 ROOT = Path('/Users/chaoruiz/Documents/Repos/SparseNNforHJB'); sys.path.insert(0, str(ROOT))
 import src.config.store  # noqa
 from src.data import normalize_value_samples, split_value_samples
@@ -70,6 +74,8 @@ pc=curve(dcurv,'CURVED switching g=(||x||-1)_+')
 print("\n=== verdict ===")
 rf=report(pf,'FLAT  '); rc=report(pc,'CURVED')
 import numpy as np
+
+
 def slope(rows):
     b=[(tg,n) for tg,n in rows if n]
     return np.polyfit(np.log([1/tg for tg,_ in b]),np.log([n for _,n in b]),1)[0] if len(b)>=2 else float('nan')

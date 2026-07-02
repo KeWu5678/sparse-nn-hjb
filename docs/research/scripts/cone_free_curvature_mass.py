@@ -3,6 +3,7 @@ for g = h+ - h- (h± convex via nonneg ReLU), ∫Δh+ + ∫Δh- >= ∫Δg, equal
 (excess = 2∫Δh-). ⟹ nonneg representation uniquely minimizes curvature mass ∫Δ = bud(g).
 This is the count-governing cost, and the argument avoids the Radon ramp-filter obstruction."""
 import numpy as np
+
 m=40; t=np.linspace(-1,1,m); X1,X2=np.meshgrid(t,t)
 P=np.stack([X1.ravel(),X2.ravel()],1); rng=np.random.default_rng(0)
 def relu(z): return np.maximum(z,0.)

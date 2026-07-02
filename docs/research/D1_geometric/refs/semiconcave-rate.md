@@ -2,14 +2,14 @@
 
 Intermediate result, 2026-06-17. The *semiconcave side* of the eventual
 separation (Template C in Template B's currency, structure from Template A; see
-`sparsity-statements-and-structure.md`). Vocabulary per `CONTEXT.md`.
+`sparsity-statements-and-structure.md`). Vocabulary per `NOTATION.md`.
 
 **Setting.** $V = \tfrac{C}{2}\|x\|^2 - g$ on a bounded convex $\Omega \subset \mathbb{R}^d$, $g$
 convex; $V$ Lipschitz up to $\partial\Omega$. Cone model
 $f = \tfrac{\tilde C}{2}\|x\|^2 + a\!\cdot\!x + b_0 - \sum_{i\le n} c_i\,\sigma(w_i\!\cdot\!x - b_i)^p$,
 $c_i \ge 0$, $\tilde C \ge 0$, $\sigma = \mathrm{ReLU}$, atom power $k := p$ (so atoms are
 $\mathrm{ReLU}^k$). Cost $N(M, V, \varepsilon)$ = best-$n$-term neuron count to relative
-gradient-$L^2(\Omega)$ error $\varepsilon$ (CONTEXT.md).
+gradient-$L^2(\Omega)$ error $\varepsilon$ (NOTATION.md).
 
 ---
 
@@ -38,7 +38,7 @@ This is "Feature 1 (null space)" quantified: the curvature $C$ is **free**.
 **Definition (budget).** $\mathrm{bud}(g) := \|D^2 g\|_{\mathcal M} = \int_\Omega \mathrm{tr}\,d(D^2 g)$
 = total mass of the Hessian (Alexandrov) measure of the convex correction $g$ (a
 property of $g$ alone, no activation). Distinct from the rate constant $\gamma^+(g)$
-(the nonneg *ridge* variation norm); see CONTEXT.md and (d).
+(the nonneg *ridge* variation norm); see NOTATION.md and (d).
 
 **Prop B.** $g$ convex $\Rightarrow D^2 g$ is a nonnegative-matrix-valued Radon
 measure with
@@ -100,7 +100,7 @@ $N \le (\gamma^+/\varepsilon)^{2d/(d+2k+1)}$.
 **Confirmed negative result (T2 + empirical, 2026-06-17).** Concrete counterexample
 $g=(\|x\|-1)_+$ on $[-2,2]^2$ (convex; *circular* switching set): finite budget
 (circle crease mass $2\pi$ + smooth exterior) but $\gamma^+(g)=\infty$. Since
-$\|V\|_{\mathcal R}=\infty$ for a curved kink (T2) and $\|\tfrac C2\|x\|^2\|_{\mathcal R}<\infty$, we get
+$\|V\|_{\mathcal R}=\infty$ for a curved kink and $\|\tfrac C2\|x\|^2\|_{\mathcal R}<\infty$, we get
 $\|g\|_{\mathcal R}=\infty$, and $\gamma^+(g)\ge\|g\|_{\mathcal R}=\infty$ (nonneg is more constrained
 than signed). **Faithful repo cone-ReLU-ridge PDAP** (`../../scripts/curved_vs_flat_switching.py`):
 
