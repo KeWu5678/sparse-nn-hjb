@@ -35,7 +35,7 @@ ACTIVATIONSEARCH_DIR_pendulum = experiments/02_pendulum/log_penalty
 BASELINE_DIR_vdp = experiments/01_vdp/baseline
 BASELINE_DIR_pendulum = experiments/02_pendulum/baseline
 HOMOGENEOUS_ACTIVATIONS = $(shell $(PY) -c 'from src.config.activations import ACTIVATIONS; print(",".join(name for name, (_, use_sphere) in ACTIVATIONS.items() if use_sphere))')
-.PHONY: help openloop activationsearch region_split_pendulum penaltypowers baseline_relu_l1 mlflow-deploy mlflow-start mlflow-stop mlflow-tunnel mlflow-backfill mlflow-backfill-latest mlflow-backfill-dry-run mlflow-backfill-latest-dry-run
+.PHONY: help openloop activationsearch region_split_pendulum penaltypowers baseline_relu_l1 paper-figures mlflow-deploy mlflow-start mlflow-stop mlflow-tunnel mlflow-backfill mlflow-backfill-latest mlflow-backfill-dry-run mlflow-backfill-latest-dry-run
 
 help:  ## list targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -45,6 +45,20 @@ help:  ## list targets
 	@printf "  %-20s %s\n" "DATA=name" "dataset for parameterized sweeps, e.g. penaltypowers DATA=pendulum (default vdp)"
 	@printf "  %-20s %s\n" "MLFLOW_RECORDS=PATH" "JSON record file/dir for backfill (default rawdata/logs/multirun)"
 	@printf "  %-20s %s\n" "MLFLOW_TRACKING_URI=URL" "set in your shell to enable MLflow logging/backfill"
+
+paper-figures:  ## refresh papar/plot/ from curated experiment figures (matched by basename; ambiguous names pinned below)
+	@for f in papar/plot/*.png; do \
+	  b=$$(basename "$$f"); \
+	  case "$$b" in \
+	    value_surface_softplus.png|value_surface_gaussian.png) \
+	      src="experiments/01_vdp/log_penalty/figures/$$b";; \
+	    *) src=$$(find experiments -path "*/figures/$$b");; \
+	  esac; \
+	  n=$$(printf '%s\n' "$$src" | grep -c '[^ ]' || true); \
+	  if [ "$$n" -gt 1 ]; then echo "  AMBIGUOUS $$b — pin it in the paper-figures recipe:"; printf '%s\n' "$$src" | sed 's/^/    /'; \
+	  elif [ -n "$$src" ]; then cp "$$src" "$$f" && echo "  $$src -> $$f"; \
+	  else echo "  (no experiment source for $$b — left as-is)"; fi; \
+	done
 
 mlflow-deploy:  ## provision/update EC2 MLflow tracking server with Terraform
 	terraform -chdir=$(TF_DIR) init
