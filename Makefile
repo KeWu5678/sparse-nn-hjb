@@ -52,6 +52,10 @@ paper-figures:  ## refresh papar/plot/ from curated experiment figures (matched 
 	  case "$$b" in \
 	    value_surface_softplus.png|value_surface_gaussian.png) \
 	      src="experiments/01_vdp/log_penalty/figures/$$b";; \
+	    value_surface_p2.png|value_surface_p3.png|value_surface_p5.png) \
+	      src="experiments/01_vdp/frac_exp_penalty/figures/$$b";; \
+	    frontier.png) \
+	      src="experiments/01_vdp/summary/figures/$$b";; \
 	    *) src=$$(find experiments -path "*/figures/$$b");; \
 	  esac; \
 	  n=$$(printf '%s\n' "$$src" | grep -c '[^ ]' || true); \
