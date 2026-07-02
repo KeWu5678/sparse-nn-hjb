@@ -30,7 +30,7 @@ clean, *un-confounded* evidence (two $n(\varepsilon)$ curves; no bulk-subtractio
 ---
 
 
-Status: analysis grounded in the `experiments/activationsearch` data, 2026-06-16.
+Status: analysis grounded in the `experiments/01_vdp/log_penalty + experiments/02_pendulum/log_penalty` data, 2026-06-16.
 Setting: **d = 2** (VDP state space), **gradient-augmented** loss (`h1` =
 loss_weights [1,1]), **non-convex log penalty** (γ swept), repo PDAP+SSN,
 **power p = 1 (ReLU)**. This supersedes the d=1, convex-ℓ1 selection toy (now

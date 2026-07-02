@@ -76,7 +76,7 @@ def region_split_errors(
     predictions: ``True`` = near the switching set, ``False`` = far.
 
     Two families of per-region numbers are returned (see
-    ``experiments/region_split_pendulum/README.md`` for the rationale):
+    ``experiments/03_region_split_pendulum/README.md`` for the rationale):
 
       * ``{near,far}_{l2,grad,h1}`` — region-local *relative* errors (each region
         normalized by its own ‖true‖). Kept for continuity, but confounded here:
@@ -135,23 +135,25 @@ def distance_binned_error(
     v_true: torch.Tensor,
     dv_true: torch.Tensor,
     distance: torch.Tensor,
-    n_bins: int = 8,
+    n_bins: int = 30,
 ) -> Dict[str, float]:
-    """Per-sample absolute H1 error in quantile bins of distance-to-switching-set.
+    """Per-sample absolute H1 error in equal-width bins of distance-to-switching-set.
 
     The literature-standard diagnostic for behaviour near a discontinuity (Gibbs
-    error decays with distance from the kink). Each bin holds an equal share of
-    samples (distance quantiles); the reported value is the bin's mean per-sample
-    absolute error ``|ΔV| + ‖Δ∇V‖`` divided by that mean over *all* samples — a
-    scale-free ratio, so ``bin_ratio > 1`` means worse-than-average there, and the
-    curve is comparable across models. Bins are indexed from nearest the switching
-    set (``bin1``) outward; bin edges are fixed by the dataset's distance cache.
+    error decays with distance from the kink). Bins are equal-*width* in distance
+    (``n_bins`` uniform intervals spanning the dataset's distance range), so the
+    x-axis is a true spatial coordinate. Sample counts per bin are therefore uneven
+    — dense near the switching set, sparse in the far tail (the analysis overlays
+    the counts). The reported value is the bin's mean per-sample absolute error
+    ``|ΔV| + ‖Δ∇V‖`` divided by that mean over *all* samples — a scale-free ratio,
+    so ``bin_ratio > 1`` means worse-than-average there, and the curve is comparable
+    across models. Bins are indexed from nearest the switching set (``bin1``)
+    outward; empty bins report NaN.
     """
     per_sample = (v_pred - v_true).abs().reshape(-1) + (dv_pred - dv_true).norm(dim=1)
     overall = per_sample.mean().clamp_min(1e-30)
     d = distance.reshape(-1)
-    quantiles = torch.linspace(0.0, 1.0, n_bins + 1, dtype=d.dtype)
-    edges = torch.quantile(d, quantiles)
+    edges = torch.linspace(d.min(), d.max(), n_bins + 1, dtype=d.dtype)
     metrics: Dict[str, float] = {}
     for i in range(n_bins):
         lo, hi = edges[i], edges[i + 1]
