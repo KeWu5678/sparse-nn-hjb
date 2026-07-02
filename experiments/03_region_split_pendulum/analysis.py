@@ -218,13 +218,7 @@ def _plot_error_vs_distance(
 # Publication house style (CLAUDE.md): palette only, serif + cm mathtext, no
 # in-figure titles/annotations (captions carry the identifying info), top/right
 # spines hidden, frameless legends, PNG-only at 300 dpi.
-PALETTE = {
-    "blue_main": "#0F4D92",
-    "teal": "#42949E",
-    "red_strong": "#B64342",
-    "neutral": "#CFCECE",
-    "violet": "#9A4D8E",
-}
+from src.plotstyle import PALETTE, apply_publication_style as _apply_publication_style
 # The compared models (all signed, H1 loss, best run per cell by far L1).
 _MODEL_STYLE = {
     "gaussian": (PALETTE["blue_main"], "-"),
@@ -239,23 +233,6 @@ _SURFACE_MODEL_ORDER = ("gaussian", "softplus", "relu^2", "relu^5")
 NEARSWITCH_DIR = REPO_ROOT / "rawdata" / "logs" / "multirun" / "region_split_pendulum_nearswitch"
 RELU_NEARSWITCH_DIR = REPO_ROOT / "rawdata" / "logs" / "multirun" / "penaltypowers_nearswitch"
 FIG_DIR = OUTPUT_DIR / "figures"
-
-
-def _apply_publication_style() -> None:
-    import matplotlib as mpl
-    mpl.rcParams.update({
-        "font.family": ["serif"],
-        "font.serif": ["CMU Serif", "Computer Modern Roman", "cmr10", "DejaVu Serif"],
-        "font.size": 12,
-        "axes.spines.right": False,
-        "axes.spines.top": False,
-        "axes.linewidth": 1.0,
-        "legend.frameon": False,
-        "mathtext.fontset": "cm",
-        "axes.formatter.use_mathtext": True,
-        "svg.fonttype": "none",
-        "text.usetex": False,
-    })
 
 
 def _save_png(fig, name: str, *, tight: bool = True, pad: float = 2.0) -> str:

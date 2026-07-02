@@ -49,22 +49,7 @@ GAMMA1 = 1.0                       # Algorithm 1 log-penalty operating point
 _H1 = [1.0, 1.0]
 PROBLEM = VdpOptimalControlProblem()
 
-PALETTE = {
-    "blue_main": "#0F4D92", "teal": "#42949E", "red_strong": "#B64342",
-    "neutral": "#CFCECE", "violet": "#9A4D8E", "gold": "#C77F0A",
-}
-
-
-def _apply_publication_style(font_size: int = 12, axes_linewidth: float = 1.0) -> None:
-    mpl.rcParams.update({
-        "font.family": ["serif"],
-        "font.serif": ["CMU Serif", "Computer Modern Roman", "cmr10", "DejaVu Serif"],
-        "font.size": font_size,
-        "axes.spines.right": False, "axes.spines.top": False,
-        "axes.linewidth": axes_linewidth, "legend.frameon": False,
-        "mathtext.fontset": "cm", "axes.formatter.use_mathtext": True,
-        "svg.fonttype": "none", "text.usetex": False,
-    })
+from src.plotstyle import PALETTE, apply_publication_style as _apply_publication_style
 
 
 def _finalize(fig, stem: str, *, tight: bool = True, **kw) -> str:

@@ -84,13 +84,7 @@ _N_PERIODS = 3                         # +/- periods to tile for the regions plo
 # this is for visualisation only — it does not affect the wired training samples.
 _REGIONS_CAP = 80.0
 
-PALETTE = {
-    "blue_main": "#0F4D92",
-    "teal": "#42949E",
-    "red_strong": "#B64342",
-    "neutral": "#CFCECE",
-    "violet": "#9A4D8E",
-}
+from src.plotstyle import PALETTE, apply_publication_style as _apply_publication_style
 
 # MATLAB default line-color cycle (the paper cycles these per trajectory).
 _MATLAB_CYCLE = ["#0072BD", "#D95319", "#EDB120", "#7E2F8E", "#77AC30", "#4DBEEE", "#A2142F"]
@@ -101,22 +95,6 @@ _PARULA = LinearSegmentedColormap.from_list("parula", [
     (0.2422, 0.1504, 0.6603), (0.2780, 0.3556, 0.9777), (0.1129, 0.5500, 0.8901),
     (0.0488, 0.6981, 0.7327), (0.2161, 0.7843, 0.5923), (0.6473, 0.7456, 0.4188),
     (0.9856, 0.7372, 0.2537), (0.9763, 0.9831, 0.0538)])
-
-
-def _apply_publication_style(font_size: int = 12, axes_linewidth: float = 1.0) -> None:
-    mpl.rcParams.update({
-        "font.family": ["serif"],
-        "font.serif": ["CMU Serif", "Computer Modern Roman", "cmr10", "DejaVu Serif"],
-        "font.size": font_size,
-        "axes.spines.right": False,
-        "axes.spines.top": False,
-        "axes.linewidth": axes_linewidth,
-        "legend.frameon": False,
-        "mathtext.fontset": "cm",
-        "axes.formatter.use_mathtext": True,
-        "svg.fonttype": "none",
-        "text.usetex": False,
-    })
 
 
 def _finalize_figure(fig, out_path, formats=None, dpi: int = 300, close: bool = True,
