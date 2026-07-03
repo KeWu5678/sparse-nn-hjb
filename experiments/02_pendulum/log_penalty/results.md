@@ -36,7 +36,7 @@ The learned value function V̂(x) of each representative, plotted as a surface o
 the state plane (after Han & Yang Fig. 2 left). `gaussian` reproduces the value bowl
 most faithfully; `leaky_relu` is competent; `softplus` collapses.
 
-| $\mathrm{leaky\,ReLU}$ · 116 neurons · rel $H^1$=0.21 | $\mathrm{softplus}$ · 38 neurons · rel $H^1$=0.63 | $e^{-x^2}$ · 126 neurons · rel $H^1$=0.05 |
+| $\mathrm{leaky\,ReLU}$ · 36 neurons · rel $H^1$=0.43 | $\mathrm{softplus}$ · 77 neurons · rel $H^1$=0.51 | $e^{-x^2}$ · 113 neurons · rel $H^1$=0.58 |
 | --- | --- | --- |
 | ![leaky_relu](figures/value_surface_leaky_relu.png) | ![softplus](figures/value_surface_softplus.png) | ![gaussian](figures/value_surface_gaussian.png) |
 
@@ -46,9 +46,9 @@ Best signed H1 fit per representative
 
 | activation | neurons | rel H1 | far Lv | far Lg |
 | ---------- | ------- | ------ | ------ | ------ |
-| leaky_relu | 116     | 0.211  | 0.095  | 0.246  |
-| softplus   | 38      | 0.629  | 0.521  | 0.622  |
-| gaussian   | 126     | 0.049  | 0.064  | 0.040  |
+| leaky_relu | 36      | 0.425  | 0.240  | 0.306  |
+| softplus   | 77      | 0.515  | 0.221  | 0.298  |
+| gaussian   | 113     | 0.580  | 0.426  | 0.439  |
 
 These are the runs shown in the surface and control panels (the lowest-rel-H1
 signed fit per activation). `rel H1` is the relative H1 error on the validation
@@ -83,9 +83,9 @@ Stabilize to upright from deepest supported start x0=[-6.91, 7.68], T=10
 | controller | neurons | reaches upright? | closed-loop cost |
 | ---------- | ------- | ---------------- | ---------------- |
 | true PMP   | —       | yes              | 57.6             |
-| leaky_relu | 116     | yes              | 59.4             |
-| softplus   | 38      | no               | 494.4            |
-| gaussian   | 126     | yes              | 57.5             |
+| leaky_relu | 36      | yes              | 69.5             |
+| softplus   | 77      | yes              | 57.9             |
+| gaussian   | 113     | no               | 208.5            |
 
 Left is the angle from upright θ(t)−2kπ; right is the feedback law u(t); cost is the
 accumulated running cost. From a supported start the closed loop **agrees with the
@@ -116,18 +116,18 @@ Effect of alpha (best gamma per alpha), signed H1
 
 | activation | alpha  | gamma | neurons | rel H1 |
 | ---------- | ------ | ----- | ------- | ------ |
-| leaky_relu | 1e-05  | 0.1   | 148     | 0.237  |
-| leaky_relu | 0.0001 | 1     | 127     | 0.250  |
-| leaky_relu | 0.001  | 10    | 116     | 0.211  |
-| leaky_relu | 0.01   | 10    | 30      | 0.339  |
-| softplus   | 1e-05  | 0.1   | 119     | 0.738  |
-| softplus   | 0.0001 | 10    | 83      | 0.644  |
-| softplus   | 0.001  | 1     | 38      | 0.629  |
-| softplus   | 0.01   | 0     | 17      | 0.801  |
-| gaussian   | 1e-05  | 1     | 126     | 0.049  |
-| gaussian   | 0.0001 | 10    | 112     | 0.129  |
-| gaussian   | 0.001  | 0.1   | 58      | 0.249  |
-| gaussian   | 0.01   | 1     | 32      | 0.470  |
+| leaky_relu | 1e-05  | 0.1   | 149     | 0.451  |
+| leaky_relu | 0.0001 | 0.1   | 137     | 0.433  |
+| leaky_relu | 0.001  | 0     | 105     | 0.432  |
+| leaky_relu | 0.01   | 10    | 36      | 0.425  |
+| softplus   | 1e-05  | 10    | 77      | 0.515  |
+| softplus   | 0.0001 | 0.1   | 82      | 0.526  |
+| softplus   | 0.001  | 0.1   | 41      | 0.620  |
+| softplus   | 0.01   | 1     | 18      | 0.785  |
+| gaussian   | 1e-05  | 10    | 114     | 0.606  |
+| gaussian   | 0.0001 | 1     | 113     | 0.580  |
+| gaussian   | 0.001  | 0     | 100     | 0.616  |
+| gaussian   | 0.01   | 1     | 25      | 0.684  |
 
 **α is the dominant sparsity lever**: raising it from 1e-5 to 1e-2 cuts the neuron
 count sharply (leaky_relu 148→30, gaussian 126→32). What that pruning costs depends on
@@ -145,18 +145,18 @@ Effect of gamma (best alpha per gamma), signed H1
 
 | activation | gamma | alpha  | neurons | rel H1 |
 | ---------- | ----- | ------ | ------- | ------ |
-| leaky_relu | 0     | 0.0001 | 133     | 0.257  |
-| leaky_relu | 0.1   | 1e-05  | 148     | 0.237  |
-| leaky_relu | 1     | 0.0001 | 127     | 0.250  |
-| leaky_relu | 10    | 0.001  | 116     | 0.211  |
-| softplus   | 0     | 1e-05  | 117     | 0.750  |
-| softplus   | 0.1   | 0.001  | 24      | 0.711  |
-| softplus   | 1     | 0.001  | 38      | 0.629  |
-| softplus   | 10    | 0.0001 | 83      | 0.644  |
-| gaussian   | 0     | 1e-05  | 122     | 0.070  |
-| gaussian   | 0.1   | 1e-05  | 124     | 0.088  |
-| gaussian   | 1     | 1e-05  | 126     | 0.049  |
-| gaussian   | 10    | 1e-05  | 129     | 0.111  |
+| leaky_relu | 0     | 0.001  | 105     | 0.432  |
+| leaky_relu | 0.1   | 0.0001 | 137     | 0.433  |
+| leaky_relu | 1     | 0.001  | 100     | 0.441  |
+| leaky_relu | 10    | 0.01   | 36      | 0.425  |
+| softplus   | 0     | 1e-05  | 82      | 0.517  |
+| softplus   | 0.1   | 1e-05  | 84      | 0.524  |
+| softplus   | 1     | 1e-05  | 79      | 0.531  |
+| softplus   | 10    | 1e-05  | 77      | 0.515  |
+| gaussian   | 0     | 0.001  | 100     | 0.616  |
+| gaussian   | 0.1   | 1e-05  | 106     | 0.619  |
+| gaussian   | 1     | 0.0001 | 113     | 0.580  |
+| gaussian   | 10    | 1e-05  | 114     | 0.606  |
 
 **γ only refines**: the best γ improves `leaky_relu` modestly (0.211 at γ=10 vs 0.257
 at γ=0) and `gaussian` slightly (0.049 at γ=1 vs 0.070 at γ=0); it does not change the
@@ -185,20 +185,20 @@ Pendulum H1 fit — best far value-L1 per model/activation
 
 | kind        | activation   | gamma | alpha  | neurons | far Lv | near Lv | near/far V | far Lg | near/far G |
 | ----------- | ------------ | ----- | ------ | ------- | ------ | ------- | ---------- | ------ | ---------- |
-| signed      | gaussian     | 0     | 1e-05  | 122     | 0.052  | 0.032   | 0.62       | 0.054  | 0.77       |
-| signed      | leaky_relu   | 10    | 0.0001 | 130     | 0.080  | 0.044   | 0.56       | 0.268  | 0.92       |
-| signed      | matern52     | 10    | 1e-05  | 114     | 0.109  | 0.073   | 0.67       | 0.121  | 0.87       |
-| signed      | tanh         | 1     | 1e-05  | 102     | 0.134  | 0.073   | 0.54       | 0.118  | 0.79       |
-| signed      | gelu_squared | 0.1   | 1e-05  | 100     | 0.144  | 0.056   | 0.38       | 0.171  | 0.67       |
-| signed      | gausscent_1  | 1     | 0.0001 | 91      | 0.180  | 0.084   | 0.47       | 0.240  | 0.97       |
-| semiconcave | matern52     | 1     | 0.001  | 14      | 0.234  | 0.213   | 0.91       | 0.367  | 1.08       |
-| semiconcave | leaky_relu   | 1     | 0.0001 | 104     | 0.284  | 0.223   | 0.78       | 0.653  | 0.95       |
-| semiconcave | gaussian     | 0.1   | 0.001  | 12      | 0.375  | 0.222   | 0.59       | 0.322  | 0.87       |
-| semiconcave | tanh         | 1     | 0.001  | 15      | 0.481  | 0.310   | 0.65       | 0.792  | 1.13       |
-| signed      | softplus     | 1     | 0.0001 | 77      | 0.490  | 0.387   | 0.79       | 0.724  | 1.24       |
-| semiconcave | gelu_squared | 0.1   | 0.0001 | 30      | 0.498  | 0.406   | 0.82       | 0.619  | 1.08       |
-| semiconcave | gausscent_1  | 1     | 0.001  | 17      | 0.584  | 0.434   | 0.74       | 0.660  | 1.03       |
-| semiconcave | softplus     | 1     | 0.0001 | 7       | 0.790  | 0.681   | 0.86       | 0.888  | 1.16       |
+| signed      | leaky_relu   | 0     | 0.001  | 105     | 0.115  | 0.455   | 3.95       | 0.290  | 4.30       |
+| signed      | softplus     | 10    | 1e-05  | 77      | 0.221  | 1.066   | 4.82       | 0.298  | 6.05       |
+| semiconcave | leaky_relu   | 0     | 1e-05  | 119     | 0.241  | 0.929   | 3.85       | 0.528  | 3.32       |
+| signed      | gausscent_1  | 0.1   | 1e-05  | 123     | 0.270  | 1.442   | 5.33       | 0.500  | 4.11       |
+| signed      | tanh         | 1     | 0.0001 | 99      | 0.275  | 1.111   | 4.05       | 0.455  | 4.27       |
+| signed      | gaussian     | 1     | 1e-05  | 112     | 0.282  | 1.468   | 5.21       | 0.503  | 4.12       |
+| semiconcave | gelu_squared | 10    | 1e-05  | 41      | 0.315  | 1.535   | 4.87       | 0.546  | 3.84       |
+| semiconcave | tanh         | 10    | 0.001  | 24      | 0.325  | 1.390   | 4.28       | 0.527  | 3.82       |
+| semiconcave | matern52     | 10    | 0.001  | 22      | 0.352  | 1.479   | 4.21       | 0.504  | 3.96       |
+| signed      | matern52     | 0.1   | 0.0001 | 129     | 0.370  | 1.560   | 4.22       | 0.300  | 5.37       |
+| signed      | gelu_squared | 0.1   | 0.01   | 17      | 0.395  | 1.469   | 3.72       | 0.549  | 3.84       |
+| semiconcave | gaussian     | 10    | 1e-05  | 27      | 0.414  | 1.823   | 4.40       | 0.538  | 3.92       |
+| semiconcave | gausscent_1  | 0     | 1e-05  | 22      | 0.470  | 1.927   | 4.10       | 0.566  | 3.79       |
+| semiconcave | softplus     | 10    | 0.01   | 4       | 2.287  | 4.641   | 2.03       | 0.709  | 3.34       |
 
 ### L2 (value-only) loss
 
@@ -206,14 +206,16 @@ Pendulum L2 fit — best far value-L1 per model/activation
 
 | kind        | activation   | gamma | alpha  | neurons | far Lv | near Lv | near/far V | far Lg | near/far G |
 | ----------- | ------------ | ----- | ------ | ------- | ------ | ------- | ---------- | ------ | ---------- |
-| signed      | leaky_relu   | 1     | 1e-05  | 125     | 0.176  | 0.206   | 1.17       | 0.695  | 1.42       |
-| semiconcave | leaky_relu   | 10    | 1e-05  | 20      | 0.385  | 0.393   | 1.02       | 0.959  | 1.28       |
-| signed      | gaussian     | 10    | 1e-05  | 46      | 0.396  | 0.384   | 0.97       | 0.930  | 1.21       |
-| signed      | gausscent_1  | 0     | 1e-05  | 102     | 0.410  | 0.405   | 0.99       | 0.924  | 1.29       |
-| signed      | matern52     | 0.1   | 1e-05  | 70      | 0.418  | 0.413   | 0.99       | 0.916  | 1.35       |
-| signed      | tanh         | 10    | 1e-05  | 45      | 0.434  | 0.460   | 1.06       | 0.966  | 1.53       |
-| signed      | softplus     | 10    | 1e-05  | 42      | 0.434  | 0.426   | 0.98       | 1.001  | 1.28       |
-| semiconcave | gelu_squared | 10    | 1e-05  | 5       | 0.439  | 0.444   | 1.01       | 0.903  | 1.44       |
-| semiconcave | tanh         | 10    | 1e-05  | 7       | 0.440  | 0.452   | 1.03       | 0.901  | 1.36       |
-| semiconcave | gausscent_1  | 10    | 1e-05  | 8       | 0.442  | 0.447   | 1.01       | 0.911  | 1.39       |
-| signed      | gelu_squared | 1     | 0.0001 | 9       | 0.468  | 0.497   | 1.06       | 0.939  | 1.43       |
+| signed      | leaky_relu   | 0.1   | 1e-05  | 123     | 0.134  | 0.484   | 3.60       | 0.924  | 2.02       |
+| semiconcave | leaky_relu   | 1     | 1e-05  | 42      | 0.183  | 0.690   | 3.78       | 0.654  | 3.35       |
+| signed      | gaussian     | 10    | 1e-05  | 124     | 0.253  | 0.819   | 3.24       | 0.756  | 2.81       |
+| signed      | matern52     | 10    | 1e-05  | 81      | 0.261  | 0.855   | 3.27       | 0.672  | 3.20       |
+| signed      | gausscent_1  | 10    | 1e-05  | 58      | 0.262  | 0.862   | 3.29       | 0.768  | 2.83       |
+| semiconcave | gelu_squared | 10    | 1e-05  | 12      | 0.281  | 0.886   | 3.15       | 0.638  | 3.25       |
+| signed      | gelu_squared | 10    | 1e-05  | 62      | 0.288  | 0.875   | 3.04       | 0.655  | 3.16       |
+| semiconcave | gausscent_1  | 1     | 1e-05  | 16      | 0.297  | 0.948   | 3.20       | 0.601  | 3.51       |
+| signed      | tanh         | 10    | 1e-05  | 96      | 0.326  | 1.083   | 3.32       | 0.655  | 3.50       |
+| semiconcave | tanh         | 10    | 1e-05  | 68      | 0.649  | 1.715   | 2.64       | 0.833  | 3.22       |
+| semiconcave | gaussian     | 0     | 1e-05  | 42      | 0.657  | 1.724   | 2.62       | 0.838  | 3.20       |
+| semiconcave | matern52     | 10    | 0.0001 | 14      | 0.658  | 1.713   | 2.60       | 0.843  | 3.21       |
+| signed      | softplus     | 10    | 1e-05  | 39      | 0.689  | 1.772   | 2.57       | 0.846  | 3.22       |
