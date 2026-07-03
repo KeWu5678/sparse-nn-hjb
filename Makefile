@@ -56,6 +56,8 @@ paper-figures:  ## refresh papar/plot/ from curated experiment figures (matched 
 	      src="experiments/01_vdp/frac_exp_penalty/figures/$$b";; \
 	    frontier.png) \
 	      src="experiments/01_vdp/summary/figures/$$b";; \
+	    pendulum_insertion_frontier.png) \
+	      src="experiments/03_region_split_pendulum/figures/frontier.png";; \
 	    *) src=$$(find experiments -path "*/figures/$$b");; \
 	  esac; \
 	  n=$$(printf '%s\n' "$$src" | grep -c '[^ ]' || true); \

@@ -1871,7 +1871,11 @@ The two algorithms produce structurally different representations: Algorithm~2 c
 
 
 \subsection{Pendulum Swing-Up}
-In this example we consider the pendulum swing-up problem from \cite{han2024nonsmooth}.
+We have established that our current network approximate the value function in the Barron space $B_1^k(D)$.
+The ability to approximate the discontinuous gradient is potentially limited. 
+We now show this with the pendulum example. Moreover, we demonstrate under this limited setting, which model could approximate the discontinuity more effectively.
+
+The example we consider follows from \cite{han2024nonsmooth}.
 We write
 \begin{equation*}
 	x = (x_1,x_2)^T = (\theta,\omega)^T, \qquad \omega=\dot{\theta}.
@@ -1936,6 +1940,7 @@ In the experiment we use $\varepsilon=2\times 10^{-4}$, and on $\partial L_\vare
 \end{equation*}
 For the data generation, we solve the open-loop PMP system by integrating backward from the local LQR boundary $\partial L_\varepsilon$.
 Along each PMP trajectory, the accumulated running cost gives the value sample $V(x)$, and the costate gives the gradient sample $\nabla V(x)=p$.
+The backward integration stops when $V$ hits a predefined ceiling. 
 This yields the dataset
 \begin{equation*}
 \{x^m,V(x^m),\nabla V(x^m)\}_{m=1}^M
@@ -1943,8 +1948,11 @@ This yields the dataset
 
 This construction records the nonsmooth geometry of the pendulum value function.
 Because the clockwise and counter-clockwise swing-up branches have equal cost at the bottom position $((2k+1)\pi,0)$, the optimal value function is not globally $C^1$.
-The generator therefore detects the switching curve by intersecting equal-value contours with their $2\pi$-shifted copies and then restricts the PMP trajectories to a consistent smooth branch before forming the final $(x,V,dV)$ dataset.
-This is the feature that makes the pendulum benchmark a stress test for the gradient-augmented sparse neural approximation: the value can be continuous while its gradient changes sharply across the switching set.
+The generator detects the switching curve by intersecting equal-value contours with their $2\pi$-shifted copies and restricts the PMP trajectories to a consistent smooth branch.
+Restriction alone, however, produces \emph{one-sided} data --- every sample stops at the switching curve, so the gradient jump itself would never appear in the training set.
+The generator therefore adds an envelope-certified band straddling the switching arms: the raw trajectories are tiled by $\pm 2\pi$ in $\theta$, and a tiled point within the band is kept only if its branch value beats the competing branch's locally extrapolated value, certifying that it carries the true $(V,\nabla V)$ on its side of the curve.
+The final $(x,V,dV)$ dataset (3{,}900 samples: a 3{,}000-sample in-basin body plus a 900-sample two-sided band) thus contains the gradient discontinuity as an \emph{interior} feature.
+This makes the pendulum benchmark a stress test for the gradient-augmented sparse neural approximation: the value is continuous while its gradient jumps across a switching set that the models see from both sides.
 \begin{figure}[H]
 \centering
 \captionsetup[subfigure]{justification=centering}
@@ -1975,6 +1983,170 @@ periodic uprights; their boundaries are the switching-set spirals across which
 $\nabla V$ is discontinuous.}
 \label{fig:pendulum_data} 
 \end{figure}
+
+
+
+\subsubsection{Limitation of Fitting the General Value Function}
+As in the last example we fit the training data with the models we selected.
+Figure~\ref{fig:rs_surfaces} shows the
+four fitted surfaces on the same physical window and value range as the true
+surface of Figure~\ref{fig:pendulum_data_surface}.
+With the two-sided band in the training data the models now shape the full multi-well landscape rather than a single central bowl: $\mathrm{ReLU}^{2}$ raises sharp diagonal walls along the switching arms between the $2k\pi$ wells, the Gaussian reproduces the wells but rounds the ridge off, and softplus smears the structure.
+The switching walls are, however, reproduced only approximately --- the quantitative limitation appears on the transect below.
+
+\begin{figure}[H]
+\centering
+\captionsetup[subfigure]{justification=centering}
+\begin{subfigure}[b]{0.24\textwidth}
+\centering
+\includegraphics[width=\textwidth]{plot/surface_gaussian.png}
+\caption{Gaussian + $\phi_{1}$}
+\label{fig:rs_surface_gaussian}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.24\textwidth}
+\centering
+\includegraphics[width=\textwidth]{plot/surface_softplus.png}
+\caption{softplus+ $\phi_{1}$}
+\label{fig:rs_surface_softplus}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.24\textwidth}
+\centering
+\includegraphics[width=\textwidth]{plot/surface_relu2.png}
+\caption{$\mathrm{ReLU}^{2}$+$\phi_2$.}
+\label{fig:rs_surface_relu2}
+\end{subfigure} 
+\hfill
+\begin{subfigure}[b]{0.24\textwidth}
+\centering
+\includegraphics[width=\textwidth]{plot/surface_relu5.png}
+\caption{$\mathrm{ReLU}^{5}$+$\phi_5$.}
+\label{fig:rs_surface_relu5}
+\end{subfigure}
+\caption{Learned value surfaces $\hat V(x)$ over the $(\theta,\dot\theta)$
+window $[-8,8]^{2}$, displayed on the common range $\hat V\in[0,60]$.
+Trained on the two-sided data, the models shape the multi-well landscape;
+the sharpness of the switching walls varies with the atom class, from the
+crisp $\mathrm{ReLU}^{2}$ ridges to the smeared softplus surface.}
+\label{fig:rs_surfaces}
+\end{figure}
+
+In Figure~\ref{fig:rs_transect}, a transect along the normal to the
+switching curve through the densest data region. The true value (left) is the
+continuous lower envelope of the two PMP branches, with a concave kink at the
+crossing; the true normal gradient $n\cdot\nabla V$ (right) therefore
+\emph{jumps} at the switching set $s=0$.
+Unlike the branch-restricted construction, the training data here carry samples
+on \emph{both} sides of the curve, so the jump is in-sample --- and the
+transect shows that this is necessary but not sufficient. No model reproduces
+the jump's magnitude: all of them undershoot the steep pre-jump gradient
+(true $n\cdot\nabla V\approx-100$ just before the curve against fitted values
+between $-20$ and $-58$), because the finite-width band bounds how much
+one-sided steepness the global $H^{1}$ fit will spend neurons on.
+$\mathrm{ReLU}^{2}$ comes closest: it is the only model that develops a visible
+kink at $s\approx 0$ --- its piecewise-quadratic atoms can break the derivative
+across a line --- while the smooth activations necessarily interpolate a gentle
+slope through the discontinuity. The near-band error is thus a genuine
+representation cost at a \emph{seen} discontinuity, no longer a boundary-layer
+artifact of one-sided sampling.
+
+\begin{figure}[H]
+\centering
+\captionsetup[subfigure]{justification=centering}
+\begin{subfigure}[b]{0.48\textwidth}
+\centering
+\includegraphics[width=\textwidth]{plot/transect_value.png}
+\caption{value $V$ along the normal.}
+\label{fig:rs_transect_value}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.48\textwidth}
+\centering
+\includegraphics[width=\textwidth]{plot/transect_normal_gradient.png}
+\caption{normal gradient $n\cdot\nabla V$ along the normal.}
+\label{fig:rs_transect_gradient}
+\end{subfigure}
+\caption{Transect along the switching-set normal, parametrized by signed
+distance $s$ (the models saw data on both sides). Left: the true value (dashed)
+is a continuous lower envelope with a kink at $s=0$. Right: the true normal
+gradient jumps at $s=0$ by ${\approx}100$ units; $\mathrm{ReLU}^{2}$ alone
+develops a kink near $s=0$, while the smooth models interpolate through the
+discontinuity, and no model reproduces the jump's full magnitude --- a
+representation limit at a seen discontinuity.}
+\label{fig:rs_transect}
+\end{figure}
+
+
+\subsubsection{The $ReLU^2$ fits the discontinuous gradient}
+Despite the limitation of fitting the discontinuous gradient in general, ReLU$^2$ demonstrate better performance in fitting the swtiching profile than other activation function. 
+
+ 
+Figure~\ref{fig:rs_frontier}
+tracks the best relative $H^{1}$ validation error reached as neurons are
+inserted, for each activation paired with its penalty. $\mathrm{ReLU}^{2}$
+(fractional penalty $\psi_{2}$) separates from the field almost immediately and
+reaches the lowest error of all ($\approx 3.6\times10^{-1}$ at 113 neurons);
+softplus plateaus near $5.4\times10^{-1}$, and $\mathrm{ReLU}^{5}$ ($\psi_{5}$)
+and the Gaussian stall around $5.5$--$5.9\times10^{-1}$. The errors are
+uniformly higher than on a smooth target --- the two-sided switching band makes
+the fit genuinely harder for every atom class --- but the per-neuron accuracy
+advantage of the \emph{low-power} rectified atom is unambiguous; raising the
+power to $5$ forfeits it.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.7\textwidth]{plot/pendulum_insertion_frontier.png}
+\caption{Best relative $H^{1}$ validation error against
+neuron count, one curve per activation--penalty pair
+($\phi_{\gamma}$ the log penalty, $\psi_{k}$ the fractional-exponent penalty),
+on the two-sided switching-set data.
+$\mathrm{ReLU}^{2}$ reaches the lowest error overall by a wide margin;
+softplus, the Gaussian, and $\mathrm{ReLU}^{5}$ plateau at $1.5$--$1.6\times$
+its error.}
+\label{fig:rs_frontier}
+\end{figure}
+
+Figure~\ref{fig:rs_atoms} draws each atom's active line $\{a\cdot x + b = 0\}$
+in the physical $(\theta,\dot\theta)$ plane, with line strength proportional to
+the outer weight $|c_{n}|$, for $\mathrm{ReLU}^{2}$ (left) and Gaussian (right);
+the switching curve is shown in black. $\mathrm{ReLU}^{2}$ concentrates its
+strongest ridges parallel to the diagonal switching arms --- piecewise
+low-degree ridges whose derivative breaks exactly where the target's does ---
+whereas the Gaussian spends its capacity on near-isotropic bumps that can tile
+the wells but cannot seat a gradient break. This alignment is the mechanism
+behind the frontier advantage above and behind the transect kink of
+Figure~\ref{fig:rs_transect}.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.85\textwidth]{plot/atom_portrait.png}
+\caption{Active atom lines $\{a\cdot x + b = 0\}$ in the $(\theta,\dot\theta)$
+plane (strength $\propto |c_{n}|$) for $\mathrm{ReLU}^{2}$ (left) and Gaussian
+(right); the switching curve is black. $\mathrm{ReLU}^{2}$'s strongest ridges
+run parallel to the switching arms; the Gaussian atoms tile the wells
+isotropically.}
+\label{fig:rs_atoms}
+\end{figure}
+
+
+In summary, $\mathrm{ReLU}^{2}$ with the fractional-exponent penalty is the
+best atom class for this nonsmooth target. With the two-sided band the
+switching set is an \emph{interior} kink of the training data, and the
+experiment measures representation rather than extrapolation: every atom class
+pays a several-fold accuracy penalty in the band around the curve, and only
+$\mathrm{ReLU}^{2}$ --- whose derivative can break across a hyperplane ---
+partially seats the jump (Figure~\ref{fig:rs_transect}). The two-sided
+coverage also has a price: the band carries most of the squared mass of the
+unweighted $H^{1}$ objective, so interior accuracy degrades relative to
+training on the basin alone --- least for $\mathrm{ReLU}^{2}$, most for the
+stiff high-power atoms. In closed loop the branch decision at the curve
+becomes learnable, and $\mathrm{ReLU}^{2}$ alone makes it correctly from both
+sides of the switching set, matching the optimal cost from the braking side;
+the smooth models fail from both starts. The bottleneck has moved from data
+coverage across the curve to the atoms' ability to represent the kink ---
+which is precisely the regime the sparse rectified atoms are built for.
+
 
 \newpage
 \bibliographystyle{plain}
