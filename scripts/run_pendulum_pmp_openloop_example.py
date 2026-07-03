@@ -42,6 +42,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--basin-value-max", type=float, default=50.0,
                         help="value cap on the basin arms (reference ~57; 35 is too small) — issue #18")
     parser.add_argument("--periodic-copies", type=int, default=0)
+    parser.add_argument("--collar-width", type=float, default=0.5,
+                        help="switching-set band half-width around the tiled ridge (0 disables)")
+    parser.add_argument("--collar-fraction", type=float, default=1.0 / 6.0,
+                        help="share of --level-set-samples drawn from the far-side collar")
+    parser.add_argument("--pad-fraction", type=float, default=1.0 / 12.0,
+                        help="share of --level-set-samples drawn from the near-side pad")
     parser.add_argument("--level-set-samples", type=int, default=2000)
     parser.add_argument("--output-dir", type=Path, default=DATA_DIR)
     parser.add_argument("--tag", type=str, default=None)
@@ -94,14 +100,46 @@ def main() -> None:
         contour_delta=args.contour_delta,
         basin_value_max=args.basin_value_max,
         periodic_copies=args.periodic_copies,
+        collar_width=args.collar_width,
     )
+    if not 0.0 <= args.collar_fraction + args.pad_fraction < 1.0:
+        raise ValueError("collar-fraction + pad-fraction must be in [0, 1)")
     solver = PendulumPmpSolver(problem=problem, config=config)
 
     started = time.perf_counter()
     solution = solver.solve(progress=progress_printer(args.quiet))
     elapsed = time.perf_counter() - started
+    if solution.nonsmooth_curve.basin.shape[0] < 3:
+        # Known issue-#18 instability: the auto-assembled basin can come out empty
+        # (e.g. at 2000 paths), silently disabling BOTH the restriction cut and the
+        # collar/pad harvest — the emitted samples would be the raw chaotic region.
+        raise RuntimeError(
+            "basin assembly produced an empty ring: restriction and switching-band "
+            "harvest are no-ops. Re-run the post-processing with a validated basin "
+            "injected (issue #18 workaround; see the 20260630 dataset's basin_source)."
+        )
     raw_sample_count = solution.value_samples.size
-    value_samples = thin_value_samples(solution.value_samples, args.level_set_samples)
+    collar_pool = solution.collar_samples or ValueSamples.concatenate([])
+    pad_pool = solution.pad_samples or ValueSamples.concatenate([])
+    # Thin the in-basin body, near-side pad, and far-side collar pools separately
+    # so the emitted dataset hits the requested near-switch shares (uniform
+    # thinning would give the band only its pool proportion).
+    collar_target = min(round(args.collar_fraction * args.level_set_samples), collar_pool.size)
+    pad_target = min(round(args.pad_fraction * args.level_set_samples), pad_pool.size)
+    basin_samples = thin_value_samples(
+        solution.value_samples, args.level_set_samples - collar_target - pad_target
+    )
+    collar_samples = (
+        thin_value_samples(collar_pool, collar_target)
+        if collar_target > 0
+        else ValueSamples.concatenate([])
+    )
+    pad_samples = (
+        thin_value_samples(pad_pool, pad_target)
+        if pad_target > 0
+        else ValueSamples.concatenate([])
+    )
+    value_samples = ValueSamples.concatenate([basin_samples, pad_samples, collar_samples])
     solution = replace(
         solution,
         value_samples=value_samples,
@@ -119,6 +157,12 @@ def main() -> None:
         "elapsed_seconds": elapsed,
         "raw_retained_points": raw_sample_count,
         "level_set_samples": args.level_set_samples,
+        "collar_pool_points": collar_pool.size,
+        "collar_samples": collar_samples.size,
+        "collar_fraction": args.collar_fraction,
+        "pad_pool_points": pad_pool.size,
+        "pad_samples": pad_samples.size,
+        "pad_fraction": args.pad_fraction,
         "problem": {
             "mass": problem.mass,
             "length": problem.length,

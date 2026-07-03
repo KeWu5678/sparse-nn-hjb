@@ -16,11 +16,12 @@ The region eval (``cfg.eval=region_split``) loads ``distance`` and labels the lo
 ``near_percentile`` percent of validation samples as *near* — so the band lives only
 in the eval config, not baked into the cache.
 
-Distance is to the nearest ridge *point* (KD-tree over the dense ~2.6k ridge
-points), not the polyline, so it is robust to the ridge having multiple arcs and
-makes no assumption about the stored point ordering. Distances are in raw
-(theta, omega) units; no periodic wrapping (ridge and samples share the same
-solve coordinates, and the stored ridge already spans more than one period).
+Distance is to the nearest ridge *point* (KD-tree over the ridge points tiled by
+2πk in theta, k = -1, 0, 1), not the polyline, so it is robust to the ridge
+having multiple arcs and makes no assumption about the stored point ordering.
+Tiling matters: the stored ridge covers one period (the +theta arm and spiral),
+while the basin's left boundary is the same arm shifted by -2π — without the
+tiles, samples hugging the left arm would be mislabeled far.
 
     python scripts/investigation/precompute_region_distances.py \
         --data Pendulum_<run>/Pendulum_pmp_value_samples_256_<date>.npz
@@ -99,8 +100,12 @@ def main() -> int:
     if curve.is_empty:
         raise ValueError(f"ridge {curve_path} is empty; cannot label regions")
 
-    # Distance from every sample to the nearest ridge point.
-    ridge_tree = cKDTree(curve.points)
+    # Distance from every sample to the nearest ridge point (periodically tiled:
+    # the stored ridge covers one period, but its -2π copy bounds the basin too).
+    ridge_tiled = np.vstack(
+        [curve.points + np.array([2.0 * np.pi * k, 0.0]) for k in (-1, 0, 1)]
+    )
+    ridge_tree = cKDTree(ridge_tiled)
     distance, _ = ridge_tree.query(x, k=1)
 
     # h = median nearest-neighbor spacing among the samples themselves: query k=2
