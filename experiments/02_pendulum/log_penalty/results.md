@@ -12,13 +12,15 @@ baseline, not an H1 candidate — see `../../baseline`).
 
 Under the gradient-augmented (H1) loss each neuron contributes σ to V and
 **w·σ′ to ∇V**, so the activation *derivative* σ′ is the basis that reconstructs
-the gradient field. On the **faithful** basin data (issue #18: wider basin, V≲57,
-θ̇±7.7), the result **reverses** the old narrow-basin (cap-35) finding: the sampled
-region is dominated by the **smooth interior** of the upright basin — the switching
-set is only its sparse boundary — so the activation that tiles a smooth field most
-economically wins. That is the **localized RBF (`gaussian`)**, best on every error
-band *and* in closed loop; the kink (`leaky_relu`) is a competent, uniquely
-sparse-robust runner-up, and the smooth ridge (`softplus`) is worst.
+the gradient field. On the **two-sided** data (3,900 samples: in-basin body +
+an envelope-certified pad/collar band straddling the switching arms, so the
+gradient jump is in-sample) the ranking flips back from the one-sided
+interlude: the switching band dominates the unweighted H1 objective, so the
+activation whose derivative can **break across a hyperplane** wins. That is
+the **kink (`leaky_relu`)**, best on every error band and stable in closed
+loop; the smooth ridge (`softplus`) is a surprising runner-up in both accuracy
+and control; the localized RBF (`gaussian`) — the one-sided era's winner —
+drops to mid-field and **fails in closed loop**.
 
 ### Activation shape
 
@@ -27,14 +29,18 @@ sparse-robust runner-up, and the smooth ridge (`softplus`) is worst.
 `leaky_relu′` is a step (slope `a`→`1` across its hyperplane — it can seat a finite
 gradient jump, and unlike plain `relu` has no dead side); `softplus′` is a smooth
 sigmoid (it can only smear a jump over width ≈ 1/β); the Gaussian derivative is a
-sign-changing bump (localized, non-monotone). The kink can *localize* a switching-set
-discontinuity, but most of the basin is smooth — where the localized bump tiles best.
+sign-changing bump (localized, non-monotone). With the switching band in-sample
+the step derivative is the right basis where the error mass sits; the localized
+bump must tile the jump at high neuron count and extrapolates worst beyond the
+data.
 
 ### Fitted value surfaces
 
 The learned value function V̂(x) of each representative, plotted as a surface over
-the state plane (after Han & Yang Fig. 2 left). `gaussian` reproduces the value bowl
-most faithfully; `leaky_relu` is competent; `softplus` collapses.
+the state plane (after Han & Yang Fig. 2 left; z unclipped — note the per-panel
+scale). `leaky_relu` keeps a bounded multi-well relief; `softplus` shapes the
+wells most visibly; `gaussian` is nearly flat over the data and erupts in a
+~10³ off-support corner spike — the surface behind its closed-loop failure.
 
 | $\mathrm{leaky\,ReLU}$ · 36 neurons · rel $H^1$=0.43 | $\mathrm{softplus}$ · 77 neurons · rel $H^1$=0.51 | $e^{-x^2}$ · 113 neurons · rel $H^1$=0.58 |
 | --- | --- | --- |
@@ -53,28 +59,32 @@ Best signed H1 fit per representative
 These are the runs shown in the surface and control panels (the lowest-rel-H1
 signed fit per activation). `rel H1` is the relative H1 error on the validation
 split; `far Lv`/`far Lg` are the absolute far-field value/gradient L1 (the robust
-metric the rest of the doc uses). On the faithful basin data the two metrics now
-**agree**:
+metric the rest of the doc uses). On the two-sided data the two metrics agree
+on the ranking:
 
-- **`gaussian` is best on every column** — lowest rel H1 (0.049), lowest far value
-  L1 (0.064) *and* lowest far gradient L1 (0.040). On the old cap-35 basin rel H1
-  *inverted* (gaussian posted a low rel H1 but a large absolute error); here the
-  V→0 confound does not flip the ranking, and the robust L1 confirms it.
-- **`leaky_relu` is the competent runner-up** (rel H1 0.211, far Lv 0.095) — it
-  seats the boundary kink but pays on the gradient band (far Lg 0.246, ~6× gaussian).
-- **`softplus` is worst on all three** (far Lv 0.521): its smooth, single-signed σ′
-  cannot localize structure, so its surface collapses (see the panel).
+- **`leaky_relu` is best on every column** — lowest rel H1 (0.425 at only 36
+  neurons), lowest far gradient L1, and in the full table below its far value
+  L1 (0.115 at α=1e-3) is roughly half the best smooth activation's. Its step
+  derivative seats the in-sample jump instead of averaging across it.
+- **`softplus` is the runner-up** (rel H1 0.515, far Lv 0.221) — a reversal of
+  its one-sided-era collapse: with large-|V| band samples anchoring both sides
+  of the arms, its monotone ridge shapes the wells competently (see the panel).
+- **`gaussian` drops to mid-field** (rel H1 0.580, far Lv 0.282 at its best
+  cell): the one-sided era's winner tiled a smooth interior; forced to spend
+  bumps on an unfittable jump it loses everywhere, and off-support its surface
+  erupts (panel above).
 
 ### Synthesized control vs true feedback
 
 The pendulum is control-affine with cost `r·u²`, so a value function induces the
 feedback `u(x) = −(1/(2r·ml²)) ∂_θ̇ V(x)` (`PendulumSwingUpProblem.feedback_from_gradient`).
 We synthesize û from each fitted V̂ and **roll it out in the true dynamics** from the
-deepest *supported* state (the basin has no data at hanging θ=π, so a swing-up from
-hanging is off-data; we start from the highest cost-to-go sample and drive to the
-nearest upright copy), beside the true PMP feedback (nearest-neighbour interpolated
-from the dataset's costate samples) — the closed-loop test of Han & Yang Fig. 3:
-does the induced controller reach upright, and at what cost.
+deepest *supported* state (the hanging configuration θ=π itself remains at the edge
+of support — the band samples sit on the switching spiral around it, not at it — so
+we start from the highest cost-to-go sample and drive to the nearest upright copy),
+beside the true PMP feedback (nearest-neighbour interpolated from the dataset's
+costate samples) — the closed-loop test of Han & Yang Fig. 3: does the induced
+controller reach upright, and at what cost.
 
 ![control synthesis](figures/control_synthesis.png)
 
@@ -91,20 +101,20 @@ Left is the angle from upright θ(t)−2kπ; right is the feedback law u(t); cos
 accumulated running cost. From a supported start the closed loop **agrees with the
 accuracy ranking**:
 
-- **`gaussian` ≈ true PMP** — it reaches upright at cost 57.5, essentially matching
-  the true feedback (57.6) and the best learned controller. Its low-error, smooth
-  surface induces a benign global field.
-- **`leaky_relu` reaches upright** at a slightly higher cost (59.4) — competent, as
-  its piecewise-linear extrapolation stays bounded.
-- **`softplus` fails** (cost 494) — its collapsed value surface gives a feedback that
-  never reaches upright.
+- **`softplus` ≈ true PMP** — it reaches upright at cost 57.9, essentially matching
+  the true feedback (57.6): its smooth low-error field is benign along the whole
+  swing corridor.
+- **`leaky_relu` reaches upright** at a modestly higher cost (69.5) — its
+  piecewise-linear extrapolation stays bounded and sign-correct.
+- **`gaussian` fails** (cost 208.5): it swings up but settles ≈ 0.4 rad short of
+  upright with a persistent u ≈ +4 bias — the residual field of its off-support
+  spike. The one-sided era's best controller is now the only failing one.
 
-So on the faithful basin data the localized RBF wins *both* on-data accuracy and
-closed-loop control; the kink is a safe runner-up; the smooth ridge is unusable.
-This **reverses** the old cap-35 conclusion (where the kink was the only stabilizing
-controller and gaussian diverged) — with the corrected wider basin, the closed loop
-no longer punishes the smooth surface, because the data now covers the region the
-controlled trajectory actually traverses.
+So on the two-sided data the kink atom wins on-data accuracy and stays reliable
+in closed loop, while the RBF's advantage — economically tiling a smooth
+interior — is gone once the objective is dominated by a jump it cannot seat.
+The closed loop punishes global field quality, and gaussian's is now the worst
+of the three.
 
 ## Parameter discussion (α, γ)
 
@@ -130,16 +140,17 @@ Effect of alpha (best gamma per alpha), signed H1
 | gaussian   | 0.01   | 1     | 25      | 0.684  |
 
 **α is the dominant sparsity lever**: raising it from 1e-5 to 1e-2 cuts the neuron
-count sharply (leaky_relu 148→30, gaussian 126→32). What that pruning costs depends on
+count sharply (leaky_relu 149→36, gaussian 114→25). What that pruning costs depends on
 the activation, and the dependence is itself a finding:
 
-- `gaussian` is **most accurate but pruning-sensitive** — rel H1 0.049 at α=1e-5
-  (126 neurons) degrades to 0.470 by α=1e-2 (32 neurons). Its low error is bought by
-  *tiling* the smooth field with many localized bumps; remove them and it cannot fit.
-- `leaky_relu` **stays competent when sparse** — rel H1 holds ≈ 0.21–0.34 all the way
-  down to 30 neurons. A kink atom carries irreducible structure, so few are needed —
-  this sparse-robustness is its remaining edge over the RBF.
-- `softplus` never fits (rel H1 ≈ 0.63–0.80 at every α).
+- `leaky_relu` is **essentially free to prune** — rel H1 stays 0.425–0.451 from
+  149 neurons all the way down to 36 (its best cell is the *sparsest* one). A
+  kink atom carries irreducible structure, so few are needed; on the two-sided
+  target this sparse-robustness compounds its accuracy lead.
+- `gaussian` degrades under pruning (0.580 at 113 neurons → 0.684 at 25): its
+  fit is bought by tiling with many localized bumps.
+- `softplus` degrades the fastest (0.515 at 77 neurons → 0.785 at 18) — the
+  ridge needs width to shape the wells.
 
 Effect of gamma (best alpha per gamma), signed H1
 
@@ -158,18 +169,18 @@ Effect of gamma (best alpha per gamma), signed H1
 | gaussian   | 1     | 0.0001 | 113     | 0.580  |
 | gaussian   | 10    | 1e-05  | 114     | 0.606  |
 
-**γ only refines**: the best γ improves `leaky_relu` modestly (0.211 at γ=10 vs 0.257
-at γ=0) and `gaussian` slightly (0.049 at γ=1 vs 0.070 at γ=0); it does not change the
-ranking.
+**γ only refines**: the best γ improves `leaky_relu` marginally (0.425 at γ=10 vs
+0.432 at γ=0) and `gaussian` slightly (0.580 at γ=1 vs 0.616 at γ=0); it does not
+change the ranking.
 
 ![alpha/gamma tradeoff](figures/alpha_gamma_tradeoff.png)
 
 The scatter places every signed-H1 run on the neurons-vs-accuracy plane (marker =
-activation, colour = γ). `gaussian` reaches the lowest error but only at high neuron
-count, rising steeply as it is pruned; `leaky_relu` is a low, flat band — competent
-across the whole sparsity range; `softplus` sits high throughout. The penalty moves a
-model *along* its frontier, but where that frontier sits — and whether accuracy
-survives sparsity — is set by the activation.
+activation, colour = γ). `leaky_relu` is the low, flat band — best accuracy *and*
+it survives the whole sparsity range; `gaussian` and `softplus` sit higher and
+rise as they are pruned. The penalty moves a model *along* its frontier, but
+where that frontier sits — and whether accuracy survives sparsity — is set by
+the activation.
 
 ## Full result
 

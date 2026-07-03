@@ -469,7 +469,10 @@ The coefficient penalty is `α·Σ |c|^q`, `q = 2/(power+1)`: higher power ⇒ s
 `q` ⇒ more aggressive nonconvex pruning. On a smooth target that was free, but a
 switching-set value function needs **more, lower-degree** atoms to seat the gradient
 discontinuity — so raising the power both over-smooths each atom and over-prunes,
-and the fit degrades sharply.
+and the fit degrades sharply. On the current **two-sided** data (the pad/collar band
+puts the gradient jump in-sample) the reversal is starker than on the earlier
+one-sided basin: the band dominates the H1 objective, and only low-power atoms can
+spend that error mass usefully.
 
 ### Penalty & atom shape
 
@@ -483,10 +486,10 @@ grows more concave as `q=2/(p+1)` shrinks. The mildest nonconvex penalty, `p=2`
 
 The learned `V̂(x)` of the best ReLU fit at each power (shared `plot_model_value_surface`
 renderer, z **unclipped**). The reconstruction degrades visibly as the power rises: the
-in-basin bowl is correct at `p=2`, but a high-power atom `σ(z)^p` extrapolates as a
-degree-`p` polynomial off the thin basin, so by `p=5` the surface is dominated by a
-~10⁴ off-basin spike and the true value range (≲57) is squashed flat — itself a picture
-of why high power over-fits the boundary and loses the interior.
+multi-well landscape and its switching walls are shaped at `p=2`, but a high-power atom
+`σ(z)^p` extrapolates as a degree-`p` polynomial off the data, so by `p=5` the surface
+is dominated by a ~10⁴ off-support spike and the true value range (≲65) is squashed
+flat — itself a picture of why high power over-fits the boundary and loses the interior.
 
 {_surf_row()}
 
@@ -510,32 +513,31 @@ The pendulum is control-affine with cost `r·u²`, so the value induces the **fe
 law** `u(x) = −(1/(2r·ml²)) ∂_θ̇ V(x)` (Han & Yang Eq. 15,
 `PendulumSwingUpProblem.feedback_from_gradient`). We synthesize û from each fitted ReLU^p
 `V̂` and roll it out in the true dynamics, beside the true PMP feedback. **Start.** The
-PMP samples are the *upright smooth basin* (faithful basin restriction, issue #18): they
-cover `θ̇∈[−7.7,7.7]` and `V≲57` around each upright copy, with **no data at the
-hanging-down switching set `θ=π`** — so a swing-up *from hanging* is unsupported
-(off-data, every feedback law would extrapolate). We instead start from the **deepest
-supported state** (the highest cost-to-go sample, here `x0≈[{x0[0]:.2f}, {x0[1]:.2f}]`, a fast-moving
-edge-of-basin state) and drive to the nearest upright copy. Left is the angle from upright
-`θ(t)−2kπ`; right is the feedback law `u(t)`.
+samples cover the upright basin plus the two-sided switching band (`θ̇∈[−7.7,7.7]`,
+`V≲65`); the hanging configuration `θ=π` itself remains at the edge of support (band
+samples sit on the switching spiral around it, not at it), so we start from the
+**deepest supported state** (the highest cost-to-go sample, here
+`x0≈[{x0[0]:.2f}, {x0[1]:.2f}]`, a fast-moving edge-of-basin state) and drive to the
+nearest upright copy. Left is the angle from upright `θ(t)−2kπ`; right is the feedback
+law `u(t)`.
 
 ![control synthesis]({ctrl_fig})
 
 {_cost_table(cost_rows, x0)}
 
 At `t=0` all four controllers sit at the same supported state, and their controls
-**agree in sign and rough magnitude** — the feedback law is synthesized correctly (the
-earlier off-data hanging start, by contrast, gave sign-flipped garbage because no sample
-constrained `∇V̂` there). From this supported start **all four controllers stabilize** to
-the upright with near-identical cost ({cost_phrase}). Unlike the on-data accuracy — where power 2 is materially better
-— the induced *controllers* are barely separated here: every fitted `V̂` produces a benign
-global field from this fast edge-of-basin start, so the closed loop does not amplify the
-accuracy gap. The mild cost ordering still favors low power (`p2 < p3 < p5`), consistent
-with the reversal, but the catastrophic high-power failure seen on the old (narrower,
-cap-35) basin data is **gone** with the faithful wider basin. (Caveats: a single initial
-condition, and closed-loop outcomes are sensitive to the start because `∇V̂` is only pinned
-on the thin basin samples; the basin data cannot reach the hanging configuration at all.
-The robust, data-level statement is the accuracy reversal itself: **higher power degrades
-the fit**, far Lv rising from {far_lv_by_p[lo_p]:.2f} at `p={int(lo_p)}` to {far_lv_by_p[hi_p]:.2f} at `p={int(hi_p)}`.)
+**agree in sign and rough magnitude** — the feedback law is synthesized correctly (an
+off-data hanging start, by contrast, gives sign-flipped garbage because no sample
+constrains `∇V̂` there). The closed loop now amplifies the accuracy gap ({cost_phrase}):
+**powers 2 and 3 track the true swing to the 2π upright almost exactly, while power 5
+overshoots and never settles** — its oscillating control keeps the pendulum orbiting
+past the upright, the closed-loop face of the same off-support polynomial growth seen
+in its value surface. On the two-sided data the high-power controller failure is back
+(it had vanished in the one-sided interlude, where the smooth interior dominated the
+objective). (Caveats: a single initial condition, and closed-loop outcomes are
+sensitive to the start because `∇V̂` is pinned only near the data. The robust,
+data-level statement is the accuracy reversal itself: **higher power degrades the
+fit**, far Lv rising from {far_lv_by_p[lo_p]:.2f} at `p={int(lo_p)}` to {far_lv_by_p[hi_p]:.2f} at `p={int(hi_p)}`.)
 
 ## Parameter discussion (power, α)
 
