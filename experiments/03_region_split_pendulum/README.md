@@ -11,13 +11,22 @@ samples never reached the switching set.
 - **Data**: `data=pendulum`, which auto-selects `eval=region_split`
   (`conf/data/pendulum.yaml`). The dataset is the open-loop PMP solve
   (`scripts/run_pendulum_pmp_openloop_example.py`): 2000 backward-PMP
-  trajectories with **no** periodic tiling (`periodic_copies 0`, single upright
-  well at θ = 0), adaptively level-set-sampled to **3,000** samples spanning
-  x[0] ∈ [-7.6, 7.2], x[1] ∈ [-7.7, 7.7] (basin reuses the validated 256-path
-  basin — issue #18 workaround, since the 2000-path auto-basin came back empty).
-  Each sample carries a precomputed distance to the switching set
-  (`scripts/investigation/precompute_region_distances.py`); the near band
-  (lowest 10%) is distance ≤ 0.57 → 300 near samples.
+  trajectories, basin-restricted (the validated 256-path basin — issue #18
+  workaround, since the 2000-path auto-basin came back empty) and **two-sided
+  at the switching set**: **3,900** samples = 3,000 in-basin body (adaptive
+  level-set thinning, single upright well at θ = 0, no periodic tiling of the
+  emitted domain) + a 900-sample envelope-certified band within 0.5 of the
+  switching arms — 300 near-side *pad* (central-branch points between the
+  basin's conservative trim and the true arm) and 600 far-side *collar*
+  (±2π-branch points across the arm), each candidate kept only where its
+  branch value beats the competing branch's locally extrapolated value
+  (`PendulumPmpSolver.build_collar_samples`). The gradient jump is in-sample
+  wherever both branches carry data. Each sample carries a precomputed
+  distance to the **±2π-tiled** switching set
+  (`scripts/investigation/precompute_region_distances.py`; tiling matters —
+  the stored ridge covers one period while the basin's left arm is its −2π
+  copy); the near band (lowest 10%) is distance ≤ 0.25 → 390 near samples
+  (221 near-side + 169 far-side).
 - **Region split**: `near` = the lowest `near_percentile` (default 10) % of
   validation samples by distance to the switching set; `far` = the rest.
 - **Sweep** (`make region_split_pendulum`): `model.kind ∈ {signed, semiconcave}` ×

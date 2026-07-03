@@ -41,6 +41,11 @@ OUTPUT_DIR = Path(__file__).resolve().parent
 
 _LOSS_LABEL = {(1.0, 0.0): "l2", (1.0, 1.0): "h1"}
 _N_BINS = 30
+# Fixed geometric tube (distance-to-switching-set) that defines the
+# "switching set" region for the switching-set / rest comparison, replacing the
+# old density-dependent 10% near-band quantile. |V| is large in this tube, so
+# relative error there is not confounded by the V->0 equilibrium.
+_SWITCHING_TUBE = 0.3
 # The Fig. 2 open-loop data panels (value surface, switching set, regions of
 # attraction) now live in experiments/00_openloop/pendulum; this analysis only
 # scores the region split and plots error-vs-distance.
@@ -233,7 +238,6 @@ _DISPLAY = {"relu^2": r"ReLU$^2$", "relu^5": r"ReLU$^5$",
             "gaussian": "gaussian", "softplus": "softplus"}
 _SURFACE_MODEL_ORDER = ("gaussian", "softplus", "relu^2", "relu^5")
 NEARSWITCH_DIR = REPO_ROOT / "rawdata" / "logs" / "multirun" / "region_split_pendulum_nearswitch"
-RELU_NEARSWITCH_DIR = REPO_ROOT / "rawdata" / "logs" / "multirun" / "penaltypowers_nearswitch"
 FIG_DIR = OUTPUT_DIR / "figures"
 
 
@@ -411,7 +415,7 @@ def fig_transect(models: dict[str, dict[str, Any]], nets: dict[str, Any], norm,
     axes[1].set_ylim(g_true.min() - pad_g, g_true.max() + pad_g)
     axes[0].set_ylabel(r"$V$")
     axes[1].set_ylabel(r"$n\cdot\nabla V$")
-    axes[1].set_xlabel(r"signed distance $s$ along the switching-set normal")
+    axes[1].set_xlabel(r"$s$")
     axes[0].legend(loc="upper left", fontsize=10)
     return _save_png(fig, "transect_switching_set")
 
@@ -466,7 +470,7 @@ def fig_transect_split(models: dict[str, dict[str, Any]], nets: dict[str, Any], 
         ymin, ymax = float(np.nanmin(all_y)), float(np.nanmax(all_y))
         pad = 0.06 * max(ymax - ymin, 1.0)
         ax.set_ylim(ymin - pad, ymax + pad)
-        ax.set_xlabel(r"signed distance $s$ along the switching-set normal")
+        ax.set_xlabel(r"$s$")
         ax.set_ylabel(ylabel)
         ax.legend(loc="upper left", fontsize=10)
         out[key] = _save_png(fig, stem)
@@ -552,38 +556,64 @@ def fig_true_branch_transect(curve, pool, rawt, *, s_max: float = 0.45) -> dict[
                 lw=2.2, label=styles["branch1"][2])
         ax.plot(s, ymin, color=styles["min"][0], ls=styles["min"][1],
                 lw=2.4, label=styles["min"][2])
-        ax.set_xlabel(r"signed distance $s$ along the switching-set normal")
+        ax.set_xlabel(r"$s$")
         ax.set_ylabel(ylabel)
         ax.legend(loc="best", fontsize=10)
         out[stem] = _save_png(fig, stem)
     return out
 
 
-def fig_dumbbell(models: dict[str, dict[str, Any]]) -> str:
-    """F4 — near vs far mean per-sample L1 per model (log scale, paired dots)."""
+def fig_dumbbell(models: dict[str, dict[str, Any]], nets: dict[str, Any],
+                 samples, norm, distance: np.ndarray,
+                 tube: float = _SWITCHING_TUBE) -> str:
+    """F4 — switching-set-tube vs rest relative H1 error per model.
+
+    Region = fixed geometric tube ``d <= tube`` around the switching set (not the
+    old 10% quantile). Error = relative H1 error
+    ``sqrt(sum(dV^2 + |d grad V|^2)) / sqrt(sum(V^2 + |grad V|^2))``, well posed in
+    the tube where ``|V|`` is large.
+    """
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     _apply_publication_style()
-    order = sorted(models, key=lambda n: models[n]["far_l1"], reverse=True)
+    x = np.asarray(samples["x"], dtype=np.float64)
+    v_true = np.asarray(samples["v"], dtype=np.float64).reshape(-1)
+    g_true = np.asarray(samples["dv"], dtype=np.float64)
+    d = np.asarray(distance, dtype=np.float64)
+    inb = d <= tube
+    out = ~inb
+    h1_true_sq = v_true**2 + np.sum(g_true**2, axis=1)
+
+    def _rel_h1(err_sq, sel):
+        den = float(h1_true_sq[sel].sum())
+        return float(np.sqrt(err_sq[sel].sum()) / np.sqrt(den)) if den > 0 else np.nan
+
+    rel: dict[str, dict[str, float]] = {}
+    for name in models:
+        v_pred, g_pred = _value_grad_phys(nets[name], x, norm)
+        err_sq = (v_pred - v_true) ** 2 + np.sum((g_pred - g_true) ** 2, axis=1)
+        rel[name] = {"tube": _rel_h1(err_sq, inb), "rest": _rel_h1(err_sq, out)}
+
+    order = sorted(models, key=lambda n: rel[n]["rest"], reverse=True)
     fig, ax = plt.subplots(figsize=(8.0, 4.2))
     for y, name in enumerate(order):
-        r = models[name]
         color, _ = _MODEL_STYLE[name]
-        ax.plot([r["far_l1"], r["near_l1"]], [y, y], color=color, lw=2.0, zorder=1)
-        ax.scatter([r["far_l1"]], [y], s=70, facecolor="white", edgecolor=color,
+        ax.plot([rel[name]["rest"], rel[name]["tube"]], [y, y], color=color, lw=2.0, zorder=1)
+        ax.scatter([rel[name]["rest"]], [y], s=70, facecolor="white", edgecolor=color,
                    lw=2.0, zorder=2)
-        ax.scatter([r["near_l1"]], [y], s=70, color=color, zorder=2)
+        ax.scatter([rel[name]["tube"]], [y], s=70, color=color, zorder=2)
     ax.set_xscale("log")
     ax.set_yticks(range(len(order)))
     ax.set_yticklabels([_DISPLAY[n] for n in order])
-    ax.set_xlabel(r"mean per-sample $L^1$ error / global mean $\|\mathrm{true}\|$")
+    ax.set_xlabel(r"relative $H^1$ error")
     from matplotlib.lines import Line2D
     ax.legend(handles=[
-        Line2D([], [], marker="o", ls="", markerfacecolor="0.3", color="0.3", label="near"),
+        Line2D([], [], marker="o", ls="", markerfacecolor="0.3", color="0.3",
+               label=f"switching set ($d\\leq{tube:g}$)"),
         Line2D([], [], marker="o", ls="", markerfacecolor="white",
-               markeredgecolor="0.3", color="0.3", label="far"),
+               markeredgecolor="0.3", color="0.3", label="rest"),
     ], loc="lower left", fontsize=10)
     return _save_png(fig, "near_far_dumbbell")
 
@@ -591,7 +621,12 @@ def fig_dumbbell(models: dict[str, dict[str, Any]]) -> str:
 def fig_error_vs_distance_split(models: dict[str, dict[str, Any]], nets: dict[str, Any],
                                 samples, norm, distance: np.ndarray,
                                 centers: np.ndarray, counts: np.ndarray) -> dict[str, str]:
-    """Separate value and gradient error profiles for the comparison models."""
+    """Per-bin relative error vs distance to the switching set (value, gradient).
+
+    Each bin's mean absolute error is divided by that bin's mean absolute true
+    value / gradient (a within-bin relative error), so the value magnitude is
+    divided out and the curve is not a copy of the |V| profile.
+    """
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -608,22 +643,28 @@ def fig_error_vs_distance_split(models: dict[str, dict[str, Any]], nets: dict[st
         v_pred, g_pred = _value_grad_phys(nets[name], x, norm)
         v_err_abs = np.abs(v_pred - v_true)
         g_err_abs = np.linalg.norm(g_pred - g_true, axis=1)
-        v_den = max(float(np.mean(v_err_abs)), 1e-30)
-        g_den = max(float(np.mean(g_err_abs)), 1e-30)
-        v_err = v_err_abs / v_den
-        g_err = g_err_abs / g_den
+        v_abs = np.abs(v_true)
+        g_abs = np.linalg.norm(g_true, axis=1)
         curves[name] = {"value": [], "gradient": []}
         for i in range(_N_BINS):
             lo, hi = edges[i], edges[i + 1]
             mask = (distance >= lo) & ((distance <= hi) if i == _N_BINS - 1 else (distance < hi))
-            curves[name]["value"].append(float(np.mean(v_err[mask])) if np.any(mask) else np.nan)
-            curves[name]["gradient"].append(float(np.mean(g_err[mask])) if np.any(mask) else np.nan)
+            if np.any(mask):
+                v_den = float(np.mean(v_abs[mask]))
+                g_den = float(np.mean(g_abs[mask]))
+                curves[name]["value"].append(
+                    float(np.mean(v_err_abs[mask])) / v_den if v_den > 0 else np.nan)
+                curves[name]["gradient"].append(
+                    float(np.mean(g_err_abs[mask])) / g_den if g_den > 0 else np.nan)
+            else:
+                curves[name]["value"].append(np.nan)
+                curves[name]["gradient"].append(np.nan)
 
     out: dict[str, str] = {}
     for quantity, ylabel, stem in (
-        ("value", r"bin mean $|\hat V - V|$ / model global mean $|\hat V - V|$",
+        ("value", r"bin mean $|\hat V - V|$ / bin mean $|V|$",
          "error_vs_distance_value"),
-        ("gradient", r"bin mean $\|\nabla\hat V-\nabla V\|$ / model global mean error",
+        ("gradient", r"bin mean $\|\nabla\hat V-\nabla V\|$ / bin mean $\|\nabla V\|$",
          "error_vs_distance_gradient"),
     ):
         fig, ax = plt.subplots(figsize=(8.5, 5.2))
@@ -642,117 +683,6 @@ def fig_error_vs_distance_split(models: dict[str, dict[str, Any]], nets: dict[st
         ax.set_ylabel(ylabel)
         ax.legend(loc="upper left", fontsize=10)
         out[quantity] = _save_png(fig, stem)
-    return out
-
-
-def _best_ratio_by_cell(multirun: Path, *, relu_power: bool) -> dict[str, dict[str, float]]:
-    """activation -> {'ratio','near','far'} from the best-per-cell H1 run in a sweep dir."""
-    out: dict[str, dict[str, Any]] = {}
-    for path in sorted(multirun.glob("*/*.json")):
-        record = json.loads(path.read_text(encoding="utf-8"))
-        model = record["config"]["model"]
-        m = record["metrics"][0]["values"]
-        if "near_l1_h1" not in m or int(m.get("best_neurons", 0)) == 0:
-            continue
-        loss = _LOSS_LABEL.get(tuple(model["loss_weights"]), "")
-        if relu_power:
-            if model["activation"] != "relu":
-                continue
-            key = f"relu^{model['power']:g}|{loss}"
-        else:
-            if model["kind"] != "signed" or loss != "h1":
-                continue
-            key = f"{model['activation']}|{loss}"
-        far = float(m["far_l1_h1"])
-        if key not in out or far < out[key]["far"]:
-            out[key] = {"far": far, "near": float(m["near_l1_h1"]),
-                        "ratio": float(m["near_l1_h1"]) / far if far else float("nan")}
-    return out
-
-
-def fig_sampling_control(models: dict[str, dict[str, Any]]) -> str | None:
-    """F5 — (a) near/far ratio baseline → density-balanced per model;
-    (b) balanced-data near/far vs ReLU power under L2 and H1."""
-    if not NEARSWITCH_DIR.exists() or not RELU_NEARSWITCH_DIR.exists():
-        return None
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-
-    _apply_publication_style()
-    smooth = _best_ratio_by_cell(NEARSWITCH_DIR, relu_power=False)
-    relu = _best_ratio_by_cell(RELU_NEARSWITCH_DIR, relu_power=True)
-    balanced = {**{k.split("|")[0]: v for k, v in smooth.items()},
-                **{k.split("|")[0]: v for k, v in relu.items() if k.endswith("|h1")}}
-
-    fig, axes = plt.subplots(1, 2, figsize=(11, 4.4))
-    for name, row in models.items():
-        if name not in balanced:
-            continue
-        color, _ = _MODEL_STYLE[name]
-        axes[0].plot([0, 1], [row["l1_near/far"], balanced[name]["ratio"]],
-                     "-o", color=color, lw=2.0, ms=6, label=_DISPLAY[name])
-    axes[0].axhline(1.0, color="0.75", lw=1.0, ls="--", zorder=0)
-    axes[0].set_xticks([0, 1])
-    axes[0].set_xticklabels(["biased (3k)", "balanced (6k)"])
-    axes[0].set_xlim(-0.25, 1.25)
-    axes[0].set_ylabel("near/far mean L1 ratio")
-    axes[0].legend(loc="upper right", fontsize=10)
-
-    powers = [2.0, 2.01, 3.0, 4.0, 5.0]
-    for loss, color, ls in (("l2", PALETTE["red_strong"], "-"),
-                            ("h1", PALETTE["blue_main"], "-")):
-        ratios = [relu.get(f"relu^{p:g}|{loss}", {}).get("ratio", np.nan) for p in powers]
-        axes[1].plot(powers, ratios, "-o", color=color, ls=ls, lw=2.0, ms=6,
-                     label={"l2": r"$L^2$ trained", "h1": r"$H^1$ trained"}[loss])
-    axes[1].axhline(1.0, color="0.75", lw=1.0, ls="--", zorder=0)
-    axes[1].set_xlabel(r"atom power $p$ (penalty $q=2/(p{+}1)$)")
-    axes[1].set_ylabel("near/far mean L1 ratio (balanced)")
-    axes[1].legend(loc="upper left", fontsize=10)
-    return _save_png(fig, "sampling_control")
-
-
-def fig_sampling_control_split(models: dict[str, dict[str, Any]]) -> dict[str, str]:
-    """Separate sampling-density and ReLU-power controls."""
-    if not NEARSWITCH_DIR.exists() or not RELU_NEARSWITCH_DIR.exists():
-        return {}
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-
-    _apply_publication_style()
-    smooth = _best_ratio_by_cell(NEARSWITCH_DIR, relu_power=False)
-    relu = _best_ratio_by_cell(RELU_NEARSWITCH_DIR, relu_power=True)
-    balanced = {**{k.split("|")[0]: v for k, v in smooth.items()},
-                **{k.split("|")[0]: v for k, v in relu.items() if k.endswith("|h1")}}
-    out: dict[str, str] = {}
-
-    fig, ax = plt.subplots(figsize=(6.4, 4.4))
-    for name, row in models.items():
-        if name not in balanced:
-            continue
-        color, ls = _MODEL_STYLE[name]
-        ax.plot([0, 1], [row["l1_near/far"], balanced[name]["ratio"]],
-                marker="o", color=color, ls=ls, lw=2.0, ms=6, label=_DISPLAY[name])
-    ax.axhline(1.0, color="0.75", lw=1.0, ls="--", zorder=0)
-    ax.set_xticks([0, 1])
-    ax.set_xticklabels(["biased (3k)", "balanced (6k)"])
-    ax.set_xlim(-0.25, 1.25)
-    ax.set_ylabel("near/far mean L1 ratio")
-    ax.legend(loc="upper right", fontsize=10)
-    out["density"] = _save_png(fig, "sampling_density_balance")
-
-    fig, ax = plt.subplots(figsize=(6.4, 4.4))
-    powers = [2.0, 2.01, 3.0, 4.0, 5.0]
-    for loss, color in (("l2", PALETTE["red_strong"]), ("h1", PALETTE["blue_main"])):
-        ratios = [relu.get(f"relu^{p:g}|{loss}", {}).get("ratio", np.nan) for p in powers]
-        ax.plot(powers, ratios, "-o", color=color, lw=2.0, ms=6,
-                label={"l2": r"$L^2$ trained", "h1": r"$H^1$ trained"}[loss])
-    ax.axhline(1.0, color="0.75", lw=1.0, ls="--", zorder=0)
-    ax.set_xlabel(r"atom power $p$ (penalty $q=2/(p{+}1)$)")
-    ax.set_ylabel("near/far mean L1 ratio (balanced)")
-    ax.legend(loc="upper left", fontsize=10)
-    out["power"] = _save_png(fig, "sampling_relu_power")
     return out
 
 
@@ -792,9 +722,9 @@ def _common_pool_scores(pool, curve) -> list[dict[str, Any]] | None:
 
     X, V, DV = pool["x"], pool["v"], pool["dv"]
     d = cKDTree(curve.points).query(X)[0]
-    bands = {"ultra-near": d <= 0.2, "near": d <= _NEAR_THRESH, "far": d > _NEAR_THRESH}
-    v_den = np.abs(V).mean()
-    g_den = np.linalg.norm(DV, axis=1).mean()
+    bands = {"switching": d <= _SWITCHING_TUBE, "rest": d > _SWITCHING_TUBE}
+    h1_true_sq = np.asarray(V, dtype=np.float64).reshape(-1) ** 2 + np.sum(
+        np.asarray(DV, dtype=np.float64) ** 2, axis=1)
 
     norms: dict[str, ValueSampleNormalizer] = {}
     scored = []
@@ -818,7 +748,7 @@ def _common_pool_scores(pool, curve) -> list[dict[str, Any]] | None:
                                  p=model["power"], inner_weights=a, inner_bias=b,
                                  outer_weights=u)
             net.eval()
-            err = np.empty(len(X))
+            err_sq = np.empty(len(X))
             for lo in range(0, len(X), 100_000):
                 hi = min(lo + 100_000, len(X))
                 xn = torch.tensor(X[lo:hi] / norm.x_scale, dtype=torch.float64,
@@ -827,11 +757,16 @@ def _common_pool_scores(pool, curve) -> list[dict[str, Any]] | None:
                 (grad,) = torch.autograd.grad(val.sum(), xn)
                 vp = val.detach().numpy().reshape(-1) * norm.v_scale
                 gp = grad.detach().numpy() * (norm.v_scale / norm.x_scale)
-                err[lo:hi] = 0.5 * (np.abs(vp - V[lo:hi]) / v_den
-                                    + np.linalg.norm(gp - DV[lo:hi], axis=1) / g_den)
+                err_sq[lo:hi] = (vp - V[lo:hi]) ** 2 + np.sum((gp - DV[lo:hi]) ** 2, axis=1)
             entry = {"variant": variant,
                      "neurons": int(record["metrics"][0]["values"]["best_neurons"])}
-            entry.update({band: float(err[sel].mean()) for band, sel in bands.items()})
+            # Per-region relative H1 error (well posed in the switching tube, |V| large):
+            # sqrt(sum(dV^2 + |d grad V|^2)) / sqrt(sum(V^2 + |grad V|^2)).
+            entry.update({
+                band: float(np.sqrt(err_sq[sel].sum()) / np.sqrt(h1_true_sq[sel].sum()))
+                if h1_true_sq[sel].sum() > 0 else np.nan
+                for band, sel in bands.items()
+            })
             scored.append(entry)
     return scored or None
 
@@ -844,8 +779,7 @@ def fig_oversampling_control(scored: list[dict[str, Any]]) -> str:
 
     _apply_publication_style()
     variants = list(_OVERSAMPLE_VARIANTS)
-    series = {"ultra-near": PALETTE["red_strong"], "near": PALETTE["blue_main"],
-              "far": PALETTE["teal"]}
+    series = {"switching": PALETTE["red_strong"], "rest": PALETTE["blue_main"]}
     fig, ax = plt.subplots(figsize=(8.5, 5.2))
     for band, color in series.items():
         best = []
@@ -862,7 +796,7 @@ def fig_oversampling_control(scored: list[dict[str, Any]]) -> str:
     ax.set_yscale("log")
     ax.set_xticks(range(len(variants)))
     ax.set_xticklabels(variants, fontsize=10)
-    ax.set_ylabel("common-set mean normalized error")
+    ax.set_ylabel(r"common-set relative $H^1$ error")
     ax.legend(loc="upper left", fontsize=10)
     return _save_png(fig, "oversampling_control")
 
@@ -1151,9 +1085,7 @@ def main() -> int:
     true_branch_figs = fig_true_branch_transect(curve, pool, rawt)
     f3 = fig_transect(models, nets, norm, curve, pool, rawt)
     f3_split = fig_transect_split(models, nets, norm, curve, pool, rawt)
-    f4 = fig_dumbbell(models)
-    f5 = fig_sampling_control(models)
-    f5_split = fig_sampling_control_split(models)
+    f4 = fig_dumbbell(models, nets, samples, norm, distance)
     f6_figs, cost_rows, starts = fig_feedback_split(models, nets, norm, curve, pool, rawt)
     f7 = fig_atom_portrait(models, nets, norm, curve)
     cost_table = format_table(
@@ -1172,41 +1104,45 @@ def main() -> int:
             runs = [r for r in scored if r["variant"] == variant]
             if not runs:
                 continue
-            bn = min(runs, key=lambda r: r["near"])
+            bn = min(runs, key=lambda r: r["switching"])
             best_rows.append({
                 "variant": variant, "runs": len(runs),
-                "ultra-near": f"{min(r['ultra-near'] for r in runs):.3f}",
-                "near": f"{min(r['near'] for r in runs):.3f}",
-                "far": f"{min(r['far'] for r in runs):.3f}",
+                "switching": f"{min(r['switching'] for r in runs):.3f}",
+                "rest": f"{min(r['rest'] for r in runs):.3f}",
                 "neurons": f"{bn['neurons']}",
             })
         f8_table = format_table(
-            best_rows, ["variant", "runs", "ultra-near", "near", "far", "neurons"],
-            title=("Best common-set error per variant (min over that variant's runs; "
-                   "neurons = size of the near-best run)"),
+            best_rows, ["variant", "runs", "switching", "rest", "neurons"],
+            title=("Best common-set relative H1 error per variant (min over that "
+                   "variant's runs; neurons = size of the switching-best run)"),
         )
         f8_block = (
-            "### 3.2 Reallocating a fixed budget toward the near band does not help\n\n"
+            "### 3.1 Legacy control: in-basin oversampling (one-sided era), and "
+            "what it shows now\n\n"
             f"![oversampling control]({f8})\n\n"
-            "All signed gaussian (γ=1) models fitted on the oversampling dataset "
-            "variants, re-scored on ONE common evaluation set — the full restricted "
-            "raw pool (~823k points), one near band (d ≤ 0.571), one denominator — "
-            "since each variant's own recorded metrics use its own band and "
-            "denominator and are not cross-comparable. Faint dots = individual runs "
-            "(capacity levels), lines = the best run per variant; bands: ultra-near "
-            "d ≤ 0.2, near d ≤ 0.571, far = rest.\n\n"
+            "The oversampling variants (6k, 10–40% near share) are **one-sided-era "
+            "models**: signed gaussian (γ=1) fits on in-basin-only datasets, kept "
+            "for provenance and NOT retrained on the two-sided data. All runs are "
+            "re-scored on one common evaluation set — the full restricted (in-basin) "
+            "raw pool, one band, one denominator. The baseline row is the current "
+            "two-sided-trained gaussian, so the table now mixes training eras: "
+            "baseline vs variants is a *training-data* comparison, not a budget "
+            "comparison.\n\n"
             f"{f8_table}\n\n"
-            "**Doubling the budget helps; reallocating it does not.** Keeping the "
-            "sampling distribution and doubling the count (6k 10% prop) improves "
-            "every band — ultra-near 0.97 → 0.17. Raising the near share at a fixed "
-            "budget (20%, 40%) makes *every* band worse, including the ultra-near "
-            "band the extra samples were spent on: stratifying away the dense "
-            "equilibrium band starves the region that anchors the global fit. This "
-            "is not a capacity artifact (the 20% variant is bad even at 429 "
-            "neurons). Caveat: gaussian γ=1 only, single seed, and the common "
-            "evaluation measure is the pool's time-uniform (equilibrium-heavy) "
-            "distribution — the near/far *ratio* study (§3.1) used each dataset's own "
-            "balanced measure, which is why both statements can hold at once.\n\n"
+            "Two readings survive this caveat. (1) The one-sided-era conclusion — "
+            "reallocating a fixed in-basin budget toward the near band does not "
+            "help; only more samples at the natural distribution do — still stands "
+            "*within* the variant rows (10% prop beats 20%/40% strat everywhere). "
+            "(2) The baseline row quantifies the **interior price of two-sided "
+            "training**: scored on the in-basin pool alone, the two-sided gaussian "
+            "(0.61) is far worse than a one-sided 6k model (0.04). The 900-sample "
+            "band is 23% of the sample count but carries ~75% of the squared value "
+            "mass and ~57% of the squared gradient mass of the normalized H1 "
+            "objective (mean |V| ≈ 24.5 in the band vs 3.8 in the body), so the "
+            "unweighted least-squares fit is dominated by the hardest, "
+            "kink-carrying region and smooth atoms sacrifice the interior. "
+            "Rebalancing the objective (per-sample weighting) or the band share is "
+            "an open design choice, not attempted here.\n\n"
         )
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     out = OUTPUT_DIR / "results.md"
@@ -1217,17 +1153,20 @@ def main() -> int:
         "what role do the activation and the nonconvex penalty play? (2) Can a "
         "reliable **feedback law** be synthesized from the fitted value function "
         "near — and across — the switching set?\n\n"
-        "**Setup.** Pendulum swing-up value samples (3k, branch-restricted basin; "
-        "see `README.md` for data and the error-metric rationale). Two sweeps on "
-        "the same dataset and `eval=region_split` hook: smooth activations "
+        "**Setup.** Pendulum swing-up value samples, **two-sided** at the "
+        "switching set: 3,900 = 3,000 in-basin body + a 900-sample "
+        "envelope-certified band straddling the switching arms (300 near-side "
+        "pad + 600 far-side collar, within 0.5 of the arms; see `README.md` for "
+        "the construction and the error-metric rationale). Two sweeps on the "
+        "same dataset and `eval=region_split` hook: smooth activations "
         "(profile insertion, gamma selected per cell) and **ReLU^p atoms with the "
         "fractional-exponent penalty** q = 2/(p+1) (finite_step insertion, gamma=0 "
         "by design, alpha selected per cell) — see `../02_pendulum/"
         "frac_exp_penalty`. `near` = lowest 10% of samples by distance to the "
-        "switching set (d ≤ 0.57); `far` = the rest. The model-level studies "
-        "(§4–§5) use four representative signed H1 models — gaussian, softplus, "
-        "relu², relu⁵; semiconcave models are excluded there (they do not "
-        "round-trip through the fit artifact, #19).\n\n"
+        "(±2π-tiled) switching set (d ≤ 0.25); `far` = the rest. The model-level "
+        "studies (§4–§5) use four representative signed H1 models — gaussian, "
+        "softplus, relu², relu⁵; semiconcave models are excluded there (they do "
+        "not round-trip through the fit artifact, #19).\n\n"
 
         "## 1. The target: a value function with a gradient discontinuity\n\n"
         "The regions of attraction of the (periodic) upright equilibria — PMP "
@@ -1245,61 +1184,70 @@ def main() -> int:
         "| --- | --- |\n"
         f"| ![true branches, value]({true_branch_figs['transect_true_branches_value']}) "
         f"| ![true branches, gradient]({true_branch_figs['transect_true_branches_gradient']}) |\n\n"
-        "One structural fact controls everything below: **the branch-restricted "
-        "training data stop AT the curve** — no arm has samples on both sides, so "
-        "the far branch (and the jump itself) is invisible to every model. Ground "
-        "truth on both sides is reconstructed as the lower envelope of the raw "
-        "(unrestricted) PMP trajectories tiled by 2πk in θ.\n\n"
+        "One structural fact controls everything below: **the training data "
+        "straddles the switching curve** (this reverses the earlier one-sided "
+        "generation, whose samples stopped AT the curve). The basin restriction "
+        "alone yields one-sided data — the neighbouring branch is the 2πk-shifted "
+        "basin, excluded by the cut — so the dataset adds an envelope-certified "
+        "band: near-side pad points (the central branch between the basin's "
+        "conservative trim and the true arm) and far-side collar points (the ±2π "
+        "branch across the arm), each kept only where its branch value beats the "
+        "competing branch's locally extrapolated value. Verified on the emitted "
+        "samples: the 10% near band (d ≤ 0.25) contains 221 near-side and 169 "
+        "far-side points, and 44% of all samples within 0.3 of the curve have an "
+        "opposite-side neighbour within 0.3 (0% in the one-sided data). The "
+        "gradient jump is therefore **in-sample** wherever both branches carry "
+        "data; the residual one-sided stretches are arms whose far branch lies "
+        "beyond the PMP integration cap. Ground truth on both sides is "
+        "reconstructed as the lower envelope of the raw (unrestricted) PMP "
+        "trajectories tiled by 2πk in θ.\n\n"
 
-        "## 2. Symptom: error concentrates near the switching set\n\n"
+        "## 2. Error concentrates at the switching set — now as a representation "
+        "cost\n\n"
         "Region mean per-sample L1 (absolute) error / global mean ‖true‖ — "
         "count-fair and robust to the V→0 interior; `near/far` > 1 ⇒ worse at the "
-        "switching set. (The naive relative-H1 metric flips this conclusion — see "
-        "the Appendix.)\n\n"
+        "switching set. (On the two-sided data the relative-H1 appendix table "
+        "agrees in direction; it no longer flips.)\n\n"
         f"{l1_table}\n\n"
-        "Every model — both kinds, every activation, every penalty — is **2.2–3.7× "
-        "worse in the near band**. The ReLU^p rows sit in the same ratio band as "
-        "the smooth activations (2.19–2.94, rising with p) while being an order of "
-        "magnitude better in absolute terms: the *relative* near-band penalty is "
-        "family-independent, a first hint that it is a property of the "
-        "sampling/geometry rather than of the atom class.\n\n"
-        "### 2.1 The error profile is a valley\n\n"
-        "Per-sample absolute error against distance to the switching set "
-        "(equal-width bins; count-weighted smoothing), split into the value and "
-        "gradient components:\n\n"
+        "Every model — both kinds, every activation, every penalty — is **3.0–8.4× "
+        "worse in the near band**, a wider spread than the 2.2–3.7× measured on "
+        "the earlier one-sided data. The composition changed too: near L1 is "
+        "compressed across models (0.92–2.52, a ~2.7× spread) while far L1 spans "
+        "~7× (0.12–0.83), so the ratio mostly reflects how good a model is *away* "
+        "from the curve — ReLU² has the largest ratio (8.4) precisely because its "
+        "far error is the smallest. With the jump in-sample, the near band is "
+        "genuinely hard for every atom class: a uniform representation cost, no "
+        "longer a one-sided extrapolation artifact.\n\n"
+        "### 2.1 The error profile against distance\n\n"
+        "Per-bin relative error (bin mean |V̂−V| / bin mean |V|) against distance "
+        "to the switching set (equal-width bins; grey bars = samples per bin):\n\n"
         "| value error vs distance | gradient error vs distance |\n"
         "| --- | --- |\n"
         f"| ![value error]({distance_figs.get('value', '')}) "
         f"| ![gradient error]({distance_figs.get('gradient', '')}) |\n\n"
-        "Error peaks right at the switching set, drops to its minimum in the dense "
-        "band at distance ≈ 0.7 (where ~2/3 of the samples sit — the upright "
-        "equilibrium), then climbs toward the under-sampled outer basin edge. The "
-        "near/far ratio stays > 1 because `near` sits on the switching-set peak "
-        "while the bulk of `far` is the low-error dense band. The valley tracks "
-        "the **sample density**, which motivates the controls in §3.\n\n"
+        "The profile inverted relative to the one-sided data. The switching set "
+        "itself (d < 0.3) is no longer the relative-error peak — the pad/collar "
+        "band anchors the fit there and |V| is large. The peak now sits at "
+        "d ≈ 0.65: that bin holds the dense sample mass around the upright "
+        "equilibrium, where |V| → 0 inflates the per-bin *relative* error and "
+        "where two-sided training visibly costs interior accuracy (§3). ReLU² "
+        "keeps the lowest profile at every distance; ReLU⁵ pays the largest "
+        "interior penalty.\n\n"
 
-        "## 3. Diagnosis: sampling density, not the kink\n\n"
-        "### 3.1 Density-balanced resampling collapses the near/far gap\n\n"
-        "Refitting on a density-balanced 6k resample (same spatial band d ≤ 0.57, "
-        "`eval.near_percentile` matched) collapses the near/far ratio to ≈ 1 for "
-        "every model (left). On the balanced data the residual *intrinsic* "
-        "switching-set penalty is small, grows with the ReLU power (more concave "
-        "penalty, stiffer atoms), and is visible mainly without gradient "
-        "supervision — H1 training absorbs it (right).\n\n"
-        "| near/far ratio: biased → balanced | residual vs ReLU power (balanced) |\n"
-        "| --- | --- |\n"
-        f"| ![density balance]({f5_split.get('density', '')}) "
-        f"| ![relu power]({f5_split.get('power', '')}) |\n\n"
+        "## 3. The price of two-sided coverage\n\n"
         f"{f8_block}"
 
         "## 4. Which atoms fit the switching-set target best\n\n"
         "### 4.1 Accuracy per model\n\n"
         f"![near/far dumbbell]({f4})\n\n"
-        "Mean per-sample L1 (log scale) in the near band (filled) and far region "
-        "(open), per model, from the primary table (§2); rows ordered by far L1. "
-        "**ReLU² dominates on both bands** — near 4.3e-02 / far 1.9e-02, roughly "
-        "8× better than the best smooth activation (gaussian: 3.6e-01 / 1.4e-01) "
-        "at a comparable neuron count (107 vs 97).\n\n"
+        "Relative H1 error (log scale) in a fixed geometric tube around the "
+        "switching set (d ≤ 0.3, filled — well posed there now that the band makes "
+        "|V| large) and in the rest of the domain (open), per representative "
+        "model; rows ordered by rest error. **ReLU² dominates both regions** "
+        "(rest ≈ 0.20, tube ≈ 0.31), 2–3× better than the smooth activations; "
+        "ReLU⁵ is the only model *better* inside the tube than outside — its "
+        "stiff high-degree atoms seat the band but pay for it everywhere else "
+        "(see §2.1).\n\n"
         "### 4.2 Learned value surfaces\n\n"
         "| gaussian | softplus |\n"
         "| --- | --- |\n"
@@ -1309,40 +1257,52 @@ def main() -> int:
         "| --- | --- |\n"
         f"| ![relu2 surface]({surface_figs.get('relu^2', '')}) "
         f"| ![relu5 surface]({surface_figs.get('relu^5', '')}) |\n\n"
-        "The learned V̂ over the state plane (z clipped at 60): gaussian and the "
-        "ReLU powers reproduce the in-basin bowl; softplus — the weakest fit "
-        "throughout — flattens it.\n\n"
+        "The learned V̂ over the state plane (z clipped at 60). With the band in "
+        "the training data the models now shape the full multi-well landscape, "
+        "not just the central bowl: ReLU² raises sharp diagonal walls along the "
+        "switching arms between the 2πk wells; gaussian reproduces the wells but "
+        "rounds the ridge off; softplus — the weakest fit throughout — smears "
+        "the structure.\n\n"
         "### 4.3 Models on the transect\n\n"
-        "The same transect as §1.1, with the fitted models overlaid (grey dots = "
-        "lower-envelope truth; the models saw data only on s < 0):\n\n"
+        "The same transect as §1.1, with the fitted models overlaid (dashed = "
+        "lower-envelope truth; unlike the one-sided data, the models now saw "
+        "samples on **both** sides of s = 0):\n\n"
         "| value | normal gradient |\n"
         "| --- | --- |\n"
         f"| ![transect value]({f3_split.get('value', '')}) "
         f"| ![transect gradient]({f3_split.get('gradient', '')}) |\n\n"
-        "On the data side every model except softplus tracks V and n·∇V up to the "
-        "curve. At s = 0 the true n·∇V jumps from ≈ +80 to ≈ −3; **every model "
-        "continues smoothly across** — the jump was never in their data. The "
-        "near-band error of §2 is therefore a *boundary-layer* fitting effect "
-        "(steep one-sided values + thin data), not a failure to represent a seen "
-        "discontinuity.\n\n"
+        "At s = 0 the true n·∇V jumps by ≈ 80–100 units. The jump being "
+        "in-sample is necessary but not sufficient: **no model reproduces its "
+        "magnitude**. ReLU² comes closest — it is the only model that develops a "
+        "visible kink at s ≈ 0 (its piecewise-quadratic atoms can break the "
+        "derivative across a line) and it tracks the true V level best on both "
+        "sides; the smooth activations interpolate a gentle slope through the "
+        "discontinuity, exactly as their C^∞ atoms must. All models undershoot "
+        "the steep pre-jump gradient (true n·∇V ≈ −100 at s < 0 vs fitted −20 to "
+        "−58): the finite-width band bounds how much one-sided steepness the "
+        "global H1 fit will spend neurons on. This is the §2 near-band cost seen "
+        "pointwise: a genuine representation limit at a *seen* discontinuity.\n\n"
         "### 4.4 Mechanism: where the atoms sit\n\n"
         f"![atom portrait]({f7})\n\n"
         "Each atom's active line {a·x + b = 0} in the physical (θ, θ̇) plane (line "
         "strength ∝ |outer weight|), for relu² (left) and gaussian (right), with "
-        "the switching curve in black. ReLU²'s strongest atom lines align with the "
-        "main switching arm — piecewise low-degree ridges seat the steep one-sided "
-        "gradient — while gaussian bumps tile the basin isotropically. This is the "
-        "mechanism behind §4.1.\n\n"
+        "the switching curve in black. ReLU² concentrates its strongest lines "
+        "parallel to the diagonal switching arms — piecewise low-degree ridges "
+        "whose derivative breaks exactly where the target's does — while "
+        "gaussian's strength is spread over near-isotropic bumps that can tile "
+        "the wells but not seat a gradient break. This is the mechanism behind "
+        "§4.1 and the transect kink in §4.3.\n\n"
 
         "## 5. Can a reliable feedback law be synthesized?\n\n"
         "Closed-loop rollouts of u(x) = −(1/(2r·ml²)) ∂_θ̇ V̂(x), one phase panel "
-        "per feedback law, from two starts placed symmetrically either side of the "
-        "switching curve (× markers): **start A** (blue) on the data side, "
-        "**start B** (red) beyond the curve — off-data for every model. Switching "
-        "set in black; all panels share the same axes. True PMP feedback = envelope "
-        "nearest-neighbour over the tiled raw trajectories (valid on both sides): "
-        "from B it swings over the top to the 2π upright, while every model pulls "
-        "back through the curve to the θ = 0 upright.\n\n"
+        "per feedback law, from two starts placed symmetrically either side of "
+        "the switching curve (× markers) — **both in-sample now** that the band "
+        "straddles the curve. The curve separates two optimal behaviours here: "
+        "from **start A** (blue) the true law swings over the top to the 2π "
+        "upright; from **start B** (red) it brakes directly to the θ = 0 "
+        "upright. Switching set in black; all panels share the same axes. True "
+        "PMP feedback = envelope nearest-neighbour over the tiled raw "
+        "trajectories.\n\n"
         "| true PMP | gaussian | softplus |\n"
         "| --- | --- | --- |\n"
         f"| ![true PMP]({f6_figs['true PMP']}) | ![gaussian]({f6_figs['gaussian']}) "
@@ -1350,46 +1310,57 @@ def main() -> int:
         "| ReLU² | ReLU⁵ |\n"
         "| --- | --- |\n"
         f"| ![relu2]({f6_figs['relu^2']}) | ![relu5]({f6_figs['relu^5']}) |\n\n"
-        "The control signal from the off-data start B, per feedback law (true PMP "
-        "pushes positive to swing over; the models brake toward θ = 0; softplus "
-        "settles at a spurious equilibrium with u ≈ −5):\n\n"
+        "The control signal from start B, per feedback law (true PMP brakes to "
+        "θ = 0 with u rising from ≈ −7 to 0; ReLU² tracks it almost exactly; "
+        "softplus settles at a spurious equilibrium with u ≈ −4; gaussian "
+        "saturates at ±30):\n\n"
         f"![control from B]({f6_figs['control_b']})\n\n"
         f"{cost_table}\n\n"
-        "From start A every model except softplus matches the true closed-loop "
-        "cost (10.5–10.9 vs 10.6) — the feedback is reliable arbitrarily close to "
-        "the switching set, *on the training branch*. From the off-data start B "
-        "the true law pays 26.3; the models stabilize but on the wrong branch, at "
-        "~2× the cost (51–66), because the branch beyond the curve was never in "
-        "the data.\n\n"
+        "**The branch decision at the curve is now learnable — and only ReLU² "
+        "learns it.** From B it brakes to the θ = 0 upright at the true cost "
+        "(10.1 vs 10.2); from A it correctly swings over to the 2π upright, "
+        "though with an over-energetic arc (331.6 vs 26.2) — right branch, "
+        "inefficient execution. Every smooth model fails on *both* sides, and "
+        "the failure tracks the global fit quality of §2, not proximity to the "
+        "curve: gaussian's degraded interior gradient field saturates the "
+        "actuator and overshoots past 2π (cost ≈ 1200); softplus never reaches "
+        "an upright (spurious equilibrium); ReLU⁵ under-rotates and stalls near "
+        "the origin. On the one-sided data every model mis-branched from beyond "
+        "the curve; the data fix moved the bottleneck from *coverage* to "
+        "*fit quality*.\n\n"
 
         "## 6. Conclusions\n\n"
-        "- **The switching set is the boundary of the training data, not an "
-        "interior kink** (§1.1, §4.3). No curve arm has branch-restricted samples "
-        "on both sides, so no model ever faces the gradient jump; each fits a "
-        "smooth one-sided target on an irregular domain.\n"
-        "- **The near-band accuracy gap is a sampling artifact** (§3.1): "
-        "density-balancing collapses near/far from 2.2–3.7 to ≈ 1 for every "
-        "model. The residual intrinsic penalty is small, grows with atom "
-        "stiffness, and is absorbed by gradient (H1) training.\n"
-        "- **But rebalancing a fixed budget is the wrong fix** (§3.2): doubling "
-        "the sample count at the natural distribution improves every band ~6×, "
-        "while shifting a fixed 6k budget toward the near band degrades every "
-        "band — including the near band itself.\n"
-        "- **ReLU² + fractional-exponent penalty is the best atom class for this "
-        "target** (§4.1, §4.4): ~8× more accurate than any smooth activation on "
-        "both bands, by aligning its strongest ridges with the switching arm.\n"
-        "- **Feedback synthesis is reliable up to the curve and mis-branches "
-        "beyond it** (§5). The limit is **data coverage across the curve**, not "
-        "the atoms' ability to fit — two-branch (multi-well or ±2π-tiled) "
-        "training data are required if cross-switching feedback is needed.\n\n"
+        "- **The switching set is now an interior kink of the training data** "
+        "(§1.1): the envelope-certified pad+collar band puts the gradient jump "
+        "in-sample wherever both branches carry data. The near-band error "
+        "(3.0–8.4× the far error, §2) is a genuine representation cost at a seen "
+        "discontinuity — the one-sided era's 'sampling artifact' diagnosis no "
+        "longer applies.\n"
+        "- **No atom class represents the jump; ReLU² comes closest** (§4.3, "
+        "§4.4): it alone develops a kink on the transect and aligns its strongest "
+        "ridges with the arms, and it is the best model on *both* sides of the "
+        "split (§2, §4.1). Smooth activations necessarily interpolate through "
+        "the discontinuity.\n"
+        "- **Two-sided coverage has an interior price** (§2.1, §3): the band is "
+        "23% of the samples but dominates the unweighted H1 objective (~75% of "
+        "the squared value mass), so interior accuracy degrades several-fold "
+        "relative to one-sided training — most for stiff ReLU⁵, least for ReLU². "
+        "Objective weighting / band-share tuning is the open follow-up.\n"
+        "- **Cross-switching feedback synthesis now works — for the atom that "
+        "fits** (§5): ReLU² makes the correct branch decision from both sides of "
+        "the curve (matching the true cost from B), which no model achieved on "
+        "one-sided data. The smooth models fail globally; the bottleneck moved "
+        "from data coverage to fit quality.\n\n"
 
-        "## Appendix: relative H1 (confounded)\n\n"
-        "The naive region-local relative H1 metric reports models as *better* near "
-        "the switching set (`near/far ≈ 0.55–1.15`, < 1 for 14 of 15 rows) — the "
-        "V→0 artifact: with a single well, the `far` denominator is dominated by "
-        "the near-zero interior at the upright, inflating far relative error. "
-        "Kept for continuity; the count-fair absolute mean-L1 of §2 is the "
-        "primary metric.\n\n"
+        "## Appendix: relative H1\n\n"
+        "On the one-sided data this region-local relative metric *flipped* the "
+        "conclusion (near/far < 1 for 14 of 15 rows) because the near band held "
+        "only small-|V| samples at the data edge. On the two-sided data the "
+        "band contributes large-|V| pad/collar samples to the near denominator, "
+        "muting the V→0 confound: near/far is now ≥ 0.99 for every row and the "
+        "ranking agrees with the primary L1 table of §2. Kept for continuity "
+        "and as a record of the metric's data-dependence; the count-fair "
+        "absolute mean-L1 of §2 remains the primary metric.\n\n"
         f"{rel_table}\n",
         encoding="utf-8",
     )

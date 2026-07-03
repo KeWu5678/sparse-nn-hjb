@@ -2,7 +2,7 @@
 
 **Questions.** (1) How well do sparse shallow models fit an optimal value function whose **gradient jumps across the swing-up switching set**, and what role do the activation and the nonconvex penalty play? (2) Can a reliable **feedback law** be synthesized from the fitted value function near — and across — the switching set?
 
-**Setup.** Pendulum swing-up value samples (3k, branch-restricted basin; see `README.md` for data and the error-metric rationale). Two sweeps on the same dataset and `eval=region_split` hook: smooth activations (profile insertion, gamma selected per cell) and **ReLU^p atoms with the fractional-exponent penalty** q = 2/(p+1) (finite_step insertion, gamma=0 by design, alpha selected per cell) — see `../02_pendulum/frac_exp_penalty`. `near` = lowest 10% of samples by distance to the switching set (d ≤ 0.57); `far` = the rest. The model-level studies (§4–§5) use four representative signed H1 models — gaussian, softplus, relu², relu⁵; semiconcave models are excluded there (they do not round-trip through the fit artifact, #19).
+**Setup.** Pendulum swing-up value samples, **two-sided** at the switching set: 3,900 = 3,000 in-basin body + a 900-sample envelope-certified band straddling the switching arms (300 near-side pad + 600 far-side collar, within 0.5 of the arms; see `README.md` for the construction and the error-metric rationale). Two sweeps on the same dataset and `eval=region_split` hook: smooth activations (profile insertion, gamma selected per cell) and **ReLU^p atoms with the fractional-exponent penalty** q = 2/(p+1) (finite_step insertion, gamma=0 by design, alpha selected per cell) — see `../02_pendulum/frac_exp_penalty`. `near` = lowest 10% of samples by distance to the (±2π-tiled) switching set (d ≤ 0.25); `far` = the rest. The model-level studies (§4–§5) use four representative signed H1 models — gaussian, softplus, relu², relu⁵; semiconcave models are excluded there (they do not round-trip through the fit artifact, #19).
 
 ## 1. The target: a value function with a gradient discontinuity
 
@@ -18,71 +18,63 @@ Along a transect normal to the switching curve (through the densest data region)
 | --- | --- |
 | ![true branches, value](figures/transect_true_branches_value.png) | ![true branches, gradient](figures/transect_true_branches_gradient.png) |
 
-One structural fact controls everything below: **the branch-restricted training data stop AT the curve** — no arm has samples on both sides, so the far branch (and the jump itself) is invisible to every model. Ground truth on both sides is reconstructed as the lower envelope of the raw (unrestricted) PMP trajectories tiled by 2πk in θ.
+One structural fact controls everything below: **the training data straddles the switching curve** (this reverses the earlier one-sided generation, whose samples stopped AT the curve). The basin restriction alone yields one-sided data — the neighbouring branch is the 2πk-shifted basin, excluded by the cut — so the dataset adds an envelope-certified band: near-side pad points (the central branch between the basin's conservative trim and the true arm) and far-side collar points (the ±2π branch across the arm), each kept only where its branch value beats the competing branch's locally extrapolated value. Verified on the emitted samples: the 10% near band (d ≤ 0.25) contains 221 near-side and 169 far-side points, and 44% of all samples within 0.3 of the curve have an opposite-side neighbour within 0.3 (0% in the one-sided data). The gradient jump is therefore **in-sample** wherever both branches carry data; the residual one-sided stretches are arms whose far branch lies beyond the PMP integration cap. Ground truth on both sides is reconstructed as the lower envelope of the raw (unrestricted) PMP trajectories tiled by 2πk in θ.
 
-## 2. Symptom: error concentrates near the switching set
+## 2. Error concentrates at the switching set — now as a representation cost
 
-Region mean per-sample L1 (absolute) error / global mean ‖true‖ — count-fair and robust to the V→0 interior; `near/far` > 1 ⇒ worse at the switching set. (The naive relative-H1 metric flips this conclusion — see the Appendix.)
+Region mean per-sample L1 (absolute) error / global mean ‖true‖ — count-fair and robust to the V→0 interior; `near/far` > 1 ⇒ worse at the switching set. (On the two-sided data the relative-H1 appendix table agrees in direction; it no longer flips.)
 
 Mean per-sample L1 over the full dataset — count-fair, robust to V→0
 
 | kind        | insertion   | activation   | loss | gamma | neurons | near L1  | far L1   | near/far |
 | ----------- | ----------- | ------------ | ---- | ----- | ------- | -------- | -------- | -------- |
-| semiconcave | profile     | gaussian     | h1   | 1     | 19      | 1.05e+00 | 4.12e-01 | 2.54     |
-| semiconcave | profile     | gelu_squared | h1   | 1     | 28      | 1.60e+00 | 5.39e-01 | 2.97     |
-| semiconcave | profile     | tanh         | h1   | 0     | 22      | 1.96e+00 | 6.34e-01 | 3.09     |
-| semiconcave | profile     | softplus     | h1   | 0     | 18      | 2.35e+00 | 7.33e-01 | 3.20     |
-| semiconcave | profile     | matern52     | h1   | 0     | 21      | 1.91e+00 | 5.59e-01 | 3.42     |
-| signed      | finite_step | relu^2.01    | h1   | 0     | 106     | 4.91e-02 | 2.24e-02 | 2.19     |
-| signed      | finite_step | relu^2       | h1   | 0     | 107     | 4.34e-02 | 1.87e-02 | 2.32     |
-| signed      | finite_step | relu^4       | h1   | 0     | 58      | 2.58e-01 | 1.03e-01 | 2.52     |
-| signed      | finite_step | relu^3       | h1   | 0     | 71      | 9.94e-02 | 3.85e-02 | 2.58     |
-| signed      | finite_step | relu^5       | h1   | 0     | 55      | 1.64e-01 | 5.57e-02 | 2.94     |
-| signed      | profile     | tanh         | h1   | 0     | 80      | 6.91e-01 | 3.02e-01 | 2.29     |
-| signed      | profile     | gelu_squared | h1   | 1     | 51      | 1.14e+00 | 4.74e-01 | 2.41     |
-| signed      | profile     | gaussian     | h1   | 1     | 97      | 3.64e-01 | 1.43e-01 | 2.54     |
-| signed      | profile     | matern52     | h1   | 0     | 107     | 4.93e-01 | 1.61e-01 | 3.05     |
-| signed      | profile     | softplus     | h1   | 1     | 77      | 2.13e+00 | 5.73e-01 | 3.71     |
+| semiconcave | profile     | tanh         | h1   | 0     | 25      | 2.39e+00 | 7.90e-01 | 3.02     |
+| semiconcave | profile     | softplus     | h1   | 1     | 8       | 2.52e+00 | 8.33e-01 | 3.03     |
+| semiconcave | profile     | gaussian     | h1   | 0     | 23      | 2.15e+00 | 5.65e-01 | 3.81     |
+| semiconcave | profile     | gelu_squared | h1   | 1     | 19      | 2.02e+00 | 5.27e-01 | 3.83     |
+| semiconcave | profile     | matern52     | h1   | 0     | 21      | 1.94e+00 | 4.79e-01 | 4.05     |
+| signed      | finite_step | relu^5       | h1   | 0     | 79      | 1.78e+00 | 4.38e-01 | 4.07     |
+| signed      | finite_step | relu^4       | h1   | 0     | 75      | 1.70e+00 | 3.98e-01 | 4.28     |
+| signed      | finite_step | relu^3       | h1   | 0     | 99      | 1.33e+00 | 1.97e-01 | 6.77     |
+| signed      | finite_step | relu^2.01    | h1   | 0     | 132     | 9.23e-01 | 1.27e-01 | 7.24     |
+| signed      | finite_step | relu^2       | h1   | 0     | 114     | 1.01e+00 | 1.20e-01 | 8.39     |
+| signed      | profile     | gelu_squared | h1   | 0     | 39      | 2.13e+00 | 5.72e-01 | 3.72     |
+| signed      | profile     | gaussian     | h1   | 1     | 113     | 1.81e+00 | 4.38e-01 | 4.14     |
+| signed      | profile     | matern52     | h1   | 0     | 125     | 1.74e+00 | 4.09e-01 | 4.24     |
+| signed      | profile     | tanh         | h1   | 1     | 99      | 1.88e+00 | 4.42e-01 | 4.26     |
+| signed      | profile     | softplus     | h1   | 0     | 82      | 1.77e+00 | 3.49e-01 | 5.09     |
 
-Every model — both kinds, every activation, every penalty — is **2.2–3.7× worse in the near band**. The ReLU^p rows sit in the same ratio band as the smooth activations (2.19–2.94, rising with p) while being an order of magnitude better in absolute terms: the *relative* near-band penalty is family-independent, a first hint that it is a property of the sampling/geometry rather than of the atom class.
+Every model — both kinds, every activation, every penalty — is **3.0–8.4× worse in the near band**, a wider spread than the 2.2–3.7× measured on the earlier one-sided data. The composition changed too: near L1 is compressed across models (0.92–2.52, a ~2.7× spread) while far L1 spans ~7× (0.12–0.83), so the ratio mostly reflects how good a model is *away* from the curve — ReLU² has the largest ratio (8.4) precisely because its far error is the smallest. With the jump in-sample, the near band is genuinely hard for every atom class: a uniform representation cost, no longer a one-sided extrapolation artifact.
 
-### 2.1 The error profile is a valley
+### 2.1 The error profile against distance
 
-Per-sample absolute error against distance to the switching set (equal-width bins; count-weighted smoothing), split into the value and gradient components:
+Per-bin relative error (bin mean |V̂−V| / bin mean |V|) against distance to the switching set (equal-width bins; grey bars = samples per bin):
 
 | value error vs distance | gradient error vs distance |
 | --- | --- |
 | ![value error](figures/error_vs_distance_value.png) | ![gradient error](figures/error_vs_distance_gradient.png) |
 
-Error peaks right at the switching set, drops to its minimum in the dense band at distance ≈ 0.7 (where ~2/3 of the samples sit — the upright equilibrium), then climbs toward the under-sampled outer basin edge. The near/far ratio stays > 1 because `near` sits on the switching-set peak while the bulk of `far` is the low-error dense band. The valley tracks the **sample density**, which motivates the controls in §3.
+The profile inverted relative to the one-sided data. The switching set itself (d < 0.3) is no longer the relative-error peak — the pad/collar band anchors the fit there and |V| is large. The peak now sits at d ≈ 0.65: that bin holds the dense sample mass around the upright equilibrium, where |V| → 0 inflates the per-bin *relative* error and where two-sided training visibly costs interior accuracy (§3). ReLU² keeps the lowest profile at every distance; ReLU⁵ pays the largest interior penalty.
 
-## 3. Diagnosis: sampling density, not the kink
+## 3. The price of two-sided coverage
 
-### 3.1 Density-balanced resampling collapses the near/far gap
-
-Refitting on a density-balanced 6k resample (same spatial band d ≤ 0.57, `eval.near_percentile` matched) collapses the near/far ratio to ≈ 1 for every model (left). On the balanced data the residual *intrinsic* switching-set penalty is small, grows with the ReLU power (more concave penalty, stiffer atoms), and is visible mainly without gradient supervision — H1 training absorbs it (right).
-
-| near/far ratio: biased → balanced | residual vs ReLU power (balanced) |
-| --- | --- |
-| ![density balance](figures/sampling_density_balance.png) | ![relu power](figures/sampling_relu_power.png) |
-
-### 3.2 Reallocating a fixed budget toward the near band does not help
+### 3.1 Legacy control: in-basin oversampling (one-sided era), and what it shows now
 
 ![oversampling control](figures/oversampling_control.png)
 
-All signed gaussian (γ=1) models fitted on the oversampling dataset variants, re-scored on ONE common evaluation set — the full restricted raw pool (~823k points), one near band (d ≤ 0.571), one denominator — since each variant's own recorded metrics use its own band and denominator and are not cross-comparable. Faint dots = individual runs (capacity levels), lines = the best run per variant; bands: ultra-near d ≤ 0.2, near d ≤ 0.571, far = rest.
+The oversampling variants (6k, 10–40% near share) are **one-sided-era models**: signed gaussian (γ=1) fits on in-basin-only datasets, kept for provenance and NOT retrained on the two-sided data. All runs are re-scored on one common evaluation set — the full restricted (in-basin) raw pool, one band, one denominator. The baseline row is the current two-sided-trained gaussian, so the table now mixes training eras: baseline vs variants is a *training-data* comparison, not a budget comparison.
 
-Best common-set error per variant (min over that variant's runs; neurons = size of the near-best run)
+Best common-set relative H1 error per variant (min over that variant's runs; neurons = size of the switching-best run)
 
-| variant           | runs | ultra-near | near  | far   | neurons |
-| ----------------- | ---- | ---------- | ----- | ----- | ------- |
-| 3k 10% (baseline) | 1    | 0.969      | 0.346 | 0.134 | 97      |
-| 6k 10% prop       | 6    | 0.167      | 0.096 | 0.063 | 238     |
-| 6k 10% strat      | 6    | 0.277      | 0.204 | 0.065 | 176     |
-| 6k 20% strat      | 6    | 0.773      | 0.533 | 0.482 | 179     |
-| 6k 40% strat      | 1    | 0.771      | 0.579 | 0.809 | 110     |
+| variant           | runs | switching | rest  | neurons |
+| ----------------- | ---- | --------- | ----- | ------- |
+| 3k 10% (baseline) | 1    | 0.613     | 0.550 | 113     |
+| 6k 10% prop       | 6    | 0.040     | 0.074 | 238     |
+| 6k 10% strat      | 6    | 0.048     | 0.077 | 355     |
+| 6k 20% strat      | 6    | 0.133     | 0.286 | 429     |
+| 6k 40% strat      | 1    | 0.173     | 0.548 | 110     |
 
-**Doubling the budget helps; reallocating it does not.** Keeping the sampling distribution and doubling the count (6k 10% prop) improves every band — ultra-near 0.97 → 0.17. Raising the near share at a fixed budget (20%, 40%) makes *every* band worse, including the ultra-near band the extra samples were spent on: stratifying away the dense equilibrium band starves the region that anchors the global fit. This is not a capacity artifact (the 20% variant is bad even at 429 neurons). Caveat: gaussian γ=1 only, single seed, and the common evaluation measure is the pool's time-uniform (equilibrium-heavy) distribution — the near/far *ratio* study (§3.1) used each dataset's own balanced measure, which is why both statements can hold at once.
+Two readings survive this caveat. (1) The one-sided-era conclusion — reallocating a fixed in-basin budget toward the near band does not help; only more samples at the natural distribution do — still stands *within* the variant rows (10% prop beats 20%/40% strat everywhere). (2) The baseline row quantifies the **interior price of two-sided training**: scored on the in-basin pool alone, the two-sided gaussian (0.61) is far worse than a one-sided 6k model (0.04). The 900-sample band is 23% of the sample count but carries ~75% of the squared value mass and ~57% of the squared gradient mass of the normalized H1 objective (mean |V| ≈ 24.5 in the band vs 3.8 in the body), so the unweighted least-squares fit is dominated by the hardest, kink-carrying region and smooth atoms sacrifice the interior. Rebalancing the objective (per-sample weighting) or the band share is an open design choice, not attempted here.
 
 ## 4. Which atoms fit the switching-set target best
 
@@ -90,7 +82,7 @@ Best common-set error per variant (min over that variant's runs; neurons = size 
 
 ![near/far dumbbell](figures/near_far_dumbbell.png)
 
-Mean per-sample L1 (log scale) in the near band (filled) and far region (open), per model, from the primary table (§2); rows ordered by far L1. **ReLU² dominates on both bands** — near 4.3e-02 / far 1.9e-02, roughly 8× better than the best smooth activation (gaussian: 3.6e-01 / 1.4e-01) at a comparable neuron count (107 vs 97).
+Relative H1 error (log scale) in a fixed geometric tube around the switching set (d ≤ 0.3, filled — well posed there now that the band makes |V| large) and in the rest of the domain (open), per representative model; rows ordered by rest error. **ReLU² dominates both regions** (rest ≈ 0.20, tube ≈ 0.31), 2–3× better than the smooth activations; ReLU⁵ is the only model *better* inside the tube than outside — its stiff high-degree atoms seat the band but pay for it everywhere else (see §2.1).
 
 ### 4.2 Learned value surfaces
 
@@ -102,27 +94,27 @@ Mean per-sample L1 (log scale) in the near band (filled) and far region (open), 
 | --- | --- |
 | ![relu2 surface](figures/surface_relu2.png) | ![relu5 surface](figures/surface_relu5.png) |
 
-The learned V̂ over the state plane (z clipped at 60): gaussian and the ReLU powers reproduce the in-basin bowl; softplus — the weakest fit throughout — flattens it.
+The learned V̂ over the state plane (z clipped at 60). With the band in the training data the models now shape the full multi-well landscape, not just the central bowl: ReLU² raises sharp diagonal walls along the switching arms between the 2πk wells; gaussian reproduces the wells but rounds the ridge off; softplus — the weakest fit throughout — smears the structure.
 
 ### 4.3 Models on the transect
 
-The same transect as §1.1, with the fitted models overlaid (grey dots = lower-envelope truth; the models saw data only on s < 0):
+The same transect as §1.1, with the fitted models overlaid (dashed = lower-envelope truth; unlike the one-sided data, the models now saw samples on **both** sides of s = 0):
 
 | value | normal gradient |
 | --- | --- |
 | ![transect value](figures/transect_value.png) | ![transect gradient](figures/transect_normal_gradient.png) |
 
-On the data side every model except softplus tracks V and n·∇V up to the curve. At s = 0 the true n·∇V jumps from ≈ +80 to ≈ −3; **every model continues smoothly across** — the jump was never in their data. The near-band error of §2 is therefore a *boundary-layer* fitting effect (steep one-sided values + thin data), not a failure to represent a seen discontinuity.
+At s = 0 the true n·∇V jumps by ≈ 80–100 units. The jump being in-sample is necessary but not sufficient: **no model reproduces its magnitude**. ReLU² comes closest — it is the only model that develops a visible kink at s ≈ 0 (its piecewise-quadratic atoms can break the derivative across a line) and it tracks the true V level best on both sides; the smooth activations interpolate a gentle slope through the discontinuity, exactly as their C^∞ atoms must. All models undershoot the steep pre-jump gradient (true n·∇V ≈ −100 at s < 0 vs fitted −20 to −58): the finite-width band bounds how much one-sided steepness the global H1 fit will spend neurons on. This is the §2 near-band cost seen pointwise: a genuine representation limit at a *seen* discontinuity.
 
 ### 4.4 Mechanism: where the atoms sit
 
 ![atom portrait](figures/atom_portrait.png)
 
-Each atom's active line {a·x + b = 0} in the physical (θ, θ̇) plane (line strength ∝ |outer weight|), for relu² (left) and gaussian (right), with the switching curve in black. ReLU²'s strongest atom lines align with the main switching arm — piecewise low-degree ridges seat the steep one-sided gradient — while gaussian bumps tile the basin isotropically. This is the mechanism behind §4.1.
+Each atom's active line {a·x + b = 0} in the physical (θ, θ̇) plane (line strength ∝ |outer weight|), for relu² (left) and gaussian (right), with the switching curve in black. ReLU² concentrates its strongest lines parallel to the diagonal switching arms — piecewise low-degree ridges whose derivative breaks exactly where the target's does — while gaussian's strength is spread over near-isotropic bumps that can tile the wells but not seat a gradient break. This is the mechanism behind §4.1 and the transect kink in §4.3.
 
 ## 5. Can a reliable feedback law be synthesized?
 
-Closed-loop rollouts of u(x) = −(1/(2r·ml²)) ∂_θ̇ V̂(x), one phase panel per feedback law, from two starts placed symmetrically either side of the switching curve (× markers): **start A** (blue) on the data side, **start B** (red) beyond the curve — off-data for every model. Switching set in black; all panels share the same axes. True PMP feedback = envelope nearest-neighbour over the tiled raw trajectories (valid on both sides): from B it swings over the top to the 2π upright, while every model pulls back through the curve to the θ = 0 upright.
+Closed-loop rollouts of u(x) = −(1/(2r·ml²)) ∂_θ̇ V̂(x), one phase panel per feedback law, from two starts placed symmetrically either side of the switching curve (× markers) — **both in-sample now** that the band straddles the curve. The curve separates two optimal behaviours here: from **start A** (blue) the true law swings over the top to the 2π upright; from **start B** (red) it brakes directly to the θ = 0 upright. Switching set in black; all panels share the same axes. True PMP feedback = envelope nearest-neighbour over the tiled raw trajectories.
 
 | true PMP | gaussian | softplus |
 | --- | --- | --- |
@@ -132,50 +124,49 @@ Closed-loop rollouts of u(x) = −(1/(2r·ml²)) ∂_θ̇ V̂(x), one phase pane
 | --- | --- |
 | ![relu2](figures/feedback_relu2.png) | ![relu5](figures/feedback_relu5.png) |
 
-The control signal from the off-data start B, per feedback law (true PMP pushes positive to swing over; the models brake toward θ = 0; softplus settles at a spurious equilibrium with u ≈ −5):
+The control signal from start B, per feedback law (true PMP brakes to θ = 0 with u rising from ≈ −7 to 0; ReLU² tracks it almost exactly; softplus settles at a spurious equilibrium with u ≈ −4; gaussian saturates at ±30):
 
 ![control from B](figures/feedback_control_b.png)
 
-Closed-loop cost / stabilization from the two straddling starts (A = (0.22, 0.60), B = (0.70, 0.76); T=10)
+Closed-loop cost / stabilization from the two straddling starts (A = (0.71, 0.68), B = (0.23, 0.53); T=10)
 
 | model    | cost A | upright A | cost B | upright B |
 | -------- | ------ | --------- | ------ | --------- |
-| true PMP | 10.6   | yes       | 26.3   | yes       |
-| gaussian | 10.6   | yes       | 66.3   | yes       |
-| softplus | 335.5  | no        | 343.9  | no        |
-| ReLU^2   | 10.5   | yes       | 51.3   | yes       |
-| ReLU^5   | 10.6   | yes       | 51.6   | yes       |
+| true PMP | 26.2   | yes       | 10.2   | yes       |
+| gaussian | 1221.9 | no        | 1199.2 | no        |
+| softplus | 168.0  | no        | 190.7  | no        |
+| ReLU^2   | 331.6  | yes       | 10.1   | yes       |
+| ReLU^5   | 631.4  | no        | 352.9  | no        |
 
-From start A every model except softplus matches the true closed-loop cost (10.5–10.9 vs 10.6) — the feedback is reliable arbitrarily close to the switching set, *on the training branch*. From the off-data start B the true law pays 26.3; the models stabilize but on the wrong branch, at ~2× the cost (51–66), because the branch beyond the curve was never in the data.
+**The branch decision at the curve is now learnable — and only ReLU² learns it.** From B it brakes to the θ = 0 upright at the true cost (10.1 vs 10.2); from A it correctly swings over to the 2π upright, though with an over-energetic arc (331.6 vs 26.2) — right branch, inefficient execution. Every smooth model fails on *both* sides, and the failure tracks the global fit quality of §2, not proximity to the curve: gaussian's degraded interior gradient field saturates the actuator and overshoots past 2π (cost ≈ 1200); softplus never reaches an upright (spurious equilibrium); ReLU⁵ under-rotates and stalls near the origin. On the one-sided data every model mis-branched from beyond the curve; the data fix moved the bottleneck from *coverage* to *fit quality*.
 
 ## 6. Conclusions
 
-- **The switching set is the boundary of the training data, not an interior kink** (§1.1, §4.3). No curve arm has branch-restricted samples on both sides, so no model ever faces the gradient jump; each fits a smooth one-sided target on an irregular domain.
-- **The near-band accuracy gap is a sampling artifact** (§3.1): density-balancing collapses near/far from 2.2–3.7 to ≈ 1 for every model. The residual intrinsic penalty is small, grows with atom stiffness, and is absorbed by gradient (H1) training.
-- **But rebalancing a fixed budget is the wrong fix** (§3.2): doubling the sample count at the natural distribution improves every band ~6×, while shifting a fixed 6k budget toward the near band degrades every band — including the near band itself.
-- **ReLU² + fractional-exponent penalty is the best atom class for this target** (§4.1, §4.4): ~8× more accurate than any smooth activation on both bands, by aligning its strongest ridges with the switching arm.
-- **Feedback synthesis is reliable up to the curve and mis-branches beyond it** (§5). The limit is **data coverage across the curve**, not the atoms' ability to fit — two-branch (multi-well or ±2π-tiled) training data are required if cross-switching feedback is needed.
+- **The switching set is now an interior kink of the training data** (§1.1): the envelope-certified pad+collar band puts the gradient jump in-sample wherever both branches carry data. The near-band error (3.0–8.4× the far error, §2) is a genuine representation cost at a seen discontinuity — the one-sided era's 'sampling artifact' diagnosis no longer applies.
+- **No atom class represents the jump; ReLU² comes closest** (§4.3, §4.4): it alone develops a kink on the transect and aligns its strongest ridges with the arms, and it is the best model on *both* sides of the split (§2, §4.1). Smooth activations necessarily interpolate through the discontinuity.
+- **Two-sided coverage has an interior price** (§2.1, §3): the band is 23% of the samples but dominates the unweighted H1 objective (~75% of the squared value mass), so interior accuracy degrades several-fold relative to one-sided training — most for stiff ReLU⁵, least for ReLU². Objective weighting / band-share tuning is the open follow-up.
+- **Cross-switching feedback synthesis now works — for the atom that fits** (§5): ReLU² makes the correct branch decision from both sides of the curve (matching the true cost from B), which no model achieved on one-sided data. The smooth models fail globally; the bottleneck moved from data coverage to fit quality.
 
-## Appendix: relative H1 (confounded)
+## Appendix: relative H1
 
-The naive region-local relative H1 metric reports models as *better* near the switching set (`near/far ≈ 0.55–1.15`, < 1 for 14 of 15 rows) — the V→0 artifact: with a single well, the `far` denominator is dominated by the near-zero interior at the upright, inflating far relative error. Kept for continuity; the count-fair absolute mean-L1 of §2 is the primary metric.
+On the one-sided data this region-local relative metric *flipped* the conclusion (near/far < 1 for 14 of 15 rows) because the near band held only small-|V| samples at the data edge. On the two-sided data the band contributes large-|V| pad/collar samples to the near denominator, muting the V→0 confound: near/far is now ≥ 0.99 for every row and the ranking agrees with the primary L1 table of §2. Kept for continuity and as a record of the metric's data-dependence; the count-fair absolute mean-L1 of §2 remains the primary metric.
 
 Relative H1 (kept for continuity — confounded by the V→0 interior)
 
 | kind        | insertion   | activation   | loss | gamma | neurons | near H1  | far H1   | near/far |
 | ----------- | ----------- | ------------ | ---- | ----- | ------- | -------- | -------- | -------- |
-| semiconcave | profile     | gaussian     | h1   | 1     | 19      | 3.65e-01 | 5.19e-01 | 0.70     |
-| semiconcave | profile     | gelu_squared | h1   | 1     | 28      | 5.38e-01 | 7.03e-01 | 0.77     |
-| semiconcave | profile     | tanh         | h1   | 0     | 22      | 6.51e-01 | 7.94e-01 | 0.82     |
-| semiconcave | profile     | softplus     | h1   | 0     | 18      | 7.75e-01 | 9.14e-01 | 0.85     |
-| semiconcave | profile     | matern52     | h1   | 0     | 21      | 6.64e-01 | 7.21e-01 | 0.92     |
-| signed      | finite_step | relu^2       | h1   | 0     | 107     | 1.61e-02 | 2.94e-02 | 0.55     |
-| signed      | finite_step | relu^2.01    | h1   | 0     | 106     | 1.90e-02 | 3.38e-02 | 0.56     |
-| signed      | finite_step | relu^4       | h1   | 0     | 58      | 9.78e-02 | 1.39e-01 | 0.70     |
-| signed      | finite_step | relu^5       | h1   | 0     | 55      | 6.43e-02 | 8.36e-02 | 0.77     |
-| signed      | finite_step | relu^3       | h1   | 0     | 71      | 3.93e-02 | 4.79e-02 | 0.82     |
-| signed      | profile     | tanh         | h1   | 0     | 80      | 2.52e-01 | 4.13e-01 | 0.61     |
-| signed      | profile     | gaussian     | h1   | 1     | 97      | 1.50e-01 | 2.23e-01 | 0.67     |
-| signed      | profile     | gelu_squared | h1   | 1     | 51      | 3.93e-01 | 5.58e-01 | 0.70     |
-| signed      | profile     | matern52     | h1   | 0     | 107     | 2.01e-01 | 2.36e-01 | 0.85     |
-| signed      | profile     | softplus     | h1   | 1     | 77      | 7.26e-01 | 6.30e-01 | 1.15     |
+| semiconcave | profile     | softplus     | h1   | 1     | 8       | 8.31e-01 | 8.39e-01 | 0.99     |
+| semiconcave | profile     | tanh         | h1   | 0     | 25      | 8.21e-01 | 8.25e-01 | 0.99     |
+| semiconcave | profile     | gaussian     | h1   | 0     | 23      | 7.15e-01 | 6.66e-01 | 1.07     |
+| semiconcave | profile     | gelu_squared | h1   | 1     | 19      | 6.91e-01 | 6.36e-01 | 1.09     |
+| semiconcave | profile     | matern52     | h1   | 0     | 21      | 6.46e-01 | 5.75e-01 | 1.12     |
+| signed      | finite_step | relu^5       | h1   | 0     | 79      | 5.94e-01 | 5.03e-01 | 1.18     |
+| signed      | finite_step | relu^4       | h1   | 0     | 75      | 5.90e-01 | 4.79e-01 | 1.23     |
+| signed      | finite_step | relu^3       | h1   | 0     | 99      | 4.91e-01 | 2.71e-01 | 1.81     |
+| signed      | finite_step | relu^2.01    | h1   | 0     | 132     | 3.74e-01 | 1.79e-01 | 2.09     |
+| signed      | finite_step | relu^2       | h1   | 0     | 114     | 4.05e-01 | 1.84e-01 | 2.20     |
+| signed      | profile     | gelu_squared | h1   | 0     | 39      | 7.26e-01 | 6.79e-01 | 1.07     |
+| signed      | profile     | gaussian     | h1   | 1     | 113     | 6.22e-01 | 5.35e-01 | 1.16     |
+| signed      | profile     | tanh         | h1   | 1     | 99      | 6.50e-01 | 5.44e-01 | 1.20     |
+| signed      | profile     | matern52     | h1   | 0     | 125     | 6.18e-01 | 5.15e-01 | 1.20     |
+| signed      | profile     | softplus     | h1   | 0     | 82      | 6.13e-01 | 4.47e-01 | 1.37     |

@@ -3,20 +3,25 @@
 Comparison set: signed H1-trained `gaussian`, `softplus` with the
 log penalty, and signed H1-trained `ReLU^2`, `ReLU^5` with the fractional
 penalty `|c|^q`, `q = 2/(p+1)`. Each row uses the best run in its cell by far
-L1 error.
+L1 error. All rows are trained on the **two-sided** dataset (3,900 samples =
+3,000 in-basin + 900 envelope-certified pad/collar samples straddling the
+switching arms), so the gradient jump is in-sample; numbers are not comparable
+to the earlier one-sided (3,000-sample) report.
 
 | model | penalty | neurons | near L1 | far L1 | near/far |
 | --- | --- | ---: | ---: | ---: | ---: |
-| `ReLU^2` | fractional, `q=2/3` | 107 | 4.34e-2 | 1.87e-2 | 2.32 |
-| `ReLU^5` | fractional, `q=1/3` | 55 | 1.64e-1 | 5.57e-2 | 2.94 |
-| gaussian | log | 97 | 3.64e-1 | 1.43e-1 | 2.54 |
-| softplus | log | 77 | 2.13e+0 | 5.73e-1 | 3.71 |
+| `ReLU^2` | fractional, `q=2/3` | 114 | 1.01e+0 | 1.20e-1 | 8.39 |
+| `ReLU^5` | fractional, `q=1/3` | 79 | 1.78e+0 | 4.38e-1 | 4.07 |
+| gaussian | log | 113 | 1.81e+0 | 4.38e-1 | 4.14 |
+| softplus | log | 82 | 1.77e+0 | 3.49e-1 | 5.09 |
 
-Main conclusion: `ReLU^2` is the best fit by a large margin in both the
-near-switching band and the smooth far region. `ReLU^5` is much sparser, but
-the higher power and stronger fractional penalty degrade the switching-band fit.
-The smooth activations shown are worse in absolute error, with softplus clearly
-failing.
+Main conclusion: `ReLU^2` remains the best fit in both the near-switching band
+and the smooth far region — by ~3× on far error. The picture away from ReLU²
+changed relative to the one-sided data: with the kink in-sample the near band
+is comparably hard for all other models (near L1 1.77–1.81), and every model's
+absolute error grew, because the band dominates the unweighted H1 objective
+(23% of the samples, ~75% of the squared value mass). The near/far ratio is now
+largest for `ReLU^2` precisely because its far error is the smallest.
 
 ## Geometry
 
@@ -41,35 +46,33 @@ All learned surfaces use the same physical window as the true value surface,
 | --- | --- |
 | ![ReLU2 learned value surface](figures/surface_relu2.png) | ![ReLU5 learned value surface](figures/surface_relu5.png) |
 
-The surface view explains why global value appearance is not enough. Gaussian
-produces a smooth basin-like surface, but still misses the sharp
-switching-gradient structure measured later. Softplus is visibly too flat near
-the central basin and too saturated off-support, matching its poor error and
-feedback results. `ReLU^2` gives the sharpest piecewise surface and the best
-near/far errors; `ReLU^5` is sparser but visibly stiffer, which is consistent
-with its larger switching-band error.
+With the band in the training data the models now shape the full multi-well
+landscape rather than a single basin. `ReLU^2` raises the sharpest diagonal
+walls along the switching arms between the `2πk` wells. Gaussian reproduces the
+wells but rounds the ridge off. Softplus smears the structure, matching its
+poor feedback results below.
 
 ## Insertion Frontier
 
 ![insertion frontier](figures/frontier.png)
 
 The frontier shows the running best relative `H1` validation error reached as
-neurons are inserted for the selected run in each model family. `ReLU^5` reaches
-relative `H1` around `9.3e-2` with 55 neurons, while gaussian remains around
-`1.9e-1` at 97 neurons and softplus plateaus near `6.8e-1`. `ReLU^2` reaches the
-lowest validation error, about `3.4e-2`, but with 107 neurons. This is the
-sparsity side of the same story as the near/far table: ReLU atoms buy accuracy
-per atom, while the distance and feedback diagnostics below show where that
-accuracy is still fragile near the switching set.
+neurons are inserted for the selected run in each model family. `ReLU^2`
+separates from the field almost immediately and reaches `~3.6e-1` at 113
+neurons; softplus plateaus near `5.4e-1` from ~50 neurons; `ReLU^5` and
+gaussian sit near `5.5e-1`–`5.9e-1`. Errors are uniformly higher than on the
+one-sided data — the two-sided target is genuinely harder — but the per-atom
+accuracy advantage of the low-power ReLU atom is unchanged.
 
 ## Near/Far Error
 
 ![near/far error](figures/near_far_dumbbell.png)
 
-`ReLU^2` is closest to the origin on both endpoints: it has the smallest far
-error and the smallest near-switching error. `ReLU^5` is second best but loses
-more near the switching set. Gaussian is the best smooth activation, but its
-absolute error is still far above `ReLU^2`. Softplus is not competitive.
+Relative `H1` error inside a fixed geometric tube around the switching set
+(`d <= 0.3`, filled) versus the rest (open). `ReLU^2` is best in both regions
+(rest `~0.20`, tube `~0.31`). `ReLU^5` is the only model *better* inside the
+tube than outside: its stiff atoms seat the band and pay everywhere else.
+Gaussian and softplus sit in between, 2–3× above `ReLU^2`.
 
 ## Error By Distance
 
@@ -77,16 +80,14 @@ absolute error is still far above `ReLU^2`. Softplus is not competitive.
 | --- | --- |
 | ![value error by distance](figures/error_vs_distance_value.png) | ![gradient error by distance](figures/error_vs_distance_gradient.png) |
 
-The smoothed distance profiles show where each model concentrates its own error:
-each bin mean is divided by that model's global mean error. Values above one
-therefore mark regions where that same model fails more than usual. Read this as
-a spatial failure diagnostic, not as the absolute model ranking.
-
-The nearest bins to the switching set are elevated for all models, especially in
-gradient. The dense sample band is around distance `0.6-0.7`; the far tail has
-few samples, so far-tail changes should not be over-interpreted point by point.
-The absolute ranking remains the near/far table above: `ReLU^2`, then `ReLU^5`,
-then gaussian, with softplus worst.
+Per-bin relative error against distance to the switching set (grey bars =
+samples per bin). The profile inverted relative to the one-sided data: the
+switching set itself (`d < 0.3`) is no longer the peak — the pad/collar band
+anchors the fit there and `|V|` is large — while the peak moved to `d ≈ 0.65`,
+the dense sample band around the upright equilibrium where `|V| → 0` inflates
+the relative error and where two-sided training costs interior accuracy.
+`ReLU^2` keeps the lowest profile at every distance; `ReLU^5` pays the largest
+interior penalty.
 
 ## Switching-Set Transect
 
@@ -97,32 +98,36 @@ then gaussian, with softplus worst.
 The blue and teal curves are the two candidate PMP branches before taking the
 minimum: one goes to the upright at `0`, the other to the upright at `2π`. The
 true value is the dashed lower envelope. In the value plot the lower envelope is
-continuous: it follows the blue branch on the left and the teal branch on the
-right. In the gradient plot the selected branch changes at the switching set, so
-`n · grad V` jumps.
+continuous; in the gradient plot the selected branch changes at the switching
+set, so `n · grad V` jumps.
 
 | Value along normal direction | Normal gradient along normal direction |
 | --- | --- |
 | ![value transect](figures/transect_value.png) | ![normal gradient transect](figures/transect_normal_gradient.png) |
 
-The learned-model transect should be read against the branch-reference plot
-above. On the trained side of the switching set, `ReLU^2`, `ReLU^5`, gaussian,
-and softplus show very different behavior: the ReLU models and gaussian follow
-the steep branch reasonably well, while softplus underfits. Across the
-switching set, the true lower envelope switches from one PMP branch to the other,
-but the learned models mostly continue the branch they saw in the data. This is
-a data-support problem as much as an approximation problem.
-
-The previous combined transect made `ReLU^5` look like it had only half a curve
-because the y-limit was set from the true branch only. `ReLU^5` was not missing;
-it was clipped. In the split figures the full curve is visible: on the off-data
-side it grows to roughly `V=145` and `n·grad V=190`, far above the true branch.
+Unlike the one-sided data, the models now saw samples on **both** sides of
+`s = 0`, and the jump being in-sample is visible: `ReLU^2` is the only model
+that develops a kink at `s ≈ 0` and tracks the true value level best on both
+sides. The smooth activations interpolate a gentle slope through the
+discontinuity, as their atoms must. No model reproduces the jump's full
+magnitude (true `n·grad V ≈ −100` just before the curve vs fitted `−20` to
+`−58`): a representation limit at a *seen* discontinuity, not a data-coverage
+artifact.
 
 ## Feedback Reliability
 
-| Start A: data side | Start B: opposite side |
+One phase panel per feedback law; start A (blue) and start B (red) straddle the
+switching curve, which here separates two optimal behaviours: from A the true
+law swings over the top to the `2π` upright, from B it brakes directly to the
+`θ = 0` upright. Both starts are in-sample now.
+
+| true PMP | gaussian | softplus |
+| --- | --- | --- |
+| ![true PMP](figures/feedback_true_pmp.png) | ![gaussian](figures/feedback_gaussian.png) | ![softplus](figures/feedback_softplus.png) |
+
+| `ReLU^2` | `ReLU^5` |
 | --- | --- |
-| ![feedback start A](figures/feedback_start_a.png) | ![feedback start B](figures/feedback_start_b.png) |
+| ![ReLU2](figures/feedback_relu2.png) | ![ReLU5](figures/feedback_relu5.png) |
 
 | Control from start B |
 | --- |
@@ -130,33 +135,28 @@ side it grows to roughly `V=145` and `n·grad V=190`, far above the true branch.
 
 | controller | cost A | upright A | cost B | upright B |
 | --- | ---: | --- | ---: | --- |
-| true PMP | 10.6 | yes | 26.3 | yes |
-| gaussian | 10.6 | yes | 66.3 | yes |
-| softplus | 335.5 | no | 343.9 | no |
-| `ReLU^2` | 10.5 | yes | 51.3 | yes |
-| `ReLU^5` | 10.6 | yes | 51.6 | yes |
+| true PMP | 26.2 | yes | 10.2 | yes |
+| gaussian | 1221.9 | no | 1199.2 | no |
+| softplus | 168.0 | no | 190.7 | no |
+| `ReLU^2` | 331.6 | yes | 10.1 | yes |
+| `ReLU^5` | 631.4 | no | 352.9 | no |
 
-On the data side, every model except softplus stabilizes with almost the same
-cost as the PMP feedback. On the opposite side of the switching set, the learned
-models still stabilize, but they choose the wrong branch and pay roughly twice
-the PMP cost. Softplus fails from both starts.
+The branch decision at the curve is now learnable — and only `ReLU^2` learns
+it. From B it brakes to the `θ = 0` upright at the true cost (10.1 vs 10.2);
+from A it correctly swings over to the `2π` upright, though with an
+over-energetic arc (331.6 vs 26.2). Every smooth model fails from **both**
+starts, and the failure tracks global fit quality rather than proximity to the
+curve: gaussian saturates the actuator and overshoots past `2π`; softplus
+settles at a spurious equilibrium; `ReLU^5` under-rotates and stalls. On the
+one-sided data every model mis-branched from beyond the curve; the data fix
+moved the bottleneck from coverage to fit quality.
 
-So the fitted feedback law is reliable only on the supported side of the
-switching set. Establishing reliable cross-switching feedback requires training
-data from both branches, not just more accuracy on the one branch.
+## Summary
 
-## Sampling Check
-
-| Density balancing | ReLU power under balanced sampling |
-| --- | --- |
-| ![density balance](figures/sampling_density_balance.png) | ![ReLU power sampling](figures/sampling_relu_power.png) |
-
-Balancing the sample density collapses much of the near/far gap, so the original
-near/far ratio is partly a sampling-density effect. The remaining model effect
-is still meaningful: with balanced data and H1 training, the near/far ratio stays
-near one, while value-only training gets worse as the ReLU power increases.
-
-This supports the final interpretation: the nonsmooth region is harder, but the
-dominant failure mode for feedback reliability is one-sided branch support near
-the switching set. Among the tested models, `ReLU^2` is the best approximation
-choice; `ReLU^5` buys sparsity but loses switching accuracy.
+With two-sided data the switching set is an interior kink of the training set,
+and the study measures representation rather than extrapolation. `ReLU^2` is
+the best approximation choice on both sides of the split and the only model
+that yields a correct cross-switching feedback law; the cost is a several-fold
+loss of interior accuracy for every model, because the high-value band
+dominates the unweighted H1 objective. Rebalancing the objective (per-sample
+weighting or band share) is the open follow-up.
