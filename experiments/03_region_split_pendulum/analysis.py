@@ -36,6 +36,7 @@ MULTIRUN_DIR = REPO_ROOT / "rawdata" / "logs" / "multirun" / EXPERIMENT
 # from the penaltypowers sweep on the same dataset; only its H1 runs join the
 # comparison here (the region_split sweep is H1-only).
 RELU_MULTIRUN_DIR = REPO_ROOT / "rawdata" / "logs" / "multirun" / "penaltypowers" / "pendulum"
+ACT_MULTIRUN_DIR = REPO_ROOT / "rawdata" / "logs" / "multirun" / "activationsearch" / "pendulum"
 DATASET_STEM = "Pendulum_pmp_value_samples_2000"
 OUTPUT_DIR = Path(__file__).resolve().parent
 
@@ -51,7 +52,7 @@ _SWITCHING_TUBE = 0.3
 # scores the region split and plots error-vs-distance.
 
 
-def _record_row(record: dict[str, Any], *, relu_power: bool) -> dict[str, Any] | None:
+def _record_row(record: dict[str, Any], *, source: str) -> dict[str, Any] | None:
     """One table row from a run record; None if it lacks region metrics or scope."""
     cfg = record["config"]
     model = cfg["model"]
@@ -61,11 +62,17 @@ def _record_row(record: dict[str, Any], *, relu_power: bool) -> dict[str, Any] |
     if DATASET_STEM not in cfg["data"]["path"]:
         return None
     loss = _LOSS_LABEL.get(tuple(model["loss_weights"]), str(model["loss_weights"]))
-    if relu_power:
+    if source == "relu":
         # penaltypowers rows: ReLU^p atoms, only the H1 runs join this comparison.
         if model["activation"] != "relu" or loss != "h1":
             return None
         activation = f"relu^{model['power']:g}"
+    elif source == "act":
+        # activationsearch rows: only the kink specialist joins (H1, like the
+        # ReLU^p rows); the smooth activations are already in the region sweep.
+        if model["activation"] != "leaky_relu" or loss != "h1":
+            return None
+        activation = model["activation"]
     else:
         activation = model["activation"]
     return {
@@ -97,9 +104,13 @@ def load_rows() -> tuple[list[dict[str, Any]], str | None]:
             f"no run records under {MULTIRUN_DIR} — run `make region_split_pendulum` first"
         )
     relu_records = sorted(RELU_MULTIRUN_DIR.glob("*/*.json"))
+    act_records = sorted(ACT_MULTIRUN_DIR.glob("*/*.json"))
     rows, cache = [], None
-    for path, relu_power in [(p, False) for p in records] + [(p, True) for p in relu_records]:
-        row = _record_row(json.loads(path.read_text(encoding="utf-8")), relu_power=relu_power)
+    sources = ([(p, "region") for p in records]
+               + [(p, "relu") for p in relu_records]
+               + [(p, "act") for p in act_records])
+    for path, source in sources:
+        row = _record_row(json.loads(path.read_text(encoding="utf-8")), source=source)
         if row is None:
             continue
         cache = cache or row.pop("cache")
@@ -226,17 +237,19 @@ def _plot_error_vs_distance(
 from src.plotstyle import PALETTE
 from src.plotstyle import apply_publication_style as _apply_publication_style
 
-# The compared models (all signed, H1 loss, best run per cell by far L1).
+# The compared models (all signed, H1 loss, best run per cell by rest L1).
 _MODEL_STYLE = {
     "gaussian": (PALETTE["blue_main"], "-"),
     "softplus": (PALETTE["violet"], "-"),
+    "leaky_relu": ("0.25", "-."),
     "relu^2": (PALETTE["red_strong"], "-"),
     "relu^5": (PALETTE["teal"], "-"),
 }
 _TRUE_COLOR = "0.35"
 _DISPLAY = {"relu^2": r"ReLU$^2$", "relu^5": r"ReLU$^5$",
-            "gaussian": "gaussian", "softplus": "softplus"}
-_SURFACE_MODEL_ORDER = ("gaussian", "softplus", "relu^2", "relu^5")
+            "gaussian": "gaussian", "softplus": "softplus",
+            "leaky_relu": "leaky ReLU"}
+_SURFACE_MODEL_ORDER = ("gaussian", "softplus", "leaky_relu", "relu^2", "relu^5")
 NEARSWITCH_DIR = REPO_ROOT / "rawdata" / "logs" / "multirun" / "region_split_pendulum_nearswitch"
 FIG_DIR = OUTPUT_DIR / "figures"
 
@@ -1007,7 +1020,8 @@ def fig_frontier(best: list[dict[str, Any]]) -> str:
         if r["kind"] == "signed" and r["loss"] == "h1"
         and r["activation"] in _SURFACE_MODEL_ORDER
     }
-    markers = {"gaussian": "o", "softplus": "s", "relu^2": "^", "relu^5": "D"}
+    markers = {"gaussian": "o", "softplus": "s", "leaky_relu": "v",
+               "relu^2": "^", "relu^5": "D"}
     labels = {
         "gaussian": frontier_penalty_label(r"\mathrm{gaussian}",
                                            insertion=picked["gaussian"]["insertion"],
@@ -1015,6 +1029,9 @@ def fig_frontier(best: list[dict[str, Any]]) -> str:
         "softplus": frontier_penalty_label(r"\mathrm{softplus}",
                                            insertion=picked["softplus"]["insertion"],
                                            subscript=r"\gamma"),
+        "leaky_relu": frontier_penalty_label(r"\mathrm{leaky\,ReLU}",
+                                             insertion=picked["leaky_relu"]["insertion"],
+                                             subscript=r"\gamma"),
         "relu^2": frontier_penalty_label(r"\mathrm{ReLU}^2",
                                          insertion=picked["relu^2"]["insertion"],
                                          subscript="2"),
@@ -1048,7 +1065,8 @@ def main() -> int:
         l1,
         ["kind", "insertion", "activation", "loss", "gamma", "neurons",
          "near_l1", "far_l1", "l1_near/far"],
-        headers={"near_l1": "near L1", "far_l1": "far L1", "l1_near/far": "near/far"},
+        headers={"near_l1": "switching L1", "far_l1": "rest L1",
+                 "l1_near/far": "switch/rest"},
         formats={"gamma": "{:g}", "near_l1": "{:.2e}", "far_l1": "{:.2e}",
                  "l1_near/far": "{:.2f}"},
         title="Mean per-sample L1 over the full dataset — count-fair, robust to V→0",
@@ -1058,7 +1076,8 @@ def main() -> int:
         rel,
         ["kind", "insertion", "activation", "loss", "gamma", "neurons",
          "near_h1", "far_h1", "rel_near/far"],
-        headers={"near_h1": "near H1", "far_h1": "far H1", "rel_near/far": "near/far"},
+        headers={"near_h1": "switching H1", "far_h1": "rest H1",
+                 "rel_near/far": "switch/rest"},
         formats={"gamma": "{:g}", "near_h1": "{:.2e}", "far_h1": "{:.2e}",
                  "rel_near/far": "{:.2f}"},
         title="Relative H1 (kept for continuity — confounded by the V→0 interior)",
@@ -1130,9 +1149,10 @@ def main() -> int:
             "comparison.\n\n"
             f"{f8_table}\n\n"
             "Two readings survive this caveat. (1) The one-sided-era conclusion — "
-            "reallocating a fixed in-basin budget toward the near band does not "
-            "help; only more samples at the natural distribution do — still stands "
-            "*within* the variant rows (10% prop beats 20%/40% strat everywhere). "
+            "reallocating a fixed in-basin budget toward the switching band does "
+            "not help; only more samples at the natural distribution do — still "
+            "stands *within* the variant rows (10% prop beats 20%/40% strat "
+            "everywhere). "
             "(2) The baseline row quantifies the **interior price of two-sided "
             "training**: scored on the in-basin pool alone, the two-sided gaussian "
             "(0.61) is far worse than a one-sided 6k model (0.04). The 900-sample "
@@ -1162,22 +1182,35 @@ def main() -> int:
         "(profile insertion, gamma selected per cell) and **ReLU^p atoms with the "
         "fractional-exponent penalty** q = 2/(p+1) (finite_step insertion, gamma=0 "
         "by design, alpha selected per cell) — see `../02_pendulum/"
-        "frac_exp_penalty`. `near` = lowest 10% of samples by distance to the "
-        "(±2π-tiled) switching set (d ≤ 0.25); `far` = the rest. The model-level "
-        "studies (§4–§5) use four representative signed H1 models — gaussian, "
-        "softplus, relu², relu⁵; semiconcave models are excluded there (they do "
-        "not round-trip through the fit artifact, #19).\n\n"
+        "frac_exp_penalty` — plus the kink specialist `leaky_relu` from the "
+        "activationsearch sweep (`../02_pendulum/log_penalty`, H1 runs). The "
+        "region split uses the switching set identified during data generation: "
+        "the **switching band** = the lowest 10% of samples by distance to the "
+        "(±2π-tiled) switching set (d ≤ 0.25 on this dataset); the **rest** = "
+        "all other samples. The model-level studies (§4–§5) use five "
+        "representative signed H1 models — gaussian, softplus, leaky ReLU, "
+        "relu², relu⁵; semiconcave models are excluded there (they do not "
+        "round-trip through the fit artifact, #19).\n\n"
 
         "## 1. The target: a value function with a gradient discontinuity\n\n"
-        "The regions of attraction of the (periodic) upright equilibria — PMP "
-        "characteristics filled by nearest-point classification — are separated by "
-        "the nonsmooth switching curves the region split is built on (open-loop "
-        "data visualisations are centralised in [`experiments/00_openloop/pendulum`]"
-        "(../00_openloop/pendulum)).\n"
-        "\n![regions of attraction & switching set](../00_openloop/pendulum/figures/regions_of_attraction.png)\n\n"
+        "The pendulum value is continuous, but the gradient changes branch across "
+        "the switching spirals — which is why global H1 alone is not enough: the "
+        "fit must be checked against the switching set identified during data "
+        "generation, and by the induced feedback law. The regions of attraction "
+        "of the (periodic) upright equilibria — PMP characteristics filled by "
+        "nearest-point classification — are separated by the nonsmooth switching "
+        "curves the region split is built on (open-loop data visualisations are "
+        "centralised in [`experiments/00_openloop/pendulum`]"
+        "(../00_openloop/pendulum)):\n\n"
+        "| value samples | value surface | switching set |\n"
+        "| --- | --- | --- |\n"
+        "| ![value samples](../00_openloop/pendulum/figures/value_scatter.png) "
+        "| ![value surface](../00_openloop/pendulum/figures/value_surface.png) "
+        "| ![regions of attraction](../00_openloop/pendulum/figures/regions_of_attraction.png) |\n\n"
         "### 1.1 The kink, seen in the data\n\n"
         "Along a transect normal to the switching curve (through the densest data "
-        "region), the two PMP branch values cross; the optimal V is their lower "
+        "region), the two candidate PMP branches — one driving to the upright at "
+        "0, the other to the upright at 2π — cross; the optimal V is their lower "
         "envelope — continuous, with a concave kink where the branches exchange "
         "optimality, so ∇V jumps (left: V; right: n·∇V):\n\n"
         "| value along the transect | normal gradient along the transect |\n"
@@ -1193,7 +1226,7 @@ def main() -> int:
         "conservative trim and the true arm) and far-side collar points (the ±2π "
         "branch across the arm), each kept only where its branch value beats the "
         "competing branch's locally extrapolated value. Verified on the emitted "
-        "samples: the 10% near band (d ≤ 0.25) contains 221 near-side and 169 "
+        "samples: the 10% switching band (d ≤ 0.25) contains 221 near-side and 169 "
         "far-side points, and 44% of all samples within 0.3 of the curve have an "
         "opposite-side neighbour within 0.3 (0% in the one-sided data). The "
         "gradient jump is therefore **in-sample** wherever both branches carry "
@@ -1205,22 +1238,26 @@ def main() -> int:
         "## 2. Error concentrates at the switching set — now as a representation "
         "cost\n\n"
         "Region mean per-sample L1 (absolute) error / global mean ‖true‖ — "
-        "count-fair and robust to the V→0 interior; `near/far` > 1 ⇒ worse at the "
-        "switching set. (On the two-sided data the relative-H1 appendix table "
+        "count-fair and robust to the V→0 interior; `switch/rest` > 1 ⇒ worse at "
+        "the switching set. (On the two-sided data the relative-H1 appendix table "
         "agrees in direction; it no longer flips.)\n\n"
         f"{l1_table}\n\n"
         "Every model — both kinds, every activation, every penalty — is **3.0–8.4× "
-        "worse in the near band**, a wider spread than the 2.2–3.7× measured on "
-        "the earlier one-sided data. The composition changed too: near L1 is "
-        "compressed across models (0.92–2.52, a ~2.7× spread) while far L1 spans "
-        "~7× (0.12–0.83), so the ratio mostly reflects how good a model is *away* "
-        "from the curve — ReLU² has the largest ratio (8.4) precisely because its "
-        "far error is the smallest. With the jump in-sample, the near band is "
-        "genuinely hard for every atom class: a uniform representation cost, no "
-        "longer a one-sided extrapolation artifact.\n\n"
+        "worse in the switching band**, a wider spread than the 2.2–3.7× measured "
+        "on the earlier one-sided data. The composition changed too: switching L1 "
+        "is compressed across models (0.92–2.52, a ~2.7× spread) while rest L1 "
+        "spans ~7× (0.12–0.83), so the ratio mostly reflects how good a model is "
+        "*away* from the curve — ReLU² has the largest ratio (8.4) precisely "
+        "because its rest error is the smallest. With the jump in-sample, the "
+        "switching band is genuinely hard for every atom class: a uniform "
+        "representation cost, no longer a one-sided extrapolation artifact.\n\n"
         "### 2.1 The error profile against distance\n\n"
         "Per-bin relative error (bin mean |V̂−V| / bin mean |V|) against distance "
-        "to the switching set (equal-width bins; grey bars = samples per bin):\n\n"
+        "to the switching set (equal-width bins; grey bars = samples per bin). "
+        "Read it as a *spatial failure diagnostic* — where each model "
+        "concentrates its own error — not as an absolute model ranking (that is "
+        "the table above); the far tail has few samples and should not be "
+        "over-interpreted point by point:\n\n"
         "| value error vs distance | gradient error vs distance |\n"
         "| --- | --- |\n"
         f"| ![value error]({distance_figs.get('value', '')}) "
@@ -1238,21 +1275,31 @@ def main() -> int:
         f"{f8_block}"
 
         "## 4. Which atoms fit the switching-set target best\n\n"
-        "### 4.1 Accuracy per model\n\n"
-        f"![near/far dumbbell]({f4})\n\n"
+        "### 4.1 Insertion frontier\n\n"
+        "![insertion frontier](figures/frontier.png)\n\n"
+        "The running best relative H1 validation error reached as neurons are "
+        "inserted, for the selected run in each model family. ReLU² separates "
+        "from the field almost immediately and reaches the lowest error; the "
+        "other families plateau well above it. This is the sparsity side of the "
+        "switching/rest story: low-power rectified atoms buy the most accuracy "
+        "per neuron on this nonsmooth target.\n\n"
+        "### 4.2 Accuracy per model\n\n"
+        f"![switching/rest dumbbell]({f4})\n\n"
         "Relative H1 error (log scale) in a fixed geometric tube around the "
         "switching set (d ≤ 0.3, filled — well posed there now that the band makes "
         "|V| large) and in the rest of the domain (open), per representative "
         "model; rows ordered by rest error. **ReLU² dominates both regions** "
-        "(rest ≈ 0.20, tube ≈ 0.31), 2–3× better than the smooth activations; "
-        "ReLU⁵ is the only model *better* inside the tube than outside — its "
-        "stiff high-degree atoms seat the band but pay for it everywhere else "
-        "(see §2.1).\n\n"
-        "### 4.2 Learned value surfaces\n\n"
-        "| gaussian | softplus |\n"
-        "| --- | --- |\n"
+        "(rest ≈ 0.20, tube ≈ 0.31); leaky ReLU is the clear runner-up "
+        "(rest ≈ 0.29) — the two kink-capable atoms lead both regions, 1.5–3× "
+        "ahead of the smooth activations. ReLU⁵ is the only model *better* "
+        "inside the tube than outside — its stiff high-degree atoms seat the "
+        "band but pay for it everywhere else (see §2.1).\n\n"
+        "### 4.3 Learned value surfaces\n\n"
+        "| gaussian | softplus | leaky ReLU |\n"
+        "| --- | --- | --- |\n"
         f"| ![gaussian surface]({surface_figs.get('gaussian', '')}) "
-        f"| ![softplus surface]({surface_figs.get('softplus', '')}) |\n\n"
+        f"| ![softplus surface]({surface_figs.get('softplus', '')}) "
+        f"| ![leaky relu surface]({surface_figs.get('leaky_relu', '')}) |\n\n"
         "| ReLU² | ReLU⁵ |\n"
         "| --- | --- |\n"
         f"| ![relu2 surface]({surface_figs.get('relu^2', '')}) "
@@ -1260,10 +1307,11 @@ def main() -> int:
         "The learned V̂ over the state plane (z clipped at 60). With the band in "
         "the training data the models now shape the full multi-well landscape, "
         "not just the central bowl: ReLU² raises sharp diagonal walls along the "
-        "switching arms between the 2πk wells; gaussian reproduces the wells but "
-        "rounds the ridge off; softplus — the weakest fit throughout — smears "
-        "the structure.\n\n"
-        "### 4.3 Models on the transect\n\n"
+        "switching arms between the 2πk wells; leaky ReLU builds the same walls "
+        "with piecewise-linear facets; gaussian reproduces the wells but rounds "
+        "the ridge off; softplus — the weakest fit throughout — smears the "
+        "structure.\n\n"
+        "### 4.4 Models on the transect\n\n"
         "The same transect as §1.1, with the fitted models overlaid (dashed = "
         "lower-envelope truth; unlike the one-sided data, the models now saw "
         "samples on **both** sides of s = 0):\n\n"
@@ -1273,16 +1321,17 @@ def main() -> int:
         f"| ![transect gradient]({f3_split.get('gradient', '')}) |\n\n"
         "At s = 0 the true n·∇V jumps by ≈ 80–100 units. The jump being "
         "in-sample is necessary but not sufficient: **no model reproduces its "
-        "magnitude**. ReLU² comes closest — it is the only model that develops a "
-        "visible kink at s ≈ 0 (its piecewise-quadratic atoms can break the "
-        "derivative across a line) and it tracks the true V level best on both "
-        "sides; the smooth activations interpolate a gentle slope through the "
+        "magnitude**. The rectified atoms come closest — their derivatives can "
+        "break across a hyperplane: ReLU² develops a visible kink at s ≈ 0 and "
+        "tracks the true V level best, while leaky ReLU's step derivative shows "
+        "as plateaued gradients with visible breaks (at the wrong level); the "
+        "smooth activations interpolate a gentle slope through the "
         "discontinuity, exactly as their C^∞ atoms must. All models undershoot "
-        "the steep pre-jump gradient (true n·∇V ≈ −100 at s < 0 vs fitted −20 to "
-        "−58): the finite-width band bounds how much one-sided steepness the "
-        "global H1 fit will spend neurons on. This is the §2 near-band cost seen "
+        "the steep pre-jump gradient (true n·∇V ≈ −100 at s < 0): the "
+        "finite-width band bounds how much one-sided steepness the global H1 "
+        "fit will spend neurons on. This is the §2 switching-band cost seen "
         "pointwise: a genuine representation limit at a *seen* discontinuity.\n\n"
-        "### 4.4 Mechanism: where the atoms sit\n\n"
+        "### 4.5 Mechanism: where the atoms sit\n\n"
         f"![atom portrait]({f7})\n\n"
         "Each atom's active line {a·x + b = 0} in the physical (θ, θ̇) plane (line "
         "strength ∝ |outer weight|), for relu² (left) and gaussian (right), with "
@@ -1291,7 +1340,7 @@ def main() -> int:
         "whose derivative breaks exactly where the target's does — while "
         "gaussian's strength is spread over near-isotropic bumps that can tile "
         "the wells but not seat a gradient break. This is the mechanism behind "
-        "§4.1 and the transect kink in §4.3.\n\n"
+        "§4.1–§4.2 and the transect kink in §4.4.\n\n"
 
         "## 5. Can a reliable feedback law be synthesized?\n\n"
         "Closed-loop rollouts of u(x) = −(1/(2r·ml²)) ∂_θ̇ V̂(x), one phase panel "
@@ -1307,8 +1356,9 @@ def main() -> int:
         "| --- | --- | --- |\n"
         f"| ![true PMP]({f6_figs['true PMP']}) | ![gaussian]({f6_figs['gaussian']}) "
         f"| ![softplus]({f6_figs['softplus']}) |\n\n"
-        "| ReLU² | ReLU⁵ |\n"
-        "| --- | --- |\n"
+        "| leaky ReLU | ReLU² | ReLU⁵ |\n"
+        "| --- | --- | --- |\n"
+        f"| ![leaky relu]({f6_figs['leaky_relu']}) "
         f"| ![relu2]({f6_figs['relu^2']}) | ![relu5]({f6_figs['relu^5']}) |\n\n"
         "The control signal from start B, per feedback law (true PMP brakes to "
         "θ = 0 with u rising from ≈ −7 to 0; ReLU² tracks it almost exactly; "
@@ -1317,10 +1367,12 @@ def main() -> int:
         f"![control from B]({f6_figs['control_b']})\n\n"
         f"{cost_table}\n\n"
         "**The branch decision at the curve is now learnable — and only ReLU² "
-        "learns it.** From B it brakes to the θ = 0 upright at the true cost "
-        "(10.1 vs 10.2); from A it correctly swings over to the 2π upright, "
-        "though with an over-energetic arc (331.6 vs 26.2) — right branch, "
-        "inefficient execution. Every smooth model fails on *both* sides, and "
+        "learns it from both sides.** From B it brakes to the θ = 0 upright at "
+        "the true cost (10.1 vs 10.2); from A it correctly swings over to the "
+        "2π upright, though with an over-energetic arc (331.6 vs 26.2) — right "
+        "branch, inefficient execution. leaky ReLU, the accuracy runner-up, "
+        "gets the braking side right (14.8 from B) but fails from the "
+        "swing-over side. Every smooth model fails on *both* sides, and "
         "the failure tracks the global fit quality of §2, not proximity to the "
         "curve: gaussian's degraded interior gradient field saturates the "
         "actuator and overshoots past 2π (cost ≈ 1200); softplus never reaches "
@@ -1332,35 +1384,37 @@ def main() -> int:
         "## 6. Conclusions\n\n"
         "- **The switching set is now an interior kink of the training data** "
         "(§1.1): the envelope-certified pad+collar band puts the gradient jump "
-        "in-sample wherever both branches carry data. The near-band error "
-        "(3.0–8.4× the far error, §2) is a genuine representation cost at a seen "
-        "discontinuity — the one-sided era's 'sampling artifact' diagnosis no "
-        "longer applies.\n"
-        "- **No atom class represents the jump; ReLU² comes closest** (§4.3, "
-        "§4.4): it alone develops a kink on the transect and aligns its strongest "
-        "ridges with the arms, and it is the best model on *both* sides of the "
-        "split (§2, §4.1). Smooth activations necessarily interpolate through "
-        "the discontinuity.\n"
+        "in-sample wherever both branches carry data. The switching-band error "
+        "(3.0–8.4× the rest error, §2) is a genuine representation cost at a "
+        "seen discontinuity — the one-sided era's 'sampling artifact' diagnosis "
+        "no longer applies.\n"
+        "- **No atom class represents the jump; the rectified atoms come "
+        "closest** (§4.4, §4.5): they alone develop a kink on the transect and "
+        "align their strongest ridges with the arms, and ReLU² is the best "
+        "model on *both* sides of the split (§2, §4.2). Smooth activations "
+        "necessarily interpolate through the discontinuity.\n"
         "- **Two-sided coverage has an interior price** (§2.1, §3): the band is "
         "23% of the samples but dominates the unweighted H1 objective (~75% of "
         "the squared value mass), so interior accuracy degrades several-fold "
         "relative to one-sided training — most for stiff ReLU⁵, least for ReLU². "
         "Objective weighting / band-share tuning is the open follow-up.\n"
         "- **Cross-switching feedback synthesis now works — for the atom that "
-        "fits** (§5): ReLU² makes the correct branch decision from both sides of "
-        "the curve (matching the true cost from B), which no model achieved on "
-        "one-sided data. The smooth models fail globally; the bottleneck moved "
-        "from data coverage to fit quality.\n\n"
+        "fits** (§5): ReLU² makes the correct branch decision from both sides "
+        "of the curve (matching the true cost from B), which no model achieved "
+        "on one-sided data; leaky ReLU gets the braking side only. The smooth "
+        "models fail globally; the bottleneck moved from data coverage to fit "
+        "quality.\n\n"
 
         "## Appendix: relative H1\n\n"
         "On the one-sided data this region-local relative metric *flipped* the "
-        "conclusion (near/far < 1 for 14 of 15 rows) because the near band held "
-        "only small-|V| samples at the data edge. On the two-sided data the "
-        "band contributes large-|V| pad/collar samples to the near denominator, "
-        "muting the V→0 confound: near/far is now ≥ 0.99 for every row and the "
-        "ranking agrees with the primary L1 table of §2. Kept for continuity "
-        "and as a record of the metric's data-dependence; the count-fair "
-        "absolute mean-L1 of §2 remains the primary metric.\n\n"
+        "conclusion (switch/rest < 1 for 14 of 15 rows) because the switching "
+        "band held only small-|V| samples at the data edge. On the two-sided "
+        "data the band contributes large-|V| pad/collar samples to the "
+        "switching-band denominator, muting the V→0 confound: switch/rest is "
+        "now ≥ 0.99 for every row and the ranking agrees with the primary L1 "
+        "table of §2. Kept for continuity and as a record of the metric's "
+        "data-dependence; the count-fair absolute mean-L1 of §2 remains the "
+        "primary metric.\n\n"
         f"{rel_table}\n",
         encoding="utf-8",
     )

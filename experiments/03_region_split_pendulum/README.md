@@ -1,10 +1,11 @@
 # region_split_pendulum
 
 Profiles how well sparse PDAP models fit the pendulum value function in the
-**smooth region** vs the **switching region** (near the nonsmooth swing-up
-switching set). Built on the corrected pendulum dataset (the branch-restriction
-fix, issue #18 / `experiments/pendulum_branch_restriction/`); without that fix the
-samples never reached the switching set.
+**switching band** (around the nonsmooth swing-up switching set identified
+during data generation) vs the **rest** of the domain. Built on the corrected
+pendulum dataset (the branch-restriction fix, issue #18 — diagnosis in
+`../00_openloop/DIAGNOSIS.md`); without that fix the samples never reached the
+switching set.
 
 ## Method
 
@@ -25,10 +26,12 @@ samples never reached the switching set.
   distance to the **±2π-tiled** switching set
   (`scripts/investigation/precompute_region_distances.py`; tiling matters —
   the stored ridge covers one period while the basin's left arm is its −2π
-  copy); the near band (lowest 10%) is distance ≤ 0.25 → 390 near samples
-  (221 near-side + 169 far-side).
-- **Region split**: `near` = the lowest `near_percentile` (default 10) % of
-  validation samples by distance to the switching set; `far` = the rest.
+  copy); the switching band (lowest 10%) is distance ≤ 0.25 → 390 band samples
+  (221 on the central-branch side + 169 across the arm).
+- **Region split**: the **switching band** = the lowest `near_percentile`
+  (default 10) % of validation samples by distance to the switching set; the
+  **rest** = all other samples. (The config/metric keys keep the legacy
+  `near`/`far` names; all reporting uses switching/rest.)
 - **Sweep** (`make region_split_pendulum`): `model.kind ∈ {signed, semiconcave}` ×
   `activation ∈ {tanh, softplus, matern52, gaussian, gelu_squared}` ×
   `gamma ∈ {0, 1}`, profile insertion, H1 loss, α=1e-4, seed 42.
@@ -36,9 +39,12 @@ samples never reached the switching set.
   folds in the H1 runs of the fractional-exponent-penalty sweep
   (`../02_pendulum/frac_exp_penalty`) — signed, finite_step insertion,
   `power ∈ {2, 2.01, 3, 4, 5}` (penalty exponent q = 2/(p+1)), gamma=0 by design,
-  `α ∈ {1e-2…1e-6}` selected per power by far L1. Same dataset, same
+  `α ∈ {1e-2…1e-6}` selected per power by rest L1. Same dataset, same
   `eval=region_split` hook, so the region metrics are directly comparable.
-- **Output**: `results.md` (two tables + a diagnostic plot), via `analysis.py`.
+- **leaky_relu rows**: the kink specialist joins from the activationsearch
+  sweep's H1 runs (`../02_pendulum/log_penalty`, `make activationsearch
+  DATA=pendulum`) — same dataset and eval hook.
+- **Output**: `results.md` (tables + figures), via `analysis.py`.
 
 ## Choice of error metric
 
@@ -48,7 +54,7 @@ choice against the literature rather than picking what fit our hypothesis.
 
 **The default (region-local relative H1) is confounded here.** Relative error
 `‖pred−true‖ / ‖true‖` is computed per region with that region's own denominator.
-The `far` (smooth interior) region contains the upright equilibrium where `V→0`
+The `rest` (smooth interior) region contains the upright equilibrium where `V→0`
 and `∇V→0`, so its small `‖true‖` denominator inflates the relative error. Result:
 every model looks *better* near the switching set — an artifact of where the small
 values live, not of switching-set skill. Relative/percentage error is documented
@@ -61,9 +67,10 @@ problems the L1 norm gives the error "without significant contamination from
 localized deviations," whereas L2 worst-case bounds "cannot be generalized … near
 a shock."² So we report the region's **mean per-sample L1 (absolute) error,
 normalized by the global mean `‖true‖`**: L1 is discontinuity-appropriate; the
-*mean* (not the sum) keeps `near`/`far` **count-fair** — `near` is only ~10% of
-samples, so a summed L1 would trivially favour it (a sum-based version reported
-near/far ≈ 0.12 ≈ the 10/90 split, an artifact); and the shared global denominator
+*mean* (not the sum) keeps switching/rest **count-fair** — the switching band is
+only ~10% of samples, so a summed L1 would trivially favour it (a sum-based
+version reported switch/rest ≈ 0.12 ≈ the 10/90 split, an artifact); and the
+shared global denominator
 removes the per-region `V→0` confound. This is the **primary** table.
 
 **The primary diagnostic is error vs distance to the switching set.** The standard
