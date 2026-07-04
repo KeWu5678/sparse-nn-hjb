@@ -254,12 +254,15 @@ NEARSWITCH_DIR = REPO_ROOT / "rawdata" / "logs" / "multirun" / "region_split_pen
 FIG_DIR = OUTPUT_DIR / "figures"
 
 
-def _save_png(fig, name: str, *, tight: bool = True, pad: float = 2.0) -> str:
+def _save_png(fig, name: str, *, tight: bool = True, pad: float = 2.0,
+              bbox: bool = False) -> str:
     FIG_DIR.mkdir(parents=True, exist_ok=True)
     if tight:
         fig.tight_layout(pad=pad)
     out = FIG_DIR / f"{name}.png"
-    fig.savefig(out, dpi=300)
+    # bbox=True includes artists outside the axes (e.g. an above-axes legend
+    # row), which tight_layout alone does not account for.
+    fig.savefig(out, dpi=300, bbox_inches="tight" if bbox else None)
     import matplotlib.pyplot as plt
     plt.close(fig)
     return f"figures/{out.name}"
@@ -465,10 +468,6 @@ def fig_transect_split(models: dict[str, dict[str, Any]], nets: dict[str, Any], 
         model_values[name] = (v, g @ nrm)
 
     out: dict[str, str] = {}
-    # Per-panel legend corner, matched to where the data leaves room: the value
-    # panel is empty above the flat truth branch (upper right), the gradient
-    # panel below the model plateaus for s > 0 (lower right).
-    legend_loc = {"value": "upper right", "gradient": "lower right"}
     for key, truth, ylabel, stem in (
         ("value", v_true, r"$V$", "transect_value"),
         ("gradient", g_true, r"$n\cdot\nabla V$", "transect_normal_gradient"),
@@ -489,8 +488,13 @@ def fig_transect_split(models: dict[str, dict[str, Any]], nets: dict[str, Any], 
         ax.set_ylim(ymin - pad, ymax + pad)
         ax.set_xlabel(r"$s$")
         ax.set_ylabel(ylabel)
-        ax.legend(loc=legend_loc[key], fontsize=10)
-        out[key] = _save_png(fig, stem)
+        # One shared placement for the pair: a frameless row above the axes.
+        # Inside-the-axes corners forced per-panel positions (the free corner
+        # moves with the data); each PNG stays self-contained because the
+        # thesis reuses the panels as individual subfigures.
+        ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.0), ncol=3,
+                  fontsize=10, borderaxespad=0.0)
+        out[key] = _save_png(fig, stem, bbox=True)
     return out
 
 
