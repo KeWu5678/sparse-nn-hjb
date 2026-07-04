@@ -134,9 +134,11 @@ Closed-loop rollouts of u(x) = −(1/(2r·ml²)) ∂_θ̇ V̂(x), one phase pane
 | --- | --- | --- |
 | ![leaky relu](figures/feedback_leaky_relu.png) | ![relu2](figures/feedback_relu2.png) | ![relu5](figures/feedback_relu5.png) |
 
-The control signal from start B, per feedback law (true PMP brakes to θ = 0 with u rising from ≈ −7 to 0; ReLU² tracks it almost exactly; softplus settles at a spurious equilibrium with u ≈ −4; gaussian saturates at ±30):
+The control signal from start B, per feedback law (axis clipped to the informative band — softplus's ±30 actuator-saturation excursion leaves the frame). True PMP brakes to θ = 0 with u rising from ≈ −7 to 0; **ReLU² (red dashes on the black line, right panel) tracks it almost exactly**; the others oscillate or saturate:
 
-![control from B](figures/feedback_control_b.png)
+| log-penalty models | ReLU^p models |
+| --- | --- |
+| ![control from B, log-penalty](figures/feedback_control_b_log_penalty.png) | ![control from B, ReLU^p](figures/feedback_control_b_relu.png) |
 
 Closed-loop cost / stabilization from the two straddling starts (A = (0.71, 0.68), B = (0.23, 0.53); T=10)
 
@@ -149,11 +151,11 @@ Closed-loop cost / stabilization from the two straddling starts (A = (0.71, 0.68
 | ReLU^2     | 57.9    | yes       | 10.3    | yes       |
 | ReLU^5     | 235.9   | no        | 232.4   | no        |
 
-**The branch decision at the curve is now learnable — and only ReLU² learns it from both sides.** From B it brakes to the θ = 0 upright at the true cost (10.1 vs 10.2); from A it correctly swings over to the 2π upright, though with an over-energetic arc (331.6 vs 26.2) — right branch, inefficient execution. leaky ReLU, the accuracy runner-up, gets the braking side right (14.8 from B) but fails from the swing-over side. Every smooth model fails on *both* sides, and the failure tracks the global fit quality of §2, not proximity to the curve: gaussian's degraded interior gradient field saturates the actuator and overshoots past 2π (cost ≈ 1200); softplus never reaches an upright (spurious equilibrium); ReLU⁵ under-rotates and stalls near the origin. On the one-sided data every model mis-branched from beyond the curve; the data fix moved the bottleneck from *coverage* to *fit quality*.
+**The branch decision at the curve is now learnable — and only ReLU² learns it from both sides.** From B it brakes to the θ = 0 upright at the true cost (10.3 vs 10.2); from A it correctly swings over to the 2π upright, though with an over-energetic arc (57.9 vs 26.2) — right branch, inefficient execution. Every other law fails from *both* starts: leaky ReLU — the accuracy runner-up — and softplus over-accelerate, blow past the uprights and never brake (costs 776.9 and 66996.7 from B); gaussian settles into a limit cycle around the wells without reaching an upright (278.9 from B); ReLU⁵ swings over from A but arrives at 2π too slowly to be captured, and from B stalls just short of the θ = 0 upright (232.4 from B). On the one-sided data every model mis-branched from beyond the curve; the data fix moved the bottleneck from *coverage* to *fit quality* — only the atom class that fits the kink yields a usable feedback law.
 
 ## 6. Conclusions
 
 - **The switching set is now an interior kink of the training data** (§1.1): the envelope-certified pad+collar band puts the gradient jump in-sample wherever both branches carry data. The switching-band error (4.1–6.7× the rest error, §2) is a genuine representation cost at a seen discontinuity — the one-sided era's 'sampling artifact' diagnosis no longer applies.
 - **No atom class represents the jump; the rectified atoms come closest** (§4.4, §4.5): they alone develop a kink on the cross-section and align their strongest ridges with the arms, and ReLU² is the best model on *both* sides of the split (§2, §4.2). Smooth activations necessarily interpolate through the discontinuity.
 - **Two-sided coverage has an interior price, and band oversampling does not pay it down** (§2.1, §3): the switching band is 23% of the samples but dominates the unweighted H1 objective (~75% of the squared value mass), so interior accuracy degrades several-fold relative to one-sided training — most for stiff ReLU⁵, least for ReLU². Varying the switching-band share (23–60%) or adding samples leaves the switching fit flat (§3.1); per-sample objective weighting is the open follow-up.
-- **Cross-switching feedback synthesis now works — for the atom that fits** (§5): ReLU² makes the correct branch decision from both sides of the curve (matching the true cost from B), which no model achieved on one-sided data; leaky ReLU gets the braking side only. The smooth models fail globally; the bottleneck moved from data coverage to fit quality.
+- **Cross-switching feedback synthesis now works — for the atom that fits** (§5): ReLU² makes the correct branch decision from both sides of the curve (matching the true cost from B), which no model achieved on one-sided data; every other atom class fails from both starts. The bottleneck moved from data coverage to fit quality.

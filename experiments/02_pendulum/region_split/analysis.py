@@ -940,17 +940,42 @@ def fig_feedback_split(models: dict[str, dict[str, Any]], nets: dict[str, Any], 
         ax.legend(loc="upper right", fontsize=9)
         out[name] = _save_png(fig, stem)
 
-    fig, ax = plt.subplots(figsize=(6.4, 4.4))
-    for name, (color, ls, _) in laws.items():
-        t, _, us, _ = rolled[("B", name)]
-        lw = 3.0 if name == "true PMP" else 1.8
-        ax.plot(t, us, color=color, ls=ls, lw=lw, label=_DISPLAY.get(name, name))
-    ax.axhline(0.0, color="0.85", lw=0.8, zorder=0)
-    ax.set_xlabel(r"time $t$")
-    ax.set_ylabel(r"feedback control $u(t)$")
-    ax.set_xlim(0, roll_t)
-    ax.legend(loc="best", fontsize=9)
-    out["control_b"] = _save_png(fig, "feedback_control_b")
+    # One panel per model family (log_penalty vs ReLU^p), true law as a thick
+    # solid black underlay in both. ReLU^p members are forced dashed so ReLU²'s
+    # near-exact tracking (the finding) reads as red dashes riding on black
+    # instead of an invisible overlap; log-penalty members keep their natural
+    # _MODEL_STYLE linestyle since none of them overlap the true-PMP curve.
+    # Each panel's y-range is set from its own members' full excursion (plus a
+    # margin) so softplus's saturation swings are shown in full rather than
+    # clipped — the ReLU^p panel stays tight since ReLU^2/^5 never saturate.
+    panels = {
+        "control_b_log": ("feedback_control_b_log_penalty",
+                          ("gaussian", "softplus", "leaky_relu"), False),
+        "control_b_relu": ("feedback_control_b_relu",
+                           ("relu^2", "relu^5"), True),
+    }
+    for key, (stem, members, force_dash) in panels.items():
+        fig, ax = plt.subplots(figsize=(6.4, 4.4))
+        t_true, _, us_true, _ = rolled[("B", "true PMP")]
+        member_us = [rolled[("B", name)][2] for name in members]
+        all_us = np.concatenate([us_true, *member_us])
+        ylo, yhi = all_us.min() - 1.0, all_us.max() + 1.0
+        ax.plot(t_true, us_true, color=_TRUE_COLOR, ls="-", lw=3.2, zorder=2,
+                label="true PMP")
+        for name in members:
+            color, ls, _ = laws[name]
+            if force_dash:
+                ls = (0, (4, 2.4))
+            t, _, us, _ = rolled[("B", name)]
+            ax.plot(t, us, color=color, ls=ls, lw=1.9, zorder=3,
+                    label=_DISPLAY.get(name, name))
+        ax.axhline(0.0, color="0.85", lw=0.8, zorder=0)
+        ax.set_xlabel(r"time $t$")
+        ax.set_ylabel(r"feedback control $u(t)$")
+        ax.set_xlim(0, roll_t)
+        ax.set_ylim(ylo, yhi)
+        ax.legend(loc="upper left", fontsize=9)
+        out[key] = _save_png(fig, stem)
 
     table = []
     for name in laws:
@@ -1161,6 +1186,10 @@ def main() -> int:
                f"(A = ({starts['A'][0]:.2f}, {starts['A'][1]:.2f}), "
                f"B = ({starts['B'][0]:.2f}, {starts['B'][1]:.2f}); T=10)"),
     )
+    # prose cites the same rollout costs as the table — never hard-code them
+    fb_cost = {row["model"]: row for row in cost_rows}
+    def _cost(model: str, side: str) -> str:
+        return fb_cost[model][f"cost {side}"]
     scored = _common_pool_scores(next(r["data_path"] for r in best))
     f8_block = ""
     if scored:
@@ -1433,26 +1462,34 @@ def main() -> int:
         "| --- | --- | --- |\n"
         f"| ![leaky relu]({f6_figs['leaky_relu']}) "
         f"| ![relu2]({f6_figs['relu^2']}) | ![relu5]({f6_figs['relu^5']}) |\n\n"
-        "The control signal from start B, per feedback law (true PMP brakes to "
-        "θ = 0 with u rising from ≈ −7 to 0; ReLU² tracks it almost exactly; "
-        "softplus settles at a spurious equilibrium with u ≈ −4; gaussian "
-        "saturates at ±30):\n\n"
-        f"![control from B]({f6_figs['control_b']})\n\n"
+        "The control signal from start B, per feedback law (axis clipped to the "
+        "informative band — softplus's ±30 actuator-saturation excursion leaves "
+        "the frame). True PMP brakes to θ = 0 with u rising from ≈ −7 to 0; "
+        "**ReLU² (red dashes on the black line, right panel) tracks it almost exactly**; the "
+        "others oscillate or saturate:\n\n"
+        "| log-penalty models | ReLU^p models |\n"
+        "| --- | --- |\n"
+        f"| ![control from B, log-penalty]({f6_figs['control_b_log']}) "
+        f"| ![control from B, ReLU^p]({f6_figs['control_b_relu']}) |\n\n"
         f"{cost_table}\n\n"
         "**The branch decision at the curve is now learnable — and only ReLU² "
         "learns it from both sides.** From B it brakes to the θ = 0 upright at "
-        "the true cost (10.1 vs 10.2); from A it correctly swings over to the "
-        "2π upright, though with an over-energetic arc (331.6 vs 26.2) — right "
-        "branch, inefficient execution. leaky ReLU, the accuracy runner-up, "
-        "gets the braking side right (14.8 from B) but fails from the "
-        "swing-over side. Every smooth model fails on *both* sides, and "
-        "the failure tracks the global fit quality of §2, not proximity to the "
-        "curve: gaussian's degraded interior gradient field saturates the "
-        "actuator and overshoots past 2π (cost ≈ 1200); softplus never reaches "
-        "an upright (spurious equilibrium); ReLU⁵ under-rotates and stalls near "
-        "the origin. On the one-sided data every model mis-branched from beyond "
+        f"the true cost ({_cost('ReLU^2', 'B')} vs {_cost('true PMP', 'B')}); "
+        "from A it correctly swings over to the "
+        f"2π upright, though with an over-energetic arc ({_cost('ReLU^2', 'A')} "
+        f"vs {_cost('true PMP', 'A')}) — right "
+        "branch, inefficient execution. Every other law fails from *both* "
+        "starts: leaky ReLU — the accuracy runner-up — and softplus "
+        "over-accelerate, blow past the uprights and never brake "
+        f"(costs {_cost('leaky ReLU', 'B')} and {_cost('softplus', 'B')} from B); "
+        "gaussian settles into a limit cycle around the wells without reaching "
+        f"an upright ({_cost('gaussian', 'B')} from B); ReLU⁵ swings over from A "
+        "but arrives at 2π too slowly to be captured, and from B stalls just "
+        f"short of the θ = 0 upright ({_cost('ReLU^5', 'B')} from B). "
+        "On the one-sided data every model mis-branched from beyond "
         "the curve; the data fix moved the bottleneck from *coverage* to "
-        "*fit quality*.\n\n"
+        "*fit quality* — only the atom class that fits the kink yields a "
+        "usable feedback law.\n\n"
 
         "## 6. Conclusions\n\n"
         "- **The switching set is now an interior kink of the training data** "
@@ -1477,9 +1514,8 @@ def main() -> int:
         "- **Cross-switching feedback synthesis now works — for the atom that "
         "fits** (§5): ReLU² makes the correct branch decision from both sides "
         "of the curve (matching the true cost from B), which no model achieved "
-        "on one-sided data; leaky ReLU gets the braking side only. The smooth "
-        "models fail globally; the bottleneck moved from data coverage to fit "
-        "quality.\n\n"
+        "on one-sided data; every other atom class fails from both starts. "
+        "The bottleneck moved from data coverage to fit quality.\n\n"
 
         "",
         encoding="utf-8",
