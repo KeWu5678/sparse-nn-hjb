@@ -108,13 +108,13 @@ The learned V̂ over the state plane (z clipped at 60). With the band in the tra
 
 ### 4.4 Models on the transect
 
-The same transect as §1.1, with the fitted models overlaid (dashed = lower-envelope truth; unlike the one-sided data, the models now saw samples on **both** sides of s = 0):
+The same transect as §1.1, with the fitted models overlaid (solid black = lower-envelope truth; unlike the one-sided data, the models now saw samples on **both** sides of s = 0):
 
 | value | normal gradient |
 | --- | --- |
 | ![transect value](figures/transect_value.png) | ![transect gradient](figures/transect_normal_gradient.png) |
 
-At s = 0 the true n·∇V jumps by ≈ 80–100 units. The jump being in-sample is necessary but not sufficient: **no model reproduces its magnitude**. The rectified atoms come closest — their derivatives can break across a hyperplane: ReLU² develops a visible kink at s ≈ 0 and tracks the true V level best, while leaky ReLU's step derivative shows as plateaued gradients with visible breaks (at the wrong level); the smooth activations interpolate a gentle slope through the discontinuity, exactly as their C^∞ atoms must. All models undershoot the steep pre-jump gradient (true n·∇V ≈ −100 at s < 0): the finite-width band bounds how much one-sided steepness the global H1 fit will spend neurons on. This is the §2 switching-band cost seen pointwise: a genuine representation limit at a *seen* discontinuity.
+At s = 0 the true n·∇V jumps by ≈ 80–100 units. The jump being in-sample is necessary but not sufficient: **no model reproduces its magnitude**. The rectified atoms come closest — their derivatives can break across a hyperplane: ReLU² develops a visible kink at s ≈ 0 and tracks the true V level best. leaky ReLU's staircase is its atom geometry made visible: a piecewise-linear network has zero curvature, so ∇V̂ is **piecewise constant, not zero** — along the transect n·∇V̂ is exactly a step function (verified: every step coincides with one of the 10 atom-line crossings in the window, and between crossings the variation is machine-zero), holding a nonzero plateau ≈ −30…−42 whose level is the summed c·(a·n) of the active atoms. The smooth activations interpolate a gentle slope through the discontinuity, exactly as their C^∞ atoms must. All models undershoot the steep pre-jump gradient (true n·∇V ≈ −100 at s < 0): the finite-width band bounds how much one-sided steepness the global H1 fit will spend neurons on. This is the §2 switching-band cost seen pointwise: a genuine representation limit at a *seen* discontinuity.
 
 ### 4.5 Mechanism: where the atoms sit
 

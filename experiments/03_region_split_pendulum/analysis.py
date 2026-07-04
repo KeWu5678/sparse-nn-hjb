@@ -245,7 +245,7 @@ _MODEL_STYLE = {
     "relu^2": (PALETTE["red_strong"], "-"),
     "relu^5": (PALETTE["teal"], "-"),
 }
-_TRUE_COLOR = "0.35"
+_TRUE_COLOR = "0.0"
 _DISPLAY = {"relu^2": r"ReLU$^2$", "relu^5": r"ReLU$^5$",
             "gaussian": "gaussian", "softplus": "softplus",
             "leaky_relu": "leaky ReLU"}
@@ -471,7 +471,7 @@ def fig_transect_split(models: dict[str, dict[str, Any]], nets: dict[str, Any], 
     ):
         fig, ax = plt.subplots(figsize=(8.5, 4.4))
         ax.axvline(0.0, color="0.8", lw=1.0, ls="--", zorder=0)
-        ax.plot(s, truth, color=_TRUE_COLOR, ls="--", lw=2.6, label="true PMP",
+        ax.plot(s, truth, color=_TRUE_COLOR, ls="-", lw=2.6, label="true PMP",
                 zorder=3)
         model_stack = []
         for name in models:
@@ -1312,9 +1312,9 @@ def main() -> int:
         "the ridge off; softplus — the weakest fit throughout — smears the "
         "structure.\n\n"
         "### 4.4 Models on the transect\n\n"
-        "The same transect as §1.1, with the fitted models overlaid (dashed = "
-        "lower-envelope truth; unlike the one-sided data, the models now saw "
-        "samples on **both** sides of s = 0):\n\n"
+        "The same transect as §1.1, with the fitted models overlaid (solid "
+        "black = lower-envelope truth; unlike the one-sided data, the models "
+        "now saw samples on **both** sides of s = 0):\n\n"
         "| value | normal gradient |\n"
         "| --- | --- |\n"
         f"| ![transect value]({f3_split.get('value', '')}) "
@@ -1323,10 +1323,15 @@ def main() -> int:
         "in-sample is necessary but not sufficient: **no model reproduces its "
         "magnitude**. The rectified atoms come closest — their derivatives can "
         "break across a hyperplane: ReLU² develops a visible kink at s ≈ 0 and "
-        "tracks the true V level best, while leaky ReLU's step derivative shows "
-        "as plateaued gradients with visible breaks (at the wrong level); the "
-        "smooth activations interpolate a gentle slope through the "
-        "discontinuity, exactly as their C^∞ atoms must. All models undershoot "
+        "tracks the true V level best. leaky ReLU's staircase is its atom "
+        "geometry made visible: a piecewise-linear network has zero curvature, "
+        "so ∇V̂ is **piecewise constant, not zero** — along the transect n·∇V̂ "
+        "is exactly a step function (verified: every step coincides with one "
+        "of the 10 atom-line crossings in the window, and between crossings "
+        "the variation is machine-zero), holding a nonzero plateau ≈ −30…−42 "
+        "whose level is the summed c·(a·n) of the active atoms. The smooth "
+        "activations interpolate a gentle slope through the discontinuity, "
+        "exactly as their C^∞ atoms must. All models undershoot "
         "the steep pre-jump gradient (true n·∇V ≈ −100 at s < 0): the "
         "finite-width band bounds how much one-sided steepness the global H1 "
         "fit will spend neurons on. This is the §2 switching-band cost seen "
