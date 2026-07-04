@@ -1,113 +1,51 @@
 # MLflow Pipeline
 
-Operational guide for experiment tracking (EC2/Terraform deployment per ADR 0001/0002).
+Operational guide for experiment tracking (EC2/Terraform deployment per ADR
+0001/0002).
 
 `ExperimentRun` always writes a local JSON Run Record in the Hydra output
-directory. When `MLFLOW_TRACKING_URI` is set, the same completed record is also
-uploaded to MLflow for dashboard comparison. MLflow stores params, scalar
-metrics, status, Hydra metadata, and local artifact paths; it does not upload
-the `result_<run_id>.pkl` artifact in the current pipeline.
+directory. MLflow is normally filled by **backfilling** those completed local
+records after a sweep, so training does not depend on the EC2 server being up.
+MLflow stores params, scalar metrics, status, Hydra metadata, and local artifact
+paths; it does not upload the `result_<run_id>.pkl` artifact in the current
+pipeline.
 
-Start or connect to an MLflow tracking server first.
-
-For the EC2/Terraform deployment, provision once:
+Provision the EC2/Terraform deployment once:
 
 ```bash
 make mlflow-deploy
 ```
 
-### Runtime logging
+### Normal Workflow
 
-Then start the instance when needed and open the SSM tunnel in a dedicated
-terminal:
-
-```bash
-make mlflow-start
-make mlflow-tunnel
-```
-
-`mlflow-tunnel` keeps running while the dashboard is connected. The EC2 instance
-starts the MLflow server through systemd; you do not manually run `mlflow server`
-on your laptop for this path.
-
-For a purely local server instead:
+Run experiments normally. Local Run Records are written whether MLflow exists or
+not:
 
 ```bash
-uv run mlflow server --backend-store-uri sqlite:///mlflow.db --host 127.0.0.1 --port 5000
+make sweep EXPERIMENT=activationsearch DATA=pendulum
 ```
 
-Once the tracking server is reachable, set:
+Backfill the latest full sweep into the EC2 MLflow dashboard:
 
 ```bash
-export MLFLOW_TRACKING_URI=http://127.0.0.1:5000
+make mlflow-backfill EXPERIMENT=activationsearch DATA=pendulum
 ```
 
-Run a curated experiment through the Makefile:
+`mlflow-backfill` starts the EC2 instance, opens an SSM tunnel, uploads local Run
+Records, and stops the instance in a cleanup trap. By default it uploads the
+latest full Hydra sweep under the current `EXPERIMENT`/`DATA` log directory.
+
+Preview without starting EC2 or uploading:
 
 ```bash
-make activationsearch
+make mlflow-backfill EXPERIMENT=activationsearch DATA=pendulum MLFLOW_DRY_RUN=true
 ```
 
-Or run the lower-level Hydra training entrypoint directly:
+Limit or broaden the source records:
 
 ```bash
-uv run python scripts/train.py +experiment=activationsearch data=pendulum
-```
-
-At `run.finish()`, the script writes the local JSON Run Record, keeps it on disk,
-and publishes dashboard data to MLflow. If `MLFLOW_TRACKING_URI` is unset, the
-run is local-only. Project run IDs use:
-
-```text
-{experiment_name}_{data_choice}_{YYYYMMDD}_{4hex}
-```
-
-### Backfill existing records
-
-Existing JSON Run Records under `rawdata/logs/multirun` can be uploaded to
-MLflow without rerunning training. You still need a reachable MLflow tracking
-server. Provision with `make mlflow-deploy` only if the MLflow EC2 infrastructure
-does not exist yet.
-
-For the EC2 server, boot the instance and open the tunnel first (same as a live
-run):
-
-```bash
-make mlflow-start
-make mlflow-tunnel   # keep running in a dedicated terminal
-```
-
-For a local server, just have `mlflow server` running instead — no start/tunnel
-needed. Then point at the tracking server and backfill:
-
-```bash
-export MLFLOW_TRACKING_URI=http://127.0.0.1:5000
-make mlflow-backfill
-```
-
-For a sweep directory such as `rawdata/logs/multirun/activationsearch`, this
-uploads every JSON record in that directory — including stale job dirs left over
-from earlier sweeps. To upload only the **latest full sweep**, use
-`mlflow-backfill-latest`. It finds the sweep's `multirun.yaml` launch marker
-(Hydra rewrites it on every sweep) and uploads only the records written at or
-after that marker, dropping leftovers from previous sweeps:
-
-```bash
-make mlflow-backfill-latest MLFLOW_RECORDS=rawdata/logs/multirun/activationsearch
-```
-
-Limit upload to one experiment or one Hydra job directory:
-
-```bash
-make mlflow-backfill MLFLOW_RECORDS=rawdata/logs/multirun/activationsearch
 make mlflow-backfill MLFLOW_RECORDS=rawdata/logs/multirun/activationsearch/1069
-```
-
-Preview what would be uploaded without calling MLflow:
-
-```bash
-make mlflow-backfill-dry-run
-make mlflow-backfill-latest-dry-run MLFLOW_RECORDS=rawdata/logs/multirun/activationsearch
+make mlflow-backfill MLFLOW_RECORDS=rawdata/logs/multirun/activationsearch MLFLOW_LATEST=false
 ```
 
 The importer reads each Run Record JSON and, for older records, enriches it with
@@ -115,8 +53,38 @@ adjacent `.hydra/overrides.yaml` metadata before uploading. Re-running the
 importer creates additional MLflow runs for the same JSON; deduplication is not
 implemented yet.
 
-Stop the EC2 instance when idle:
+Project run IDs use:
+
+```text
+{experiment_name}_{data_choice}_{YYYYMMDD}_{4hex}
+```
+
+### Optional Live Logging
+
+Live logging is still available, but it is not the default workflow. Start the
+server and tunnel manually, then set `MLFLOW_TRACKING_URI` before training:
 
 ```bash
-make mlflow-stop
+aws ec2 start-instances --instance-ids "$(terraform -chdir=deploy/terraform output -raw instance_id)"
+eval "$(terraform -chdir=deploy/terraform output -raw ssm_port_forward_command)"
+export MLFLOW_TRACKING_URI=http://127.0.0.1:5000
+make sweep EXPERIMENT=activationsearch DATA=pendulum
+aws ec2 stop-instances --instance-ids "$(terraform -chdir=deploy/terraform output -raw instance_id)"
+```
+
+At `run.finish()`, the script writes the local JSON Run Record, keeps it on disk,
+and publishes dashboard data to MLflow. If `MLFLOW_TRACKING_URI` is unset, the
+run is local-only.
+
+For a purely local server instead:
+
+```bash
+uv run mlflow server --backend-store-uri sqlite:///mlflow.db --host 127.0.0.1 --port 5000
+```
+
+Then point at that local server and use the lower-level uploader:
+
+```bash
+export MLFLOW_TRACKING_URI=http://127.0.0.1:5000
+.venv/bin/python scripts/upload_run_records_to_mlflow.py rawdata/logs/multirun/activationsearch
 ```

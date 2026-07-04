@@ -35,7 +35,7 @@ multi-well landscape and its switching walls are shaped at `p=2`, but a high-pow
 is dominated by a ~10⁴ off-support spike and the true value range (≲65) is squashed
 flat — itself a picture of why high power over-fits the boundary and loses the interior.
 
-| ReLU $p=2$ · 131 neurons · far Lv=0.14 | ReLU $p=3$ · 99 neurons · far Lv=0.19 | ReLU $p=5$ · 24 neurons · far Lv=0.38 |
+| ReLU $p=2$ · 131 neurons · far Lv=0.14 | ReLU $p=3$ · 99 neurons · far Lv=0.21 | ReLU $p=5$ · 24 neurons · far Lv=0.46 |
 | --- | --- | --- |
 | ![p2](figures/value_surface_p2.png) | ![p3](figures/value_surface_p3.png) | ![p5](figures/value_surface_p5.png) |
 
@@ -45,9 +45,9 @@ Best ReLU^p H1 fit per power (rel H1 + region-split absolute L1)
 
 | power | q=2/(p+1) | α     | neurons | rel H1 | near Lv | far Lv | near Lg | far Lg |
 | ----- | --------- | ----- | ------- | ------ | ------- | ------ | ------- | ------ |
-| 2     | 0.67      | 1e-06 | 131     | 0.309  | 0.428   | 0.136  | 0.925   | 0.120  |
-| 3     | 0.50      | 1e-06 | 99      | 0.428  | 0.639   | 0.186  | 1.386   | 0.198  |
-| 5     | 0.33      | 1e-04 | 24      | 0.617  | 1.202   | 0.376  | 2.089   | 0.516  |
+| 2     | 0.67      | 1e-06 | 131     | 0.309  | 0.511   | 0.145  | 0.937   | 0.110  |
+| 3     | 0.50      | 1e-06 | 99      | 0.428  | 0.712   | 0.207  | 1.420   | 0.182  |
+| 5     | 0.33      | 1e-04 | 24      | 0.617  | 1.571   | 0.455  | 2.327   | 0.497  |
 
 `rel H1` is the global relative H1 loss (total value+gradient); `near`/`far` are the
 region-split **mean per-sample absolute L1** (`near` = lowest-10% distance to the
@@ -96,7 +96,7 @@ in its value surface. On the two-sided data the high-power controller failure is
 objective). (Caveats: a single initial condition, and closed-loop outcomes are
 sensitive to the start because `∇V̂` is pinned only near the data. The robust,
 data-level statement is the accuracy reversal itself: **higher power degrades the
-fit**, far Lv rising from 0.14 at `p=2` to 0.38 at `p=5`.)
+fit**, far Lv rising from 0.14 at `p=2` to 0.46 at `p=5`.)
 
 ## Parameter discussion (power, α)
 
@@ -107,18 +107,18 @@ ReLU H1: effect of α at each power (best far Lv per cell)
 
 | power | α     | neurons | far Lv | far Lg |
 | ----- | ----- | ------- | ------ | ------ |
-| 2     | 1e-06 | 131     | 0.136  | 0.120  |
-| 2     | 1e-05 | 114     | 0.191  | 0.115  |
-| 2     | 1e-04 | 62      | 0.256  | 0.160  |
-| 2     | 1e-03 | 18      | 0.254  | 0.479  |
-| 3     | 1e-06 | 99      | 0.186  | 0.198  |
-| 3     | 1e-05 | 60      | 0.252  | 0.198  |
-| 3     | 1e-04 | 31      | 0.711  | 0.386  |
-| 3     | 1e-03 | 13      | 0.392  | 0.564  |
-| 5     | 1e-06 | 79      | 0.930  | 0.401  |
-| 5     | 1e-05 | 45      | 0.509  | 0.489  |
-| 5     | 1e-04 | 24      | 0.376  | 0.516  |
-| 5     | 1e-03 | 12      | 0.473  | 0.611  |
+| 2     | 1e-06 | 131     | 0.145  | 0.110  |
+| 2     | 1e-05 | 114     | 0.231  | 0.102  |
+| 2     | 1e-04 | 62      | 0.293  | 0.131  |
+| 2     | 1e-03 | 18      | 0.316  | 0.460  |
+| 3     | 1e-06 | 99      | 0.207  | 0.182  |
+| 3     | 1e-05 | 60      | 0.290  | 0.173  |
+| 3     | 1e-04 | 31      | 0.840  | 0.349  |
+| 3     | 1e-03 | 13      | 0.440  | 0.538  |
+| 5     | 1e-06 | 79      | 1.095  | 0.373  |
+| 5     | 1e-05 | 45      | 0.576  | 0.470  |
+| 5     | 1e-04 | 24      | 0.455  | 0.497  |
+| 5     | 1e-03 | 12      | 0.565  | 0.588  |
 
 ![power/alpha tradeoff](figures/power_alpha_tradeoff.png)
 
@@ -139,11 +139,11 @@ Pendulum H1 fit — best far value-L1 per power (α swept)
 
 | power | α     | neurons | far Lv | near/far V | far Lg | near/far G |
 | ----- | ----- | ------- | ------ | ---------- | ------ | ---------- |
-| 2     | 1e-06 | 131     | 0.136  | 3.15       | 0.120  | 7.71       |
-| 2.01  | 1e-05 | 104     | 0.091  | 3.82       | 0.144  | 8.50       |
-| 3     | 1e-06 | 99      | 0.186  | 3.44       | 0.198  | 7.00       |
-| 4     | 1e-05 | 46      | 0.398  | 4.04       | 0.500  | 4.04       |
-| 5     | 1e-04 | 24      | 0.376  | 3.20       | 0.516  | 4.05       |
+| 2     | 1e-06 | 131     | 0.145  | 3.53       | 0.110  | 8.53       |
+| 2.01  | 1e-05 | 104     | 0.093  | 3.87       | 0.131  | 8.72       |
+| 3     | 1e-06 | 99      | 0.207  | 3.44       | 0.182  | 7.80       |
+| 4     | 1e-05 | 46      | 0.414  | 4.55       | 0.477  | 4.80       |
+| 5     | 1e-04 | 24      | 0.455  | 3.45       | 0.497  | 4.69       |
 
 ### L2 (value-only) loss
 
@@ -151,8 +151,8 @@ Pendulum L2 fit — best far value-L1 per power (α swept)
 
 | power | α     | neurons | far Lv | near/far V | far Lg | near/far G |
 | ----- | ----- | ------- | ------ | ---------- | ------ | ---------- |
-| 2     | 1e-06 | 48      | 0.173  | 3.51       | 0.802  | 2.40       |
-| 2.01  | 1e-06 | 46      | 0.187  | 4.01       | 0.644  | 3.17       |
-| 3     | 1e-06 | 27      | 0.221  | 3.48       | 0.670  | 3.07       |
-| 4     | 1e-06 | 24      | 0.255  | 3.50       | 0.772  | 2.81       |
-| 5     | 1e-06 | 31      | 0.287  | 3.23       | 0.832  | 2.51       |
+| 2     | 1e-06 | 48      | 0.211  | 4.03       | 0.827  | 2.73       |
+| 2.01  | 1e-06 | 46      | 0.225  | 4.60       | 0.643  | 3.83       |
+| 3     | 1e-06 | 27      | 0.258  | 4.42       | 0.661  | 3.78       |
+| 4     | 1e-06 | 24      | 0.297  | 4.28       | 0.768  | 3.40       |
+| 5     | 1e-06 | 31      | 0.327  | 4.15       | 0.805  | 3.08       |

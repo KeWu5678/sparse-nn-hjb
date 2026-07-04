@@ -51,12 +51,12 @@ _SWITCHING_TUBE = 0.3
 # scores the region split and plots error-vs-distance.
 
 
-def _record_row(record: dict[str, Any], *, source: str) -> dict[str, Any] | None:
+def _record_row(record: dict[str, Any], rs: dict | None, *, source: str) -> dict[str, Any] | None:
     """One table row from a run record; None if it lacks region metrics or scope."""
     cfg = record["config"]
     model = cfg["model"]
     m = record["metrics"][0]["values"]
-    if "near_l1_h1" not in m or int(m.get("best_neurons", 0)) == 0:
+    if rs is None or int(m.get("best_neurons", 0)) == 0:
         return None
     if DATASET_STEM not in cfg["data"]["path"]:
         return None
@@ -87,12 +87,12 @@ def _record_row(record: dict[str, Any], *, source: str) -> dict[str, Any] | None
         "loss": loss,
         "gamma": float(model["gamma"]),
         "neurons": int(m["best_neurons"]),
-        "near_l1": float(m["near_l1_h1"]),
-        "far_l1": float(m["far_l1_h1"]),
-        "l1_near/far": float(m["near_l1_h1"]) / float(m["far_l1_h1"]) if m["far_l1_h1"] else float("inf"),
-        "near_h1": float(m["near_h1"]),
-        "far_h1": float(m["far_h1"]),
-        "rel_near/far": float(m["near_h1"]) / float(m["far_h1"]) if m["far_h1"] else float("inf"),
+        "near_l1": float(rs["switching_l1_h1"]),
+        "far_l1": float(rs["rest_l1_h1"]),
+        "l1_near/far": float(rs["switching_l1_h1"]) / float(rs["rest_l1_h1"]) if rs["rest_l1_h1"] else float("inf"),
+        "near_h1": float(rs["switching_h1"]),
+        "far_h1": float(rs["rest_h1"]),
+        "rel_near/far": float(rs["switching_h1"]) / float(rs["rest_h1"]) if rs["rest_h1"] else float("inf"),
         "bins": [m.get(f"distbin{i + 1}_ratio", float("nan")) for i in range(_N_BINS)],
         "cache": cfg.get("eval", {}).get("distance_cache"),
         "result_path": "",  # filled by load_rows (needs the record path)
@@ -118,7 +118,12 @@ def load_rows() -> tuple[list[dict[str, Any]], str | None]:
     sources = ([(p, "relu") for p in relu_records]
                + [(p, "act") for p in act_records])
     for path, source in sources:
-        row = _record_row(json.loads(path.read_text(encoding="utf-8")), source=source)
+        if path.name.startswith("region_rescored_"):
+            continue
+        record = json.loads(path.read_text(encoding="utf-8"))
+        sidecar = path.parent / f"region_rescored_{record.get('run_id', path.stem)}.json"
+        rs = json.loads(sidecar.read_text(encoding="utf-8")) if sidecar.exists() else None
+        row = _record_row(record, rs, source=source)
         if row is None:
             continue
         cache = cache or row.pop("cache")
@@ -603,39 +608,20 @@ def fig_true_branch_transect(curve, pool, rawt, *, s_max: float = 0.45) -> dict[
     return out
 
 
-def fig_dumbbell(models: dict[str, dict[str, Any]], nets: dict[str, Any],
-                 samples, norm, distance: np.ndarray,
-                 tube: float = _SWITCHING_TUBE) -> str:
-    """F4 — switching-set-tube vs rest relative H1 error per model.
+def fig_dumbbell(models: dict[str, dict[str, Any]]) -> str:
+    """F4 — switching-tube vs rest relative H1 per model.
 
-    Region = fixed geometric tube ``d <= tube`` around the switching set (not the
-    old 10% quantile). Error = relative H1 error
-    ``sqrt(sum(dV^2 + |d grad V|^2)) / sqrt(sum(V^2 + |grad V|^2))``, well posed in
-    the tube where ``|V|`` is large.
+    Values come from the consolidated rescore sidecars: fixed tube
+    (d <= 0.3 to the tiled switching curve) on the out-of-sample
+    region-eval pool.
     """
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     _apply_publication_style()
-    x = np.asarray(samples["x"], dtype=np.float64)
-    v_true = np.asarray(samples["v"], dtype=np.float64).reshape(-1)
-    g_true = np.asarray(samples["dv"], dtype=np.float64)
-    d = np.asarray(distance, dtype=np.float64)
-    inb = d <= tube
-    out = ~inb
-    h1_true_sq = v_true**2 + np.sum(g_true**2, axis=1)
-
-    def _rel_h1(err_sq, sel):
-        den = float(h1_true_sq[sel].sum())
-        return float(np.sqrt(err_sq[sel].sum()) / np.sqrt(den)) if den > 0 else np.nan
-
-    rel: dict[str, dict[str, float]] = {}
-    for name in models:
-        v_pred, g_pred = _value_grad_phys(nets[name], x, norm)
-        err_sq = (v_pred - v_true) ** 2 + np.sum((g_pred - g_true) ** 2, axis=1)
-        rel[name] = {"tube": _rel_h1(err_sq, inb), "rest": _rel_h1(err_sq, out)}
-
+    rel = {name: {"tube": row["near_h1"], "rest": row["far_h1"]}
+           for name, row in models.items()}
     order = sorted(models, key=lambda n: rel[n]["rest"], reverse=True)
     fig, ax = plt.subplots(figsize=(8.0, 4.2))
     for y, name in enumerate(order):
@@ -651,7 +637,7 @@ def fig_dumbbell(models: dict[str, dict[str, Any]], nets: dict[str, Any],
     from matplotlib.lines import Line2D
     ax.legend(handles=[
         Line2D([], [], marker="o", ls="", markerfacecolor="0.3", color="0.3",
-               label=f"switching set ($d\\leq{tube:g}$)"),
+               label=f"switching tube ($d\\leq{_SWITCHING_TUBE:g}$)"),
         Line2D([], [], marker="o", ls="", markerfacecolor="white",
                markeredgecolor="0.3", color="0.3", label="rest"),
     ], loc="lower left", fontsize=10)
@@ -1124,19 +1110,8 @@ def main() -> int:
                  "l1_near/far": "switch/rest"},
         formats={"gamma": "{:g}", "near_l1": "{:.2e}", "far_l1": "{:.2e}",
                  "l1_near/far": "{:.2f}"},
-        title="Mean per-sample L1 over the full dataset — count-fair, robust to V→0",
-    )
-    rel = sorted(best, key=lambda r: (r["kind"], r["insertion"], r["loss"], r["rel_near/far"]))
-    rel_table = format_table(
-        rel,
-        ["kind", "insertion", "activation", "loss", "gamma", "neurons",
-         "near_h1", "far_h1", "rel_near/far"],
-        headers={"near_h1": "switching H1", "far_h1": "rest H1",
-                 "rel_near/far": "switch/rest"},
-        formats={"gamma": "{:g}", "near_h1": "{:.2e}", "far_h1": "{:.2e}",
-                 "rel_near/far": "{:.2f}"},
-        title=("Region-local relative H1 (historical metric — agrees with §2 "
-               "on the two-sided data)"),
+        title=("Mean per-sample L1 on the region-eval pool (out-of-sample, "
+               "switching tube d ≤ 0.3) — count-fair, robust to V→0"),
     )
 
     binned = _bin_centers(cache)
@@ -1160,7 +1135,7 @@ def main() -> int:
     true_branch_figs = fig_true_branch_transect(curve, pool, rawt)
     f3 = fig_transect(models, nets, norm, curve, pool, rawt)
     f3_split = fig_transect_split(models, nets, norm, curve, pool, rawt)
-    f4 = fig_dumbbell(models, nets, samples, norm, distance)
+    f4 = fig_dumbbell(models)
     f6_figs, cost_rows, starts = fig_feedback_split(models, nets, norm, curve, pool, rawt)
     f7 = fig_atom_portrait(models, nets, norm, curve)
     cost_table = format_table(
@@ -1195,10 +1170,10 @@ def main() -> int:
                    "(min over the α ladder; neurons = size of the switching-best run)"),
         )
         f8_block = (
-            "The band is expensive by construction: at the production share it is "
+            "The switching band is expensive by construction: at the production share it is "
             "23% of the sample count but carries ~75% of the squared value mass "
             "and ~57% of the squared gradient mass of the normalized H1 objective "
-            "(mean |V| ≈ 24.5 in the band vs 3.8 in the body), so the unweighted "
+            "(mean |V| ≈ 24.5 in the switching band vs 3.8 in the body), so the unweighted "
             "least-squares fit is dominated by the hardest, kink-carrying region "
             "and interior accuracy is traded away (§2.1). The control below asks "
             "the follow-up directly: **does spending more samples on the "
@@ -1207,28 +1182,28 @@ def main() -> int:
             f"![oversampling control]({f8})\n\n"
             "Four two-sided training sets built from the same certified pools "
             "(`scripts/investigation/make_twosided_oversampling_sets.py`), "
-            "varying only the band share: 6k at the production ~23% share "
-            "(base), 6k reallocated to a 40% and a 60% band, and base + 2,000 "
-            "*added* band samples (8k total, 42% band). Two atom families, one "
+            "varying only the switching-band share: 6k at the production ~23% share "
+            "(base), 6k reallocated to a 40% and a 60% share, and base + 2,000 "
+            "*added* switching-band samples (8k total, 42%). Two atom families, one "
             "α capacity ladder each per variant: signed gaussian (γ=1, "
             "α ∈ {1e-3…1e-5}) and signed ReLU² (γ=0, α ∈ {1e-4…1e-6}). Every "
             "fitted model is re-scored "
             "on ONE common two-sided evaluation set — the full certified pool "
-            "(restricted in-basin points + the envelope-certified band, ~966k "
-            "points), one switching tube (d ≤ 0.3 to the ±2π-tiled ridge), one "
-            "denominator pair — since each variant's own recorded metrics use "
-            "its own band and denominator. Faint dots = the α ladder, lines = "
+            "(restricted in-basin points + the certified switching band, ~966k "
+            "points), one switching tube (d ≤ 0.3 to the ±2π-tiled switching "
+            "curve), one denominator pair — since each variant's own recorded "
+            "metrics use its own region and denominator. Faint dots = the α ladder, lines = "
             "the best run per variant.\n\n"
             f"{f8_table}\n\n"
             "**Band oversampling does not buy the switching fit for either "
             "atom family.** gaussian is essentially flat across all variants "
-            "(switching 0.57–0.60): more band samples cannot teach a smooth "
+            "(switching 0.57–0.60): more switching-band samples cannot teach a smooth "
             "atom a kink. ReLU² — uniformly 2–4× better on both regions — "
-            "*degrades monotonically* as the band share grows (switching "
-            "0.250 → 0.289 → 0.343, rest 0.156 → 0.218): the band already "
+            "*degrades monotonically* as the switching-band share grows (switching "
+            "0.250 → 0.289 → 0.343, rest 0.156 → 0.218): the switching band already "
             "dominates the unweighted objective at the production share, and "
             "reallocating samples away from the interior starves the smooth "
-            "structure its ridges anchor to. Adding 2,000 band samples on top "
+            "structure its ridges anchor to. Adding 2,000 switching-band samples on top "
             "of the budget beats reallocation but not the base. So the "
             "production ~23% share is at or near optimal for both families, "
             "and the switching-band error is a **representation limit of the "
@@ -1277,12 +1252,13 @@ def main() -> int:
         "| ![value surface](../../00_openloop/pendulum/figures/value_surface.png) "
         "| ![regions of attraction](../../00_openloop/pendulum/figures/regions_of_attraction.png) |\n\n"
         "### 1.1 The kink, seen in the data\n\n"
-        "Along a transect normal to the switching curve (through the densest data "
+        "Along a normal cross-section of the switching curve (through the densest "
+        "data "
         "region), the two candidate PMP branches — one driving to the upright at "
         "0, the other to the upright at 2π — cross; the optimal V is their lower "
         "envelope — continuous, with a concave kink where the branches exchange "
         "optimality, so ∇V jumps (left: V; right: n·∇V):\n\n"
-        "| value along the transect | normal gradient along the transect |\n"
+        "| value along the cross-section | normal gradient along the cross-section |\n"
         "| --- | --- |\n"
         f"| ![true branches, value]({true_branch_figs['transect_true_branches_value']}) "
         f"| ![true branches, gradient]({true_branch_figs['transect_true_branches_gradient']}) |\n\n"
@@ -1306,20 +1282,21 @@ def main() -> int:
 
         "## 2. Error concentrates at the switching set — now as a representation "
         "cost\n\n"
-        "Region mean per-sample L1 (absolute) error / global mean ‖true‖ — "
-        "count-fair and robust to the V→0 interior; `switch/rest` > 1 ⇒ worse at "
-        "the switching set. (On the two-sided data the relative-H1 appendix table "
-        "agrees in direction; it no longer flips.)\n\n"
+        "Region mean per-sample L1 (absolute) error / global mean ‖true‖, scored "
+        "on the **region-eval pool** — the dense certified two-sided point set "
+        "(~962k points) with the training rows excluded, split by the fixed "
+        "**switching tube** (distance to the ±2π-tiled switching curve ≤ 0.3) — "
+        "count-fair, out-of-sample, and exogenous to the sampling design (the "
+        "earlier percentile band moved with the training distribution). "
+        "`switch/rest` > 1 ⇒ worse at the switching set.\n\n"
         f"{l1_table}\n\n"
-        "Every model — every activation, every penalty — is **4.1–8.4× worse in "
-        "the switching band**, a wider spread than the 2.2–3.7× measured on the "
-        "earlier one-sided data. The composition matters: switching L1 is "
-        "compressed across models (0.92–1.94, a ~2× spread) while rest L1 spans "
-        "~3.7× (0.12–0.47), so the ratio mostly reflects how good a model is "
-        "*away* from the curve — ReLU² has the largest ratio (8.4) precisely "
-        "because its rest error is the smallest. With the jump in-sample, the "
-        "switching band is genuinely hard for every atom class: a uniform "
-        "representation cost, no longer a one-sided extrapolation artifact.\n\n"
+        "Every model — every activation, every penalty — is **4.1–6.7× worse in "
+        "the switching tube**. The composition matters: switching L1 is "
+        "compressed across models (0.72–2.48, a ~3.4× spread) while rest L1 "
+        "spans ~4.6× (0.11–0.52), so the ratio mostly reflects how good a model "
+        "is *away* from the curve. With the jump in-sample, the switching tube "
+        "is genuinely hard for every atom class: a uniform representation cost, "
+        "no longer a one-sided extrapolation artifact.\n\n"
         "### 2.1 The error profile against distance\n\n"
         "Per-bin relative error (bin mean |V̂−V| / bin mean |V|) against distance "
         "to the switching set (equal-width bins; grey bars = samples per bin). "
@@ -1355,13 +1332,13 @@ def main() -> int:
         "### 4.2 Accuracy per model\n\n"
         f"![switching/rest dumbbell]({f4})\n\n"
         "Relative H1 error (log scale) in a fixed geometric tube around the "
-        "switching set (d ≤ 0.3, filled — well posed there now that the band makes "
-        "|V| large) and in the rest of the domain (open), per representative "
+        "switching set (d ≤ 0.3, filled — well posed there now that the switching "
+        "band makes |V| large) and in the rest of the domain (open), per representative "
         "model; rows ordered by rest error. **ReLU² dominates both regions** "
         "(rest ≈ 0.20, tube ≈ 0.31); leaky ReLU is the clear runner-up "
         "(rest ≈ 0.29) — the two kink-capable atoms lead both regions, 1.5–3× "
         "ahead of the smooth activations. ReLU⁵ is the only model *better* "
-        "inside the tube than outside — its stiff high-degree atoms seat the "
+        "inside the tube than outside — its stiff high-degree atoms seat the switching "
         "band but pay for it everywhere else (see §2.1).\n\n"
         "### 4.3 Learned value surfaces\n\n"
         "| gaussian | softplus | leaky ReLU |\n"
@@ -1373,15 +1350,16 @@ def main() -> int:
         "| --- | --- |\n"
         f"| ![relu2 surface]({surface_figs.get('relu^2', '')}) "
         f"| ![relu5 surface]({surface_figs.get('relu^5', '')}) |\n\n"
-        "The learned V̂ over the state plane (z clipped at 60). With the band in "
+        "The learned V̂ over the state plane (z clipped at 60). With the switching "
+        "band in "
         "the training data the models now shape the full multi-well landscape, "
         "not just the central bowl: ReLU² raises sharp diagonal walls along the "
         "switching arms between the 2πk wells; leaky ReLU builds the same walls "
         "with piecewise-linear facets; gaussian reproduces the wells but rounds "
         "the ridge off; softplus — the weakest fit throughout — smears the "
         "structure.\n\n"
-        "### 4.4 Models on the transect\n\n"
-        "The same transect as §1.1, with the fitted models overlaid (solid "
+        "### 4.4 Models on the normal cross-section\n\n"
+        "The same cross-section as §1.1, with the fitted models overlaid (solid "
         "black = lower-envelope truth; unlike the one-sided data, the models "
         "now saw samples on **both** sides of s = 0):\n\n"
         "| value | normal gradient |\n"
@@ -1394,7 +1372,7 @@ def main() -> int:
         "break across a hyperplane: ReLU² develops a visible kink at s ≈ 0 and "
         "tracks the true V level best. leaky ReLU's staircase is its atom "
         "geometry made visible: a piecewise-linear network has zero curvature, "
-        "so ∇V̂ is **piecewise constant, not zero** — along the transect n·∇V̂ "
+        "so ∇V̂ is **piecewise constant, not zero** — along the cross-section n·∇V̂ "
         "is exactly a step function (verified: every step coincides with one "
         "of the 10 atom-line crossings in the window, and between crossings "
         "the variation is machine-zero), holding a nonzero plateau ≈ −30…−42 "
@@ -1402,7 +1380,7 @@ def main() -> int:
         "activations interpolate a gentle slope through the discontinuity, "
         "exactly as their C^∞ atoms must. All models undershoot "
         "the steep pre-jump gradient (true n·∇V ≈ −100 at s < 0): the "
-        "finite-width band bounds how much one-sided steepness the global H1 "
+        "finite-width switching band bounds how much one-sided steepness the global H1 "
         "fit will spend neurons on. This is the §2 switching-band cost seen "
         "pointwise: a genuine representation limit at a *seen* discontinuity.\n\n"
         "### 4.5 Mechanism: where the atoms sit\n\n"
@@ -1418,13 +1396,13 @@ def main() -> int:
         "whose derivative breaks exactly where the target's does — while "
         "gaussian's strength is spread over near-isotropic bumps that can tile "
         "the wells but not seat a gradient break. This is the mechanism behind "
-        "§4.1–§4.2 and the transect kink in §4.4.\n\n"
+        "§4.1–§4.2 and the cross-section kink in §4.4.\n\n"
 
         "## 5. Can a reliable feedback law be synthesized?\n\n"
         "Closed-loop rollouts of u(x) = −(1/(2r·ml²)) ∂_θ̇ V̂(x), one phase panel "
         "per feedback law, from two starts placed symmetrically either side of "
-        "the switching curve (× markers) — **both in-sample now** that the band "
-        "straddles the curve. The curve separates two optimal behaviours here: "
+        "the switching curve (× markers) — **both in-sample now** that the "
+        "switching band straddles the curve. The curve separates two optimal behaviours here: "
         "from **start A** (blue) the true law swings over the top to the 2π "
         "upright; from **start B** (red) it brakes directly to the θ = 0 "
         "upright. Switching set in black; all panels share the same axes. True "
@@ -1463,20 +1441,20 @@ def main() -> int:
         "- **The switching set is now an interior kink of the training data** "
         "(§1.1): the envelope-certified pad+collar band puts the gradient jump "
         "in-sample wherever both branches carry data. The switching-band error "
-        "(3.0–8.4× the rest error, §2) is a genuine representation cost at a "
+        "(4.1–6.7× the rest error, §2) is a genuine representation cost at a "
         "seen discontinuity — the one-sided era's 'sampling artifact' diagnosis "
         "no longer applies.\n"
         "- **No atom class represents the jump; the rectified atoms come "
-        "closest** (§4.4, §4.5): they alone develop a kink on the transect and "
+        "closest** (§4.4, §4.5): they alone develop a kink on the cross-section and "
         "align their strongest ridges with the arms, and ReLU² is the best "
         "model on *both* sides of the split (§2, §4.2). Smooth activations "
         "necessarily interpolate through the discontinuity.\n"
         "- **Two-sided coverage has an interior price, and band oversampling "
-        "does not pay it down** (§2.1, §3): the band is 23% of the samples but "
+        "does not pay it down** (§2.1, §3): the switching band is 23% of the samples but "
         "dominates the unweighted H1 objective (~75% of the squared value "
         "mass), so interior accuracy degrades several-fold relative to "
         "one-sided training — most for stiff ReLU⁵, least for ReLU². Varying "
-        "the band share (23–60%) or adding band samples leaves the switching "
+        "the switching-band share (23–60%) or adding samples leaves the switching "
         "fit flat (§3.1); per-sample objective weighting is the open "
         "follow-up.\n"
         "- **Cross-switching feedback synthesis now works — for the atom that "
@@ -1486,23 +1464,7 @@ def main() -> int:
         "models fail globally; the bottleneck moved from data coverage to fit "
         "quality.\n\n"
 
-        "## Appendix: the same comparison under region-local relative H1\n\n"
-        "The table repeats the §2 comparison (same rows, same best-per-cell "
-        "runs) under the *historical* metric of this study: relative H1 "
-        "computed **per region with that region's own denominator**, "
-        "‖pred−true‖_H1 / ‖true‖_H1 restricted to the switching band and to "
-        "the rest separately. It exists because the metric choice used to "
-        "change the story: on the one-sided data the rest region's denominator "
-        "was dominated by the V→0 upright interior, which inflated the rest "
-        "relative error and made every model look *better* at the switching "
-        "set (switch/rest < 1 for 14 of 15 rows) — the opposite of the "
-        "absolute-L1 table. On the two-sided data the band contributes "
-        "large-|V| pad/collar samples to the switching-band denominator, so "
-        "the confound is gone: switch/rest ≥ 0.99 for every row and the "
-        "ranking agrees with §2. The table is kept to document that the "
-        "conclusion is now metric-robust; the count-fair absolute mean-L1 of "
-        "§2 remains the primary metric (see `README.md` for the rationale).\n\n"
-        f"{rel_table}\n",
+        "",
         encoding="utf-8",
     )
     print(f"wrote {out}")

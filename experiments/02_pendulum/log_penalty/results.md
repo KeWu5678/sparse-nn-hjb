@@ -52,9 +52,9 @@ Best signed H1 fit per representative
 
 | activation | neurons | rel H1 | far Lv | far Lg |
 | ---------- | ------- | ------ | ------ | ------ |
-| leaky_relu | 36      | 0.425  | 0.240  | 0.306  |
-| softplus   | 77      | 0.515  | 0.221  | 0.298  |
-| gaussian   | 113     | 0.580  | 0.426  | 0.439  |
+| leaky_relu | 36      | 0.425  | 0.298  | 0.290  |
+| softplus   | 77      | 0.515  | 0.217  | 0.259  |
+| gaussian   | 113     | 0.580  | 0.490  | 0.420  |
 
 These are the runs shown in the surface and control panels (the lowest-rel-H1
 signed fit per activation). `rel H1` is the relative H1 error on the validation
@@ -194,22 +194,22 @@ activations.
 
 Pendulum H1 fit — best far value-L1 per model/activation
 
-| kind        | activation   | gamma | alpha  | neurons | far Lv | near Lv | near/far V | far Lg | near/far G |
-| ----------- | ------------ | ----- | ------ | ------- | ------ | ------- | ---------- | ------ | ---------- |
-| signed      | leaky_relu   | 0     | 0.001  | 105     | 0.115  | 0.455   | 3.95       | 0.290  | 4.30       |
-| signed      | softplus     | 10    | 1e-05  | 77      | 0.221  | 1.066   | 4.82       | 0.298  | 6.05       |
-| semiconcave | leaky_relu   | 0     | 1e-05  | 119     | 0.241  | 0.929   | 3.85       | 0.528  | 3.32       |
-| signed      | gausscent_1  | 0.1   | 1e-05  | 123     | 0.270  | 1.442   | 5.33       | 0.500  | 4.11       |
-| signed      | tanh         | 1     | 0.0001 | 99      | 0.275  | 1.111   | 4.05       | 0.455  | 4.27       |
-| signed      | gaussian     | 1     | 1e-05  | 112     | 0.282  | 1.468   | 5.21       | 0.503  | 4.12       |
-| semiconcave | gelu_squared | 10    | 1e-05  | 41      | 0.315  | 1.535   | 4.87       | 0.546  | 3.84       |
-| semiconcave | tanh         | 10    | 0.001  | 24      | 0.325  | 1.390   | 4.28       | 0.527  | 3.82       |
-| semiconcave | matern52     | 10    | 0.001  | 22      | 0.352  | 1.479   | 4.21       | 0.504  | 3.96       |
-| signed      | matern52     | 0.1   | 0.0001 | 129     | 0.370  | 1.560   | 4.22       | 0.300  | 5.37       |
-| signed      | gelu_squared | 0.1   | 0.01   | 17      | 0.395  | 1.469   | 3.72       | 0.549  | 3.84       |
-| semiconcave | gaussian     | 10    | 1e-05  | 27      | 0.414  | 1.823   | 4.40       | 0.538  | 3.92       |
-| semiconcave | gausscent_1  | 0     | 1e-05  | 22      | 0.470  | 1.927   | 4.10       | 0.566  | 3.79       |
-| semiconcave | softplus     | 10    | 0.01   | 4       | 2.287  | 4.641   | 2.03       | 0.709  | 3.34       |
+| kind        | activation   | gamma | alpha  | neurons | far Lv  | near Lv | near/far V | far Lg | near/far G |
+| ----------- | ------------ | ----- | ------ | ------- | ------- | ------- | ---------- | ------ | ---------- |
+| signed      | leaky_relu   | 0     | 0.001  | 105     | 0.114   | 0.524   | 4.60       | 0.294  | 4.98       |
+| signed      | softplus     | 10    | 1e-05  | 77      | 0.217   | 1.181   | 5.43       | 0.259  | 7.18       |
+| signed      | gausscent_1  | 0.1   | 1e-05  | 123     | 0.259   | 1.746   | 6.74       | 0.477  | 4.89       |
+| signed      | gaussian     | 0     | 1e-05  | 114     | 0.272   | 1.794   | 6.60       | 0.474  | 4.97       |
+| signed      | tanh         | 1     | 0.0001 | 99      | 0.294   | 1.385   | 4.70       | 0.436  | 4.92       |
+| signed      | matern52     | 0.1   | 0.0001 | 129     | 0.363   | 1.755   | 4.84       | 0.274  | 5.97       |
+| signed      | gelu_squared | 0.1   | 0.0001 | 30      | 0.469   | 2.428   | 5.18       | 0.566  | 4.47       |
+| semiconcave | softplus     | 10    | 0.01   | 4       | 7.837   | 9.517   | 1.21       | 1.442  | 3.23       |
+| semiconcave | tanh         | 0.1   | 0.01   | 15      | 8.867   | 14.000  | 1.58       | 1.264  | 3.99       |
+| semiconcave | gaussian     | 0.1   | 0.01   | 15      | 19.599  | 16.067  | 0.82       | 2.100  | 2.29       |
+| semiconcave | matern52     | 1     | 0.01   | 13      | 26.532  | 22.619  | 0.85       | 1.778  | 2.89       |
+| semiconcave | gausscent_1  | 0.1   | 0.01   | 7       | 28.923  | 27.691  | 0.96       | 1.307  | 3.93       |
+| semiconcave | leaky_relu   | 1     | 0.01   | 19      | 33.658  | 36.572  | 1.09       | 1.412  | 3.85       |
+| semiconcave | gelu_squared | 0     | 1e-05  | 34      | 132.400 | 177.309 | 1.34       | 5.140  | 2.77       |
 
 ### L2 (value-only) loss
 
@@ -217,16 +217,16 @@ Pendulum L2 fit — best far value-L1 per model/activation
 
 | kind        | activation   | gamma | alpha  | neurons | far Lv | near Lv | near/far V | far Lg | near/far G |
 | ----------- | ------------ | ----- | ------ | ------- | ------ | ------- | ---------- | ------ | ---------- |
-| signed      | leaky_relu   | 0.1   | 1e-05  | 123     | 0.134  | 0.484   | 3.60       | 0.924  | 2.02       |
-| semiconcave | leaky_relu   | 1     | 1e-05  | 42      | 0.183  | 0.690   | 3.78       | 0.654  | 3.35       |
-| signed      | gaussian     | 10    | 1e-05  | 124     | 0.253  | 0.819   | 3.24       | 0.756  | 2.81       |
-| signed      | matern52     | 10    | 1e-05  | 81      | 0.261  | 0.855   | 3.27       | 0.672  | 3.20       |
-| signed      | gausscent_1  | 10    | 1e-05  | 58      | 0.262  | 0.862   | 3.29       | 0.768  | 2.83       |
-| semiconcave | gelu_squared | 10    | 1e-05  | 12      | 0.281  | 0.886   | 3.15       | 0.638  | 3.25       |
-| signed      | gelu_squared | 10    | 1e-05  | 62      | 0.288  | 0.875   | 3.04       | 0.655  | 3.16       |
-| semiconcave | gausscent_1  | 1     | 1e-05  | 16      | 0.297  | 0.948   | 3.20       | 0.601  | 3.51       |
-| signed      | tanh         | 10    | 1e-05  | 96      | 0.326  | 1.083   | 3.32       | 0.655  | 3.50       |
-| semiconcave | tanh         | 10    | 1e-05  | 68      | 0.649  | 1.715   | 2.64       | 0.833  | 3.22       |
-| semiconcave | gaussian     | 0     | 1e-05  | 42      | 0.657  | 1.724   | 2.62       | 0.838  | 3.20       |
-| semiconcave | matern52     | 10    | 0.0001 | 14      | 0.658  | 1.713   | 2.60       | 0.843  | 3.21       |
-| signed      | softplus     | 10    | 1e-05  | 39      | 0.689  | 1.772   | 2.57       | 0.846  | 3.22       |
+| signed      | leaky_relu   | 0.1   | 1e-05  | 123     | 0.166  | 0.595   | 3.58       | 0.981  | 2.15       |
+| signed      | gaussian     | 10    | 1e-05  | 124     | 0.300  | 1.236   | 4.12       | 0.762  | 3.52       |
+| signed      | matern52     | 10    | 1e-05  | 81      | 0.304  | 1.232   | 4.06       | 0.662  | 4.04       |
+| signed      | gausscent_1  | 1     | 1e-05  | 82      | 0.309  | 1.217   | 3.93       | 0.631  | 4.00       |
+| signed      | gelu_squared | 10    | 1e-05  | 62      | 0.338  | 1.339   | 3.96       | 0.623  | 3.93       |
+| signed      | tanh         | 10    | 1e-05  | 96      | 0.379  | 1.498   | 3.96       | 0.635  | 4.68       |
+| signed      | softplus     | 10    | 1e-05  | 39      | 0.780  | 2.106   | 2.70       | 0.772  | 4.68       |
+| semiconcave | leaky_relu   | 0     | 0.001  | 2       | 0.802  | 3.671   | 4.58       | 0.769  | 4.63       |
+| semiconcave | gelu_squared | 0     | 0.001  | 2       | 0.917  | 2.780   | 3.03       | 0.780  | 4.75       |
+| semiconcave | gausscent_1  | 0     | 0.0001 | 5       | 4.575  | 2.954   | 0.65       | 0.774  | 4.75       |
+| semiconcave | tanh         | 0     | 0.0001 | 4       | 9.102  | 5.024   | 0.55       | 0.857  | 4.15       |
+| semiconcave | gaussian     | 0     | 0.0001 | 27      | 13.693 | 8.778   | 0.64       | 0.788  | 4.47       |
+| semiconcave | matern52     | 10    | 0.0001 | 14      | 19.019 | 14.071  | 0.74       | 0.796  | 4.43       |

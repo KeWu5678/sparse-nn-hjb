@@ -43,7 +43,7 @@ would ever see the jump.
    its **first exit** from the basin polygon (the reference `inpolygon` cut).
    The retained prefixes form the in-basin body pool (~823k points): the smooth
    branch of the upright well, stopping at the curve.
-4. **Envelope-certified band (the two sides).** Candidates are the *raw*
+4. **Envelope-certified switching band (the two sides).** Candidates are the *raw*
    trajectories tiled by k ∈ {−1, 0, +1}·2π in θ, gated to within 0.5 of the
    **±2π-tiled** switching arms. A candidate from tile k is kept only if it is
    certified envelope-optimal there: its branch value must beat every *other*
@@ -56,23 +56,24 @@ would ever see the jump.
      value-cap trim and the true arm, but step 3 discards it;
    - the **far-side collar** (k = ±1 outside the basin): the neighbouring
      upright's branch across the arm — the other side of the jump.
-   Anchoring the gate on the tiled *ridge* rather than the basin ring matters:
-   long ring stretches are value-cap trims ~1 unit short of the true arm, and a
+   Anchoring the gate on the tiled *switching curve* rather than the basin ring
+   matters: long ring stretches are value-cap trims ~1 unit short of the true
+   arm, and a
    collar harvested from the *restricted* trajectories would miss every arm
    stretch whose far-side value exceeds the basin cap. Global tiling of the
    emitted samples (`periodic_copies`) is **not** a substitute: it multiplies
    the training domain by identical wells and collapses the fit.
 5. **Thinning to the emitted set.** Body, pad, and collar pools are thinned
    *separately* to the requested shares — the production set is
-   3,000 body + 300 pad + 600 collar = 3,900 — so the band share is a design
+   3,000 body + 300 pad + 600 collar = 3,900 — so the switching-band share is a design
    parameter rather than the pools' incidental proportion. Each sample carries
    a precomputed distance to the ±2π-tiled switching set
    (`scripts/investigation/precompute_region_distances.py`).
 
-Verified on the production set: 0/900 band samples violate the
-first-order-corrected lower envelope; the lowest-decile band (d ≤ 0.25)
+Verified on the production set: 0/900 switching-band samples violate the
+first-order-corrected lower envelope; the lowest-decile switching band (d ≤ 0.25)
 straddles the curve (221 near-side / 169 far-side); 44% of samples within 0.3
-of the ridge have an opposite-side neighbour within 0.3 (0% in the one-sided
+of the switching curve have an opposite-side neighbour within 0.3 (0% in the one-sided
 data). The residual one-sided stretches are arms whose far branch lies beyond
 the `value_max` integration cap. Downstream use and findings:
 `experiments/03_region_split_pendulum/`.

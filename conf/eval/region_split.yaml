@@ -1,9 +1,9 @@
-# Post-fit evaluation: global metrics PLUS relative errors split by distance to
-# the switching set (near vs far). Requires a precomputed per-sample distance
-# cache aligned to the dataset (see scripts/investigation/precompute_region_distances.py).
-# near = the lowest near_percentile% of validation samples by distance-to-switching-set
-# (a percentile, not an absolute band: sample spacing is anisotropic — dense along
-# trajectories, sparse transverse — so a fixed NN-scaled band captures ~nothing).
+# Post-fit evaluation: global metrics PLUS errors split into the switching tube
+# (distance to the ±2π-tiled switching curve <= tube_radius) and the rest,
+# scored on the region-eval pool — the dense certified two-sided point set with
+# the training rows excluded (scripts/investigation/build_region_eval_pool.py).
+# The distance cache (dataset-aligned) remains for the binned error profile.
 kind: region_split
-near_percentile: 10.0
+tube_radius: 0.3
+eval_pool: Pendulum_20260703_ada466c6182948469a197282906c3b6c/Pendulum_pmp_value_samples_2000_20260703_region_eval_pool.npz
 distance_cache: Pendulum_20260703_ada466c6182948469a197282906c3b6c/Pendulum_pmp_value_samples_2000_20260703_region_distances.npz

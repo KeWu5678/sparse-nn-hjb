@@ -2,24 +2,24 @@
 """Precompute per-sample distance to the pendulum switching set.
 
 Reads a pendulum value-sample ``.npz`` (``x, v, dv``) and its sibling
-``..._nonsmooth_curve.npz`` (the persisted ridge), and writes a parameter-free
+``..._nonsmooth_curve.npz`` (the persisted switching curve), and writes a parameter-free
 distance cache ``..._region_distances.npz`` aligned to the dataset's sample
 order, with:
 
   * ``distance`` (N,)  -- Euclidean distance from each sample's physical state
-    (theta, omega) to the nearest ridge point (the switching set).
+    (theta, omega) to the nearest switching-curve point.
   * ``h``        ()    -- the dataset's median nearest-neighbor spacing (kept for
     reference; not used by the eval, which is percentile-based — h is dominated by
     dense along-trajectory spacing, not the transverse scale).
 
-The region eval (``cfg.eval=region_split``) loads ``distance`` and labels the lowest
-``near_percentile`` percent of validation samples as *near* — so the band lives only
-in the eval config, not baked into the cache.
+The consolidated region eval scores the switching tube on the region-eval pool
+(see ``build_region_eval_pool.py``); this dataset-aligned cache remains for the
+distance-binned error-profile diagnostic.
 
-Distance is to the nearest ridge *point* (KD-tree over the ridge points tiled by
-2πk in theta, k = -1, 0, 1), not the polyline, so it is robust to the ridge
+Distance is to the nearest switching-curve *point* (KD-tree over the curve points tiled by
+2πk in theta, k = -1, 0, 1), not the polyline, so it is robust to the curve
 having multiple arcs and makes no assumption about the stored point ordering.
-Tiling matters: the stored ridge covers one period (the +theta arm and spiral),
+Tiling matters: the stored curve covers one period (the +theta arm and spiral),
 while the basin's left boundary is the same arm shifted by -2π — without the
 tiles, samples hugging the left arm would be mislabeled far.
 
@@ -56,7 +56,7 @@ def parse_args() -> argparse.Namespace:
         "--curve",
         type=str,
         default=None,
-        help="ridge .npz; defaults to the dataset's sibling ..._nonsmooth_curve.npz",
+        help="switching-curve .npz; defaults to the dataset's sibling ..._nonsmooth_curve.npz",
     )
     parser.add_argument(
         "--output",
@@ -84,7 +84,7 @@ def main() -> int:
     )
     if not curve_path.exists():
         raise FileNotFoundError(
-            f"ridge not found: {curve_path}\n"
+            f"switching curve not found: {curve_path}\n"
             "regenerate the dataset with the curve-persisting solver first"
         )
 
@@ -98,15 +98,16 @@ def main() -> int:
         x = np.asarray(data["x"], dtype=np.float64)
     curve = NonsmoothCurve.load_npz(curve_path)
     if curve.is_empty:
-        raise ValueError(f"ridge {curve_path} is empty; cannot label regions")
+        raise ValueError(f"switching curve {curve_path} is empty; cannot label regions")
 
-    # Distance from every sample to the nearest ridge point (periodically tiled:
-    # the stored ridge covers one period, but its -2π copy bounds the basin too).
-    ridge_tiled = np.vstack(
+    # Distance from every sample to the nearest switching-curve point
+    # (periodically tiled: the stored curve covers one period, but its -2π copy
+    # bounds the basin too).
+    curve_tiled = np.vstack(
         [curve.points + np.array([2.0 * np.pi * k, 0.0]) for k in (-1, 0, 1)]
     )
-    ridge_tree = cKDTree(ridge_tiled)
-    distance, _ = ridge_tree.query(x, k=1)
+    curve_tree = cKDTree(curve_tiled)
+    distance, _ = curve_tree.query(x, k=1)
 
     # h = median nearest-neighbor spacing among the samples themselves: query k=2
     # (self at distance 0 + the true nearest neighbor) and take the second column.
@@ -115,14 +116,13 @@ def main() -> int:
     h = float(np.median(nn[:, 1]))
 
     np.savez(output_path, distance=distance.astype(np.float64), h=h)
-    print(f"samples: {x.shape[0]}  ridge points: {curve.points.shape[0]}")
+    print(f"samples: {x.shape[0]}  switching-curve points: {curve.points.shape[0]}")
     print(
         f"distance-to-switching-set  min/median/max = "
         f"{distance.min():.4g}/{np.median(distance):.4g}/{distance.max():.4g}"
     )
-    p10 = float(np.percentile(distance, 10.0))
-    print(f"near band (lowest 10%): distance <= {p10:.4g}  "
-          f"-> {int(np.sum(distance <= p10))} near samples")
+    n_tube = int(np.sum(distance <= 0.3))
+    print(f"switching tube (d <= 0.3): {n_tube} samples")
     print(f"wrote {output_path}")
     return 0
 

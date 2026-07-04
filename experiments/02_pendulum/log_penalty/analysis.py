@@ -89,6 +89,19 @@ PROBLEM = PendulumSwingUpProblem()
 # ---------------------------------------------------------------------------- #
 # Records (region-split absolute L1 + relative H1)
 # ---------------------------------------------------------------------------- #
+def _rescored_metrics(record_path: Path, run_id: str) -> dict | None:
+    """Consolidated switching-tube/rest metrics from the run's rescore sidecar.
+
+    Written by ``scripts/investigation/rescore_region_metrics.py``: fixed tube
+    (d <= 0.3 to the tiled switching curve) on the out-of-sample region-eval
+    pool. Runs without a sidecar (degenerate fits) are skipped by the loaders.
+    """
+    sidecar = record_path.parent / f"region_rescored_{run_id}.json"
+    if not sidecar.exists():
+        return None
+    return json.loads(sidecar.read_text(encoding="utf-8"))
+
+
 def load_rows() -> list[dict[str, Any]]:
     records = sorted(MULTIRUN_DIR.glob("**/*.json"))
     if not records:
@@ -97,6 +110,8 @@ def load_rows() -> list[dict[str, Any]]:
         )
     rows = []
     for path in records:
+        if path.name.startswith("region_rescored_"):
+            continue
         record = json.loads(path.read_text(encoding="utf-8"))
         cfg = record["config"]
         if "pendulum" not in cfg["data"]["path"].lower():
@@ -106,8 +121,12 @@ def load_rows() -> list[dict[str, Any]]:
         neurons = int(v["best_neurons"])
         if neurons == 0:                       # degenerate non-fit (predicts ~0)
             continue
-        far_lv, near_lv = float(v["far_l1_value"]), float(v["near_l1_value"])
-        far_lg, near_lg = float(v["far_l1_grad"]), float(v["near_l1_grad"])
+        rid = record.get("run_id", path.stem)
+        rs = _rescored_metrics(path, rid)
+        if rs is None:
+            continue
+        far_lv, near_lv = float(rs["rest_l1_value"]), float(rs["switching_l1_value"])
+        far_lg, near_lg = float(rs["rest_l1_grad"]), float(rs["switching_l1_grad"])
         rows.append({
             "kind": model["kind"],
             "activation": model["activation"],

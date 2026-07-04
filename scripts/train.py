@@ -103,38 +103,65 @@ def set_seed(seed: int) -> None:
     torch.manual_seed(seed)
 
 
-def region_split_metrics(cfg, model, data, n_total: int) -> dict:
-    """Near/far errors over the FULL dataset, split by distance to the switching set.
+def region_split_metrics(cfg, model, data, normalizer) -> dict:
+    """Switching-tube vs rest errors on the region-eval pool + binned profile.
 
-    Evaluated on *all* samples, not the validation tail: the model is fixed here,
-    so we are characterizing where it errs across the state space, which is both
-    spatially representative and independent of the train/val split. The lowest
-    ``near_percentile`` percent of samples by distance form the *near* region.
+    The tube/rest split is scored on the **region-eval pool** — the dense
+    certified two-sided point set with the training rows excluded (strictly
+    out-of-sample) — inside/outside the fixed tube {distance ≤ tube_radius}.
+    The distance-binned profile diagnostic stays on the emitted dataset (the
+    dataset-aligned distance cache).
 
     Scored on the **live, as-fit** ``model`` (final iteration), not a reconstructed
     best-iteration one: reconstruction via ``set_atoms`` loses the semiconcave
     envelope (``C``/affine) that ``History`` never snapshots (issue #19), so only
     the live model is complete for both model kinds.
     """
-    if not cfg.eval.distance_cache:
-        raise ValueError("eval.kind=region_split requires eval.distance_cache")
-    with np.load(DATA_DIR / cfg.eval.distance_cache) as cache:
-        distance = np.asarray(cache["distance"], dtype=np.float64)
-    if distance.shape[0] != n_total:
-        raise ValueError(
-            f"distance cache has {distance.shape[0]} rows, dataset has {n_total}; "
-            "the cache is not aligned to this dataset"
+    if not cfg.eval.eval_pool:
+        raise ValueError("eval.kind=region_split requires eval.eval_pool")
+    with np.load(DATA_DIR / cfg.eval.eval_pool) as pool:
+        x_pool = np.asarray(pool["x"], dtype=np.float64)
+        v_pool = np.asarray(pool["v"], dtype=np.float64).reshape(-1, 1)
+        dv_pool = np.asarray(pool["dv"], dtype=np.float64)
+        distance_pool = np.asarray(pool["distance"], dtype=np.float64)
+    # The model is fit in normalized coordinates; score the pool in the same
+    # coordinates (all reported quantities are ratios over the same pool).
+    if normalizer is not None:
+        x_pool = x_pool / normalizer.x_scale
+        v_pool = v_pool / normalizer.v_scale
+        dv_pool = dv_pool * (normalizer.x_scale / normalizer.v_scale)
+    tube_mask = torch.from_numpy(distance_pool <= cfg.eval.tube_radius)
+
+    v_pred_chunks, dv_pred_chunks = [], []
+    for lo in range(0, len(x_pool), 100_000):
+        xb = torch.as_tensor(x_pool[lo:lo + 100_000], dtype=torch.float64)
+        vb, dvb = model.predict_tensors(xb)
+        v_pred_chunks.append(vb)
+        dv_pred_chunks.append(dvb)
+    v_pred = torch.cat(v_pred_chunks)
+    dv_pred = torch.cat(dv_pred_chunks)
+    metrics = region_split_errors(
+        v_pred, dv_pred,
+        torch.as_tensor(v_pool, dtype=torch.float64),
+        torch.as_tensor(dv_pool, dtype=torch.float64),
+        tube_mask,
+    )
+
+    if cfg.eval.distance_cache:
+        with np.load(DATA_DIR / cfg.eval.distance_cache) as cache:
+            distance = np.asarray(cache["distance"], dtype=np.float64)
+        if distance.shape[0] != data["x"].shape[0]:
+            raise ValueError(
+                f"distance cache has {distance.shape[0]} rows, dataset has "
+                f"{data['x'].shape[0]}; the cache is not aligned to this dataset"
+            )
+        x = torch.as_tensor(data["x"], dtype=torch.float64)
+        v = torch.as_tensor(data["v"], dtype=torch.float64)
+        dv = torch.as_tensor(data["dv"], dtype=torch.float64)
+        v_pred_d, dv_pred_d = model.predict_tensors(x)
+        metrics.update(
+            distance_binned_error(v_pred_d, dv_pred_d, v, dv, torch.from_numpy(distance))
         )
-
-    threshold = float(np.percentile(distance, cfg.eval.near_percentile))
-    near_mask = torch.from_numpy(distance <= threshold)
-
-    x = torch.as_tensor(data["x"], dtype=torch.float64)
-    v = torch.as_tensor(data["v"], dtype=torch.float64)
-    dv = torch.as_tensor(data["dv"], dtype=torch.float64)
-    v_pred, dv_pred = model.predict_tensors(x)
-    metrics = region_split_errors(v_pred, dv_pred, v, dv, near_mask)
-    metrics.update(distance_binned_error(v_pred, dv_pred, v, dv, torch.from_numpy(distance)))
     return metrics
 
 
@@ -163,8 +190,9 @@ def main(cfg: DictConfig) -> None:
     # Data preprocessing lives in the script: load, normalize, split.  The model
     # is built by build_model; the trainer holds only config and returns a History.
     data = load_value_samples(cfg.data.path)
+    normalizer = None
     if cfg.data.normalize:
-        data, _ = normalize_value_samples(data)
+        data, normalizer = normalize_value_samples(data)
     input_dim = data["x"].shape[1]
     logger.info("loaded %s  (d=%d)", cfg.data.path, input_dim)
     train_data, valid_data = split_value_samples(data, cfg.data.train_fraction)
@@ -198,12 +226,12 @@ def main(cfg: DictConfig) -> None:
     # split by distance to the switching set, merged into the run record so the
     # analysis layer reads them like any other metric.
     if cfg.eval.kind == "region_split":
-        region = region_split_metrics(cfg, model, data, data["x"].shape[0])
+        region = region_split_metrics(cfg, model, data, normalizer)
         metrics.update(region)
         logger.info(
-            "region split | near H1 %.3e (n=%d) | far H1 %.3e (n=%d)",
-            region["near_h1"], int(region["near_count"]),
-            region["far_h1"], int(region["far_count"]),
+            "region split | switching H1 %.3e (n=%d) | rest H1 %.3e (n=%d)",
+            region["switching_h1"], int(region["switching_count"]),
+            region["rest_h1"], int(region["rest_count"]),
         )
 
     artifact = run_dir / f"result_{run.run_id}.pkl"
