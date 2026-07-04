@@ -743,35 +743,51 @@ def _oversample_family(model: dict[str, Any]) -> str | None:
     return None
 
 
-def _common_pool_scores(pool, band_pool, curve) -> list[dict[str, Any]] | None:
-    """Score every oversampling-variant model (signed gaussian γ=1) on one pool.
+def _common_pool_scores(data_rel: str) -> list[dict[str, Any]] | None:
+    """Score every oversampling-variant model on ONE out-of-sample pool.
 
-    Each variant's recorded region metrics use its *own* band and its own
+    Each variant's recorded region metrics use its *own* region and its own
     global denominator, so they are not cross-comparable. Here every fitted
     model is rebuilt (with its own training normalizer) and scored on ONE
-    common two-sided set — the full certified pool (restricted in-basin points
-    plus the envelope-certified pad/collar band) — with one switching tube
-    (distance to the ±2π-tiled ridge ≤ 0.3) and one denominator pair.
+    common two-sided set: the production region-eval pool artifact
+    (``build_region_eval_pool.py``) minus the **union of all variants'
+    training rows** (exact row match), so the set is identical across models
+    and strictly out-of-sample for every one of them — the same convention as
+    the consolidated per-run metrics. One switching tube (distance to the
+    ±2π-tiled switching curve ≤ 0.3), one denominator pair.
     """
     if not OVERSAMPLE_DIR.exists():
         return None
     import pickle
 
     import torch
-    from scipy.spatial import cKDTree
 
     from src.config.activations import get_activation
     from src.data import ValueSampleNormalizer, load_value_samples
     from src.models.net import ShallowNetwork
     from src.plots import _best_iteration_atoms
 
-    X = np.vstack([pool["x"], band_pool["x"]])
-    V = np.concatenate([pool["v"], band_pool["v"]])
-    DV = np.vstack([pool["dv"], band_pool["dv"]])
-    ridge_tiled = np.vstack(
-        [curve.points + np.array([2.0 * np.pi * k, 0.0]) for k in (-1, 0, 1)]
+    pool_path = (DATA_DIR / data_rel).with_name(
+        Path(data_rel).stem + "_region_eval_pool.npz"
     )
-    d = cKDTree(ridge_tiled).query(X)[0]
+    with np.load(pool_path) as npz:
+        X = np.asarray(npz["x"], dtype=np.float64)
+        V = np.asarray(npz["v"], dtype=np.float64)
+        DV = np.asarray(npz["dv"], dtype=np.float64)
+        d = np.asarray(npz["distance"], dtype=np.float64)
+
+    train_keys: set[bytes] = set()
+    for variant_npz in sorted((DATA_DIR / "Pendulum_2sided_oversample_20260704").glob("*.npz")):
+        if variant_npz.stem.endswith(("_nonsmooth_curve", "_region_distances")):
+            continue
+        with np.load(variant_npz) as npz:
+            for row in np.ascontiguousarray(np.asarray(npz["x"], dtype=np.float64)):
+                train_keys.add(row.tobytes())
+    keep = np.fromiter(
+        (row.tobytes() not in train_keys for row in np.ascontiguousarray(X)),
+        bool, len(X),
+    )
+    X, V, DV, d = X[keep], V[keep], DV[keep], d[keep]
     bands = {"switching": d <= _SWITCHING_TUBE, "rest": d > _SWITCHING_TUBE}
     h1_true_sq = np.asarray(V, dtype=np.float64).reshape(-1) ** 2 + np.sum(
         np.asarray(DV, dtype=np.float64) ** 2, axis=1)
@@ -1145,7 +1161,7 @@ def main() -> int:
                f"(A = ({starts['A'][0]:.2f}, {starts['A'][1]:.2f}), "
                f"B = ({starts['B'][0]:.2f}, {starts['B'][1]:.2f}); T=10)"),
     )
-    scored = _common_pool_scores(pool, band_pool, curve)
+    scored = _common_pool_scores(next(r["data_path"] for r in best))
     f8_block = ""
     if scored:
         f8 = fig_oversampling_control(scored)
@@ -1188,11 +1204,12 @@ def main() -> int:
             "α capacity ladder each per variant: signed gaussian (γ=1, "
             "α ∈ {1e-3…1e-5}) and signed ReLU² (γ=0, α ∈ {1e-4…1e-6}). Every "
             "fitted model is re-scored "
-            "on ONE common two-sided evaluation set — the full certified pool "
-            "(restricted in-basin points + the certified switching band, ~966k "
-            "points), one switching tube (d ≤ 0.3 to the ±2π-tiled switching "
-            "curve), one denominator pair — since each variant's own recorded "
-            "metrics use its own region and denominator. Faint dots = the α ladder, lines = "
+            "on ONE common two-sided evaluation set: the region-eval pool minus "
+            "the union of all variants' training rows (~936k points, identical "
+            "across models and strictly out-of-sample for every one of them — "
+            "the same convention as the consolidated per-run metrics), one "
+            "switching tube (d ≤ 0.3 to the ±2π-tiled switching curve), one "
+            "denominator pair. Faint dots = the α ladder, lines = "
             "the best run per variant.\n\n"
             f"{f8_table}\n\n"
             "**Band oversampling does not buy the switching fit for either "
@@ -1200,7 +1217,7 @@ def main() -> int:
             "(switching 0.57–0.60): more switching-band samples cannot teach a smooth "
             "atom a kink. ReLU² — uniformly 2–4× better on both regions — "
             "*degrades monotonically* as the switching-band share grows (switching "
-            "0.250 → 0.289 → 0.343, rest 0.156 → 0.218): the switching band already "
+            "0.246 → 0.289 → 0.346, rest 0.156 → 0.220): the switching band already "
             "dominates the unweighted objective at the production share, and "
             "reallocating samples away from the interior starves the smooth "
             "structure its ridges anchor to. Adding 2,000 switching-band samples on top "

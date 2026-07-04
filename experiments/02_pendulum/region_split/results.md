@@ -63,22 +63,22 @@ The switching band is expensive by construction: at the production share it is 2
 
 ![oversampling control](figures/oversampling_control.png)
 
-Four two-sided training sets built from the same certified pools (`scripts/investigation/make_twosided_oversampling_sets.py`), varying only the switching-band share: 6k at the production ~23% share (base), 6k reallocated to a 40% and a 60% share, and base + 2,000 *added* switching-band samples (8k total, 42%). Two atom families, one α capacity ladder each per variant: signed gaussian (γ=1, α ∈ {1e-3…1e-5}) and signed ReLU² (γ=0, α ∈ {1e-4…1e-6}). Every fitted model is re-scored on ONE common two-sided evaluation set — the full certified pool (restricted in-basin points + the certified switching band, ~966k points), one switching tube (d ≤ 0.3 to the ±2π-tiled switching curve), one denominator pair — since each variant's own recorded metrics use its own region and denominator. Faint dots = the α ladder, lines = the best run per variant.
+Four two-sided training sets built from the same certified pools (`scripts/investigation/make_twosided_oversampling_sets.py`), varying only the switching-band share: 6k at the production ~23% share (base), 6k reallocated to a 40% and a 60% share, and base + 2,000 *added* switching-band samples (8k total, 42%). Two atom families, one α capacity ladder each per variant: signed gaussian (γ=1, α ∈ {1e-3…1e-5}) and signed ReLU² (γ=0, α ∈ {1e-4…1e-6}). Every fitted model is re-scored on ONE common two-sided evaluation set: the region-eval pool minus the union of all variants' training rows (~936k points, identical across models and strictly out-of-sample for every one of them — the same convention as the consolidated per-run metrics), one switching tube (d ≤ 0.3 to the ±2π-tiled switching curve), one denominator pair. Faint dots = the α ladder, lines = the best run per variant.
 
 Best common-set relative H1 error per variant and family (min over the α ladder; neurons = size of the switching-best run)
 
 | family   | variant        | runs | switching | rest  | neurons |
 | -------- | -------------- | ---- | --------- | ----- | ------- |
-| gaussian | 6k 23% (base)  | 3    | 0.581     | 0.588 | 111     |
-| gaussian | 6k 40% band    | 3    | 0.570     | 0.527 | 114     |
-| gaussian | 6k 60% band    | 3    | 0.598     | 0.662 | 125     |
-| gaussian | 6k+2k band add | 3    | 0.595     | 0.565 | 118     |
-| ReLU^2   | 6k 23% (base)  | 3    | 0.250     | 0.156 | 108     |
+| gaussian | 6k 23% (base)  | 3    | 0.581     | 0.589 | 111     |
+| gaussian | 6k 40% band    | 3    | 0.572     | 0.530 | 114     |
+| gaussian | 6k 60% band    | 3    | 0.602     | 0.668 | 125     |
+| gaussian | 6k+2k band add | 3    | 0.597     | 0.568 | 118     |
+| ReLU^2   | 6k 23% (base)  | 3    | 0.246     | 0.156 | 108     |
 | ReLU^2   | 6k 40% band    | 3    | 0.289     | 0.172 | 131     |
-| ReLU^2   | 6k 60% band    | 3    | 0.343     | 0.218 | 109     |
+| ReLU^2   | 6k 60% band    | 3    | 0.346     | 0.220 | 109     |
 | ReLU^2   | 6k+2k band add | 3    | 0.288     | 0.184 | 131     |
 
-**Band oversampling does not buy the switching fit for either atom family.** gaussian is essentially flat across all variants (switching 0.57–0.60): more switching-band samples cannot teach a smooth atom a kink. ReLU² — uniformly 2–4× better on both regions — *degrades monotonically* as the switching-band share grows (switching 0.250 → 0.289 → 0.343, rest 0.156 → 0.218): the switching band already dominates the unweighted objective at the production share, and reallocating samples away from the interior starves the smooth structure its ridges anchor to. Adding 2,000 switching-band samples on top of the budget beats reallocation but not the base. So the production ~23% share is at or near optimal for both families, and the switching-band error is a **representation limit of the atom class** (§4.4), not a sampling deficit; per-sample objective weighting remains the untried lever.
+**Band oversampling does not buy the switching fit for either atom family.** gaussian is essentially flat across all variants (switching 0.57–0.60): more switching-band samples cannot teach a smooth atom a kink. ReLU² — uniformly 2–4× better on both regions — *degrades monotonically* as the switching-band share grows (switching 0.246 → 0.289 → 0.346, rest 0.156 → 0.220): the switching band already dominates the unweighted objective at the production share, and reallocating samples away from the interior starves the smooth structure its ridges anchor to. Adding 2,000 switching-band samples on top of the budget beats reallocation but not the base. So the production ~23% share is at or near optimal for both families, and the switching-band error is a **representation limit of the atom class** (§4.4), not a sampling deficit; per-sample objective weighting remains the untried lever.
 
 ## 4. Which atoms fit the switching-set target best
 
