@@ -7,8 +7,8 @@ All figure-producing helpers live here. Tabular summaries live in
 there to avoid duplication.
 """
 
-import os
 import logging
+import os
 from typing import Any, Optional, Sequence, Tuple
 
 _REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
@@ -19,16 +19,30 @@ os.makedirs(_XDG_CACHE, exist_ok=True)
 os.environ.setdefault("MPLCONFIGDIR", _PLOT_CACHE)
 os.environ.setdefault("XDG_CACHE_HOME", _XDG_CACHE)
 
-import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.ticker import MaxNLocator, ScalarFormatter
+import numpy as np
 import torch
+from matplotlib.colors import LinearSegmentedColormap
 
 from .metric import _load_results
+
+# Default colormap for learned value surfaces — the "MATLAB surf" blue→yellow ramp
+# shared across all the experiment surface plots (see ``plot_model_value_surface``).
+_SURFACE_CMAP = LinearSegmentedColormap.from_list("surface_blue_yellow", [
+    (0.2298, 0.2987, 0.7537),
+    (0.1050, 0.5090, 0.9180),
+    (0.0000, 0.6900, 0.8200),
+    (0.3000, 0.7600, 0.5200),
+    (0.9100, 0.7400, 0.1800),
+    (1.0000, 0.8800, 0.0000),
+])
 
 logger = logging.getLogger(__name__)
 
 
+# ============================================================================ #
+# INTERNAL HELPERS
+# ============================================================================ #
 def _repel_labels(ax, xs, ys, labels, *, fontsize=7, max_iter=300, pad=1.5,
                   max_radius=48.0, spring=0.08):
     """Annotate each (x, y) with its label, then iteratively push the text boxes
@@ -88,6 +102,111 @@ def _repel_labels(ax, xs, ys, labels, *, fontsize=7, max_iter=300, pad=1.5,
     return anns
 
 
+def _get_field(dataset: Any, name: str) -> np.ndarray:
+    """Extract a field from a structured array or dict-like dataset."""
+    if isinstance(dataset, np.ndarray) and dataset.dtype.fields is not None:
+        if name not in dataset.dtype.fields:
+            raise KeyError(f"Dataset is missing field '{name}'. Available: {list(dataset.dtype.fields.keys())}")
+        return dataset[name]
+    if hasattr(dataset, "keys") and hasattr(dataset, "__getitem__"):
+        if name not in dataset:
+            raise KeyError(f"Dataset is missing key '{name}'. Available: {list(dataset.keys())}")
+        return np.asarray(dataset[name])
+    raise TypeError(
+        "dataset must be a NumPy structured array (with fields) or a dict-like object containing keys "
+        "'x', 'v', 'dv'."
+    )
+
+
+def _extract_active_weights(run: dict, u_thresh: float = 1e-4) -> dict:
+    """Return active (a, b, u) at the best iteration of one run.
+
+    Active means |u| > u_thresh.  Returns a dict with keys:
+        'a'     : np.ndarray (n_active, d)
+        'b'     : np.ndarray (n_active,)
+        'u'     : np.ndarray (n_active,)
+        'gamma' : float
+    """
+    it = run["best_iteration"]
+    iw = run["inner_weights"][it]
+    a = np.asarray(iw["weight"])               # (n, d)
+    b = np.asarray(iw["bias"])                 # (n,)
+    u = np.asarray(run["outer_weights"][it]).flatten()  # (n,)
+    mask = np.abs(u) > u_thresh
+    return {"a": a[mask], "b": b[mask], "u": u[mask], "gamma": run["gamma"]}
+
+
+def _best_iteration_atoms(history: Any, run_index: int = 0) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Best-iteration ``(a, b, u)`` from a fit result, robust to its container.
+
+    Accepts a single ``History`` object (attribute access), a dict-like run, or a
+    list/tuple of either (selecting ``run_index``). Returns inner weights ``a``
+    (n, d), inner bias ``b`` (n,), and outer weights ``u`` (1, n).
+    """
+    if isinstance(history, (list, tuple)):
+        history = history[run_index]
+
+    def field(name: str) -> Any:
+        if hasattr(history, name):
+            return getattr(history, name)
+        if hasattr(history, "__getitem__"):
+            try:
+                return history[name]
+            except (KeyError, TypeError, IndexError):
+                pass
+        raise AttributeError(f"fit result exposes no '{name}' (got {type(history).__name__})")
+
+    best_it = int(field("best_iteration"))
+    iw = field("inner_weights")[best_it]
+    a = np.asarray(iw["weight"])                       # (n, d)
+    b = np.asarray(iw["bias"])                         # (n,)
+    u = np.asarray(field("outer_weights")[best_it])    # (1, n)
+    return a, b, u
+
+
+# ---------------------------------------------------------------------------- #
+# Neuron / H1 frontier
+# ---------------------------------------------------------------------------- #
+# Shared publication style for frontier plots (boxed variant — see
+# src.plotstyle.style_frontier_axes). Applied via rc_context so the module
+# leaves global rcParams untouched.
+_FRONTIER_RC = {
+    "font.family": ["serif"],
+    "font.serif": ["CMU Serif", "Computer Modern Roman", "cmr10", "DejaVu Serif"],
+    "font.size": 12,
+    "axes.linewidth": 1.0,
+    "mathtext.fontset": "cm",
+    "axes.formatter.use_mathtext": True,
+    "text.usetex": False,
+}
+
+
+def penalty_symbol(insertion: str) -> str:
+    """Greek penalty symbol implied by the insertion rule.
+
+    ``profile`` insertion uses the penalty written ``phi``; ``finite_step``
+    (finite) insertion uses ``psi``. Returned as a mathtext token (``\\phi`` /
+    ``\\psi``) for embedding inside a ``$...$`` label.
+    """
+    return r"\phi" if insertion == "profile" else r"\psi"
+
+
+def frontier_penalty_label(activation_tex: str, *, insertion: str,
+                           subscript: str, coeff: str = r"\alpha") -> str:
+    """Legend label ``$<activation> + <coeff> <sym>_<subscript>$`` with the penalty
+    symbol (phi/psi) selected from ``insertion`` (see :func:`penalty_symbol`).
+
+    Example: ``frontier_penalty_label(r"\\mathrm{ReLU}^k",
+    insertion="finite_step", subscript="k")`` ->
+    ``$\\mathrm{ReLU}^k + \\alpha\\,\\psi_{k}$``.
+    """
+    sym = penalty_symbol(insertion)
+    return rf"${activation_tex} + {coeff}\,{sym}_{{{subscript}}}$"
+
+
+# ============================================================================ #
+# PLOTTING FUNCTIONS
+# ============================================================================ #
 def plot_score_tradeoff(
     rows: Sequence[dict[str, Any]],
     *,
@@ -146,22 +265,6 @@ def plot_score_tradeoff(
     return fig, ax
 
 
-def _get_field(dataset: Any, name: str) -> np.ndarray:
-    """Extract a field from a structured array or dict-like dataset."""
-    if isinstance(dataset, np.ndarray) and dataset.dtype.fields is not None:
-        if name not in dataset.dtype.fields:
-            raise KeyError(f"Dataset is missing field '{name}'. Available: {list(dataset.dtype.fields.keys())}")
-        return dataset[name]
-    if hasattr(dataset, "keys") and hasattr(dataset, "__getitem__"):
-        if name not in dataset:
-            raise KeyError(f"Dataset is missing key '{name}'. Available: {list(dataset.keys())}")
-        return np.asarray(dataset[name])
-    raise TypeError(
-        "dataset must be a NumPy structured array (with fields) or a dict-like object containing keys "
-        "'x', 'v', 'dv'."
-    )
-
-
 def plot_value_scatter3d(
     dataset: Any,
     *,
@@ -172,8 +275,8 @@ def plot_value_scatter3d(
     cmap: str = "viridis",
     xlim: Optional[Tuple[float, float]] = None,
     ylim: Optional[Tuple[float, float]] = None,
-    elev: float = 30.0,
-    azim: float = -120.0,
+    elev: float = 15.0,
+    azim: float = -60.0,
     colorbar: bool = True,
     save_path: Optional[str] = None,
     show: bool = True,
@@ -204,6 +307,9 @@ def plot_value_scatter3d(
 
     sc = ax.scatter(x[:, 0], x[:, 1], v, c=v, cmap=cmap, s=s, alpha=alpha,
                     depthshade=True)
+    for a in (ax.xaxis, ax.yaxis, ax.zaxis):
+        a.pane.set_facecolor((1, 1, 1, 0)); a.pane.set_edgecolor((0, 0, 0, 0))
+        a._axinfo["grid"].update(color="0.85", linewidth=0.5)
     if colorbar:
         cbar = fig.colorbar(sc, ax=ax, shrink=0.6, pad=0.1)
         cbar.set_label("V(x)")
@@ -259,7 +365,7 @@ def plot_nonsmooth_curve(
     else:
         with np.load(os.fspath(curve)) as data:
             points = np.asarray(data["points"])
-            value_levels = np.asarray(data["value_levels"]) if "value_levels" in data.files else None
+            value_levels = np.asarray(data["value_levels"]) if "value_levels" in data.files else None  # noqa: F841
             basin = np.asarray(data["basin"]) if "basin" in data.files else None
 
     if ax is None:
@@ -439,24 +545,6 @@ def plot_vdp_value_with_gradient_arrows2d(
     return fig, ax
 
 
-def _extract_active_weights(run: dict, u_thresh: float = 1e-4) -> dict:
-    """Return active (a, b, u) at the best iteration of one run.
-
-    Active means |u| > u_thresh.  Returns a dict with keys:
-        'a'     : np.ndarray (n_active, d)
-        'b'     : np.ndarray (n_active,)
-        'u'     : np.ndarray (n_active,)
-        'gamma' : float
-    """
-    it = run["best_iteration"]
-    iw = run["inner_weights"][it]
-    a = np.asarray(iw["weight"])               # (n, d)
-    b = np.asarray(iw["bias"])                 # (n,)
-    u = np.asarray(run["outer_weights"][it]).flatten()  # (n,)
-    mask = np.abs(u) > u_thresh
-    return {"a": a[mask], "b": b[mask], "u": u[mask], "gamma": run["gamma"]}
-
-
 def plot_inner_weight_3d_scatter(
     results: "Sequence[dict] | str | os.PathLike[str]",
     *,
@@ -601,10 +689,10 @@ def plot_regions_of_attraction(
     set, ``curve_label``); omit for no legend. Pass ``ax`` to compose into a
     multi-panel figure.
     """
-    from scipy.spatial import cKDTree
     from matplotlib.colors import ListedColormap
-    from matplotlib.patches import Patch
     from matplotlib.lines import Line2D
+    from matplotlib.patches import Patch
+    from scipy.spatial import cKDTree
 
     points = np.asarray(points, dtype=np.float64)
     labels = np.asarray(labels)
@@ -658,34 +746,6 @@ def plot_regions_of_attraction(
     return fig, ax
 
 
-def _best_iteration_atoms(history: Any, run_index: int = 0) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Best-iteration ``(a, b, u)`` from a fit result, robust to its container.
-
-    Accepts a single ``History`` object (attribute access), a dict-like run, or a
-    list/tuple of either (selecting ``run_index``). Returns inner weights ``a``
-    (n, d), inner bias ``b`` (n,), and outer weights ``u`` (1, n).
-    """
-    if isinstance(history, (list, tuple)):
-        history = history[run_index]
-
-    def field(name: str) -> Any:
-        if hasattr(history, name):
-            return getattr(history, name)
-        if hasattr(history, "__getitem__"):
-            try:
-                return history[name]
-            except (KeyError, TypeError, IndexError):
-                pass
-        raise AttributeError(f"fit result exposes no '{name}' (got {type(history).__name__})")
-
-    best_it = int(field("best_iteration"))
-    iw = field("inner_weights")[best_it]
-    a = np.asarray(iw["weight"])                       # (n, d)
-    b = np.asarray(iw["bias"])                         # (n,)
-    u = np.asarray(field("outer_weights")[best_it])    # (1, n)
-    return a, b, u
-
-
 def plot_model_value_surface(
     history: "Any | str | os.PathLike[str]",
     *,
@@ -700,10 +760,14 @@ def plot_model_value_surface(
     dataset: Any = None,
     ax: Optional[Any] = None,
     title: Optional[str] = None,
-    cmap: str = "viridis",
-    elev: float = 30.0,
-    azim: float = -120.0,
-    colorbar: bool = True,
+    cmap: Any = None,
+    vmax: Optional[float] = None,
+    xticks: "Optional[Sequence[float]]" = None,
+    yticks: "Optional[Sequence[float]]" = None,
+    zticks: "Optional[Sequence[float]]" = None,
+    elev: float = 15.0,
+    azim: float = -105.0,
+    colorbar: bool = False,
     save_path: Optional[str] = None,
     show: bool = True,
 ) -> Tuple[plt.Figure, Any]:
@@ -722,10 +786,24 @@ def plot_model_value_surface(
     rescaled back to physical units — the surface is then drawn over the physical
     state plane. Pass ``ax`` (a 3D axis) to compose into a multi-panel figure.
 
+    This is the single source of truth for learned-value surface plots: callers
+    render **one surface per call** and arrange any row/grid in their markdown/LaTeX.
+    The uniform style is **no axis names**, **sparse ticks** ({min, 0, max} on x/y;
+    {0, mid, max} on z), and **no title** unless one is passed — the surface itself
+    stays smooth and precise (fine ``grid_n`` evaluation, no mesh lines drawn).
+    ``cmap`` defaults to the shared blue→yellow ``_SURFACE_CMAP``. Values below
+    zero are clipped to the display floor. ``vmax`` clips the surface above and
+    fixes the z-range (e.g. to the data's value range when the model extrapolates
+    wildly off-support); ``None`` auto-scales to the nonnegative surface.
+    ``xticks``/``yticks``/``zticks`` override the sparse defaults when a caller wants
+    explicit tick positions; pass ``x_range``/``y_range`` to set the displayed extent
+    (and re-evaluate the surface over it).
+
     Note: ``semiconcave`` models do not round-trip through ``History`` faithfully
     (the lossy atom record drops structure — issue #19); use a ``signed`` run here.
     """
     import pickle
+
     from src.models.net import ShallowNetwork
 
     if isinstance(history, (str, os.PathLike)):
@@ -781,15 +859,36 @@ def plot_model_value_surface(
     else:
         fig = ax.figure
 
-    surf = ax.plot_surface(X0, X1, V, cmap=cmap, alpha=0.95, edgecolor="none",
-                           rcount=grid_n, ccount=grid_n)
+    # Clip to the displayed nonnegative value range. The model can extrapolate
+    # wildly off-support; the surface plot is a visual comparison, not a signed
+    # residual diagnostic.
+    if vmax is not None:
+        V = np.clip(V, 0.0, vmax)
+    else:
+        V = np.maximum(V, 0.0)
+    zmax = float(vmax) if vmax is not None else float(np.nanmax(V))
+    cmap = cmap if cmap is not None else _SURFACE_CMAP
+    surf = ax.plot_surface(X0, X1, V, cmap=cmap, vmin=0.0, vmax=zmax, alpha=0.95,
+                           edgecolor="none", rcount=grid_n, ccount=grid_n)
+    for a in (ax.xaxis, ax.yaxis, ax.zaxis):
+        a.pane.set_facecolor((1, 1, 1, 0)); a.pane.set_edgecolor((0, 0, 0, 0))
+        a._axinfo["grid"].update(color="0.85", linewidth=0.5)
     if colorbar:
         cbar = fig.colorbar(surf, ax=ax, shrink=0.6, pad=0.1)
         cbar.set_label("V(x)")
-    ax.set_xlabel("x[0]")
-    ax.set_ylabel("x[1]")
-    ax.set_zlabel("V(x)")
-    ax.set_title(title or f"Learned V(x) — {n_neurons} neurons")
+
+    # Uniform style: no axis names, sparse ticks (overridable), title only if given.
+    def _sparse(lo: float, hi: float) -> list[float]:
+        mid = 0.0 if lo < 0.0 < hi else round((lo + hi) / 2.0, 2)
+        return sorted({round(lo, 2), mid, round(hi, 2)})
+
+    ax.set_xticks(list(xticks) if xticks is not None else _sparse(*x_range))
+    ax.set_yticks(list(yticks) if yticks is not None else _sparse(*y_range))
+    ax.set_zticks(list(zticks) if zticks is not None
+                  else sorted({0.0, round(zmax / 2.0, 2), round(zmax, 2)}))
+    ax.set_zlim(0.0, zmax)
+    if title:
+        ax.set_title(title)
     ax.view_init(elev=elev, azim=azim)
     fig.tight_layout()
 
@@ -800,3 +899,54 @@ def plot_model_value_surface(
     return fig, ax
 
 
+def plot_neuron_h1_frontier(
+    series: Sequence[dict[str, Any]],
+    *,
+    xlabel: str = "number of neurons",
+    ylabel: str = r"best relative $H^1$ error",
+    save_path: str | os.PathLike[str] | None = None,
+    show_plot: bool = False,
+):
+    """Render the neuron / H1 lower-envelope frontier (log-y) in house style.
+
+    Each entry of ``series`` is a dict with:
+      ``ns``     -- 1-D array of neuron counts (x),
+      ``h1``     -- 1-D array of relative H1 errors (y),
+      ``label``  -- legend label (build penalty labels via
+                    :func:`frontier_penalty_label` for the insertion-aware
+                    phi/psi convention),
+      ``color``  -- line/marker color,
+      ``marker`` -- marker shape,
+      ``ls``     -- (optional) line style, default ``"-."``.
+
+    Empty series (``ns`` of length 0) are skipped. Returns ``(fig, ax)``.
+    """
+    with plt.rc_context(_FRONTIER_RC):
+        fig, ax = plt.subplots(figsize=(8.5, 5.2), dpi=150)
+        drawn = 0
+        for s in series:
+            ns = np.asarray(s["ns"])
+            h1 = np.asarray(s["h1"])
+            if ns.size == 0:
+                logger.warning("frontier: no points for %r — skipping", s.get("label"))
+                continue
+            ax.plot(ns, h1, ls=s.get("ls", "-."), lw=1.6, color=s["color"],
+                    marker=s["marker"], ms=7.5, mfc=s["color"], mec="0.15",
+                    mew=0.8, label=s["label"], zorder=3)
+            drawn += 1
+        ax.set_yscale("log")
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel(ylabel)
+        ax.set_xlim(left=0)
+        from src.plotstyle import style_frontier_axes
+        style_frontier_axes(ax)
+        fig.tight_layout(pad=2.0)
+        if save_path is not None:
+            save_path = os.fspath(save_path)
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+            fig.savefig(save_path, dpi=300, bbox_inches="tight")
+        if show_plot:
+            plt.show()
+        else:
+            plt.close(fig)
+    return fig, ax

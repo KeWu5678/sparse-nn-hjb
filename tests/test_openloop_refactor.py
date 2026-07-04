@@ -1,6 +1,7 @@
-import numpy as np
 import subprocess
 import sys
+
+import numpy as np
 
 
 def test_openloop_value_samples_public_import_is_available() -> None:

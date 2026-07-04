@@ -1,10 +1,11 @@
-import torch
 from typing import Optional
+
+import torch
 
 
 def _to_boundary(
-    x: torch.Tensor, 
-    d: torch.Tensor, 
+    x: torch.Tensor,
+    d: torch.Tensor,
     s: float
     ) -> tuple[torch.Tensor, float]:
     """
@@ -57,7 +58,7 @@ def mpcg(
     x = torch.zeros_like(b)
 
     # r(x) = b - H x, start with x = 0
-    r = b.clone() 
+    r = b.clone()
     z = r.clone()
     DPz = z if DP is None else (DP @ z)
     resres = torch.dot(r, DPz)  # r' * DP * z
@@ -107,7 +108,7 @@ def mpcg(
         alpha = resres / (gamma + 1e-30)
         xnew = x + alpha * d
 
-        # Trust region redius reached 
+        # Trust region redius reached
         normx = torch.norm(xnew)
         if sigma > 0 and normx > sigma:
             flag = 'radius'
@@ -160,5 +161,3 @@ def mpcg(
 
 
 __all__ = ["mpcg"]
-
-

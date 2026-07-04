@@ -6,7 +6,6 @@ import logging
 import sys
 from pathlib import Path
 
-
 DIAGNOSTIC_FORMAT = "%(levelname)s %(message)s"
 
 

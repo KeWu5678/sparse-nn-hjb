@@ -5,7 +5,8 @@ Iterated in the fast loop (cached trajectories). Once the grade passes, this log
 is ported into src/OpenLoop/pendulum/nonsmooth.py. Throwaway.
 """
 from __future__ import annotations
-import pickle, sys
+import pickle
+import sys
 from pathlib import Path
 import numpy as np
 import matplotlib; matplotlib.use("Agg"); import matplotlib.pyplot as plt

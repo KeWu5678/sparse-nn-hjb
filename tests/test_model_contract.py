@@ -3,8 +3,8 @@
 import torch
 
 from src.models.base import PDAPModel
-from src.models.signed import SignedModel
 from src.models.semiconcave import SemiconcaveModel
+from src.models.signed import SignedModel
 
 
 def _atoms(n=4, d=2):

@@ -16,8 +16,8 @@ so prox(q_var) != u.
 import sys
 from pathlib import Path
 
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
@@ -63,6 +63,7 @@ ax.axhline(y=v_example, color='green', linestyle=':', linewidth=1.5, label=f'exa
 
 # Find the two roots numerically
 from scipy.optimize import brentq
+
 # t_small: root in (0, t_star)
 t_small = brentq(lambda t: t + mu * q_exp * t ** (q_exp - 1) - v_example, 1e-12, t_star)
 # t_large: root in (t_star, big)
@@ -113,10 +114,10 @@ ax = axes[1, 0]
 t_plot = np.linspace(1e-9, 6 * t_star, 2000)
 
 for v_val, color, label in [
-    (0.5 * v_thresh, 'blue', f'v = 0.5*v_thresh (no root, prox=0)'),
-    (v_thresh, 'orange', f'v = v_thresh (one root at t*)'),
-    (2.5 * v_thresh, 'green', f'v = 2.5*v_thresh (two roots)'),
-    (5.0 * v_thresh, 'red', f'v = 5*v_thresh (two roots)'),
+    (0.5 * v_thresh, 'blue', 'v = 0.5*v_thresh (no root, prox=0)'),
+    (v_thresh, 'orange', 'v = v_thresh (one root at t*)'),
+    (2.5 * v_thresh, 'green', 'v = 2.5*v_thresh (two roots)'),
+    (5.0 * v_thresh, 'red', 'v = 5*v_thresh (two roots)'),
 ]:
     obj = mu * t_plot ** q_exp + 0.5 * (t_plot - v_val) ** 2
     # Normalize for display: subtract minimum

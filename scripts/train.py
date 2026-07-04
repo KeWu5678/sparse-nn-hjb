@@ -42,11 +42,11 @@ sys.path.insert(0, str(REPO_ROOT))
 import src.config.store  # noqa: F401  — registers `config_schema` with Hydra's ConfigStore
 from src.data import load_value_samples, normalize_value_samples, split_value_samples
 from src.eval import distance_binned_error, region_split_errors
+from src.experiment_logging import ExperimentRun
+from src.logging_config import configure_logging
 from src.models import build_model
 from src.paths import DATA_DIR
 from src.PDAP import PDAP
-from src.experiment_logging import ExperimentRun
-from src.logging_config import configure_logging
 
 logger = logging.getLogger(__name__)
 

@@ -4,10 +4,10 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import replace
 import json
 import sys
 import time
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -39,6 +39,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--reference-value", type=float, default=None)
     parser.add_argument("--boundary-distance-power", type=float, default=0.8)
     parser.add_argument("--contour-delta", type=float, default=1.0)
+    parser.add_argument("--basin-value-max", type=float, default=50.0,
+                        help="value cap on the basin arms (reference ~57; 35 is too small) — issue #18")
     parser.add_argument("--periodic-copies", type=int, default=0)
     parser.add_argument("--level-set-samples", type=int, default=2000)
     parser.add_argument("--output-dir", type=Path, default=DATA_DIR)
@@ -90,6 +92,7 @@ def main() -> None:
         reference_value=args.reference_value,
         boundary_distance_power=args.boundary_distance_power,
         contour_delta=args.contour_delta,
+        basin_value_max=args.basin_value_max,
         periodic_copies=args.periodic_copies,
     )
     solver = PendulumPmpSolver(problem=problem, config=config)

@@ -17,7 +17,7 @@ value to the same physical state (Han & Yang, arXiv:2312.17467). This module:
 This replaces an earlier buggy approach that connected the switching points into
 one value-ordered polyline and cut on ``LineString`` intersection — whose
 cross-arm chords swept through the origin and truncated every trajectory ~25×
-too early (GitHub issue #18; see experiments/pendulum_branch_restriction/).
+too early (GitHub issue #18; see experiments/00_openloop/ (DIAGNOSIS.md)).
 """
 
 from __future__ import annotations

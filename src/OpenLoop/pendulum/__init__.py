@@ -2,7 +2,6 @@
 
 from src.OpenLoop.pendulum.nonsmooth import NonsmoothCurve
 from src.OpenLoop.pendulum.problem import PendulumSwingUpProblem
-from src.OpenLoop.value_samples import ValueSamples
 from src.OpenLoop.pendulum.solver import (
     PendulumPmpSolver,
     PendulumPmpSolverConfig,
@@ -10,6 +9,7 @@ from src.OpenLoop.pendulum.solver import (
     SolverDiagnostics,
 )
 from src.OpenLoop.pendulum.trajectories import PmpTrajectory
+from src.OpenLoop.value_samples import ValueSamples
 
 __all__ = [
     "NonsmoothCurve",

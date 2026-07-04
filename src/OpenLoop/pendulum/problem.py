@@ -149,8 +149,14 @@ class PendulumSwingUpProblem:
         control_value = self.bounded_control(np.asarray(control, dtype=np.float64))
         return self.control_gain * p2 + 2.0 * self.control_weight * control_value
 
-    def minimizing_control(self, costate: np.ndarray) -> np.ndarray:
-        p2 = np.asarray(costate, dtype=np.float64)[..., 1]
+    def feedback_from_gradient(self, gradient: np.ndarray) -> np.ndarray:
+        """The Hamiltonian-minimizing control synthesized from a value gradient.
+
+        Along the optimal trajectory the costate equals ∇V(x), so this maps either
+        a PMP costate or a (learned) value gradient to the feedback control
+        ``u = -control_gain · ∂_θ̇ V / (2·control_weight)``.
+        """
+        p2 = np.asarray(gradient, dtype=np.float64)[..., 1]
         control = -self.control_gain * p2 / (2.0 * self.control_weight)
         return np.asarray(self.bounded_control(control), dtype=np.float64)
 
@@ -185,10 +191,49 @@ class PendulumSwingUpProblem:
         control: np.ndarray | float | None = None,
     ) -> np.ndarray:
         if control is None:
-            control = self.minimizing_control(costate)
+            control = self.feedback_from_gradient(costate)
         dynamics = self.dynamics(state, control)
         running = self.running_cost(state, control)
         return running + np.sum(np.asarray(costate, dtype=np.float64) * dynamics, axis=-1)
+
+    def rk4_rollout(self, u_of_x, x0, *, T: float = 10.0, dt: float = 0.01,
+                    u_clip: float = 30.0):
+        """Closed-loop RK4 rollout of ``ẋ = f(x, u(x))`` under a state feedback law.
+
+        Integrates with fixed-step RK4 and a zero-order hold on ``u_of_x`` (clipped
+        to ``±u_clip`` as a numerical guard). Returns ``(t, xs, us, cost)`` — the time
+        grid, state trajectory, applied controls, and accumulated running cost —
+        truncated early if the closed loop diverges (non-finite or ``|x| > 1e3``).
+        """
+        n = int(T / dt)
+        xs = np.zeros((n + 1, 2)); us = np.zeros(n + 1); xs[0] = np.asarray(x0, np.float64)
+        cost = 0.0
+        last = n
+        for i in range(n):
+            x = xs[i]
+            u = float(np.clip(np.ravel(u_of_x(x))[0], -u_clip, u_clip)); us[i] = u
+            cost += float(self.running_cost(x, u)) * dt
+            k1 = self.dynamics(x, u)
+            k2 = self.dynamics(x + 0.5 * dt * k1, u)
+            k3 = self.dynamics(x + 0.5 * dt * k2, u)
+            k4 = self.dynamics(x + dt * k3, u)
+            xs[i + 1] = x + (dt / 6.0) * (k1 + 2 * k2 + 2 * k3 + k4)
+            if not np.all(np.isfinite(xs[i + 1])) or np.abs(xs[i + 1]).max() > 1e3:
+                last = i + 1; break
+        us[last] = us[last - 1] if last else 0.0
+        t = np.arange(last + 1) * dt
+        return t, xs[:last + 1], us[:last + 1], cost
+
+    def true_feedback(self, samples):
+        """True PMP feedback κ*(x) = feedback_from_gradient(∇V_true), nearest-neighbour
+        interpolated from the dataset's costate samples. Returns a ``u_of_x`` closure."""
+        from scipy.spatial import cKDTree
+        tree = cKDTree(samples["x"])
+
+        def u(x):
+            _, j = tree.query(np.asarray(x).reshape(1, 2))
+            return float(self.feedback_from_gradient(samples["dv"][j])[0])
+        return u
 
 
 __all__ = ["PendulumSwingUpProblem"]

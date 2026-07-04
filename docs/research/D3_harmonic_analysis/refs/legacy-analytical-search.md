@@ -1,0 +1,295 @@
+# Legacy: analytical discontinuous-gradient activation search
+
+> Migrated verbatim from `autoresearch/ActivationSearch/data:analytical/`
+> (SUMMARY.md + program.md) on 2026-07-02; the autoresearch tree is archived
+> in `outdated/`. Raw runs/TSVs were regenerable and were not migrated.
+
+# Discontinuous-Gradient Activation Search - Summary
+
+This folder repeats the activation search on the analytic Experiment 3 dataset
+from `notebook/pdpa_vdp.ipynb`, where the value function is continuous but its
+gradient jumps across
+
+```text
+h(x1, x2) = x1 + x2 * abs(x2) / 2 = 0.
+```
+
+The primary local metric is `near_grad`: relative gradient error on evaluation
+points near the discontinuity. The notebook also uses
+`near_grad / far_grad` as a localization diagnostic. The masks match the
+notebook: near means distance to the switching curve below the 20th percentile,
+and far means distance above the 50th percentile.
+
+The detailed variant-level table is `results_near.tsv`. The summary below is
+consolidated by activation family: each family is represented by its best
+tested variant under `near_grad`.
+
+## Family Leaders
+
+| family | best variant | near grad | std | far grad | near/far | neurons |
+|:-------|:-------------|----------:|----:|---------:|---------:|--------:|
+| Leaky ReLU2 sphere | `alpha=0.02` | 0.151223 | 0.003271 | 0.017083 | 8.8520 | 120.10 |
+| ReLU2 sphere | baseline | 0.157911 | 0.004934 | 0.017340 | 9.1068 | 106.50 |
+| x\|x\| sphere | baseline | 0.164566 | 0.004347 | 0.021366 | 7.7024 | 128.20 |
+| SmoothReLU | `w=0.05` | 0.168244 | 0.009455 | 0.055722 | 3.0193 | 149.40 |
+| abs activation | baseline | 0.177244 | 0.007285 | 0.054753 | 3.2371 | 142.00 |
+| ReLU | baseline | 0.182863 | 0.007877 | 0.057389 | 3.1864 | 144.00 |
+| Leaky ReLU | baseline | 0.186197 | 0.003840 | 0.056432 | 3.2995 | 143.00 |
+| Matérn 5/2 | baseline | 0.214069 | 0.008288 | 0.043474 | 4.9241 | 131.40 |
+| ELU2 | `beta=0.5` | 0.222943 | 0.008986 | 0.039858 | 5.5935 | 55.20 |
+| Gaussian | notebook form | 0.248449 | 0.009634 | 0.031426 | 7.9060 | 99.00 |
+
+## Main Finding
+
+After consolidation, the same conclusion remains: the best family for behavior
+at the discontinuous gradient is **spherical leaky squared ReLU**,
+
+```text
+phi_alpha(x) = max(x, alpha*x)^2,
+```
+
+with the best tested value `alpha=0.02`.
+
+The improvement is not just from using any kinked quadratic. The antisymmetric
+quadratic `x|x|` is worse (`near_grad=0.164566`), and the same leaky squared
+ReLU without spherical parameterization is much worse
+(`near_grad=0.228469` for `alpha=0.05`).
+
+## Variant Sweep
+
+The leaky ReLU2 sphere family was tested over several leak values. The leading
+region is narrow:
+
+| variant | near grad | neurons | near score |
+|:--------|----------:|--------:|-----------:|
+| `alpha=0.02` | 0.151223 | 120.10 | 18.1617 |
+| `alpha=0.025` | 0.151872 | 120.90 | 18.3463 |
+| `alpha=0.05` | 0.152113 | 120.20 | 18.2869 |
+| `alpha=0.075` | 0.154104 | 110.40 | 17.0111 |
+| `alpha=0.10` | 0.155808 | 110.10 | 17.1509 |
+| `alpha=0.01` | 0.156104 | 115.20 | 17.9812 |
+| ReLU2, no leak | 0.157911 | 106.50 | 16.8143 |
+
+So `alpha=0.02` is best for discontinuity accuracy, but `alpha=0.075` and
+plain ReLU2 are stronger sparsity-aware choices.
+
+## Near/Far Ratio
+
+The near/far ratio is diagnostic, not an objective by itself. It measures where
+the remaining gradient error lives. A high ratio can mean either:
+
+- the activation fits smooth regions very well, so `far_grad` is tiny;
+- or the activation fails badly near the discontinuity.
+
+For the best squared-ReLU families, the high ratio is mostly the first case:
+far-field errors are very small, and the remaining error is localized at the
+jump. For example, `Leaky ReLU2 sphere (alpha=0.02)` has
+`near_grad=0.151223`, `far_grad=0.017083`, and `near/far=8.8520`.
+
+This differs from the notebook's Gaussian example, where the ratio was also
+high but the near error stayed poor. In the expanded search, squared ReLU
+variants reduce both near and far errors compared with Matérn and Gaussian.
+
+## What Is Specific To The Discontinuity
+
+The previous sections rank by absolute `near_grad`, but that alone does not
+prove a discontinuity-specific mechanism. A lower near error can simply come
+from a uniformly better approximation everywhere. To separate the two effects,
+read `near_grad` together with `far_grad` and `near/far`.
+
+| activation | near grad | far grad | near/far | interpretation |
+|:-----------|----------:|---------:|---------:|:---------------|
+| Leaky ReLU2 sphere, `alpha=0.02` | 0.151223 | 0.017083 | 8.8520 | best absolute near error; much of the gain is also global because far error is extremely small |
+| ReLU2 sphere | 0.157911 | 0.017340 | 9.1068 | same pattern: excellent far fit plus strong near fit |
+| x\|x\| sphere | 0.164566 | 0.021366 | 7.7024 | close to ReLU2, but worse in both near and far regions |
+| SmoothReLU, `w=0.05` | 0.168244 | 0.055722 | 3.0193 | more discontinuity-specific: near error stays competitive even though far fit is much worse |
+| abs activation | 0.177244 | 0.054753 | 3.2371 | kinked value basis helps the jump region, but global fit is weaker |
+| ReLU | 0.182863 | 0.057389 | 3.1864 | hard kink gives relatively good near behavior for its far error |
+| Gaussian | 0.248449 | 0.031426 | 7.9060 | good smooth-region fit does not transfer to the discontinuity |
+
+The discontinuity-specific factor is therefore **one-sided/kinked gradient
+structure**, not just lower H1 error. The target has a gradient jump across
+
+```text
+h(x1, x2) = x1 + x2 * abs(x2) / 2 = 0.
+```
+
+Activations with a one-sided derivative or a kinked transition can create a
+directional contrast across inserted hyperplanes, so their near-region error is
+not as bad as their far-region error would suggest. This is why `SmoothReLU`,
+`abs`, and `ReLU` have much lower near/far ratios than Gaussian or Matérn.
+
+The leading spherical ReLU2/leaky-ReLU2 family combines two effects:
+
+1. It has enough one-sided polynomial structure to keep the near-gradient error
+   low.
+2. It fits smooth regions extremely well, which drives `far_grad` down and
+   improves the absolute H1/near-gradient numbers.
+
+So the headline should be read carefully: **Leaky ReLU2 sphere is best in
+absolute near-discontinuity error, but the clearest discontinuity-specific
+signature appears in kinked/one-sided activations whose near error remains
+competitive despite a weaker far-region fit.**
+
+## Sparsity Tradeoff
+
+The best-accuracy family uses about 120 neurons. If sparsity matters, the
+choice changes:
+
+| choice | near grad | neurons | near score | comment |
+|:-------|----------:|--------:|-----------:|:--------|
+| Leaky ReLU2 sphere, `alpha=0.02` | 0.151223 | 120.10 | 18.1617 | best discontinuity accuracy |
+| Leaky ReLU2 sphere, `alpha=0.075` | 0.154104 | 110.40 | 17.0111 | best leaky sparse compromise |
+| ReLU2 sphere | 0.157911 | 106.50 | 16.8143 | sparsest good baseline |
+
+The unconstrained `near_score = near_grad * neurons` is not reliable by itself:
+very sparse low-rank activations such as `sp2_b0_2` and `qr_0_05` get low
+scores only because they use 9-11 neurons, but their near-gradient errors are
+around `0.39`, which is poor behavior at the discontinuity.
+
+## When Gamma Matters Most
+
+For this experiment, the main accuracy metric is `near_grad`, and the sparsity
+metric is the mean selected neuron count. Gamma has the largest absolute effect
+on noncompetitive smooth/saturating activations, not on the leading squared-ReLU
+families.
+
+| activation | near-grad range | neuron range | near-score range | largest step | interpretation |
+|:-----------|----------------:|-------------:|-----------------:|:-------------|:---------------|
+| `asinh` | 0.4484 | 4.2 | 25.30 | `0.01 -> 0.1` | largest absolute effect, but the fit is poor |
+| `gelu_b0_2` | 0.0607 | 21.6 | 5.29 | `0 -> 0.01` | gamma strongly changes sparsity and accuracy |
+| `smoothy_relu_w0_05` | 0.0440 | 4.2 | 5.66 | `1 -> 10` | gamma matters for near-discontinuity accuracy |
+| `mish_b0_15` | 0.0320 | 16.8 | 7.05 | `0 -> 0.01` | strong sparsity/score effect, but not a top near-gradient fit |
+| `softplus_b0_25` | 0.0274 | 10.2 | 2.68 | `1 -> 10` | gamma changes sparsity, still not competitive near the jump |
+| Leaky ReLU2 sphere, `alpha=0.02` | 0.0051 | 5.5 | 0.64 | `1 -> 10` | best near accuracy is robust to gamma |
+| Leaky ReLU2 sphere, `alpha=0.075` | 0.0081 | 3.2 | 1.37 | `1 -> 10` | sparse compromise is also robust |
+| ReLU2 sphere | 0.0047 | 4.5 | 0.63 | `0 -> 0.01` | sparsest good baseline is robust |
+
+This is the important distinction: gamma can move some weak activations a lot,
+but it does not rescue them into the leading group. Among the useful
+near-discontinuity fits, gamma changes the exact sparsity/accuracy point only
+slightly; the activation shape, especially spherical squared ReLU with a small
+leak, dominates the result.
+
+This also means the VDP-side heuristic "gamma matters most for high-neuron or
+sharp/inactive activations" does not generalize here. The generated
+`../gamma_pattern_check.md` file lists counterexamples such as `asinh`,
+`mish_b0_15`, `atan`, `swish_b0_25`, and `gelu_b0_2`, which have large
+gamma-induced score changes without being high-neuron sharp/inactive fits.
+
+Use `near_pareto.png` for the consolidated family plot with error bars and
+`results_near.tsv` for the complete variant-level table.
+
+---
+
+## Program (original program.md)
+
+# autoresearch/ActivationSearch/data:analytical
+
+Autonomous search for activation functions on the analytic value function with
+a discontinuous gradient from `notebook/pdpa_vdp.ipynb` Experiment 3.
+
+## Fixed Study
+
+Use signed-profile PDAP (`model="signed"`, `insertion="profile"`) with:
+
+- `power=1`
+- `loss="h1"`
+- gamma list `[0, 0.01, 0.1, 1, 10]`
+- `alpha=1e-5`
+- `num_iterations=10`
+- `num_insertion=50`
+- `pruning_threshold=1e-5`
+- training grid: 30x30 points on `[-2, 2]^2`
+- evaluation grid: 61x61 points on `[-2, 2]^2`
+- target: `V = x1^2 + x2^2 + abs(x1 + x2*abs(x2)/2)`
+
+The global score is
+
+```text
+score = eval_h1 * best_neurons
+```
+
+where `eval_h1` is computed analytically on the dense evaluation grid at the
+PDPA-selected best iteration for each gamma.
+
+For this Experiment 3 task, the primary result is discontinuity behavior:
+
+```text
+near_grad = relative gradient error on points near h(x1, x2)=0
+```
+
+Use `rank_discontinuity.py` to reselect the best gamma per seed by smallest
+`near_grad`. Use `near_score = near_grad * neurons` only as a sparsity-aware
+secondary metric.
+
+## What You Do
+
+```text
+LOOP FOREVER:
+  0. Ensure the run directory exists:
+       mkdir -p autoresearch/ActivationSearch/data:analytical/runs
+
+  1. Read autoresearch/ActivationSearch/data:analytical/results.tsv. Pick an
+     activation that has not been run yet, or a promising activation that has
+     only partial seed coverage.
+
+     Start with:
+       tanh, matern52, softplus, gaussian,
+       relu, gelu_b0_25, softplus_b0_25, softplus_b0_15,
+       smoothy_relu_w0_25, mish_b0_25, mish_b0_15, celu, elu,
+       qr_0_1, sp2_b0_25
+
+     You may use any activation already registered in
+     scripts/run_activation_experiment.py, because the discontinuous runner
+     imports the same ACTIVATIONS registry. For this task, `gaussian` is
+     overridden to the Experiment 3 notebook definition `exp(-z^2/2)`.
+
+  2. For each seed in {42, 43, 44, 45, 46}:
+       uv run python scripts/run_discontinuous_activation_experiment.py \
+         --activation <name> --seed <seed> \
+         > autoresearch/ActivationSearch/data:analytical/runs/<name>_seed<seed>.json 2>&1
+
+     Each call prints one JSON line with per-gamma results, best gamma,
+     eval metrics, near/far gradient errors, and elapsed time.
+     If `uv` is unavailable, use `.venv/bin/python` with the same script and
+     arguments.
+
+  3. Aggregate:
+       uv run python autoresearch/ActivationSearch/data:analytical/scripts/aggregate.py \
+         --activation <name> \
+         --description "<short note>"
+
+  4. Append one row to:
+       autoresearch/ActivationSearch/data:analytical/results.tsv
+
+     Columns:
+       commit, activation, power, loss, seeds, mean_score, std_score,
+       mean_eval_h1, mean_eval_grad, mean_neurons, mean_near_grad,
+       mean_far_grad, near_far_ratio, best_gamma_mode, status, description
+
+  5. Continue with the next activation.
+```
+
+## Constraints
+
+- Do not modify `src/` for this study.
+- Keep the algorithm settings above fixed.
+- Use `use_sphere=True` only where the shared activation registry already marks
+  it as true.
+- If a run crashes, inspect the run file. Fix runner-level issues if needed;
+  otherwise aggregate the valid seeds as `partial` and move on.
+
+## Plotting
+
+After several rows exist:
+
+```bash
+uv run python autoresearch/ActivationSearch/data:analytical/scripts/plot_pareto.py
+uv run python autoresearch/ActivationSearch/data:analytical/scripts/rank_discontinuity.py
+uv run python autoresearch/ActivationSearch/data:analytical/scripts/plot_near.py
+```
+
+This writes `autoresearch/ActivationSearch/data:analytical/pareto.png`,
+`results_near.tsv`, and `near_pareto.png`. For this dataset, read
+`near_pareto.png` first.

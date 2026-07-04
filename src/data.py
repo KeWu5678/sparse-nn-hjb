@@ -23,7 +23,6 @@ import torch
 
 from .paths import DATA_DIR
 
-
 ValueSamples = dict[str, np.ndarray]
 TensorSamples = tuple[torch.Tensor, torch.Tensor, torch.Tensor]
 

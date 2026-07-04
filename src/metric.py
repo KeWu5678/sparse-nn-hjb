@@ -6,10 +6,12 @@ helper (``_load_results``) that the plotting module imports.
 """
 
 from __future__ import annotations
-from typing import Any, Callable, Mapping, Sequence
-from pathlib import Path
+
 import os
 import pickle
+from pathlib import Path
+from typing import Any, Callable, Mapping, Sequence
+
 import numpy as np
 
 

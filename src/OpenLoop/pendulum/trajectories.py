@@ -36,7 +36,7 @@ def backward_pmp_rhs(
     """PMP characteristic ODE integrated away from the local LQR region."""
     state = z[0:2]
     costate = z[2:4]
-    control = float(problem.minimizing_control(costate))
+    control = float(problem.feedback_from_gradient(costate))
     state_rhs = problem.dynamics(state, control)
     costate_rhs = problem.costate_rhs(state, costate)
     value_rhs = float(problem.running_cost(state, control))
@@ -97,7 +97,7 @@ def integrate_pmp_trajectory(
 
     states = solution.y[0:2, :].T
     costates = solution.y[2:4, :].T
-    controls = problem.minimizing_control(costates)
+    controls = problem.feedback_from_gradient(costates)
     values = solution.y[4, :].copy()
     return PmpTrajectory(
         boundary_angle=float(angle),

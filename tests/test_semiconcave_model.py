@@ -1,14 +1,12 @@
 """Tests for the semiconcave model and its SSN optimiser."""
 
-import numpy as np
 import torch
-
 from torch.nn.utils import parameters_to_vector
 
-from src.SSN import SSN
-from src.PDAP.ssn_solve import ssn_solve, Objective, SolverConfig
 from src.eval import relative_errors
 from src.models.semiconcave import SemiconcaveModel
+from src.PDAP.ssn_solve import Objective, SolverConfig, ssn_solve
+from src.SSN import SSN
 
 
 def _theta(m):
