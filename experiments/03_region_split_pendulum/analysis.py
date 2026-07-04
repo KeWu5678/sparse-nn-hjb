@@ -719,15 +719,34 @@ def fig_error_vs_distance_split(models: dict[str, dict[str, Any]], nets: dict[st
 
 
 OVERSAMPLE_DIR = REPO_ROOT / "rawdata" / "logs" / "multirun" / "region_split_twosided_oversampling"
-# Two-sided oversampling variants (signed gaussian γ=1, α capacity ladder per
-# variant; datasets from scripts/investigation/make_twosided_oversampling_sets.py),
-# in band-share order with the added-budget variant last.
+# Two-sided oversampling variants (α capacity ladder per variant and family;
+# datasets from scripts/investigation/make_twosided_oversampling_sets.py), in
+# band-share order with the added-budget variant last. Each variant has a
+# gaussian (γ=1) and a ReLU² (γ=0) run dir.
 _OVERSAMPLE_VARIANTS = {
-    "6k 23% (base)": sorted((OVERSAMPLE_DIR / "base6k").glob("[0-9]*")),
-    "6k 40% band": sorted((OVERSAMPLE_DIR / "band40").glob("[0-9]*")),
-    "6k 60% band": sorted((OVERSAMPLE_DIR / "band60").glob("[0-9]*")),
-    "6k+2k band add": sorted((OVERSAMPLE_DIR / "add2k").glob("[0-9]*")),
+    "6k 23% (base)": ("base6k",),
+    "6k 40% band": ("band40",),
+    "6k 60% band": ("band60",),
+    "6k+2k band add": ("add2k",),
 }
+_OVERSAMPLE_FAMILIES = ("gaussian", "relu^2")
+
+
+def _oversample_run_dirs(stem: str) -> list[Path]:
+    return sorted((OVERSAMPLE_DIR / stem).glob("[0-9]*")) + sorted(
+        (OVERSAMPLE_DIR / f"{stem}_relu2").glob("[0-9]*")
+    )
+
+
+def _oversample_family(model: dict[str, Any]) -> str | None:
+    """Which §3 family a run record belongs to, or None if out of scope."""
+    if model["kind"] != "signed":
+        return None
+    if model["activation"] == "gaussian" and model["gamma"] == 1.0:
+        return "gaussian"
+    if model["activation"] == "relu" and float(model["power"]) == 2.0:
+        return "relu^2"
+    return None
 
 
 def _common_pool_scores(pool, band_pool, curve) -> list[dict[str, Any]] | None:
@@ -765,14 +784,15 @@ def _common_pool_scores(pool, band_pool, curve) -> list[dict[str, Any]] | None:
 
     norms: dict[str, ValueSampleNormalizer] = {}
     scored = []
-    for variant, run_dirs in _OVERSAMPLE_VARIANTS.items():
-        for run_dir in run_dirs:
+    for variant, (stem,) in _OVERSAMPLE_VARIANTS.items():
+        for run_dir in _oversample_run_dirs(stem):
             recs = sorted(Path(run_dir).glob("*.json"))
             if not recs:
                 continue
             record = json.loads(recs[0].read_text(encoding="utf-8"))
             model = record["config"]["model"]
-            if (model["kind"], model["activation"], model["gamma"]) != ("signed", "gaussian", 1.0):
+            family = _oversample_family(model)
+            if family is None:
                 continue
             data_path = record["config"]["data"]["path"]
             if data_path not in norms:
@@ -795,7 +815,7 @@ def _common_pool_scores(pool, band_pool, curve) -> list[dict[str, Any]] | None:
                 vp = val.detach().numpy().reshape(-1) * norm.v_scale
                 gp = grad.detach().numpy() * (norm.v_scale / norm.x_scale)
                 err_sq[lo:hi] = (vp - V[lo:hi]) ** 2 + np.sum((gp - DV[lo:hi]) ** 2, axis=1)
-            entry = {"variant": variant,
+            entry = {"variant": variant, "family": family,
                      "neurons": int(record["metrics"][0]["values"]["best_neurons"])}
             # Per-region relative H1 error (well posed in the switching tube, |V| large):
             # sqrt(sum(dV^2 + |d grad V|^2)) / sqrt(sum(V^2 + |grad V|^2)).
@@ -816,25 +836,28 @@ def fig_oversampling_control(scored: list[dict[str, Any]]) -> str:
 
     _apply_publication_style()
     variants = list(_OVERSAMPLE_VARIANTS)
-    series = {"switching": PALETTE["red_strong"], "rest": PALETTE["blue_main"]}
+    band_color = {"switching": PALETTE["red_strong"], "rest": PALETTE["blue_main"]}
+    family_style = {"gaussian": ("-", "o"), "relu^2": ("--", "^")}
     fig, ax = plt.subplots(figsize=(8.5, 5.2))
-    for band, color in series.items():
-        best = []
-        for i, variant in enumerate(variants):
-            vals = [r[band] for r in scored if r["variant"] == variant]
-            if not vals:
-                best.append(np.nan)
-                continue
-            ax.scatter([i] * len(vals), vals, s=22, color=color, alpha=0.35, lw=0,
-                       zorder=2)
-            best.append(min(vals))
-        ax.plot(range(len(variants)), best, "-o", color=color, lw=2.0, ms=7,
-                label=band, zorder=3)
+    for family, (ls, marker) in family_style.items():
+        for band, color in band_color.items():
+            best = []
+            for i, variant in enumerate(variants):
+                vals = [r[band] for r in scored
+                        if r["variant"] == variant and r["family"] == family]
+                if not vals:
+                    best.append(np.nan)
+                    continue
+                ax.scatter([i] * len(vals), vals, s=22, color=color, alpha=0.3,
+                           lw=0, zorder=2)
+                best.append(min(vals))
+            ax.plot(range(len(variants)), best, ls=ls, marker=marker, color=color,
+                    lw=2.0, ms=7, label=f"{_DISPLAY[family]} {band}", zorder=3)
     ax.set_yscale("log")
     ax.set_xticks(range(len(variants)))
     ax.set_xticklabels(variants, fontsize=10)
     ax.set_ylabel(r"common-set relative $H^1$ error")
-    ax.legend(loc="upper left", fontsize=10)
+    ax.legend(loc="center left", fontsize=10)
     return _save_png(fig, "oversampling_control")
 
 
@@ -1144,21 +1167,24 @@ def main() -> int:
     if scored:
         f8 = fig_oversampling_control(scored)
         best_rows = []
-        for variant in _OVERSAMPLE_VARIANTS:
-            runs = [r for r in scored if r["variant"] == variant]
-            if not runs:
-                continue
-            bn = min(runs, key=lambda r: r["switching"])
-            best_rows.append({
-                "variant": variant, "runs": len(runs),
-                "switching": f"{min(r['switching'] for r in runs):.3f}",
-                "rest": f"{min(r['rest'] for r in runs):.3f}",
-                "neurons": f"{bn['neurons']}",
-            })
+        for family in _OVERSAMPLE_FAMILIES:
+            for variant in _OVERSAMPLE_VARIANTS:
+                runs = [r for r in scored
+                        if r["variant"] == variant and r["family"] == family]
+                if not runs:
+                    continue
+                bn = min(runs, key=lambda r: r["switching"])
+                best_rows.append({
+                    "family": _DISPLAY[family].replace("$", ""),
+                    "variant": variant, "runs": len(runs),
+                    "switching": f"{min(r['switching'] for r in runs):.3f}",
+                    "rest": f"{min(r['rest'] for r in runs):.3f}",
+                    "neurons": f"{bn['neurons']}",
+                })
         f8_table = format_table(
-            best_rows, ["variant", "runs", "switching", "rest", "neurons"],
-            title=("Best common-set relative H1 error per variant (min over the "
-                   "variant's α ladder; neurons = size of the switching-best run)"),
+            best_rows, ["family", "variant", "runs", "switching", "rest", "neurons"],
+            title=("Best common-set relative H1 error per variant and family "
+                   "(min over the α ladder; neurons = size of the switching-best run)"),
         )
         f8_block = (
             "The band is expensive by construction: at the production share it is "
@@ -1175,8 +1201,10 @@ def main() -> int:
             "(`scripts/investigation/make_twosided_oversampling_sets.py`), "
             "varying only the band share: 6k at the production ~23% share "
             "(base), 6k reallocated to a 40% and a 60% band, and base + 2,000 "
-            "*added* band samples (8k total, 42% band). Signed gaussian (γ=1), "
-            "α ∈ {1e-3, 1e-4, 1e-5} per variant. Every fitted model is re-scored "
+            "*added* band samples (8k total, 42% band). Two atom families, one "
+            "α capacity ladder each per variant: signed gaussian (γ=1, "
+            "α ∈ {1e-3…1e-5}) and signed ReLU² (γ=0, α ∈ {1e-4…1e-6}). Every "
+            "fitted model is re-scored "
             "on ONE common two-sided evaluation set — the full certified pool "
             "(restricted in-basin points + the envelope-certified band, ~966k "
             "points), one switching tube (d ≤ 0.3 to the ±2π-tiled ridge), one "
@@ -1184,16 +1212,19 @@ def main() -> int:
             "its own band and denominator. Faint dots = the α ladder, lines = "
             "the best run per variant.\n\n"
             f"{f8_table}\n\n"
-            "The switching-tube error is **essentially flat across all four "
-            "variants** (0.57–0.60, within ±3% of base): neither doubling nor "
-            "tripling the band share, nor adding 2,000 extra band samples on "
-            "top of the budget, moves the switching fit materially. What does "
-            "move is the rest region — a moderate reallocation (40%) is mildly "
-            "best on both regions, while over-allocating (60%) starves the "
-            "interior. The one-sided era's conclusion therefore carries over: "
-            "the switching band's difficulty is a **representation limit of "
-            "the atom class** (§4.4), not a sampling deficit — more band "
-            "samples cannot teach a gaussian a kink. Per-sample objective "
+            "**Band oversampling does not buy the switching fit for either "
+            "atom family.** gaussian is essentially flat across all variants "
+            "(switching 0.57–0.60): more band samples cannot teach a smooth "
+            "atom a kink. ReLU² — uniformly 2–4× better on both regions — "
+            "*degrades monotonically* as the band share grows (switching "
+            "0.250 → 0.289 → 0.343, rest 0.156 → 0.218): the band already "
+            "dominates the unweighted objective at the production share, and "
+            "reallocating samples away from the interior starves the smooth "
+            "structure its ridges anchor to. Adding 2,000 band samples on top "
+            "of the budget beats reallocation but not the base. So the "
+            "production ~23% share is at or near optimal for both families, "
+            "and the switching-band error is a **representation limit of the "
+            "atom class** (§4.4), not a sampling deficit; per-sample objective "
             "weighting remains the untried lever.\n\n"
         )
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
