@@ -1986,7 +1986,7 @@ $\nabla V$ is discontinuous.}
 
 
 
-\subsubsection{Limitation of Fitting the General Value Function}
+\subsubsection{The Representation Limit at the Switching Set}
 As in the last example we fit the training data with the models we selected.
 Figure~\ref{fig:rs_surfaces} shows the
 four fitted surfaces on the same physical window and value range as the true
@@ -2047,7 +2047,7 @@ one-sided steepness the global $H^{1}$ fit will spend neurons on.
 $\mathrm{ReLU}^{2}$ comes closest: it is the only model that develops a visible
 kink at $s\approx 0$ --- its piecewise-quadratic atoms can break the derivative
 across a line --- while the smooth activations necessarily interpolate a gentle
-slope through the discontinuity. The near-band error is thus a genuine
+slope through the discontinuity. The switching-band error is thus a genuine
 representation cost at a \emph{seen} discontinuity, no longer a boundary-layer
 artifact of one-sided sampling.
 
