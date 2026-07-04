@@ -62,23 +62,24 @@ The profile inverted relative to the one-sided data. The switching set itself (d
 
 ## 3. The price of two-sided coverage
 
-### 3.1 Legacy control: in-basin oversampling (one-sided era), and what it shows now
+The band is expensive by construction: at the production share it is 23% of the sample count but carries ~75% of the squared value mass and ~57% of the squared gradient mass of the normalized H1 objective (mean |V| ≈ 24.5 in the band vs 3.8 in the body), so the unweighted least-squares fit is dominated by the hardest, kink-carrying region and interior accuracy is traded away (§2.1). The control below asks the follow-up directly: **does spending more samples on the switching band buy the switching fit anything?**
+
+### 3.1 Oversampling the switching band
 
 ![oversampling control](figures/oversampling_control.png)
 
-The oversampling variants (6k, 10–40% near share) are **one-sided-era models**: signed gaussian (γ=1) fits on in-basin-only datasets, kept for provenance and NOT retrained on the two-sided data. All runs are re-scored on one common evaluation set — the full restricted (in-basin) raw pool, one band, one denominator. The baseline row is the current two-sided-trained gaussian, so the table now mixes training eras: baseline vs variants is a *training-data* comparison, not a budget comparison.
+Four two-sided training sets built from the same certified pools (`scripts/investigation/make_twosided_oversampling_sets.py`), varying only the band share: 6k at the production ~23% share (base), 6k reallocated to a 40% and a 60% band, and base + 2,000 *added* band samples (8k total, 42% band). Signed gaussian (γ=1), α ∈ {1e-3, 1e-4, 1e-5} per variant. Every fitted model is re-scored on ONE common two-sided evaluation set — the full certified pool (restricted in-basin points + the envelope-certified band, ~966k points), one switching tube (d ≤ 0.3 to the ±2π-tiled ridge), one denominator pair — since each variant's own recorded metrics use its own band and denominator. Faint dots = the α ladder, lines = the best run per variant.
 
-Best common-set relative H1 error per variant (min over that variant's runs; neurons = size of the switching-best run)
+Best common-set relative H1 error per variant (min over the variant's α ladder; neurons = size of the switching-best run)
 
-| variant           | runs | switching | rest  | neurons |
-| ----------------- | ---- | --------- | ----- | ------- |
-| 3k 10% (baseline) | 1    | 0.613     | 0.550 | 113     |
-| 6k 10% prop       | 6    | 0.040     | 0.074 | 238     |
-| 6k 10% strat      | 6    | 0.048     | 0.077 | 355     |
-| 6k 20% strat      | 6    | 0.133     | 0.286 | 429     |
-| 6k 40% strat      | 1    | 0.173     | 0.548 | 110     |
+| variant        | runs | switching | rest  | neurons |
+| -------------- | ---- | --------- | ----- | ------- |
+| 6k 23% (base)  | 3    | 0.581     | 0.588 | 111     |
+| 6k 40% band    | 3    | 0.570     | 0.527 | 114     |
+| 6k 60% band    | 3    | 0.598     | 0.662 | 125     |
+| 6k+2k band add | 3    | 0.595     | 0.565 | 118     |
 
-Two readings survive this caveat. (1) The one-sided-era conclusion — reallocating a fixed in-basin budget toward the switching band does not help; only more samples at the natural distribution do — still stands *within* the variant rows (10% prop beats 20%/40% strat everywhere). (2) The baseline row quantifies the **interior price of two-sided training**: scored on the in-basin pool alone, the two-sided gaussian (0.61) is far worse than a one-sided 6k model (0.04). The 900-sample band is 23% of the sample count but carries ~75% of the squared value mass and ~57% of the squared gradient mass of the normalized H1 objective (mean |V| ≈ 24.5 in the band vs 3.8 in the body), so the unweighted least-squares fit is dominated by the hardest, kink-carrying region and smooth atoms sacrifice the interior. Rebalancing the objective (per-sample weighting) or the band share is an open design choice, not attempted here.
+The switching-tube error is **essentially flat across all four variants** (0.57–0.60, within ±3% of base): neither doubling nor tripling the band share, nor adding 2,000 extra band samples on top of the budget, moves the switching fit materially. What does move is the rest region — a moderate reallocation (40%) is mildly best on both regions, while over-allocating (60%) starves the interior. The one-sided era's conclusion therefore carries over: the switching band's difficulty is a **representation limit of the atom class** (§4.4), not a sampling deficit — more band samples cannot teach a gaussian a kink. Per-sample objective weighting remains the untried lever.
 
 ## 4. Which atoms fit the switching-set target best
 
@@ -120,7 +121,7 @@ At s = 0 the true n·∇V jumps by ≈ 80–100 units. The jump being in-sample 
 
 ![atom portrait](figures/atom_portrait.png)
 
-Each atom's active line {a·x + b = 0} in the physical (θ, θ̇) plane (line strength ∝ |outer weight|), for relu² (left) and gaussian (right), with the switching curve in black. ReLU² concentrates its strongest lines parallel to the diagonal switching arms — piecewise low-degree ridges whose derivative breaks exactly where the target's does — while gaussian's strength is spread over near-isotropic bumps that can tile the wells but not seat a gradient break. This is the mechanism behind §4.1–§4.2 and the transect kink in §4.4.
+Each atom's active line {a·x + b = 0} in the physical (θ, θ̇) plane (line strength ∝ |outer weight|), for the §2 representatives relu² (left: 114 neurons, switching/rest L1 1.01/0.12) and gaussian (right: 113 neurons, switching/rest L1 1.81/0.44), with the switching curve in black. ReLU² concentrates its strongest lines parallel to the diagonal switching arms — piecewise low-degree ridges whose derivative breaks exactly where the target's does — while gaussian's strength is spread over near-isotropic bumps that can tile the wells but not seat a gradient break. This is the mechanism behind §4.1–§4.2 and the transect kink in §4.4.
 
 ## 5. Can a reliable feedback law be synthesized?
 
@@ -155,14 +156,14 @@ Closed-loop cost / stabilization from the two straddling starts (A = (0.71, 0.68
 
 - **The switching set is now an interior kink of the training data** (§1.1): the envelope-certified pad+collar band puts the gradient jump in-sample wherever both branches carry data. The switching-band error (3.0–8.4× the rest error, §2) is a genuine representation cost at a seen discontinuity — the one-sided era's 'sampling artifact' diagnosis no longer applies.
 - **No atom class represents the jump; the rectified atoms come closest** (§4.4, §4.5): they alone develop a kink on the transect and align their strongest ridges with the arms, and ReLU² is the best model on *both* sides of the split (§2, §4.2). Smooth activations necessarily interpolate through the discontinuity.
-- **Two-sided coverage has an interior price** (§2.1, §3): the band is 23% of the samples but dominates the unweighted H1 objective (~75% of the squared value mass), so interior accuracy degrades several-fold relative to one-sided training — most for stiff ReLU⁵, least for ReLU². Objective weighting / band-share tuning is the open follow-up.
+- **Two-sided coverage has an interior price, and band oversampling does not pay it down** (§2.1, §3): the band is 23% of the samples but dominates the unweighted H1 objective (~75% of the squared value mass), so interior accuracy degrades several-fold relative to one-sided training — most for stiff ReLU⁵, least for ReLU². Varying the band share (23–60%) or adding band samples leaves the switching fit flat (§3.1); per-sample objective weighting is the open follow-up.
 - **Cross-switching feedback synthesis now works — for the atom that fits** (§5): ReLU² makes the correct branch decision from both sides of the curve (matching the true cost from B), which no model achieved on one-sided data; leaky ReLU gets the braking side only. The smooth models fail globally; the bottleneck moved from data coverage to fit quality.
 
-## Appendix: relative H1
+## Appendix: the same comparison under region-local relative H1
 
-On the one-sided data this region-local relative metric *flipped* the conclusion (switch/rest < 1 for 14 of 15 rows) because the switching band held only small-|V| samples at the data edge. On the two-sided data the band contributes large-|V| pad/collar samples to the switching-band denominator, muting the V→0 confound: switch/rest is now ≥ 0.99 for every row and the ranking agrees with the primary L1 table of §2. Kept for continuity and as a record of the metric's data-dependence; the count-fair absolute mean-L1 of §2 remains the primary metric.
+The table repeats the §2 comparison (same rows, same best-per-cell runs) under the *historical* metric of this study: relative H1 computed **per region with that region's own denominator**, ‖pred−true‖_H1 / ‖true‖_H1 restricted to the switching band and to the rest separately. It exists because the metric choice used to change the story: on the one-sided data the rest region's denominator was dominated by the V→0 upright interior, which inflated the rest relative error and made every model look *better* at the switching set (switch/rest < 1 for 14 of 15 rows) — the opposite of the absolute-L1 table. On the two-sided data the band contributes large-|V| pad/collar samples to the switching-band denominator, so the confound is gone: switch/rest ≥ 0.99 for every row and the ranking agrees with §2. The table is kept to document that the conclusion is now metric-robust; the count-fair absolute mean-L1 of §2 remains the primary metric (see `README.md` for the rationale).
 
-Relative H1 (kept for continuity — confounded by the V→0 interior)
+Region-local relative H1 (historical metric — agrees with §2 on the two-sided data)
 
 | kind        | insertion   | activation   | loss | gamma | neurons | switching H1 | rest H1  | switch/rest |
 | ----------- | ----------- | ------------ | ---- | ----- | ------- | ------------ | -------- | ----------- |

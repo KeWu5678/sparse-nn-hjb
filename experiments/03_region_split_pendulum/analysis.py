@@ -250,7 +250,6 @@ _DISPLAY = {"relu^2": r"ReLU$^2$", "relu^5": r"ReLU$^5$",
             "gaussian": "gaussian", "softplus": "softplus",
             "leaky_relu": "leaky ReLU"}
 _SURFACE_MODEL_ORDER = ("gaussian", "softplus", "leaky_relu", "relu^2", "relu^5")
-NEARSWITCH_DIR = REPO_ROOT / "rawdata" / "logs" / "multirun" / "region_split_pendulum_nearswitch"
 FIG_DIR = OUTPUT_DIR / "figures"
 
 
@@ -311,18 +310,21 @@ def _value_grad_phys(net, x_phys: np.ndarray, norm) -> tuple[np.ndarray, np.ndar
 
 
 def _load_geometry(best: list[dict[str, Any]]):
-    """Dataset, normalizer, switching curve, restricted pool, and tiled raw truth.
+    """Dataset, normalizer, curve, in-basin pool, tiled raw truth, band pool.
 
-    ``pool`` is the branch-restricted in-basin point set (the models' training
-    domain — it stops AT the switching curve). The global value function beyond
-    the curve is the **lower envelope of the raw (unrestricted) trajectories,
-    tiled by 2πk in θ** (the 3k curated dataset covers neither side densely):
-    ``rawt`` holds the tiled raw points for envelope queries.
+    ``pool`` is the branch-restricted in-basin point set (it stops AT the
+    switching curve); ``band_pool`` is the envelope-certified two-sided band
+    (pad + collar) around the arms — together they are the full certified
+    two-sided evaluation pool. The global value function beyond the certified
+    region is the **lower envelope of the raw (unrestricted) trajectories,
+    tiled by 2πk in θ**: ``rawt`` holds the tiled raw points for envelope
+    queries.
     """
     import pickle
 
     from src.data import ValueSampleNormalizer, load_value_samples
     from src.OpenLoop.pendulum.nonsmooth import NonsmoothCurve, restrict_trajectory_to_curve
+    from src.OpenLoop.pendulum.solver import PendulumPmpSolver, PendulumPmpSolverConfig
 
     data_rel = next(r["data_path"] for r in best)
     samples = load_value_samples(data_rel)
@@ -332,12 +334,21 @@ def _load_geometry(best: list[dict[str, Any]]):
     raw_pkl = sorted(data_abs.parent.glob("*raw_trajectories*.pkl"))[0]
     with open(raw_pkl, "rb") as f:
         raw = pickle.load(f)
+    restricted = []
     xs, vs, dvs = [], [], []
     for tr in raw:
         cut, _ = restrict_trajectory_to_curve(tr, curve)
+        restricted.append(cut)
         if cut.state.size:
             xs.append(cut.state); vs.append(cut.value); dvs.append(cut.costate)
     pool = {"x": np.vstack(xs), "v": np.concatenate(vs), "dv": np.vstack(dvs)}
+    solver = PendulumPmpSolver(config=PendulumPmpSolverConfig(num_trajectories=len(raw)))
+    pad, collar = solver.build_collar_samples(tuple(raw), tuple(restricted), curve)
+    band_pool = {
+        "x": np.vstack([pad.x, collar.x]),
+        "v": np.concatenate([pad.v, collar.v]),
+        "dv": np.vstack([pad.dv, collar.dv]),
+    }
     x_raw = np.vstack([tr.state for tr in raw])
     v_raw = np.concatenate([tr.value for tr in raw])
     dv_raw = np.vstack([tr.costate for tr in raw])
@@ -348,7 +359,7 @@ def _load_geometry(best: list[dict[str, Any]]):
         "dv": np.vstack([dv_raw] * len(shifts)),
         "tile": np.concatenate([np.full(x_raw.shape[0], k, dtype=int) for k in shifts]),
     }
-    return samples, norm, curve, pool, rawt
+    return samples, norm, curve, pool, rawt, band_pool
 
 
 def _transect_frame(curve_pts: np.ndarray, pool_x: np.ndarray):
@@ -707,29 +718,29 @@ def fig_error_vs_distance_split(models: dict[str, dict[str, Any]], nets: dict[st
     return out
 
 
-CAPACITY_DIR = REPO_ROOT / "rawdata" / "logs" / "multirun" / "region_split_nearswitch_capacity"
-# Dataset variants of the fixed-budget oversampling control, in near-share order.
+OVERSAMPLE_DIR = REPO_ROOT / "rawdata" / "logs" / "multirun" / "region_split_twosided_oversampling"
+# Two-sided oversampling variants (signed gaussian γ=1, α capacity ladder per
+# variant; datasets from scripts/investigation/make_twosided_oversampling_sets.py),
+# in band-share order with the added-budget variant last.
 _OVERSAMPLE_VARIANTS = {
-    "3k 10% (baseline)": [MULTIRUN_DIR / "7"],
-    "6k 10% prop": sorted((CAPACITY_DIR / "near10").glob("[0-9]*")),
-    "6k 10% strat": sorted((CAPACITY_DIR / "near10_strat").glob("[0-9]*")),
-    "6k 20% strat": sorted((CAPACITY_DIR / "near20_strat").glob("[0-9]*")),
-    "6k 40% strat": [NEARSWITCH_DIR / "7"],
+    "6k 23% (base)": sorted((OVERSAMPLE_DIR / "base6k").glob("[0-9]*")),
+    "6k 40% band": sorted((OVERSAMPLE_DIR / "band40").glob("[0-9]*")),
+    "6k 60% band": sorted((OVERSAMPLE_DIR / "band60").glob("[0-9]*")),
+    "6k+2k band add": sorted((OVERSAMPLE_DIR / "add2k").glob("[0-9]*")),
 }
-_NEAR_THRESH = 0.571446   # the shared near-band threshold (10% of the baseline set)
 
 
-def _common_pool_scores(pool, curve) -> list[dict[str, Any]] | None:
-    """Score every oversampling-variant model (signed gaussian γ=1) on the pool.
+def _common_pool_scores(pool, band_pool, curve) -> list[dict[str, Any]] | None:
+    """Score every oversampling-variant model (signed gaussian γ=1) on one pool.
 
-    Each variant's recorded region metrics use its *own* near percentile and its
-    own global denominator, so they are not cross-comparable. Here every fitted
-    model is rebuilt (with its own training normalizer) and scored on ONE common
-    set — the full restricted pool — with one near band (d ≤ 0.5714) and one
-    denominator pair. The reported number is the per-sample mean of
-    (|ΔV|/mean|V| + ‖Δ∇V‖/mean‖∇V‖)/2.
+    Each variant's recorded region metrics use its *own* band and its own
+    global denominator, so they are not cross-comparable. Here every fitted
+    model is rebuilt (with its own training normalizer) and scored on ONE
+    common two-sided set — the full certified pool (restricted in-basin points
+    plus the envelope-certified pad/collar band) — with one switching tube
+    (distance to the ±2π-tiled ridge ≤ 0.3) and one denominator pair.
     """
-    if not CAPACITY_DIR.exists():
+    if not OVERSAMPLE_DIR.exists():
         return None
     import pickle
 
@@ -741,8 +752,13 @@ def _common_pool_scores(pool, curve) -> list[dict[str, Any]] | None:
     from src.models.net import ShallowNetwork
     from src.plots import _best_iteration_atoms
 
-    X, V, DV = pool["x"], pool["v"], pool["dv"]
-    d = cKDTree(curve.points).query(X)[0]
+    X = np.vstack([pool["x"], band_pool["x"]])
+    V = np.concatenate([pool["v"], band_pool["v"]])
+    DV = np.vstack([pool["dv"], band_pool["dv"]])
+    ridge_tiled = np.vstack(
+        [curve.points + np.array([2.0 * np.pi * k, 0.0]) for k in (-1, 0, 1)]
+    )
+    d = cKDTree(ridge_tiled).query(X)[0]
     bands = {"switching": d <= _SWITCHING_TUBE, "rest": d > _SWITCHING_TUBE}
     h1_true_sq = np.asarray(V, dtype=np.float64).reshape(-1) ** 2 + np.sum(
         np.asarray(DV, dtype=np.float64) ** 2, axis=1)
@@ -1088,7 +1104,8 @@ def main() -> int:
                  "rel_near/far": "switch/rest"},
         formats={"gamma": "{:g}", "near_h1": "{:.2e}", "far_h1": "{:.2e}",
                  "rel_near/far": "{:.2f}"},
-        title="Relative H1 (kept for continuity — confounded by the V→0 interior)",
+        title=("Region-local relative H1 (historical metric — agrees with §2 "
+               "on the two-sided data)"),
     )
 
     binned = _bin_centers(cache)
@@ -1102,7 +1119,7 @@ def main() -> int:
     # -- model-comparison figures (F3–F7) --------------------------------------
     models = select_models(best)
     nets = {name: _build_net(row) for name, row in models.items()}
-    samples, norm, curve, pool, rawt = _load_geometry(best)
+    samples, norm, curve, pool, rawt, band_pool = _load_geometry(best)
     surface_figs = fig_learned_surfaces(best, norm)
     fig_frontier(best)
     distance_figs = (
@@ -1122,7 +1139,7 @@ def main() -> int:
                f"(A = ({starts['A'][0]:.2f}, {starts['A'][1]:.2f}), "
                f"B = ({starts['B'][0]:.2f}, {starts['B'][1]:.2f}); T=10)"),
     )
-    scored = _common_pool_scores(pool, curve)
+    scored = _common_pool_scores(pool, band_pool, curve)
     f8_block = ""
     if scored:
         f8 = fig_oversampling_control(scored)
@@ -1140,37 +1157,44 @@ def main() -> int:
             })
         f8_table = format_table(
             best_rows, ["variant", "runs", "switching", "rest", "neurons"],
-            title=("Best common-set relative H1 error per variant (min over that "
-                   "variant's runs; neurons = size of the switching-best run)"),
+            title=("Best common-set relative H1 error per variant (min over the "
+                   "variant's α ladder; neurons = size of the switching-best run)"),
         )
         f8_block = (
-            "### 3.1 Legacy control: in-basin oversampling (one-sided era), and "
-            "what it shows now\n\n"
+            "The band is expensive by construction: at the production share it is "
+            "23% of the sample count but carries ~75% of the squared value mass "
+            "and ~57% of the squared gradient mass of the normalized H1 objective "
+            "(mean |V| ≈ 24.5 in the band vs 3.8 in the body), so the unweighted "
+            "least-squares fit is dominated by the hardest, kink-carrying region "
+            "and interior accuracy is traded away (§2.1). The control below asks "
+            "the follow-up directly: **does spending more samples on the "
+            "switching band buy the switching fit anything?**\n\n"
+            "### 3.1 Oversampling the switching band\n\n"
             f"![oversampling control]({f8})\n\n"
-            "The oversampling variants (6k, 10–40% near share) are **one-sided-era "
-            "models**: signed gaussian (γ=1) fits on in-basin-only datasets, kept "
-            "for provenance and NOT retrained on the two-sided data. All runs are "
-            "re-scored on one common evaluation set — the full restricted (in-basin) "
-            "raw pool, one band, one denominator. The baseline row is the current "
-            "two-sided-trained gaussian, so the table now mixes training eras: "
-            "baseline vs variants is a *training-data* comparison, not a budget "
-            "comparison.\n\n"
+            "Four two-sided training sets built from the same certified pools "
+            "(`scripts/investigation/make_twosided_oversampling_sets.py`), "
+            "varying only the band share: 6k at the production ~23% share "
+            "(base), 6k reallocated to a 40% and a 60% band, and base + 2,000 "
+            "*added* band samples (8k total, 42% band). Signed gaussian (γ=1), "
+            "α ∈ {1e-3, 1e-4, 1e-5} per variant. Every fitted model is re-scored "
+            "on ONE common two-sided evaluation set — the full certified pool "
+            "(restricted in-basin points + the envelope-certified band, ~966k "
+            "points), one switching tube (d ≤ 0.3 to the ±2π-tiled ridge), one "
+            "denominator pair — since each variant's own recorded metrics use "
+            "its own band and denominator. Faint dots = the α ladder, lines = "
+            "the best run per variant.\n\n"
             f"{f8_table}\n\n"
-            "Two readings survive this caveat. (1) The one-sided-era conclusion — "
-            "reallocating a fixed in-basin budget toward the switching band does "
-            "not help; only more samples at the natural distribution do — still "
-            "stands *within* the variant rows (10% prop beats 20%/40% strat "
-            "everywhere). "
-            "(2) The baseline row quantifies the **interior price of two-sided "
-            "training**: scored on the in-basin pool alone, the two-sided gaussian "
-            "(0.61) is far worse than a one-sided 6k model (0.04). The 900-sample "
-            "band is 23% of the sample count but carries ~75% of the squared value "
-            "mass and ~57% of the squared gradient mass of the normalized H1 "
-            "objective (mean |V| ≈ 24.5 in the band vs 3.8 in the body), so the "
-            "unweighted least-squares fit is dominated by the hardest, "
-            "kink-carrying region and smooth atoms sacrifice the interior. "
-            "Rebalancing the objective (per-sample weighting) or the band share is "
-            "an open design choice, not attempted here.\n\n"
+            "The switching-tube error is **essentially flat across all four "
+            "variants** (0.57–0.60, within ±3% of base): neither doubling nor "
+            "tripling the band share, nor adding 2,000 extra band samples on "
+            "top of the budget, moves the switching fit materially. What does "
+            "move is the rest region — a moderate reallocation (40%) is mildly "
+            "best on both regions, while over-allocating (60%) starves the "
+            "interior. The one-sided era's conclusion therefore carries over: "
+            "the switching band's difficulty is a **representation limit of "
+            "the atom class** (§4.4), not a sampling deficit — more band "
+            "samples cannot teach a gaussian a kink. Per-sample objective "
+            "weighting remains the untried lever.\n\n"
         )
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     out = OUTPUT_DIR / "results.md"
@@ -1347,8 +1371,12 @@ def main() -> int:
         "### 4.5 Mechanism: where the atoms sit\n\n"
         f"![atom portrait]({f7})\n\n"
         "Each atom's active line {a·x + b = 0} in the physical (θ, θ̇) plane (line "
-        "strength ∝ |outer weight|), for relu² (left) and gaussian (right), with "
-        "the switching curve in black. ReLU² concentrates its strongest lines "
+        "strength ∝ |outer weight|), for the §2 representatives "
+        f"relu² (left: {models['relu^2']['neurons']} neurons, "
+        f"switching/rest L1 {models['relu^2']['near_l1']:.2f}/{models['relu^2']['far_l1']:.2f}) "
+        f"and gaussian (right: {models['gaussian']['neurons']} neurons, "
+        f"switching/rest L1 {models['gaussian']['near_l1']:.2f}/{models['gaussian']['far_l1']:.2f}), "
+        "with the switching curve in black. ReLU² concentrates its strongest lines "
         "parallel to the diagonal switching arms — piecewise low-degree ridges "
         "whose derivative breaks exactly where the target's does — while "
         "gaussian's strength is spread over near-isotropic bumps that can tile "
@@ -1406,11 +1434,14 @@ def main() -> int:
         "align their strongest ridges with the arms, and ReLU² is the best "
         "model on *both* sides of the split (§2, §4.2). Smooth activations "
         "necessarily interpolate through the discontinuity.\n"
-        "- **Two-sided coverage has an interior price** (§2.1, §3): the band is "
-        "23% of the samples but dominates the unweighted H1 objective (~75% of "
-        "the squared value mass), so interior accuracy degrades several-fold "
-        "relative to one-sided training — most for stiff ReLU⁵, least for ReLU². "
-        "Objective weighting / band-share tuning is the open follow-up.\n"
+        "- **Two-sided coverage has an interior price, and band oversampling "
+        "does not pay it down** (§2.1, §3): the band is 23% of the samples but "
+        "dominates the unweighted H1 objective (~75% of the squared value "
+        "mass), so interior accuracy degrades several-fold relative to "
+        "one-sided training — most for stiff ReLU⁵, least for ReLU². Varying "
+        "the band share (23–60%) or adding band samples leaves the switching "
+        "fit flat (§3.1); per-sample objective weighting is the open "
+        "follow-up.\n"
         "- **Cross-switching feedback synthesis now works — for the atom that "
         "fits** (§5): ReLU² makes the correct branch decision from both sides "
         "of the curve (matching the true cost from B), which no model achieved "
@@ -1418,16 +1449,22 @@ def main() -> int:
         "models fail globally; the bottleneck moved from data coverage to fit "
         "quality.\n\n"
 
-        "## Appendix: relative H1\n\n"
-        "On the one-sided data this region-local relative metric *flipped* the "
-        "conclusion (switch/rest < 1 for 14 of 15 rows) because the switching "
-        "band held only small-|V| samples at the data edge. On the two-sided "
-        "data the band contributes large-|V| pad/collar samples to the "
-        "switching-band denominator, muting the V→0 confound: switch/rest is "
-        "now ≥ 0.99 for every row and the ranking agrees with the primary L1 "
-        "table of §2. Kept for continuity and as a record of the metric's "
-        "data-dependence; the count-fair absolute mean-L1 of §2 remains the "
-        "primary metric.\n\n"
+        "## Appendix: the same comparison under region-local relative H1\n\n"
+        "The table repeats the §2 comparison (same rows, same best-per-cell "
+        "runs) under the *historical* metric of this study: relative H1 "
+        "computed **per region with that region's own denominator**, "
+        "‖pred−true‖_H1 / ‖true‖_H1 restricted to the switching band and to "
+        "the rest separately. It exists because the metric choice used to "
+        "change the story: on the one-sided data the rest region's denominator "
+        "was dominated by the V→0 upright interior, which inflated the rest "
+        "relative error and made every model look *better* at the switching "
+        "set (switch/rest < 1 for 14 of 15 rows) — the opposite of the "
+        "absolute-L1 table. On the two-sided data the band contributes "
+        "large-|V| pad/collar samples to the switching-band denominator, so "
+        "the confound is gone: switch/rest ≥ 0.99 for every row and the "
+        "ranking agrees with §2. The table is kept to document that the "
+        "conclusion is now metric-robust; the count-fair absolute mean-L1 of "
+        "§2 remains the primary metric (see `README.md` for the rationale).\n\n"
         f"{rel_table}\n",
         encoding="utf-8",
     )
