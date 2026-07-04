@@ -1,0 +1,3 @@
+# Registered model: signed network with profile insertion (log penalty).
+kind: signed
+insertion: profile

@@ -1,4 +1,4 @@
-# region_split_pendulum
+# region_split — pendulum
 
 Profiles how well sparse PDAP models fit the pendulum value function in the
 **switching band** (around the nonsmooth swing-up switching set identified
@@ -32,18 +32,19 @@ switching set.
   (default 10) % of validation samples by distance to the switching set; the
   **rest** = all other samples. (The config/metric keys keep the legacy
   `near`/`far` names; all reporting uses switching/rest.)
-- **Sweep** (`make region_split_pendulum`): `model.kind ∈ {signed, semiconcave}` ×
-  `activation ∈ {tanh, softplus, matern52, gaussian, gelu_squared}` ×
-  `gamma ∈ {0, 1}`, profile insertion, H1 loss, α=1e-4, seed 42.
-- **ReLU^p rows** (`make penaltypowers DATA=pendulum`): the analysis additionally
-  folds in the H1 runs of the fractional-exponent-penalty sweep
-  (`../02_pendulum/frac_exp_penalty`) — signed, finite_step insertion,
-  `power ∈ {2, 2.01, 3, 4, 5}` (penalty exponent q = 2/(p+1)), gamma=0 by design,
-  `α ∈ {1e-2…1e-6}` selected per power by rest L1. Same dataset, same
-  `eval=region_split` hook, so the region metrics are directly comparable.
-- **leaky_relu rows**: the kink specialist joins from the activationsearch
-  sweep's H1 runs (`../02_pendulum/log_penalty`, `make activationsearch
-  DATA=pendulum`) — same dataset and eval hook.
+- **No sweep of its own** (`make region-split` regenerates the analysis): this
+  study reads the H1 runs of the two pendulum model-family sweeps, which record
+  the region metrics on every run (`data=pendulum` auto-selects the region
+  eval). The former dedicated region_split sweep was a strict subset of the
+  log_penalty grid and was retired.
+- **log_penalty rows** (`make sweep EXPERIMENT=pendulum/log_penalty`): signed,
+  profile insertion, `activation ∈ {leaky_relu, softplus, tanh, gaussian,
+  gausscent_1, matern52, gelu_squared}` × `α ∈ {1e-2…1e-5}` ×
+  `γ ∈ {0, 0.1, 1, 10}`; α and γ selected per activation by rest L1.
+- **frac_exp_penalty rows** (`make sweep EXPERIMENT=pendulum/frac_exp_penalty`):
+  signed, finite_step insertion, `power ∈ {2, 2.01, 3, 4, 5}` (penalty exponent
+  q = 2/(p+1)), gamma=0 by design, `α ∈ {1e-3…1e-6}` selected per power by
+  rest L1.
 - **Output**: `results.md` (tables + figures), via `analysis.py`.
 
 ## Choice of error metric

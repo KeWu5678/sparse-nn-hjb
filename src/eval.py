@@ -76,7 +76,7 @@ def region_split_errors(
     predictions: ``True`` = near the switching set, ``False`` = far.
 
     Two families of per-region numbers are returned (see
-    ``experiments/03_region_split_pendulum/README.md`` for the rationale):
+    ``experiments/02_pendulum/region_split/README.md`` for the rationale):
 
       * ``{near,far}_{l2,grad,h1}`` — region-local *relative* errors (each region
         normalized by its own ‖true‖). Kept for continuity, but confounded here:

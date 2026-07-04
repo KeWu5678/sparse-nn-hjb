@@ -33,29 +33,26 @@ def test_compose_defaults() -> None:
 def test_model_groups() -> None:
     with initialize(version_base=None, config_path="../conf"):
         sc = compose(config_name="config", overrides=["model=semiconcave"])
-        fs = compose(config_name="config", overrides=["model=finite_step"])
+        fs = compose(config_name="config", overrides=["model=frac_exp_penalty"])
     assert sc.model.kind == "semiconcave"
     assert sc.model.insertion == "profile"
-    # finite_step config group = signed + finite_step
+    # frac_exp_penalty config group = signed + finite_step
     assert fs.model.kind == "signed"
     assert fs.model.insertion == "finite_step"
 
 
 def test_curated_experiment_configs_compose() -> None:
     with initialize(version_base=None, config_path="../conf"):
-        activation = compose(config_name="config", overrides=["+experiment=activationsearch"])
-        region = compose(config_name="config", overrides=["+experiment=region_split_pendulum"])
-        penalty = compose(config_name="config", overrides=["+experiment=penaltypowers"])
+        log_pen = compose(config_name="config", overrides=["+experiment=pendulum/log_penalty"])
+        frac = compose(config_name="config", overrides=["+experiment=vdp/frac_exp_penalty"])
 
-    assert activation.name == "activationsearch"
-    assert activation.model.power == 1.0
+    assert log_pen.name == "pendulum_log_penalty"
+    assert log_pen.model.power == 1.0
+    assert log_pen.data.path.startswith("Pendulum")
 
-    assert region.name == "region_split_pendulum"
-    assert region.model.power == 1.0
-
-    assert penalty.name == "penaltypowers"
-    assert penalty.model.insertion == "finite_step"
-    assert penalty.model.power == 2.0
+    assert frac.name == "vdp_frac_exp_penalty"
+    assert frac.model.insertion == "finite_step"
+    assert frac.model.power == 2.0
 
 
 def test_config_builds_trainer_and_model() -> None:

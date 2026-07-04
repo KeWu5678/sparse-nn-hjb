@@ -23,7 +23,7 @@ theory program studies why semiconcavity-adapted atoms need fewer neurons.
 | `src/` | Library code: `models/` (signed/semiconcave nets), `PDAP/`, `SSN/`, data/eval/plots |
 | `scripts/` | Hydra training entrypoint (`train.py`), MLflow backfill, one-off diagnostics |
 | `conf/` | Hydra configs: data, model, eval, experiment sweeps |
-| `experiments/` | Curated studies with `README` (scope), `results.md` (findings), `analysis.py`, `figures/` — ordered `00_openloop` (data) → `01_vdp` (smooth) → `02_pendulum` (switching set) → `03_region_split_pendulum` |
+| `experiments/` | Curated studies with `README` (scope), `results.md` (findings), `analysis.py`, `figures/` — ordered `00_openloop` (data) → `01_vdp` (smooth) → `02_pendulum` (switching set, incl. `region_split`) |
 | `tests/` | pytest suite incl. golden-output equivalence tests for the PDAP solver |
 | `docs/` | ADRs, research program (`docs/research/`, claims registry), [MLflow guide](docs/mlflow.md) |
 | `papar/` | Working paper (LaTeX); `make paper-figures` syncs its figures from `experiments/` |
@@ -43,20 +43,20 @@ make help                    # list experiment targets
 Run a curated experiment sweep (Hydra multirun + analysis → `results.md`):
 
 ```bash
-make region_split_pendulum
-make penaltypowers DATA=pendulum
+make sweep EXPERIMENT=pendulum/log_penalty
+make sweep EXPERIMENT=pendulum/frac_exp_penalty
+make region-split            # analysis-only: reads the two pendulum sweeps
 ```
 
 Or a single Hydra-composed training run:
 
 ```bash
-uv run python scripts/train.py +experiment=activationsearch data=vdp
+uv run python scripts/train.py +experiment=vdp/log_penalty
 ```
 
-Each run writes a JSON Run Record under `rawdata/logs/multirun/`; with
-`MLFLOW_TRACKING_URI` set, records are also published to MLflow — see
-[docs/mlflow.md](docs/mlflow.md) for the EC2/Terraform tracking-server
-workflow and backfill.
+Each run writes a JSON Run Record under `rawdata/logs/multirun/`; publish those
+records to MLflow afterward with `make mlflow-backfill` — see
+[docs/mlflow.md](docs/mlflow.md) for the EC2/Terraform tracking-server workflow.
 
 ## Results & research program
 

@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
-"""Analyse the region_split_pendulum study.
+"""Analyse the pendulum region-split study.
 
-Reads per-run JSON records from ``rawdata/logs/multirun/region_split_pendulum/``
+Reads per-run JSON records from ``rawdata/logs/multirun/pendulum/log_penalty/``
 plus the ReLU^p (fractional-exponent penalty) H1 runs from
-``rawdata/logs/multirun/penaltypowers/pendulum/`` — same dataset, same
+``rawdata/logs/multirun/pendulum/frac_exp_penalty/`` — same dataset, same
 ``eval=region_split`` hook, so the region metrics are directly comparable.
 The region metrics are computed by the training hook on the live as-fit model over
 the **full dataset** (see ``scripts/train.py``); this just aggregates them into
 ``results.md`` (two tables + the error-vs-distance plot). `near` = lowest 10% of
 samples by distance to the switching set; `far` = the rest. See ``README.md`` for
-the error-metric rationale. Reproduce with ``make region_split_pendulum`` (and
-``make penaltypowers DATA=pendulum`` for the ReLU^p rows).
+the error-metric rationale. Reproduce with ``make region-split`` (after the
+two pendulum family sweeps have run).
 """
 
 from __future__ import annotations
@@ -23,20 +23,19 @@ from typing import Any
 
 import numpy as np
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from src.metric import format_table  # noqa: E402
 from src.paths import DATA_DIR  # noqa: E402
 
-EXPERIMENT = "region_split_pendulum"
-MULTIRUN_DIR = REPO_ROOT / "rawdata" / "logs" / "multirun" / EXPERIMENT
+EXPERIMENT = "region_split"
 # ReLU^p rows (fractional-exponent penalty q = 2/(p+1), gamma=0 by design) come
-# from the penaltypowers sweep on the same dataset; only its H1 runs join the
+# from the frac_exp_penalty sweep on the same dataset; only its H1 runs join the
 # comparison here (the region_split sweep is H1-only).
-RELU_MULTIRUN_DIR = REPO_ROOT / "rawdata" / "logs" / "multirun" / "penaltypowers" / "pendulum"
-ACT_MULTIRUN_DIR = REPO_ROOT / "rawdata" / "logs" / "multirun" / "activationsearch" / "pendulum"
+RELU_MULTIRUN_DIR = REPO_ROOT / "rawdata" / "logs" / "multirun" / "pendulum" / "frac_exp_penalty"
+ACT_MULTIRUN_DIR = REPO_ROOT / "rawdata" / "logs" / "multirun" / "pendulum" / "log_penalty"
 DATASET_STEM = "Pendulum_pmp_value_samples_2000"
 OUTPUT_DIR = Path(__file__).resolve().parent
 
@@ -62,18 +61,21 @@ def _record_row(record: dict[str, Any], *, source: str) -> dict[str, Any] | None
     if DATASET_STEM not in cfg["data"]["path"]:
         return None
     loss = _LOSS_LABEL.get(tuple(model["loss_weights"]), str(model["loss_weights"]))
+    # This study compares H1 (gradient-augmented) fits only; both source sweeps
+    # also contain L2 runs.
+    if loss != "h1":
+        return None
     if source == "relu":
-        # penaltypowers rows: ReLU^p atoms, only the H1 runs join this comparison.
-        if model["activation"] != "relu" or loss != "h1":
+        # frac_exp_penalty rows: ReLU^p atoms, one row label per power.
+        if model["activation"] != "relu":
             return None
         activation = f"relu^{model['power']:g}"
-    elif source == "act":
-        # activationsearch rows: only the kink specialist joins (H1, like the
-        # ReLU^p rows); the smooth activations are already in the region sweep.
-        if model["activation"] != "leaky_relu" or loss != "h1":
-            return None
-        activation = model["activation"]
     else:
+        # log_penalty rows: every activation of the sweep (incl. leaky_relu).
+        # Semiconcave runs surviving in old records are out of scope (the model
+        # family was dropped from the sweeps).
+        if model["kind"] != "signed":
+            return None
         activation = model["activation"]
     return {
         "act_name": model["activation"],
@@ -98,16 +100,22 @@ def _record_row(record: dict[str, Any], *, source: str) -> dict[str, Any] | None
 
 
 def load_rows() -> tuple[list[dict[str, Any]], str | None]:
-    records = sorted(MULTIRUN_DIR.glob("*/*.json"))
-    if not records:
-        raise FileNotFoundError(
-            f"no run records under {MULTIRUN_DIR} — run `make region_split_pendulum` first"
-        )
+    """Rows from the two pendulum model-family sweeps (no sweep of our own).
+
+    The former dedicated region_split sweep was a strict subset of the
+    pendulum/log_penalty grid (data=pendulum auto-selects the region eval, so
+    every pendulum run records the region metrics); this analysis reads the
+    family sweeps directly.
+    """
     relu_records = sorted(RELU_MULTIRUN_DIR.glob("*/*.json"))
     act_records = sorted(ACT_MULTIRUN_DIR.glob("*/*.json"))
+    if not act_records:
+        raise FileNotFoundError(
+            f"no run records under {ACT_MULTIRUN_DIR} — run "
+            "`make sweep EXPERIMENT=pendulum/log_penalty` first"
+        )
     rows, cache = [], None
-    sources = ([(p, "region") for p in records]
-               + [(p, "relu") for p in relu_records]
+    sources = ([(p, "relu") for p in relu_records]
                + [(p, "act") for p in act_records])
     for path, source in sources:
         row = _record_row(json.loads(path.read_text(encoding="utf-8")), source=source)
@@ -1240,20 +1248,18 @@ def main() -> int:
         "switching set: 3,900 = 3,000 in-basin body + a 900-sample "
         "envelope-certified band straddling the switching arms (300 near-side "
         "pad + 600 far-side collar, within 0.5 of the arms; see `README.md` for "
-        "the construction and the error-metric rationale). Two sweeps on the "
-        "same dataset and `eval=region_split` hook: smooth activations "
-        "(profile insertion, gamma selected per cell) and **ReLU^p atoms with the "
-        "fractional-exponent penalty** q = 2/(p+1) (finite_step insertion, gamma=0 "
-        "by design, alpha selected per cell) — see `../02_pendulum/"
-        "frac_exp_penalty` — plus the kink specialist `leaky_relu` from the "
-        "activationsearch sweep (`../02_pendulum/log_penalty`, H1 runs). The "
+        "the construction and the error-metric rationale). This study runs no "
+        "sweep of its own: it reads the H1 runs of the two pendulum model-family "
+        "sweeps — **log_penalty** (signed, profile insertion; `../log_penalty`) "
+        "and **frac_exp_penalty** (ReLU^p atoms, penalty exponent q = 2/(p+1), "
+        "finite_step insertion, gamma=0 by design; `../frac_exp_penalty`) — "
+        "with alpha and gamma selected per cell by rest L1. The "
         "region split uses the switching set identified during data generation: "
         "the **switching band** = the lowest 10% of samples by distance to the "
         "(±2π-tiled) switching set (d ≤ 0.25 on this dataset); the **rest** = "
         "all other samples. The model-level studies (§4–§5) use five "
         "representative signed H1 models — gaussian, softplus, leaky ReLU, "
-        "relu², relu⁵; semiconcave models are excluded there (they do not "
-        "round-trip through the fit artifact, #19).\n\n"
+        "relu², relu⁵.\n\n"
 
         "## 1. The target: a value function with a gradient discontinuity\n\n"
         "The pendulum value is continuous, but the gradient changes branch across "
@@ -1264,12 +1270,12 @@ def main() -> int:
         "nearest-point classification — are separated by the nonsmooth switching "
         "curves the region split is built on (open-loop data visualisations are "
         "centralised in [`experiments/00_openloop/pendulum`]"
-        "(../00_openloop/pendulum)):\n\n"
+        "(../../00_openloop/pendulum)):\n\n"
         "| value samples | value surface | switching set |\n"
         "| --- | --- | --- |\n"
-        "| ![value samples](../00_openloop/pendulum/figures/value_scatter.png) "
-        "| ![value surface](../00_openloop/pendulum/figures/value_surface.png) "
-        "| ![regions of attraction](../00_openloop/pendulum/figures/regions_of_attraction.png) |\n\n"
+        "| ![value samples](../../00_openloop/pendulum/figures/value_scatter.png) "
+        "| ![value surface](../../00_openloop/pendulum/figures/value_surface.png) "
+        "| ![regions of attraction](../../00_openloop/pendulum/figures/regions_of_attraction.png) |\n\n"
         "### 1.1 The kink, seen in the data\n\n"
         "Along a transect normal to the switching curve (through the densest data "
         "region), the two candidate PMP branches — one driving to the upright at "
@@ -1305,11 +1311,11 @@ def main() -> int:
         "the switching set. (On the two-sided data the relative-H1 appendix table "
         "agrees in direction; it no longer flips.)\n\n"
         f"{l1_table}\n\n"
-        "Every model — both kinds, every activation, every penalty — is **3.0–8.4× "
-        "worse in the switching band**, a wider spread than the 2.2–3.7× measured "
-        "on the earlier one-sided data. The composition changed too: switching L1 "
-        "is compressed across models (0.92–2.52, a ~2.7× spread) while rest L1 "
-        "spans ~7× (0.12–0.83), so the ratio mostly reflects how good a model is "
+        "Every model — every activation, every penalty — is **4.1–8.4× worse in "
+        "the switching band**, a wider spread than the 2.2–3.7× measured on the "
+        "earlier one-sided data. The composition matters: switching L1 is "
+        "compressed across models (0.92–1.94, a ~2× spread) while rest L1 spans "
+        "~3.7× (0.12–0.47), so the ratio mostly reflects how good a model is "
         "*away* from the curve — ReLU² has the largest ratio (8.4) precisely "
         "because its rest error is the smallest. With the jump in-sample, the "
         "switching band is genuinely hard for every atom class: a uniform "

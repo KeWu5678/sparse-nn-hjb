@@ -72,32 +72,30 @@ will not rewrite the running systemd service on that instance. Recreate the
 instance intentionally, or update `/etc/systemd/system/mlflow.service` on the box
 and restart `mlflow.service`.
 
-## Start, Connect, Stop
+## Backfill To EC2
 
-Start the EC2 instance:
+Run experiments normally first; local Run Records are the source of truth. Then
+publish the latest full sweep to the EC2 MLflow dashboard:
 
 ```bash
-make mlflow-start
+make mlflow-backfill EXPERIMENT=activationsearch DATA=pendulum
 ```
 
-Open the SSM tunnel in a dedicated terminal and leave it running:
+This starts the EC2 instance, opens an SSM tunnel, uploads local records, and
+stops the instance in a cleanup trap. The default source is the current
+`EXPERIMENT`/`DATA` sweep directory.
+
+Preview the upload without starting EC2:
 
 ```bash
-make mlflow-tunnel
+make mlflow-backfill EXPERIMENT=activationsearch DATA=pendulum MLFLOW_DRY_RUN=true
 ```
 
-Then set the tracking URI in the shell that runs experiments or backfills:
+Limit or broaden the source records:
 
 ```bash
-export MLFLOW_TRACKING_URI=http://127.0.0.1:5000
-```
-
-Open the same URL in a browser for the MLflow UI.
-
-Stop the instance when idle:
-
-```bash
-make mlflow-stop
+make mlflow-backfill MLFLOW_RECORDS=rawdata/logs/multirun/activationsearch/1069
+make mlflow-backfill MLFLOW_RECORDS=rawdata/logs/multirun/activationsearch MLFLOW_LATEST=false
 ```
 
 Stopping avoids EC2 compute charges while preserving the SQLite backend DB on
@@ -105,37 +103,15 @@ the EBS root volume. Destroying/replacing the instance loses that DB unless it
 has been backed up; local JSON Run Records can be replayed with the backfill
 script.
 
-## Backfill Existing Records
+## Manual UI Session
 
-Upload existing local Run Records without rerunning training. Backfill does not
-provision infrastructure by itself; it only needs `MLFLOW_TRACKING_URI` to point
-at a reachable tracking server. If the EC2 instance already exists, start it and
-open the tunnel. Run `make mlflow-deploy` only when the infrastructure has not
-been created yet.
+For browsing the dashboard without uploading, use the raw AWS/Terraform commands:
 
 ```bash
+aws ec2 start-instances --instance-ids "$(terraform -chdir=deploy/terraform output -raw instance_id)"
+eval "$(terraform -chdir=deploy/terraform output -raw ssm_port_forward_command)"
 export MLFLOW_TRACKING_URI=http://127.0.0.1:5000
-make mlflow-backfill
-```
-
-For a sweep directory, upload only the newest immediate Hydra job directory:
-
-```bash
-make mlflow-backfill-latest MLFLOW_RECORDS=rawdata/logs/multirun/activationsearch
-```
-
-Limit the upload:
-
-```bash
-make mlflow-backfill MLFLOW_RECORDS=rawdata/logs/multirun/activationsearch
-make mlflow-backfill MLFLOW_RECORDS=rawdata/logs/multirun/activationsearch/1069
-```
-
-Preview first:
-
-```bash
-make mlflow-backfill-dry-run
-make mlflow-backfill-latest-dry-run MLFLOW_RECORDS=rawdata/logs/multirun/activationsearch
+aws ec2 stop-instances --instance-ids "$(terraform -chdir=deploy/terraform output -raw instance_id)"
 ```
 
 ## Debug
@@ -155,5 +131,6 @@ sqlite3 /opt/mlflow/mlflow.db .tables
 terraform -chdir=deploy/terraform destroy
 ```
 
-Prefer `make mlflow-stop` for ordinary cost control. `terraform destroy` removes
-the instance and loses the SQLite dashboard DB unless separately backed up.
+Prefer stopping the instance for ordinary cost control. `terraform destroy`
+removes the instance and loses the SQLite dashboard DB unless separately backed
+up.

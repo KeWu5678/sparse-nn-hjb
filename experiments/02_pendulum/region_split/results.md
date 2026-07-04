@@ -1,16 +1,16 @@
-# region_split_pendulum Results
+# region_split Results
 
 **Questions.** (1) How well do sparse shallow models fit an optimal value function whose **gradient jumps across the swing-up switching set**, and what role do the activation and the nonconvex penalty play? (2) Can a reliable **feedback law** be synthesized from the fitted value function near — and across — the switching set?
 
-**Setup.** Pendulum swing-up value samples, **two-sided** at the switching set: 3,900 = 3,000 in-basin body + a 900-sample envelope-certified band straddling the switching arms (300 near-side pad + 600 far-side collar, within 0.5 of the arms; see `README.md` for the construction and the error-metric rationale). Two sweeps on the same dataset and `eval=region_split` hook: smooth activations (profile insertion, gamma selected per cell) and **ReLU^p atoms with the fractional-exponent penalty** q = 2/(p+1) (finite_step insertion, gamma=0 by design, alpha selected per cell) — see `../02_pendulum/frac_exp_penalty` — plus the kink specialist `leaky_relu` from the activationsearch sweep (`../02_pendulum/log_penalty`, H1 runs). The region split uses the switching set identified during data generation: the **switching band** = the lowest 10% of samples by distance to the (±2π-tiled) switching set (d ≤ 0.25 on this dataset); the **rest** = all other samples. The model-level studies (§4–§5) use five representative signed H1 models — gaussian, softplus, leaky ReLU, relu², relu⁵; semiconcave models are excluded there (they do not round-trip through the fit artifact, #19).
+**Setup.** Pendulum swing-up value samples, **two-sided** at the switching set: 3,900 = 3,000 in-basin body + a 900-sample envelope-certified band straddling the switching arms (300 near-side pad + 600 far-side collar, within 0.5 of the arms; see `README.md` for the construction and the error-metric rationale). This study runs no sweep of its own: it reads the H1 runs of the two pendulum model-family sweeps — **log_penalty** (signed, profile insertion; `../log_penalty`) and **frac_exp_penalty** (ReLU^p atoms, penalty exponent q = 2/(p+1), finite_step insertion, gamma=0 by design; `../frac_exp_penalty`) — with alpha and gamma selected per cell by rest L1. The region split uses the switching set identified during data generation: the **switching band** = the lowest 10% of samples by distance to the (±2π-tiled) switching set (d ≤ 0.25 on this dataset); the **rest** = all other samples. The model-level studies (§4–§5) use five representative signed H1 models — gaussian, softplus, leaky ReLU, relu², relu⁵.
 
 ## 1. The target: a value function with a gradient discontinuity
 
-The pendulum value is continuous, but the gradient changes branch across the switching spirals — which is why global H1 alone is not enough: the fit must be checked against the switching set identified during data generation, and by the induced feedback law. The regions of attraction of the (periodic) upright equilibria — PMP characteristics filled by nearest-point classification — are separated by the nonsmooth switching curves the region split is built on (open-loop data visualisations are centralised in [`experiments/00_openloop/pendulum`](../00_openloop/pendulum)):
+The pendulum value is continuous, but the gradient changes branch across the switching spirals — which is why global H1 alone is not enough: the fit must be checked against the switching set identified during data generation, and by the induced feedback law. The regions of attraction of the (periodic) upright equilibria — PMP characteristics filled by nearest-point classification — are separated by the nonsmooth switching curves the region split is built on (open-loop data visualisations are centralised in [`experiments/00_openloop/pendulum`](../../00_openloop/pendulum)):
 
 | value samples | value surface | switching set |
 | --- | --- | --- |
-| ![value samples](../00_openloop/pendulum/figures/value_scatter.png) | ![value surface](../00_openloop/pendulum/figures/value_surface.png) | ![regions of attraction](../00_openloop/pendulum/figures/regions_of_attraction.png) |
+| ![value samples](../../00_openloop/pendulum/figures/value_scatter.png) | ![value surface](../../00_openloop/pendulum/figures/value_surface.png) | ![regions of attraction](../../00_openloop/pendulum/figures/regions_of_attraction.png) |
 
 ### 1.1 The kink, seen in the data
 
@@ -28,27 +28,22 @@ Region mean per-sample L1 (absolute) error / global mean ‖true‖ — count-fa
 
 Mean per-sample L1 over the full dataset — count-fair, robust to V→0
 
-| kind        | insertion   | activation   | loss | gamma | neurons | switching L1 | rest L1  | switch/rest |
-| ----------- | ----------- | ------------ | ---- | ----- | ------- | ------------ | -------- | ----------- |
-| semiconcave | profile     | tanh         | h1   | 0     | 25      | 2.39e+00     | 7.90e-01 | 3.02        |
-| semiconcave | profile     | softplus     | h1   | 1     | 8       | 2.52e+00     | 8.33e-01 | 3.03        |
-| semiconcave | profile     | leaky_relu   | h1   | 0.1   | 118     | 1.69e+00     | 5.03e-01 | 3.36        |
-| semiconcave | profile     | gaussian     | h1   | 0     | 23      | 2.15e+00     | 5.65e-01 | 3.81        |
-| semiconcave | profile     | gelu_squared | h1   | 1     | 19      | 2.02e+00     | 5.27e-01 | 3.83        |
-| semiconcave | profile     | matern52     | h1   | 0     | 21      | 1.94e+00     | 4.79e-01 | 4.05        |
-| signed      | finite_step | relu^5       | h1   | 0     | 79      | 1.78e+00     | 4.38e-01 | 4.07        |
-| signed      | finite_step | relu^4       | h1   | 0     | 75      | 1.70e+00     | 3.98e-01 | 4.28        |
-| signed      | finite_step | relu^3       | h1   | 0     | 99      | 1.33e+00     | 1.97e-01 | 6.77        |
-| signed      | finite_step | relu^2.01    | h1   | 0     | 132     | 9.23e-01     | 1.27e-01 | 7.24        |
-| signed      | finite_step | relu^2       | h1   | 0     | 114     | 1.01e+00     | 1.20e-01 | 8.39        |
-| signed      | profile     | gelu_squared | h1   | 0     | 39      | 2.13e+00     | 5.72e-01 | 3.72        |
-| signed      | profile     | gaussian     | h1   | 1     | 113     | 1.81e+00     | 4.38e-01 | 4.14        |
-| signed      | profile     | matern52     | h1   | 0     | 125     | 1.74e+00     | 4.09e-01 | 4.24        |
-| signed      | profile     | tanh         | h1   | 1     | 99      | 1.88e+00     | 4.42e-01 | 4.26        |
-| signed      | profile     | leaky_relu   | h1   | 0     | 135     | 1.20e+00     | 2.73e-01 | 4.41        |
-| signed      | profile     | softplus     | h1   | 0     | 82      | 1.77e+00     | 3.49e-01 | 5.09        |
+| kind   | insertion   | activation   | loss | gamma | neurons | switching L1 | rest L1  | switch/rest |
+| ------ | ----------- | ------------ | ---- | ----- | ------- | ------------ | -------- | ----------- |
+| signed | finite_step | relu^5       | h1   | 0     | 79      | 1.78e+00     | 4.38e-01 | 4.07        |
+| signed | finite_step | relu^4       | h1   | 0     | 75      | 1.70e+00     | 3.98e-01 | 4.28        |
+| signed | finite_step | relu^3       | h1   | 0     | 99      | 1.33e+00     | 1.97e-01 | 6.77        |
+| signed | finite_step | relu^2.01    | h1   | 0     | 132     | 9.23e-01     | 1.27e-01 | 7.24        |
+| signed | finite_step | relu^2       | h1   | 0     | 114     | 1.01e+00     | 1.20e-01 | 8.39        |
+| signed | profile     | gausscent_1  | h1   | 1     | 108     | 1.91e+00     | 4.70e-01 | 4.06        |
+| signed | profile     | gaussian     | h1   | 1     | 113     | 1.81e+00     | 4.38e-01 | 4.14        |
+| signed | profile     | gelu_squared | h1   | 10    | 90      | 1.94e+00     | 4.48e-01 | 4.33        |
+| signed | profile     | leaky_relu   | h1   | 0     | 135     | 1.20e+00     | 2.73e-01 | 4.41        |
+| signed | profile     | tanh         | h1   | 10    | 100     | 1.94e+00     | 4.07e-01 | 4.76        |
+| signed | profile     | matern52     | h1   | 0.1   | 129     | 1.60e+00     | 3.04e-01 | 5.27        |
+| signed | profile     | softplus     | h1   | 10    | 77      | 1.75e+00     | 2.93e-01 | 5.99        |
 
-Every model — both kinds, every activation, every penalty — is **3.0–8.4× worse in the switching band**, a wider spread than the 2.2–3.7× measured on the earlier one-sided data. The composition changed too: switching L1 is compressed across models (0.92–2.52, a ~2.7× spread) while rest L1 spans ~7× (0.12–0.83), so the ratio mostly reflects how good a model is *away* from the curve — ReLU² has the largest ratio (8.4) precisely because its rest error is the smallest. With the jump in-sample, the switching band is genuinely hard for every atom class: a uniform representation cost, no longer a one-sided extrapolation artifact.
+Every model — every activation, every penalty — is **4.1–8.4× worse in the switching band**, a wider spread than the 2.2–3.7× measured on the earlier one-sided data. The composition matters: switching L1 is compressed across models (0.92–1.94, a ~2× spread) while rest L1 spans ~3.7× (0.12–0.47), so the ratio mostly reflects how good a model is *away* from the curve — ReLU² has the largest ratio (8.4) precisely because its rest error is the smallest. With the jump in-sample, the switching band is genuinely hard for every atom class: a uniform representation cost, no longer a one-sided extrapolation artifact.
 
 ### 2.1 The error profile against distance
 
@@ -145,14 +140,14 @@ The control signal from start B, per feedback law (true PMP brakes to θ = 0 wit
 
 Closed-loop cost / stabilization from the two straddling starts (A = (0.71, 0.68), B = (0.23, 0.53); T=10)
 
-| model      | cost A | upright A | cost B | upright B |
-| ---------- | ------ | --------- | ------ | --------- |
-| true PMP   | 26.2   | yes       | 10.2   | yes       |
-| gaussian   | 1221.9 | no        | 1199.2 | no        |
-| softplus   | 168.0  | no        | 190.7  | no        |
-| leaky ReLU | 1345.3 | no        | 14.8   | yes       |
-| ReLU^2     | 331.6  | yes       | 10.1   | yes       |
-| ReLU^5     | 631.4  | no        | 352.9  | no        |
+| model      | cost A  | upright A | cost B  | upright B |
+| ---------- | ------- | --------- | ------- | --------- |
+| true PMP   | 26.2    | yes       | 10.2    | yes       |
+| gaussian   | 1221.9  | no        | 1199.2  | no        |
+| softplus   | 73013.3 | no        | 66996.7 | no        |
+| leaky ReLU | 1345.3  | no        | 14.8    | yes       |
+| ReLU^2     | 331.6   | yes       | 10.1    | yes       |
+| ReLU^5     | 631.4   | no        | 352.9   | no        |
 
 **The branch decision at the curve is now learnable — and only ReLU² learns it from both sides.** From B it brakes to the θ = 0 upright at the true cost (10.1 vs 10.2); from A it correctly swings over to the 2π upright, though with an over-energetic arc (331.6 vs 26.2) — right branch, inefficient execution. leaky ReLU, the accuracy runner-up, gets the braking side right (14.8 from B) but fails from the swing-over side. Every smooth model fails on *both* sides, and the failure tracks the global fit quality of §2, not proximity to the curve: gaussian's degraded interior gradient field saturates the actuator and overshoots past 2π (cost ≈ 1200); softplus never reaches an upright (spurious equilibrium); ReLU⁵ under-rotates and stalls near the origin. On the one-sided data every model mis-branched from beyond the curve; the data fix moved the bottleneck from *coverage* to *fit quality*.
 
@@ -169,22 +164,17 @@ The table repeats the §2 comparison (same rows, same best-per-cell runs) under 
 
 Region-local relative H1 (historical metric — agrees with §2 on the two-sided data)
 
-| kind        | insertion   | activation   | loss | gamma | neurons | switching H1 | rest H1  | switch/rest |
-| ----------- | ----------- | ------------ | ---- | ----- | ------- | ------------ | -------- | ----------- |
-| semiconcave | profile     | softplus     | h1   | 1     | 8       | 8.31e-01     | 8.39e-01 | 0.99        |
-| semiconcave | profile     | tanh         | h1   | 0     | 25      | 8.21e-01     | 8.25e-01 | 0.99        |
-| semiconcave | profile     | leaky_relu   | h1   | 0.1   | 118     | 6.22e-01     | 5.95e-01 | 1.05        |
-| semiconcave | profile     | gaussian     | h1   | 0     | 23      | 7.15e-01     | 6.66e-01 | 1.07        |
-| semiconcave | profile     | gelu_squared | h1   | 1     | 19      | 6.91e-01     | 6.36e-01 | 1.09        |
-| semiconcave | profile     | matern52     | h1   | 0     | 21      | 6.46e-01     | 5.75e-01 | 1.12        |
-| signed      | finite_step | relu^5       | h1   | 0     | 79      | 5.94e-01     | 5.03e-01 | 1.18        |
-| signed      | finite_step | relu^4       | h1   | 0     | 75      | 5.90e-01     | 4.79e-01 | 1.23        |
-| signed      | finite_step | relu^3       | h1   | 0     | 99      | 4.91e-01     | 2.71e-01 | 1.81        |
-| signed      | finite_step | relu^2.01    | h1   | 0     | 132     | 3.74e-01     | 1.79e-01 | 2.09        |
-| signed      | finite_step | relu^2       | h1   | 0     | 114     | 4.05e-01     | 1.84e-01 | 2.20        |
-| signed      | profile     | gelu_squared | h1   | 0     | 39      | 7.26e-01     | 6.79e-01 | 1.07        |
-| signed      | profile     | gaussian     | h1   | 1     | 113     | 6.22e-01     | 5.35e-01 | 1.16        |
-| signed      | profile     | tanh         | h1   | 1     | 99      | 6.50e-01     | 5.44e-01 | 1.20        |
-| signed      | profile     | matern52     | h1   | 0     | 125     | 6.18e-01     | 5.15e-01 | 1.20        |
-| signed      | profile     | softplus     | h1   | 0     | 82      | 6.13e-01     | 4.47e-01 | 1.37        |
-| signed      | profile     | leaky_relu   | h1   | 0     | 135     | 4.83e-01     | 3.24e-01 | 1.49        |
+| kind   | insertion   | activation   | loss | gamma | neurons | switching H1 | rest H1  | switch/rest |
+| ------ | ----------- | ------------ | ---- | ----- | ------- | ------------ | -------- | ----------- |
+| signed | finite_step | relu^5       | h1   | 0     | 79      | 5.94e-01     | 5.03e-01 | 1.18        |
+| signed | finite_step | relu^4       | h1   | 0     | 75      | 5.90e-01     | 4.79e-01 | 1.23        |
+| signed | finite_step | relu^3       | h1   | 0     | 99      | 4.91e-01     | 2.71e-01 | 1.81        |
+| signed | finite_step | relu^2.01    | h1   | 0     | 132     | 3.74e-01     | 1.79e-01 | 2.09        |
+| signed | finite_step | relu^2       | h1   | 0     | 114     | 4.05e-01     | 1.84e-01 | 2.20        |
+| signed | profile     | gausscent_1  | h1   | 1     | 108     | 6.52e-01     | 5.72e-01 | 1.14        |
+| signed | profile     | gaussian     | h1   | 1     | 113     | 6.22e-01     | 5.35e-01 | 1.16        |
+| signed | profile     | gelu_squared | h1   | 10    | 90      | 6.43e-01     | 5.48e-01 | 1.17        |
+| signed | profile     | tanh         | h1   | 10    | 100     | 6.59e-01     | 5.49e-01 | 1.20        |
+| signed | profile     | matern52     | h1   | 0.1   | 129     | 5.69e-01     | 4.02e-01 | 1.42        |
+| signed | profile     | leaky_relu   | h1   | 0     | 135     | 4.83e-01     | 3.24e-01 | 1.49        |
+| signed | profile     | softplus     | h1   | 10    | 77      | 6.09e-01     | 3.96e-01 | 1.54        |

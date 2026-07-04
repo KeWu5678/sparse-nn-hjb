@@ -41,7 +41,7 @@ from src.OpenLoop.vdp.problem import VdpOptimalControlProblem
 from src.plots import _best_iteration_atoms, plot_model_value_surface
 
 EXPERIMENT = "penaltypowers"
-MULTIRUN_DIR = REPO_ROOT / "rawdata" / "logs" / "multirun" / EXPERIMENT
+MULTIRUN_DIR = REPO_ROOT / "rawdata" / "logs" / "multirun" / "vdp" / "frac_exp_penalty"
 _LOSS_LABEL = {(1.0, 0.0): "l2", (1.0, 1.0): "h1"}
 
 # Fixed operating point for the value-fit comparison (matches the thesis tables):
@@ -98,7 +98,7 @@ def load_rows() -> list[dict[str, Any]]:
     records = sorted(MULTIRUN_DIR.glob("**/*.json"))
     if not records:
         raise FileNotFoundError(
-            f"no run records under {MULTIRUN_DIR} — run `make penaltypowers DATA=vdp`"
+            f"no run records under {MULTIRUN_DIR} — run `make sweep EXPERIMENT=vdp/frac_exp_penalty`"
         )
     rows = []
     for path in records:
