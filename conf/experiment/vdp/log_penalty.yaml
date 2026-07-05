@@ -1,0 +1,26 @@
+# @package _global_
+# vdp/log_penalty: activation sweep of the log-penalty model (signed, profile
+# insertion) on the smooth VDP value function. Fixed settings live here; the
+# multirun axes live in hydra.sweeper.params; Make supplies only logging and
+# output paths (make sweep EXPERIMENT=vdp/log_penalty).
+defaults:
+  - override /model: log_penalty
+  - override /data: vdp
+
+name: vdp_log_penalty
+
+model:
+  power: 1.0
+  alpha: 1e-5
+
+data:
+  normalize: true
+
+hydra:
+  sweeper:
+    params:
+      model: log_penalty
+      model.activation: leaky_relu,softplus,tanh,gaussian,gausscent_1,matern52,gelu_squared
+      model.alpha: 1e-2,1e-3,1e-4,1e-5
+      model.gamma: 0,0.1,1,10
+      model.loss_weights: "[1.0,0.0],[1.0,1.0]"

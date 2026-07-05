@@ -79,6 +79,106 @@ _Avoid_: Mixing numerical solver tolerances or sampling density into the problem
 A bound on admissible motor torque, written as `u in [-umax, umax]`. Without saturation, the admissible control set is all real torques.
 _Avoid_: Treating saturation as a separate pendulum problem class
 
+**Switching Curve**:
+The set where the pendulum value function loses differentiability: the
+equal-cost locus where two neighbouring fixed-target branches exchange
+optimality, so the value is continuous but its gradient jumps. Detected during
+data generation by intersecting equal-value contours with their 2π-shifted
+copies. Stored as an ordered point cloud (one period; tile by ±2π for
+distances).
+_Avoid_: "ridge" (reserved for ridge functions/atoms), "singular set" /
+"cut locus" (correct but not this project's vocabulary)
+
+**Arm**:
+A diagonal branch of the switching curve separating two adjacent wells, as
+opposed to the spiral part winding into the hanging point. Inherited from the
+reference implementation's per-level arm tracking (`compute_nonsmooth_curve`).
+_Avoid_: "branch" for this object — branch is reserved for fixed-target value
+branches (V₀, V₁, …)
+
+**Ridge Function**:
+A function of the form `x ↦ σ(a·x + b)` — the atom class of the signed shallow
+networks. Standard approximation-theory term. "Ridge" in project docs refers
+to atom geometry only.
+_Avoid_: Using "ridge" for the switching curve or its stored point cloud
+
+**Switching Band**:
+The envelope-certified two-sided sample set in a tubular neighborhood of the
+switching curve, added on top of the basin-restricted body so the gradient
+jump is in-sample. Split by provenance into the pad and the collar. Project
+term (generator: `build_collar_samples`). Two senses, same word: the
+*construction* sense (the 900 certified samples within 0.5 of the curve) and
+the *evaluation* sense (the lowest distance-decile of a dataset, §2 of the
+region-split report).
+_Avoid_: bare "band" (always write "switching band"); "near band" (legacy;
+config/metric keys still say near/far)
+
+**Pad (near-side)**:
+The switching-band samples from the central branch beyond the first-exit
+restriction —
+the strip between the basin's value-cap trim and the switching curve, which
+the restriction discards although the central branch is still optimal there.
+Project term; no standard equivalent ("pad" ≠ array padding).
+_Avoid_: Confusing with the collar (different branch, different side)
+
+**Collar (far-side)**:
+The switching-band samples from the ±2π-shifted neighbouring branch across the
+switching curve. Named after the topological *collar neighborhood* (∂M × [0,1)), used
+loosely: ours is one-sided about an interior curve, not a manifold boundary.
+Project term.
+_Avoid_: Treating "collar" as the whole switching band (= pad + collar)
+
+**Envelope-Certified**:
+A switching-band candidate is envelope-certified if its exact branch value (i) beats
+every competing branch's locally extrapolated value by a margin and (ii)
+attains its own branch's local lower envelope. Two mechanisms, two reasons:
+the *extrapolation* exists because trajectories almost never pass through the
+candidate point, so the competing branch's value there must be estimated —
+first-order Taylor from nearby trajectory points, `min over neighbours of
+V(y′) + ∇V(y′)·(x − y′)`, exact gradients courtesy of the costate; the
+*envelope check* exists because lying on branch k does not make branch k
+optimal there — the candidate must beat the competitor, and the own-branch
+side of the check rejects re-entrant sheets (a trajectory can pass near x
+twice at different values). The margin absorbs the O(dist²) extrapolation
+error; candidates with no competitor data in reach are dropped, not trusted.
+Project term built from two standard pieces (lower envelope + certification).
+_Avoid_: Treating raw trajectory membership as optimality; comparing branch
+values at different points without the extrapolation
+
+**Normal Cross-Section**:
+The 1-D slice along the normal of the switching curve (anchored in the densest
+data region), parametrized by signed distance `s`; V and `n·∇V` are plotted
+along it to expose the gradient jump at `s = 0`.
+_Avoid_: "transect" in prose (ecology term, legacy — survives only in figure
+filenames `transect_*.png`)
+
+**Well**:
+The optimality region Ω_k of one upright equilibrium — all states from which
+swinging to upright 2kπ is optimal (= its region of attraction); one valley of
+the periodic multi-well value landscape, bounded by the switching curve.
+_Avoid_: Using it for a small neighborhood of the equilibrium (that is the LQR
+sublevel set L_ε), or for the basin polygon
+
+**Basin Polygon**:
+The concrete polygon B used for trajectory restriction: a value-capped inner
+approximation of well 0, bounded by switching-curve pieces plus the value-cap
+trim. A pipeline artifact, not a mathematical region.
+_Avoid_: Bare "basin" when the mathematical region Ω₀ (the well) is meant
+
+**Body**:
+The basin-restricted sample pool — the in-basin samples forming the complement
+of the switching band in a two-sided dataset.
+_Avoid_: "bulk"
+
+**Value-Cap Trim**:
+The artificial part of the basin polygon's boundary created by capping the
+switching-curve tracking at `basin_value_max` (the arm assembly is unstable
+beyond it): the polygon is a sublevel-truncated inner approximation of the
+central well's optimality region, and the trim is the boundary piece lying on
+the value level set rather than on the switching curve — up to ~1 unit inside
+the true curve. The pad exists to fill the strip the trim cuts off.
+_Avoid_: Bare "trim"; treating the whole basin boundary as the switching curve
+
 **Backward-PMP Sample**:
 A value-gradient sample produced by reversing an optimal trajectory
 from the local LQR region. It records `(x, V(x), dV(x))` without solving a new

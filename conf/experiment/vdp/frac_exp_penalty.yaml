@@ -1,0 +1,29 @@
+# @package _global_
+# vdp/frac_exp_penalty: penalty-power sweep of the fractional-exponent-penalty
+# model (signed, finite_step insertion, penalty |c|^q with q = 2/(p+1)) on the
+# smooth VDP value function. gamma=0 by design: the nonconvexity is the penalty
+# exponent. Make supplies only logging and output paths
+# (make sweep EXPERIMENT=vdp/frac_exp_penalty).
+defaults:
+  - override /model: frac_exp_penalty
+  - override /data: vdp
+
+name: vdp_frac_exp_penalty
+
+model:
+  power: 2.0
+  alpha: 1e-5
+  loss_weights: [1.0, 1.0]
+
+data:
+  normalize: true
+
+hydra:
+  sweeper:
+    params:
+      model: frac_exp_penalty
+      model.activation: relu
+      model.power: 2.0,2.01,3.0,4.0,5.0
+      model.alpha: 1e-3,1e-4,1e-5,1e-6
+      model.gamma: 0
+      model.loss_weights: "[1.0,0.0],[1.0,1.0]"

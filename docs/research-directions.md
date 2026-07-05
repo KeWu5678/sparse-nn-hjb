@@ -8,15 +8,15 @@ curated experiment summaries are now the source of truth; the legacy
    Softplus is the best sparse compromise on the smooth VDP value-sample
    benchmark; Matern 5/2 and Gaussian are more accurate on H1 but use many
    more neurons, while tanh remains the weakest gradient-fitting choice.
-   Current curated readouts: [experiments/01_vdp/log_penalty/results.md](../experiments/01_vdp/log_penalty/results.md)
-   and [experiments/02_pendulum/log_penalty/results.md](../experiments/02_pendulum/log_penalty/results.md)
+   Current curated readouts: [experiments/activationsearch/vdp/results.md](../experiments/activationsearch/vdp/results.md)
+   and [experiments/activationsearch/pendulum/results.md](../experiments/activationsearch/pendulum/results.md)
 
 2. Finite-step penalty powers.
    The power sweep is non-monotone. Powers around 3-4 form the useful tradeoff
    region; `p=5` stops improving the H1/sparsity balance and is the first clear
    degradation case.
-   Current curated readouts: [experiments/01_vdp/frac_exp_penalty/results.md](../experiments/01_vdp/frac_exp_penalty/results.md)
-   and [experiments/02_pendulum/frac_exp_penalty/results.md](../experiments/02_pendulum/frac_exp_penalty/results.md)
+   Current curated readouts: [experiments/penaltypowers/vdp/results.md](../experiments/penaltypowers/vdp/results.md)
+   and [experiments/penaltypowers/pendulum/results.md](../experiments/penaltypowers/pendulum/results.md)
 
 3. Discontinuous-gradient activation search.
    On the analytic discontinuous-gradient study, the best near-jump behavior

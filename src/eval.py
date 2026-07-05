@@ -68,38 +68,39 @@ def region_split_errors(
     dv_pred: torch.Tensor,
     v_true: torch.Tensor,
     dv_true: torch.Tensor,
-    near_mask: torch.Tensor,
+    switching_mask: torch.Tensor,
 ) -> Dict[str, float]:
-    """Relative ``(L2, grad, H1)`` errors split by a near/far boolean mask.
+    """Errors split by a switching-tube / rest boolean mask.
 
-    ``near_mask`` is a length-``N`` boolean tensor over the same samples as the
-    predictions: ``True`` = near the switching set, ``False`` = far.
+    ``switching_mask`` is a length-``N`` boolean tensor over the same samples as
+    the predictions: ``True`` = inside the switching tube, ``False`` = rest.
+    (Records written before the tube consolidation carry the same metrics under
+    the legacy ``near``/``far`` key prefixes.)
 
     Two families of per-region numbers are returned (see
-    ``experiments/03_region_split_pendulum/README.md`` for the rationale):
+    ``experiments/02_pendulum/region_split/README.md`` for the rationale):
 
-      * ``{near,far}_{l2,grad,h1}`` — region-local *relative* errors (each region
-        normalized by its own ‖true‖). Kept for continuity, but confounded here:
-        the *far* (interior) region contains the upright equilibrium where V→0 and
-        ∇V→0, so its small denominator inflates the relative error — making models
-        look spuriously better near the switching set.
-      * ``{near,far}_l1_{value,grad,h1}`` — region **mean** per-sample absolute
-        (L1) error, normalized by the **global mean** ‖true‖ over *all* samples.
-        L1 is the norm of choice near discontinuities (L2 worst-case bounds do not
-        generalize across a shock); using the per-sample *mean* (not the sum)
-        keeps near/far count-fair (``near`` is only ~10% of samples, so a summed
-        L1 would trivially favour it); the shared global denominator removes the
-        per-region V→0 confound while keeping near/far on one comparable scale.
+      * ``{switching,rest}_{l2,grad,h1}`` — region-local *relative* errors (each
+        region normalized by its own ‖true‖). Well posed when the switching
+        region carries large |V| (the two-sided pool); historically confounded
+        when the region held only small-|V| samples.
+      * ``{switching,rest}_l1_{value,grad,h1}`` — region **mean** per-sample
+        absolute (L1) error, normalized by the **global mean** ‖true‖ over *all*
+        samples. L1 is the norm of choice near discontinuities (L2 worst-case
+        bounds do not generalize across a shock); using the per-sample *mean*
+        (not the sum) keeps the regions count-fair; the shared global denominator
+        removes the per-region V→0 confound while keeping the regions on one
+        comparable scale.
 
-    Region counts are included so an empty/degenerate band is visible.
+    Region counts are included so an empty/degenerate region is visible.
     """
-    near = near_mask.to(torch.bool)
-    far = ~near
+    switching = switching_mask.to(torch.bool)
+    rest = ~switching
     metrics: Dict[str, float] = {
-        "near_count": float(int(near.sum().item())),
-        "far_count": float(int(far.sum().item())),
+        "switching_count": float(int(switching.sum().item())),
+        "rest_count": float(int(rest.sum().item())),
     }
-    for tag, sel in (("near", near), ("far", far)):
+    for tag, sel in (("switching", switching), ("rest", rest)):
         if not bool(sel.any()):
             for suffix in ("l2", "grad", "h1", "l1_value", "l1_grad", "l1_h1"):
                 metrics[f"{tag}_{suffix}"] = float("nan")
@@ -117,7 +118,7 @@ def region_split_errors(
     g_err = (dv_pred - dv_true).norm(dim=1)
     v_den = v_true.abs().mean().clamp_min(1e-30)
     g_den = dv_true.norm(dim=1).mean().clamp_min(1e-30)
-    for tag, sel in (("near", near), ("far", far)):
+    for tag, sel in (("switching", switching), ("rest", rest)):
         if not bool(sel.any()):
             continue
         nv = v_err[sel].mean()

@@ -108,22 +108,24 @@ class EvalConfig:
 
     ``kind="global"`` (the default) reproduces today's behavior — only the
     global ``summary_metrics``.  ``kind="region_split"`` additionally reports
-    relative errors split by distance to a precomputed nonsmooth/switching set:
-    the validation samples whose distance is in the lowest ``near_percentile``
-    percent form the *near* region, the rest *far*. A percentile (rather than an
-    absolute band) is used because the samples are anisotropically spaced — dense
-    along trajectories, sparse transverse to the switching set — so a fixed
-    nearest-neighbor band captures essentially nothing.
+    errors split into the **switching tube** — the fixed-radius tubular
+    neighborhood {distance to the ±2π-tiled switching curve ≤ ``tube_radius``}
+    — and the **rest**, scored on the dense **region-eval pool** (``eval_pool``:
+    the certified two-sided point set with the training rows excluded, built by
+    ``scripts/investigation/build_region_eval_pool.py``). A fixed radius on an
+    out-of-sample pool replaces the earlier percentile band over the emitted
+    samples: the percentile region was endogenous to the sampling design (adding
+    switching-band samples shrank it) and was evaluated mostly on seen data.
 
-    ``distance_cache`` is a bare filename under ``DATA_DIR`` (or absolute) of an
-    ``.npz`` with per-sample ``distance`` to the switching set, aligned to the
-    dataset's sample order (see ``scripts/investigation/precompute_region_distances.py``).
-    It is parameter-free in ``near_percentile`` so one cache serves any split.
+    ``distance_cache`` (per-sample distance aligned to the *dataset*, from
+    ``scripts/investigation/precompute_region_distances.py``) remains for the
+    distance-binned error profile diagnostic.
     """
 
     kind: str = "global"                  # "global" | "region_split"
-    near_percentile: float = 10.0         # near = lowest near_percentile% of distance
-    distance_cache: Optional[str] = None  # npz with per-sample distance to the switching set
+    tube_radius: float = 0.3              # switching tube = distance <= tube_radius
+    eval_pool: Optional[str] = None       # npz with x/v/dv/distance (out-of-sample pool)
+    distance_cache: Optional[str] = None  # npz with per-sample distance (binned profile)
 
 
 @dataclass
