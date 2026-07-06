@@ -825,127 +825,207 @@ But on the other hand, it lays the ground to prove that the local optimizer admi
 If the sample size is finite, then the optimal solution admits finite support by the Carath\'eodory's theorem. 
 The following theorem proves that the optimal solution admits the finite support even though the dataset is infinitely large. 
 In contrast to \cite{pieper2022nonconvex} the parameter domain is not assumed
-compact; the localization of Assumption~\ref{ass:ridge} takes its place
-(cf.\ Remark~\ref{rem:sharpness}).
+compact; the price is the explicit no-escape condition \eqref{no_escape} on the
+dual variable at infinity, for which Remark~\ref{rem:no_escape} provides
+checkable sufficient conditions under the localization of
+Assumption~\ref{ass:ridge}.
 
-\begin{theorem}
-	If the Assumption \ref{pen1}, \ref{pen2}, \ref{pen3} are satisfied, then the optimal solution of (\ref{int_noncon}) admits at most finite nodes.
+\begin{theorem}[finite support]\label{thm:finite_support}
+	Let Assumptions \ref{pen1}, \ref{pen2}, \ref{pen3} hold, together with
+	Assumption \ref{assumption on actfun} on compact subsets of $\Omega$ (which
+	is satisfied under Assumption \ref{ass:ridge}). Let $\bar{\mu}$ be a local
+	minimizer of (\ref{int_noncon}) with $L(\bar{\mu}) < \infty$ satisfying the
+	\emph{no-escape condition}
+	\begin{equation}
+		\label{no_escape}
+		\tag{$H$}
+		\limsup_{|\omega| \rightarrow \infty} |\bar{p}(\omega)| < \alpha.
+	\end{equation}
+	Then $\bar{\mu}$ is supported on finitely many points,
+	$\bar{\mu} = \sum_{n = 1}^N \bar{c}_n \delta_{\bar{\omega}_n}$. On a compact
+	parameter set $\Omega_R$ the condition \eqref{no_escape} is void and the
+	conclusion holds unconditionally.
 \end{theorem}
 \begin{proof}\quad\\
-1. $\cont\bar{\mu} = \emptyset$: Argue by contradiction. Assuming there exists $\hat{\omega}$ such that $\bar{\mu}(\{\hat{\omega}\}) = 0$ and $\delta > 0$ such that the open ball $B_\delta(\hat{\omega})$ on $\Omega$ satisfies $|\bar{\mu}|(B_\delta(\hat{\omega})) > 0$. 
-Define $D_\delta := B_\delta(\hat{\omega})$ and $C_\delta := |\bar{\mu}|(D_\delta)$ and construct  the measure 
+1. $\cont\bar{\mu} = \emptyset$: Argue by contradiction and assume
+$\bar{\mu}_{\cont} \neq 0$; without loss of generality the positive part of the
+Hahn decomposition $\bar{\mu} = \bar{\mu}^+ - \bar{\mu}^-$ has a nontrivial
+continuous part $\bar{\mu}^+_{\cont} \neq 0$ (otherwise argue with
+$\bar{\mu}^-$ and reversed signs). By Theorem \ref{opt_cdt},
+$\bar{p} = -\alpha$ holds $\bar{\mu}^+_{\cont}$-almost everywhere, and the
+atoms of $\bar{\mu}$ form a $\bar{\mu}^+_{\cont}$-null set; we may therefore
+choose
 \begin{align*}
-	\mu_\delta = \bar{\mu} - \bar{\mu}|_{D_\delta} + C_\delta \delta_{\hat{\omega}}. 
+	\hat{\omega} \in \supp \bar{\mu}^+_{\cont}
+	\quad \text{with} \quad
+	\bar{p}(\hat{\omega}) = -\alpha, \qquad \bar{\mu}(\{\hat{\omega}\}) = 0.
 \end{align*}
-We prove that the constructed measure decrease the cost function. \par
-The cost function is quadratic, therefore the second order Taylor expansion is exact, we get:
+For $\delta \in (0, 1]$ set $D_\delta := B_\delta(\hat{\omega})$ and
+$m_\delta := \bar{\mu}^+_{\cont}(D_\delta)$; then $m_\delta > 0$ for every
+$\delta$ since $\hat{\omega} \in \supp \bar{\mu}^+_{\cont}$, and
+$m_\delta \rightarrow \bar{\mu}^+_{\cont}(\{\hat{\omega}\}) = 0$ as
+$\delta \rightarrow 0$. We merge \emph{only the continuous positive mass} of
+the ball onto its center:
 \begin{align*}
-	L(\mu_\delta)  &= L(\bar{\mu}) + \langle \bar{p}, \mu_\delta - \bar{\mu} \rangle_{C(\Omega), \mathcal{M}(\Omega)} + \frac{1}{2} \|\mathcal{N}[u_\delta - \bar{\mu}]\|_{L^2(D, \nu)}^2 + \frac{1}{2}\sum_{i = 1}^d \|\partial_{x_i} \mathcal{N}[\mu_\delta - \bar{\mu}]\|_{L^2(D, \nu)}^2
+	\mu_\delta = \bar{\mu} - \bar{\mu}^+_{\cont}|_{D_\delta} + m_\delta \, \delta_{\hat{\omega}}.
 \end{align*}
-By Assumption \ref{assumption on actfun}, it holds
+Note $\|\mu_\delta - \bar{\mu}\|_{\mathcal{M}(\Omega)} \le 2 m_\delta \rightarrow 0$,
+so $\mu_\delta$ is an admissible competitor for the local minimizer once
+$\delta$ is small. We prove that it decreases the cost. \par
+The fidelity term is quadratic, therefore the second order Taylor expansion is exact:
 \begin{align*}
-	 |\mathcal{N}[\mu_\delta - \bar{\mu}](x)| &\le \bigg|\int_{D_\delta} \sigma(x, \omega) d\bar{\mu} - C_\delta \sigma(x, \hat{\omega}) \bigg|,\\
-	& = \bigg|\int_{D_\delta} \sigma(x, \omega)  - \sigma(x, \hat{\omega}) d \bar{\mu} \bigg|,\\
-	& \le \delta \Lambda (1 + \|x\|)|\bar{\mu}|(D_\delta), \\
-	& =  \delta \Lambda (1 + \|x\|)C_\delta. 
+	L(\mu_\delta)  &= L(\bar{\mu}) + \langle \bar{p}, \mu_\delta - \bar{\mu} \rangle_{C(\Omega), \mathcal{M}(\Omega)} + \frac{1}{2} \|\mathcal{N}[\mu_\delta - \bar{\mu}]\|_{L^2(D, \nu)}^2 + \frac{1}{2}\sum_{i = 1}^d \|\partial_{x_i} \mathcal{N}[\mu_\delta - \bar{\mu}]\|_{L^2(D, \nu)}^2 .
 \end{align*}
-Analogously it holds
+The moved measure $\bar{\mu}^+_{\cont}|_{D_\delta}$ is nonnegative with total
+mass $m_\delta$, and $\sigma(x, \cdot)$, $\partial_{x_i}\sigma(x, \cdot)$ are
+Lipschitz on the compact ball $\overline{B_1(\hat{\omega})}$ with a constant of
+the form $\Lambda_{\hat{\omega}} (1 + \|x\|)$ (Assumption
+\ref{assumption on actfun} on compact sets; explicit under Assumption
+\ref{ass:ridge}). Hence
 \begin{align*}
-	|\partial_{x_i} \mathcal{N}[\mu_\delta - \bar{\mu}](x)| \le \delta \Lambda (1 + \|x\|)C_\delta.
+	 |\mathcal{N}[\mu_\delta - \bar{\mu}](x)| &= \bigg|\int_{D_\delta} \big( \sigma(x, \hat{\omega}) - \sigma(x, \omega) \big) \, d\bar{\mu}^+_{\cont}(\omega) \bigg|
+	 \le \delta \Lambda_{\hat{\omega}} (1 + \|x\|)\, m_\delta,
 \end{align*}
-Define 
+and analogously
+$|\partial_{x_i} \mathcal{N}[\mu_\delta - \bar{\mu}](x)| \le \delta \Lambda_{\hat{\omega}} (1 + \|x\|)\, m_\delta$.
+Define
 \begin{align*}
-	\Lambda_1^2(D, \Lambda) =  \int_D(1 + \|x\|)^2 d\nu  \Lambda^2.
+	\Lambda_1^2(D, \Lambda_{\hat{\omega}}) =  \Lambda_{\hat{\omega}}^2 \int_D(1 + \|x\|)^2 d\nu .
 \end{align*}
 Hence
 \begin{align*}
-	L(\mu_\delta) \le L(\bar{\mu}) + \langle \bar{p}, \mu_\delta - \bar{\mu} \rangle + \frac{d + 1}{2}\delta^2 \Lambda_1^2 C_\delta^2. 
+	L(\mu_\delta) \le L(\bar{\mu}) + \langle \bar{p}, \mu_\delta - \bar{\mu} \rangle + \frac{d + 1}{2}\delta^2 \Lambda_1^2 m_\delta^2.
 \end{align*}
-By the Theorem \ref{opt_cdt} $\bar{p}$ is constant for $\omega \in \cont \bar{\mu}$, therefore the first order term vanishes, it holds
+For the first order term, $\bar{p} = -\alpha$ holds
+$\bar{\mu}^+_{\cont}$-almost everywhere on $D_\delta$ and
+$\bar{p}(\hat{\omega}) = -\alpha$, so it vanishes exactly:
 \begin{align*}
-	L(\mu_\delta) \le L(\bar{\mu})  + \frac{d + 1}{2}\delta^2 \Lambda_1^2 C_\delta^2. 
+	\langle \bar{p}, \mu_\delta - \bar{\mu} \rangle
+	= m_\delta \, \bar{p}(\hat{\omega}) - \int_{D_\delta} \bar{p} \, d\bar{\mu}^+_{\cont}
+	= -\alpha m_\delta + \alpha m_\delta = 0.
 \end{align*}
-Concerning the cost term, it holds
+Concerning the penalty term, the moved mass is continuous --- it enters
+$\Phi_1$ with weight one --- and creates the single new atom
+$m_\delta \delta_{\hat{\omega}}$ (recall $\bar{\mu}(\{\hat{\omega}\}) = 0$).
+For $\delta$ small enough that $m_\delta \le \hat{z}_2$,
 \begin{align*}
-	\Phi(\mu_\delta) &= \Phi(\bar{\mu}) - \bar{\mu}(D_\delta) + \phi(C_\delta),\\
-	&=\Phi(\bar{\mu}) + \phi(C_\delta) - \bar{\mu}(D_\delta) , \\
-	&= \Phi(\bar{\mu}) + \int_0^{C_\delta} \phi'(\xi) - \phi'(0) d\xi,\\
-	\text{Assumption \ref{pen3}(2) }
-	& \le \Phi(\bar{\mu}) - \frac{ \gamma_2 }{2} C_\delta^2. 
+	\Phi_1(\mu_\delta) &= \Phi_1(\bar{\mu}) - m_\delta + \phi(m_\delta),\\
+	&= \Phi_1(\bar{\mu}) + \int_0^{m_\delta} \phi'(\xi) - \phi'(0) \, d\xi,\\
+	\text{(Assumption \ref{pen1}, \ref{pen3}(2)) }
+	& \le \Phi_1(\bar{\mu}) - \frac{ \gamma_2 }{2} m_\delta^2.
 \end{align*}
-Combining the 2 parts we get
+Combining the two parts we get
 \begin{align*}
-	J(\mu_\delta) \le J(\bar{\mu}) - \bigg(\frac{ \alpha \gamma_2 - (d + 1) \delta^2 \Lambda_1^2}{2} \bigg) C_\delta^2.
+	J(\mu_\delta) \le J(\bar{\mu}) - \bigg(\frac{ \alpha \gamma_2 - (d + 1) \delta^2 \Lambda_1^2}{2} \bigg) m_\delta^2.
 \end{align*}
-Choose $\delta^2 \le \frac{2 \alpha \gamma_2}{(d + 1)\Lambda_1^2(D, \Lambda)}$ we get the contradiction.
+Choosing $\delta^2 < \frac{\alpha \gamma_2}{(d + 1)\Lambda_1^2(D, \Lambda_{\hat{\omega}})}$
+gives $J(\mu_\delta) < J(\bar{\mu})$, contradicting local minimality. Hence
+$\bar{\mu}_{\cont} = 0$.
 
 \quad\\
-2. $|\atom \bar{\mu}|$ is finite: 
-Without loss of generality we can assume the atomic support of $\mu$ is contained in a compact subset of $\Omega$. 
-Assume by contradiction, there exists a sequence $\omega_n \rightarrow \infty $ escapes to the infinity.
-Since $\bar{\mu} \in \mathcal{M}(\Omega)$ admits bounded variation, by passing to a subsequence, it holds $\bar{\mu}(\omega_n) \rightarrow 0$. 
-Assuming w.l.o.g. that $\bar{\mu}(\omega_n) = c_n > 0$, we have
+2. $|\atom \bar{\mu}|$ is finite:
+First, the atoms cannot escape to infinity: if there were atoms $\omega_n$ with
+$|\omega_n| \rightarrow \infty$, then $|\bar{\mu}|(\{\omega_n\}) \rightarrow 0$
+by the boundedness of the total variation, and Theorem \ref{opt_cdt} together
+with $\phi'(0) = 1$ would give
 \begin{equation*}
-	\begin{aligned}
-		\lim_{\omega_n \rightarrow + \infty } \bar{p}(\omega_n)
-	= -\alpha \phi'(|\bar{\mu}|(\omega_n)) \sign (\bar{\mu}(\omega_n))
-	= - \alpha,
-	\end{aligned}
+	|\bar{p}(\omega_n)|
+	= \alpha \, \phi'(|\bar{\mu}|(\{\omega_n\}))
+	\rightarrow \alpha,
 \end{equation*}
-which contradicts to that $\bar{p} \in C_0(\Omega)$ and $\lim_{\omega_n \rightarrow + \infty } \bar{p}(\omega_n) \rightarrow 0$.
+contradicting the no-escape condition \eqref{no_escape}. Hence
+$\atom \bar{\mu}$ is contained in a compact subset of $\Omega$.
 
-Now we observe $\atom \bar{\mu}$.
-Since it is contained in a compact subset of $\Omega$, there exists a sequence $\omega_n$ (possibly passing through a subsequence) such that 
+Now assume by contradiction that $\atom \bar{\mu}$ is infinite. Then there
+exists a sequence of distinct atoms with $\omega_n \rightarrow \hat{\omega}$
+for some $\hat{\omega} \in \Omega$; after passing to a subsequence, infinitely
+many of the weights share one sign, w.l.o.g.\
+$c_n := \bar{\mu}(\{\omega_n\}) > 0$. By the boundedness of the total
+variation it holds $\lim_{n \rightarrow \infty} c_n = 0$, and by Theorem
+\ref{opt_cdt} and the continuity of $\bar{p}$,
 \begin{align*}
-	\omega_n \rightarrow \hat{\omega} \text{ in $\Omega \quad$ for some } \hat{\omega} \in \Omega.
+	\bar{p}(\hat{\omega}) = \lim_{n \rightarrow \infty} \bar{p}(\omega_n) = -\alpha \lim_{n\rightarrow \infty} \phi'(c_n) = -\alpha.
 \end{align*}
-Assuming w.l.o.g. that $\bar{\mu}(\omega_n) = c_n > 0$, by the boundedness of total variation it holds $ \lim_{n \rightarrow \infty} c_n = 0$. By the Theorem \ref{opt_cdt} , it holds
+Concentrate the tail of the sequence at the limit $\hat{\omega}$: for
+$N \in \mathbb{N}$ define
 \begin{align*}
-	\bar{p}(\hat{\omega}) = \lim_{n \rightarrow \infty} \bar{p}(\omega_n) = -\alpha \lim_{n\rightarrow \infty} \phi'(c_n) \rightarrow -\alpha.
+	\mu_N := \bar{\mu} - \sum_{i = N}^\infty c_i \, \delta_{\omega_i} + C_N \delta_{\hat{\omega}}, \qquad C_N := \sum_{i = N}^\infty c_i > 0,
+	\qquad \delta_N:= \sup_{i \ge N} |\omega_i - \hat{\omega}| \rightarrow 0,
 \end{align*}
-Concentrate the measure on $\{\omega_{N}, \dots\}$ on the limits $\hat{\omega}$, i.e., define
+so that $\|\mu_N - \bar{\mu}\|_{\mathcal{M}(\Omega)} \le 2 C_N \rightarrow 0$.
+As in step 1 (with the local Lipschitz constant $\Lambda_{\hat{\omega}}$),
 \begin{align*}
-	\mu_N := \bar{\mu} - \sum_{i = N}^\infty \delta_{\omega_i} \bar{\mu}(\omega_i) + C_N \delta_{\hat{\omega}}, \text{ where } C_N = \sum_{i = N}^\infty c_i > 0.
+	L(\mu_N) \le L(\bar{\mu}) + \langle \bar{p}, \mu_N - \bar{\mu}\rangle +\frac{d +1}{2} \Lambda_1^2(D, \Lambda_{\hat{\omega}}) \delta_N^2  C_N^2 .
 \end{align*}
-As in 1., the fidelity term of the cost can by decomposed by Taylor expansion.\\
-Define $\delta_N:= \max_{i = N}^\infty |\omega_i - \hat{\omega}|$ :
+For the first order term we have by the optimality condition and the value
+$\bar{p}(\hat{\omega}) = -\alpha$:
 \begin{align*}
-	L(\mu_N) \le L(\bar{\mu}) + \langle \bar{p}, \mu_N - \bar{\mu}\rangle +\frac{d +1}{2} \Lambda_1^2(D, \Lambda) \delta_N^2  C_N^2
+	\langle \bar{p}, \mu_N - \bar{\mu} \rangle = -\sum_{i = N}^\infty \bar{p}(\omega_i) c_i + C_N \bar{p}(\hat{\omega}) = \alpha \sum_{i = N}^\infty c_i \phi'(c_i) - \alpha C_N.
 \end{align*}
-For the first variation we have by the optimality condition and the argument above:
+For the penalty term, by the monotonicity and subadditivity of $\phi$
+(Lemma \ref{firstorderestimate}) --- which also covers the case that
+$\hat{\omega}$ is itself an atom of $\bar{\mu}$, since
+$\phi(|\bar{\mu}(\{\hat{\omega}\})| + C_N) - \phi(|\bar{\mu}(\{\hat{\omega}\})|) \le \phi(C_N)$ ---
 \begin{align*}
-	\langle \bar{p}, \mu_N - \bar{\mu} \rangle = \langle \bar{p},  -\sum_{i = N}^\infty \delta_{\omega_i} \bar{\mu}(\omega_i) + C_N \delta_{\hat{\omega}} \rangle = \alpha \sum_{i = N}^\infty c_i \phi'(c_i) - \alpha C_N.
+	\Phi_1(\mu_N) \le \Phi_1(\bar{\mu}) - \sum_{i = N}^\infty \phi(c_i) + \phi(C_N).
 \end{align*}
-
-For the penalty term, it holds
+Combining the estimates, it holds
 \begin{align*}
-	\Phi(\mu_N) = \Phi(\mu) - \sum_{i = N}^\infty \phi(c_i) + \phi(C_N). 
-\end{align*}
-Combining the estimation, it holds
-\begin{align*}
-	J(\mu_N) \le J(\bar{\mu}) - \alpha \sum_{i = N}^\infty \bigg(\phi(c_i) - c_i \phi'(c_i) \bigg) - \alpha\bigg(C_N  - \phi(C_N) \bigg) + \frac{d + 1}{2} \Lambda_1^2(D, \Lambda) \delta_N^2 C_N^2.
+	J(\mu_N) \le J(\bar{\mu}) - \alpha \sum_{i = N}^\infty \bigg(\phi(c_i) - c_i \phi'(c_i) \bigg) - \alpha\bigg(C_N  - \phi(C_N) \bigg) + \frac{d + 1}{2} \Lambda_1^2(D, \Lambda_{\hat{\omega}}) \delta_N^2 C_N^2.
 \end{align*}
 By concavity of $\phi$ it holds
 \begin{align*}
 	\phi(c_i) - c_i \phi'(c_i) \ge \phi(0) = 0.
 \end{align*}
-By Assumption \ref{pen3} (2) it holds
+For $N$ large enough that $C_N \le \hat{z}_2$, by Assumption \ref{pen1} and \ref{pen3}(2) it holds
 \begin{align*}
-	C_N - \phi(C_N) &= C_N \phi'(0) - \bigg(\phi(0) + \int_0^{C_N} \phi'(\xi) d\xi \bigg), \\
-	(\text{Assumption \ref{pen1}} )
-	& = -\int_0^{C_N}\phi'(\xi) - \phi'(0) d\xi, \\
-	& \ge \frac{\gamma_2}{2}C_N^2.
+	C_N - \phi(C_N) &= C_N \phi'(0) - \bigg(\phi(0) + \int_0^{C_N} \phi'(\xi) d\xi \bigg)
+	= -\int_0^{C_N}\phi'(\xi) - \phi'(0) d\xi
+	\ge \frac{\gamma_2}{2}C_N^2.
 \end{align*}
 Thus
 \begin{align*}
-	J(\mu_N) \le J(\bar{\mu}) - \frac{1}{2}\bigg(\alpha \gamma_2 -(d + 1) \Lambda_1^2(D, \Lambda)\delta_N^2 \bigg)C_N^2.
+	J(\mu_N) \le J(\bar{\mu}) - \frac{1}{2}\bigg(\alpha \gamma_2 -(d + 1) \Lambda_1^2(D, \Lambda_{\hat{\omega}})\delta_N^2 \bigg)C_N^2.
 \end{align*}
-Taking 
+Since $\delta_N \rightarrow 0$, choosing $N$ large enough that additionally
 \begin{align*}
-	\delta^2 < \frac{\alpha \gamma_2}{\Lambda_1^2(\Lambda, D)(d + 1)},
+	\delta_N^2 < \frac{\alpha \gamma_2}{\Lambda_1^2(D, \Lambda_{\hat{\omega}})(d + 1)}
 \end{align*}
-we get the contradiction.
+gives $J(\mu_N) < J(\bar{\mu})$ with $\|\mu_N - \bar{\mu}\|_{\mathcal{M}(\Omega)}$
+arbitrarily small, contradicting local minimality. Hence $\atom \bar{\mu}$ is
+finite, and together with step 1 the claim follows.
 \end{proof}
+
+\begin{remark}[sufficient conditions for \eqref{no_escape}]\label{rem:no_escape}
+Under Assumption \ref{ass:ridge}, split the dual variable into its value and
+gradient channels,
+\begin{equation*}
+	\bar{p}(\omega) = \langle \mathcal{N}\bar{\mu} - V, \, \rho(a \cdot x + b) \rangle_{L^2(D)}
+	+ \langle \nabla(\mathcal{N}\bar{\mu}) - \nabla V, \, \rho'(a \cdot x + b)\, a \rangle_{L^2(D)}.
+\end{equation*}
+The value channel always vanishes at infinity:
+$|\langle \mathcal{N}\bar{\mu} - V, \rho(a \cdot x + b)\rangle| \le \|\mathcal{N}\bar{\mu} - V\|_{L^2(D)} \, w_0(\omega) \rightarrow 0$
+by Lemma \ref{lem:value_decay}. If in addition the residual
+$w := \mathcal{N}\bar{\mu} - V$ belongs to $H^2(D)$, the gradient channel
+vanishes as well: writing $\rho'(a \cdot x + b)\, a = \nabla_x [\rho(a \cdot x + b)]$
+and integrating by parts,
+\begin{equation*}
+	\langle \nabla w, \nabla_x[\rho(a \cdot x + b)] \rangle_{L^2(D)}
+	= -\langle \Delta w, \rho(a \cdot x + b) \rangle_{L^2(D)}
+	+ \langle \partial_n w, \rho(a \cdot x + b) \rangle_{L^2(\partial D)},
+\end{equation*}
+and both terms tend to zero by the slab estimates of Lemma
+\ref{lem:value_decay}, applied on $D$ and on the $(d-1)$-dimensional Lipschitz
+boundary $\partial D$. In this case
+$\limsup_{|\omega| \rightarrow \infty} |\bar{p}(\omega)| = 0 < \alpha$ and
+\eqref{no_escape} holds. The residual lies in $H^2(D)$ for instance when
+$V \in H^2(D)$, $\rho \in C^2(\mathbb{R})$ with $\rho'' \in L^2(\mathbb{R})$,
+and $\bar{\mu}$ carries the moment
+$\int_\Omega (1 + |a|)^{3/2} \, d|\bar{\mu}|(\omega) < \infty$. Finally, note
+that \eqref{no_escape} is exactly the quantity whose failure drives the
+counterexamples of Remark \ref{rem:sharpness}: there the escaping atoms
+satisfy $|\bar{p}(\omega_n)| \rightarrow \alpha$.
+\end{remark}
 
 Now we have a necessary optimality condition. But it is not sufficient. More importantly, we cannot formulate an algorithm to determine the optimal value of $N$. To overcome this difficulty, we apply a heuristic approach: For fixed $N$, the optimization problem
 \begin{equation}\label{opt_fixN}
@@ -1288,7 +1368,7 @@ Compared with Theorem~\ref{opt_cdt}:
 	No constraint on $\bar{p}$ is obtained away from the support.
 	\item In exchange, the singularity $\phi'(0^+) = +\infty$ provides an
 	\emph{automatic minimum atom size} via (2), and finite support
-	follows without the merging argument of Theorem~5.2 or
+	follows without the merging argument of Theorem~\ref{thm:finite_support} or
 	the local strong concavity in Assumption~\ref{pen3}.
 	\item The zero measure $\mu = 0$ is always a local minimizer,
 	since adding any atom with small weight $|c| \ll 1$ incurs a
