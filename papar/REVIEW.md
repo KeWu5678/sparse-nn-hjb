@@ -935,3 +935,17 @@ Alternatives:
   the second-order envelope; lead-in rewritten honestly; Theorem
   thm:existence consequently weakened to pen1+pen2 only; stale cross-ref in
   Thm sc_opt Step 5 removed.
+- Pendulum frontier dataset-mixing fix (2026-07-06, user-caught): the intro
+  figure's pendulum panel mixed datasets — the ReLU+ell1 baseline series came
+  from the one-sided Pendulum_20260630 run while the other three series (after
+  the path fix) came from the two-sided Pendulum_20260703 set, making the
+  baseline's ~0.27 endpoint an invalid comparison. Also clarified: the
+  baseline IS gradient-trained (loss_weights (1,1)); it differs by atom and
+  penalty only. Fix: baseline rerun on the two-sided set (same protocol:
+  signed relu power 1 gamma 0 alpha 1e-5 H1 finite_step seed 42; record at
+  rawdata/logs/multirun/frontier_relu_l1/pendulum/0, one-sided records
+  relocated to frontier_relu_l1/pendulum_onesided_20260630). New honest curve:
+  rel H1 ~0.46 at ~150 neurons — above ReLU^2 everywhere, consistent with the
+  section 6.2 story. Note: the previously committed panel was itself stale
+  (one-sided era: gaussian 0.115, ReLU^k 0.075) and contradicted section 6.2;
+  the regenerated panel is the first internally consistent one.

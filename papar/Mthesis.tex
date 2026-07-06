@@ -658,7 +658,7 @@ escaping to infinity. Under Assumption~\ref{ass:ridge} the atoms of the dictiona
 $L^2(D)$ as the parameter tends to infinity; this is the content of the next
 lemma, and it is exactly what rules the escape out.
 
-\begin{lemma}[decay of the atoms in $L^2(D)$]\label{lem:value_decay}
+\begin{lemma}[continuity of $\mathcal{N}$]\label{lem:value_decay}
 Let Assumption~\ref{ass:ridge} hold and set
 $\kappa(\omega) := \|\sigma(\cdot, \omega)\|_{L^2(D)}$. Then
 $\kappa \in C_0(\Omega)$.
@@ -727,13 +727,13 @@ $J(\bar{\mu}) \le \liminf_n J(\mu_n) = \inf J$.
 
 \begin{remark}[sharpness of the localization]\label{rem:sharpness}
 The localization in Assumption~\ref{ass:ridge} cannot be dropped, and its
-failure is not a technical artifact.
+failure is not a technical artifact.\par 
 (i) For the profile $\rho = \tanh$ take $V \equiv 1$ and $\mu_n = \delta_{(a, b_n)}$ with
 $b_n \to \infty$: then $\mu_n \overset{*}{\rightharpoonup} 0$, yet
 $\mathcal{N}\mu_n = \tanh(a \cdot x + b_n) \to 1$ strongly in $H^1(D)$, so
 $\liminf_n L(\mu_n) = 0 < L(0)$: the fidelity term is not weak-* lower
 semicontinuous, and mass escapes to infinity together with its fit
-contribution.
+contribution.\par 
 (ii) For the profile $\rho(z) = \log(1 + e^z)$ (softplus) the measures
 $\mu_n = \rho(b_n)^{-1}\delta_{(0, b_n)}$ fit $V \equiv 1$ exactly for every
 $n$ at penalty $\alpha\,\phi(1/\rho(b_n)) \to 0$, so $\inf J = 0$ is not
