@@ -105,7 +105,7 @@ The first method to solve the optimization problem involves computing a state-ad
 	& -\frac{d}{dt} p^* = \partial_y \bigg( f(y^*) +  g(y^*) u^* \bigg)^Tp^* + \partial_y l(y^*),\\
 	& p^*(T) = 0.
 \end{aligned}
-\right.
+\right.  
 \end{equation}
 By the maximality condition of the Hamiltonian at the optimal control we get the optimality condition
 \begin{equation}
@@ -117,7 +117,7 @@ On the other hand, based on the Dynamic Programming principle,  we introduce the
 \begin{align*}
 	 V(t, y):= \inf_u J(u; t, y) \quad \text{ subject to the dynamic system},
 \end{align*}
-which satisfies a fully nonlinear first-order partial differential equation, the Hamilton-Jacobi-Bellman (HJB) equation:
+which satisfies a nonlinear hyperbolic differential equation, the Hamilton-Jacobi-Bellman (HJB) equation:
 \begin{equation}
 \label{HJB}
 \tag{HJB}
@@ -165,7 +165,7 @@ We have the minimization problem
 	& l_M (\mathcal{N}_{\omega, c}; V) := \frac{1}{2M} \bigg( \sum_{m = 1}^M  |V(x^m) - \mathcal{N}_{\omega, c} (x^m)|^2 +  \sum_{m = 1}^M \sum_{i = 1}^d | \partial_{x_i} V(x^m) - \partial_{x_i} \mathcal{N}_{\omega, c} (x^m) |^2 \bigg),
 \end{aligned}
 \end{equation}
-where the $x^m$ are independent samples of a $D$-valued random variable with distribution $\nu$.
+where the $x^m$ are independent samples of a random variable on domain $D$ with distribution $\nu$.
 Notice that $N$, the number of neurons, is also an optimization parameter. 
 The loss function can be understood as the empirical estimation of the $H^1$ loss
 \begin{align*}
@@ -176,14 +176,15 @@ Although the number of neurons does not act as the inductive bias of the model i
 Furthermore, sparsity is necessary for certain applications, such as deconvolution of point-like objects. 
 A sparse learning procedure usually adopts convex reformulation of the problem and employ a sparse promoting convex penalty term on the outer weights, a popular choice is the $l^1$ function (LASSO). 
 However, Pieper and Petrosyan \cite{pieper2022nonconvex} showed that convex penalties cannot effectively eliminate the redundancy of a shallow network when neurons cluster in a small neighborhood, and proposed a nonconvex sparse learning method as the remedy. Their analysis is limited to the ReLU activation. 
-The ReLU enjoys many useful properties, such as Lipschitz continuity and positive homogeneity, but its derivative is discontinuous: the gradient of a ReLU network is then discontinuous in the inner weights, which obstructs the smooth optimization of the gradient-augmented loss, and second derivatives of the model exist only as distributions \cite{li2024twolayer}.\par
+The ReLU enjoys many useful properties, such as Lipschitz continuity and positive homogeneity, but but the second derivatives of the model exist only as distributions and can't be used for training\cite{li2024twolayer}.
+We need a new class of activation functions to adopt the sparse learning framework. \par
 
 In this thesis, we combine gradient-augmented training with nonconvex sparse regularization for a class of activation functions that extends well beyond ReLU, and we analyze the resulting variational problem over measures. The contributions are the following.
 \begin{enumerate}
 	\item \emph{Existence theory on the unbounded parameter domain.} For localized ridge activations (Assumption~\ref{ass:ridge}) we prove existence of global minimizers of the gradient-augmented, nonconvex-penalized problem over measures on $\Omega = \mathbb{R}^{d+1}$ (Theorem~\ref{thm:existence}), together with counterexamples showing that the localization cannot be dropped: for saturating or growing activations such as $\tanh$ and softplus the problem degenerates at infinity, and a compact parameter set becomes necessary (Remark~\ref{rem:sharpness}).
 	\item \emph{Optimality conditions and finite support.} We derive the necessary first-order conditions (Theorem~\ref{opt_cdt}), prove that local minimizers are finitely supported under an explicit no-escape condition on the dual variable at infinity (Theorem~\ref{thm:finite_support}), and give a sufficient condition for local optimality of finitely supported candidates (Theorem~\ref{sc_opt}), based on a boundary representation of the dual pairing (Lemma~\ref{lem:dual_pairing}).
 	\item \emph{The $k$-homogeneous formulation.} For positively $k$-homogeneous activations, an equivalent sphere-constrained problem with the fractional-exponent penalty $|c|^{2/(k+1)}$ is derived (Propositions~\ref{prop:homogeneous_penalty}, \ref{prop:homogeneous_reformulation}), and the optimality and existence theory is extended to this singular penalty class (Corollaries~\ref{cor:singular_penalty}, \ref{cor:discrete_existence}).
-	\item \emph{Algorithms and benchmarks.} Two node-insertion algorithms with a semismooth Newton inner solve implement the two penalty classes. On a smooth benchmark (Van der Pol) the nonconvex penalties reach the same gradient accuracy as convex $\ell^1$ training with a fraction of the neurons; on the pendulum swing-up, whose value function has a gradient discontinuity along a switching set, the experiments locate a representation limit of the atom classes and show that only the $\mathrm{ReLU}^2$ atom yields a feedback law that works across the switching set (Figure~\ref{fig:neuron_h1_frontier}).
+	\item \emph{Algorithms and benchmarks.} Two node-insertion algorithms with a semismooth Newton inner solver with the two penalty classes. On a smooth benchmark (Van der Pol) the nonconvex penalties reach the same gradient accuracy as convex $\ell^1$ training with a fraction of the neurons; on the pendulum swing-up, whose value function has a gradient discontinuity along a switching set, the experiments locate a representation limit of the atom classes and show that only the $\mathrm{ReLU}^2$ atom yields a feedback law that works across the switching set (Figure~\ref{fig:neuron_h1_frontier}).
 \end{enumerate}
 
 The thesis is organized as follows. Section~2 reviews the space of finite Radon measures and the Barron spaces attached to the activation classes. Section~3 introduces the sparse learning problem over measures and develops the existence, optimality, and finite-support theory. Section~4 treats the $k$-homogeneous reformulation and the fractional-exponent penalty. Section~5 describes the data generation and the two insertion algorithms, and Section~6 reports the numerical studies. \par
@@ -203,7 +204,7 @@ The thesis is organized as follows. Section~2 reviews the space of finite Radon 
 \caption{Pendulum swing-up.}
 \label{fig:frontier_pendulum}
 \end{subfigure}
-\caption{Number of neurons against the best relative $H^1$ validation error on the two benchmark problems, at fixed $\alpha = 10^{-5}$; each curve is the running best error as neurons are inserted. Four series per panel: the convex baseline ReLU $+\, \ell^1$; $\relu^k$ with the fractional-exponent penalty $\psi_k(t) = |t|^{2/(k+1)}$, here at $k = 3$; and softplus and Gaussian with the nonconvex log penalty $\phi_{\log,\gamma}(t) = \tfrac{1}{\gamma}\log(1 + \gamma t)$ at $\gamma = 10$ (denoted $\psi_\gamma$ in the in-figure legend).}
+\caption{Number of neurons against the best relative $H^1$ validation error on the two benchmark problems, at fixed $\alpha = 10^{-5}$; each curve is the running best error as neurons are inserted. Four series per panel: the convex baseline ReLU $+\, \ell^1$; $\relu^k$ with the fractional-exponent penalty $\psi_k(t) = |t|^{2/(k+1)}$, here at $k = 2$; and softplus and Gaussian with the nonconvex log penalty $\phi_{\gamma}(t) = \tfrac{1}{\gamma}\log(1 + \gamma t)$ at $\gamma = 10$.}
 \label{fig:neuron_h1_frontier}
 \end{figure}
 
@@ -322,7 +323,7 @@ parameters. $\mathcal{M}(\Omega)$ is the space of finite Radon measures with
 the decomposition $\mu = \mu_{\cont} + \mu_{\atom}$; $\mathcal{N}\mu$ is the
 value network of $\mu$ and $c$ (or $c_n$) the outer weights. $J = L + \alpha
 \Phi_1$ is the penalized objective, $\phi$ the scalar penalty
-($\phi_{\log,\gamma}$ the log penalty, $\psi_k(z) = |z|^{2/(k+1)}$ the
+($\phi_{\gamma}$ the log penalty, $\psi_k(z) = |z|^{2/(k+1)}$ the
 fractional-exponent penalty), and $\bar{p}$ the dual variable of a minimizer
 $\bar{\mu}$. $V$ is the target value function and $H^1(D, \nu)$ carries the
 gradient-augmented inner product.
@@ -532,7 +533,7 @@ We are mainly interested in the behavior of $\phi'$ in a neighborhood of $0$:
 By the proposition above we know any penalty satisfies Assumption~\ref{pen1} and \ref{pen3} admits such upper and lower bound. 
 The function
 \begin{equation}
-	\phi_{\log, \gamma}(z) = \frac{1}{\gamma} \log ( 1 + \gamma z)
+	\phi_{\gamma}(z) = \frac{1}{\gamma} \log ( 1 + \gamma z)
 \end{equation}
 for $\gamma > 0$ and its convex combination with the $l1$ norm will be the main function of choice for our numerical analysis. 
 
@@ -1681,7 +1682,7 @@ Finding the global maximum of this landscape is in general intractable (for ReLU
 
 \subsection{The nonconvex penalized algorithms}
 We present two variants of the iterative node insertion and optimization algorithm, adapted from \cite{pieper2022nonconvex}.
-The first handles penalties $\phi$ satisfying Assumption~\ref{pen1}, in particular the log penalty $\phi_{\log, \gamma}(z) = \frac{1}{\gamma}\log(1 + \gamma z)$,
+The first handles penalties $\phi$ satisfying Assumption~\ref{pen1}, in particular the log penalty $\phi_{\gamma}(z) = \frac{1}{\gamma}\log(1 + \gamma z)$,
 where the insertion criterion is the necessary optimality condition from Theorem~\ref{opt_cdt}:
 a candidate $\omega$ is accepted if $|p_t(\omega)| > \alpha$.
 The second handles the fractional-exponent penalty $\psi_k(z) = \frac{1}{q}|z|^q$ with $q = 2/(k+1) < 1$ induced by the $k$-homogeneous reformulation,
@@ -1708,7 +1709,7 @@ The relative errors used to evaluate the approximation quality are
 where $|\cdot|_{H^1}$ denotes the $H^1$ semi-norm (gradient error only) and the norms are computed empirically over the data set.
 
 \begin{algorithm}[htbp]
-\caption{Iterative node insertion and optimization with $\phi_{\log,\gamma}$-penalty}
+\caption{Iterative node insertion and optimization with $\phi_{\gamma}$-penalty}
 \label{alg:log}
 \begin{algorithmic}[1]
 \State Initial network $\omega^{(0)}, c^{(0)}$ of width $N(0)$.
@@ -1817,7 +1818,7 @@ We solve the open-loop problem on a $30 \times 30$ grid over $[-3,3]^2$ ($M = 90
 All experiments run 10 outer iterations; each iteration samples $N_{\mathrm{trial}} = 50$ candidate nodes, accepts at most 15 of them, and prunes neurons with $|c| \le 10^{-8}$ after the local solve.
 
 %% ---------------------------------------------------------------
-\subsubsection{Algorithm~\ref{alg:log}: $\phi_{\log,\gamma}$-penalty with different activation functions}
+\subsubsection{Algorithm~\ref{alg:log}: $\phi_{\gamma}$-penalty with different activation functions}
 %% ---------------------------------------------------------------
 
 First we train the model with Algorithm~\ref{alg:log}, sweeping over activation functions and hyperparameter groups and reporting the effect on the validation error. 
@@ -2247,13 +2248,13 @@ The two algorithms produce structurally different representations: Algorithm~2 c
 \begin{subfigure}[t]{0.32\textwidth}
 \centering
 \includegraphics[width=\textwidth]{plot/weights_raw3d_gaussian.png}
-\caption{$e^{-x^2} + \alpha\,\phi_{\log,1}$.}
+\caption{$e^{-x^2} + \alpha\,\phi_{\gamma}$ ($\gamma = 1$).}
 \end{subfigure}
 \hfill
 \begin{subfigure}[t]{0.32\textwidth}
 \centering
 \includegraphics[width=\textwidth]{plot/weights_raw3d_softplus.png}
-\caption{$\mathrm{softplus} + \alpha\,\phi_{\log,1}$.}
+\caption{$\mathrm{softplus} + \alpha\,\phi_{\gamma}$ ($\gamma = 1$).}
 \end{subfigure}
 \hfill
 \begin{subfigure}[t]{0.32\textwidth}
@@ -2458,7 +2459,7 @@ The switching profiles are reproduced only approximately --- the quantitative li
 \caption{Learned value surfaces $\hat V(x)$ over the $(\theta,\dot\theta)$
 window $[-8,8]^{2}$, displayed on the common range $\hat V\in[0,60]$.
 The $\reluk$ models are trained with the fractional-exponent penalty $\psi_k$,
-the others with the log penalty $\phi_{\log,\gamma}$; the weights $\alpha$ and
+the others with the log penalty $\phi_{\gamma}$; the weights $\alpha$ and
 $\gamma$ are selected per model.}
 \label{fig:rs_surfaces}
 \end{figure}
@@ -2517,7 +2518,7 @@ fraction of samples placed around the switching curve:
 6{,}000 samples with the reference fraction of $23\%$, the same 6{,}000 budget
 reallocated to $40\%$ and to $60\%$, and the reference set with 2{,}000
 additional samples ($8{,}000$ total). On each set we train the Gaussian
-with $\phi_{\log,\gamma}$ and $\mathrm{ReLU}^{2}$ with $\psi_{2}$, each for three
+with $\phi_{\gamma}$ and $\mathrm{ReLU}^{2}$ with $\psi_{2}$, each for three
 regularization weights $\alpha$, and keep the best run per set. All models are
 evaluated on one common held-out set of ${\approx}9.4\times10^{5}$ points,
 disjoint from every training set, with the relative $H^{1}$ error reported
@@ -2532,7 +2533,7 @@ rest of the domain.
 \toprule
 Model & Training set & Switching tube & Rest \\
 \midrule
-Gaussian + $\phi_{\log,\gamma}$ & 6k, $23\%$ band (reference) & $5.81 \times 10^{-1}$ & $5.89 \times 10^{-1}$ \\
+Gaussian + $\phi_{\gamma}$ & 6k, $23\%$ band (reference) & $5.81 \times 10^{-1}$ & $5.89 \times 10^{-1}$ \\
  & 6k, $40\%$ band & $5.72 \times 10^{-1}$ & $5.30 \times 10^{-1}$ \\
  & 6k, $60\%$ band & $6.02 \times 10^{-1}$ & $6.68 \times 10^{-1}$ \\
  & 6k $+$ 2k band & $5.97 \times 10^{-1}$ & $5.68 \times 10^{-1}$ \\
@@ -2665,21 +2666,21 @@ reference law evaluates the same formula on the PMP solution itself.
 \begin{subfigure}[b]{0.32\textwidth}
 \centering
 \includegraphics[width=\textwidth]{plot/feedback_gaussian.png}
-\caption{Gaussian + $\phi_{\log,\gamma}$}
+\caption{Gaussian + $\phi_{\gamma}$}
 \label{fig:rs_feedback_gaussian}
 \end{subfigure}
 \hfill
 \begin{subfigure}[b]{0.32\textwidth}
 \centering
 \includegraphics[width=\textwidth]{plot/feedback_softplus.png}
-\caption{softplus + $\phi_{\log,\gamma}$}
+\caption{softplus + $\phi_{\gamma}$}
 \label{fig:rs_feedback_softplus}
 \end{subfigure}
 \vspace{0.6em}
 \begin{subfigure}[b]{0.32\textwidth}
 \centering
 \includegraphics[width=\textwidth]{plot/feedback_leaky_relu.png}
-\caption{leaky ReLU + $\phi_{\log,\gamma}$}
+\caption{leaky ReLU + $\phi_{\gamma}$}
 \label{fig:rs_feedback_leaky}
 \end{subfigure}
 \hfill
@@ -2730,9 +2731,9 @@ feedback law is only as good as the gradient field.
 Feedback law & cost & reaches upright & cost & reaches upright \\
 \midrule
 reference (PMP) & $26.2$ & yes & $10.2$ & yes \\
-Gaussian $+\, \phi_{\log,\gamma}$ & $298.5$ & no & $278.9$ & no \\
-softplus $+\, \phi_{\log,\gamma}$ & $73013.3$ & no & $66996.7$ & no \\
-leaky ReLU $+\, \phi_{\log,\gamma}$ & $869.1$ & no & $776.9$ & no \\
+Gaussian $+\, \phi_{\gamma}$ & $298.5$ & no & $278.9$ & no \\
+softplus $+\, \phi_{\gamma}$ & $73013.3$ & no & $66996.7$ & no \\
+leaky ReLU $+\, \phi_{\gamma}$ & $869.1$ & no & $776.9$ & no \\
 $\mathrm{ReLU}^{2} + \psi_{2}$ & $57.9$ & yes & $10.3$ & yes \\
 $\mathrm{ReLU}^{5} + \psi_{5}$ & $235.9$ & no & $232.4$ & no \\
 \bottomrule

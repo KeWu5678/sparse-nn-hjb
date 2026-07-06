@@ -912,3 +912,14 @@ Alternatives:
   as neuron_h1_frontier_vdp.png (pre-existing script bug, out of scope here).
   Remaining open review items: STR-1 front matter (title/abstract ON HOLD),
   TEX-8 (print link colors at submission).
+- Legend + notation follow-up (this commit), superseding the previous note:
+  the finite_step activationsearch records were NOT missing — the sweep dirs
+  were renamed (activationsearch/vdp → vdp/log_penalty, penaltypowers →
+  */frac_exp_penalty) and the baseline scripts were never migrated; paths
+  fixed, manifest JSONs skipped defensively. The earlier "pendulum script
+  writes vdp filename" observation was an invocation error on my side (the
+  script takes the dataset as argv), not a bug. Both frontier panels
+  regenerated: legends now read softplus/gaussian + α·φ_γ, and the ReLU^k
+  series switched to k = 2 per user decision (ReLU² is the pendulum star).
+  Notation consolidated thesis-wide: φ_{log,γ} → φ_γ (user decision);
+  specific γ values pinned in the two VDP weight-portrait subcaptions.

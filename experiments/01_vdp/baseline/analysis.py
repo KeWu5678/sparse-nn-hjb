@@ -49,7 +49,7 @@ _H1_LOSS = [1.0, 1.0]
 ALPHA = 1e-5   # shared regularization strength for all four series
 GAMMA = 10.0   # log-penalty non-convexity for the softplus/gaussian series
                # (best precision at alpha=1e-5 for both)
-K = 3          # ReLU^k exponent for the fractional-penalty series (penaltypowers
+K = 2          # ReLU^k exponent for the fractional-penalty series (penaltypowers
                # supports k in {2, 2.01, 3, 4, 5}); described in the thesis text
 
 
@@ -77,7 +77,10 @@ def collect(multirun_name: str | tuple[str, ...], keep: Callable[[dict[str, Any]
     multirun_names = (multirun_name,) if isinstance(multirun_name, str) else multirun_name
     for name in multirun_names:
         for json_path in sorted((MULTIRUN / name).glob("*/*.json")):
-            cfg = json.loads(json_path.read_text(encoding="utf-8"))["config"]
+            payload = json.loads(json_path.read_text(encoding="utf-8"))
+            if "config" not in payload:  # sweep manifests live beside run records
+                continue
+            cfg = payload["config"]
             model = cfg["model"]
             if not (dataset in cfg["data"]["path"].lower()
                     and model["kind"] == "signed"
@@ -122,15 +125,15 @@ def build_series(dataset: str) -> list[dict[str, Any]]:
     if dataset == "vdp":
         relu_l1_sweep, powers_sweep, act_sweep = (
             ("frontier_relu_l1/vdp", "frontier_relu_l1"),
-            "penaltypowers/vdp",
-            "activationsearch/vdp",
+            "vdp/frac_exp_penalty",
+            "vdp/log_penalty",
         )
         act_insertion = "finite_step"
     elif dataset == "pendulum":
         relu_l1_sweep, powers_sweep, act_sweep = (
             "frontier_relu_l1/pendulum",
-            "penaltypowers/pendulum",
-            "activationsearch/pendulum",
+            "pendulum/frac_exp_penalty",
+            "pendulum/log_penalty",
         )
         act_insertion = "profile"  # pendulum activationsearch is profile-only
     else:
