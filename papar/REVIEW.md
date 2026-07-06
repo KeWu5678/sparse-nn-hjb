@@ -246,7 +246,7 @@ $u = -\frac{1}{2rml^2}\partial_\omega V$ ✓).
   $\Phi(\mu)$ → $\Phi(\bar\mu)$; (ix) if $\hat\omega \in \mathrm{atom}\,\bar\mu$ the penalty
   bookkeeping needs subadditivity (one line).
 
-- [ ] **MATH-5 (medium). Remark after Prop 4.2 (l. 948–954): the constant is off
+- [x] **MATH-5 — RESOLVED (chunk 5).** Remark after Prop 4.2 (l. 948–954): the constant is off
   by a factor 2.** With $p=q=2$: $s = 4/(k+1)$, so $2/s = (k+1)/2$ and the sphere
   penalty coefficient is $\alpha\,\frac{k+1}{2}\,k^{-k/(k+1)}$, not
   $\alpha\,(k+1)\,k^{-k/(k+1)}$. Consequently $k=1$ gives $\sum|c_n|$ (matching
@@ -256,7 +256,7 @@ $u = -\frac{1}{2rml^2}\partial_\omega V$ ✓).
   The proposition statement and its proof are internally consistent and correct;
   only the remark's evaluation is wrong.
 
-- [ ] **MATH-6 (medium). §2.2 Barron material (l. 289–306) garbles the source
+- [x] **MATH-6 — RESOLVED (chunk 5): §2.2 rewritten per Li et al. Def 1/Thm 6/Thm 7 (probability-measure picture, cost E|c|(‖a‖₁+|b|)^k, compatibility remark to the sphere-measure picture).** §2.2 Barron material (l. 289–306) garbles the source
   definitions.** In Li–Lu–Mathé–Pereverzev the representation is $f(x) = \int_P
   a\,(b\cdot x + c)_+^k \,\rho(da,db,dc)$ with $\rho$ a **probability** measure on
   the parameter space, and the norm is $\|f\|_{B^{k,m}_{p,\rho}} =
@@ -273,7 +273,7 @@ $u = -\frac{1}{2rml^2}\partial_\omega V$ ✓).
   picture and keep it consistent with §3's $\mathcal{M}(\Omega)$ setting,
   remarking explicitly on the translation between the two.
 
-- [ ] **MATH-7 (medium). Prop 2.2 (l. 319–325) misstates
+- [x] **MATH-7 — RESOLVED (chunk 5): Heeringa Thm 1 restated with both points, Caputo/measure-derivative condition, D bounded; B_σ defined.** Prop 2.2 (l. 319–325) misstates
   Heeringa et al., Thm 1.** Their point 2 (for order $k \ge 1$) requires the
   one-sided **Caputo** derivatives $\partial_+^{k+1}\sigma \in L^1((0,\infty))$,
   $\partial_-^{k+1}\sigma \in L^1((-\infty,0))$ **and $\Omega$ (the state domain)
@@ -290,7 +290,7 @@ $u = -\frac{1}{2rml^2}\partial_\omega V$ ✓).
   (every later use, e.g. Thm 3.8 and Algorithms 1–2, assumes it). Also decide
   $y$ vs $V$ for the target (both are used; see WORD-4).
 
-- [ ] **MATH-9 (medium). Cor 4.2.2 (l. 1190–1242): hypotheses too weak / notation
+- [x] **MATH-9 — RESOLVED (chunk 5): C¹ hypothesis, ‖·‖_{H¹(D,ν)} replaces undefined ‖·‖_H (no new symbol needed — the pair-norm IS the H¹ norm), generalized inverse, index j, residual bound in step 2.** Cor 4.2.2 (l. 1190–1242): hypotheses too weak / notation
   undefined.** (i) "$\sigma$ is continuous" does not support the $\nabla_x\sigma$
   terms inside $J$ nor the dominated-convergence argument — require $\sigma(\cdot)
   \in C^1$ in $x$ (true for ReLU^k, $k\ge 2$); (ii) $\|\cdot\|_H$ and the inner
@@ -303,7 +303,7 @@ $u = -\frac{1}{2rml^2}\partial_\omega V$ ✓).
   it is true, otherwise use the generalized inverse; (v) the index $k$ in
   "$(\omega^k, c^k) \to (\omega,c)$" collides with the power $k$ — rename.
 
-- [ ] **MATH-10 (medium). §2.1 Riesz statement (l. 256–262) is wrong as written:**
+- [x] **MATH-10 — RESOLVED (chunk 5).** §2.1 Riesz statement (l. 256–262) is wrong as written:**
   "(C(\Omega,\mathbb{R}^m))^* = \mathcal{M}(\Omega,\mathbb{R}^m)$" must be
   $C_0(\Omega;\mathbb{R}^m)^*$ (for non-compact $\Omega$ the dual of bounded
   continuous functions is strictly larger). Also: "vanishing on the boundary"
@@ -322,13 +322,13 @@ $u = -\frac{1}{2rml^2}\partial_\omega V$ ✓).
   Also fix the argument-order drift: $\sigma(\omega,x)$ (l. 331) vs $\sigma(x,\omega)$
   (l. 654, Assumption 3.1) — pick $\sigma(x;\omega)$ everywhere.
 
-- [ ] **MATH-12 (medium). W(D) definition (l. 279–284):** the integral is over
+- [x] **MATH-12 — RESOLVED (chunk 5).** W(D) definition (l. 279–284):** the integral is over
   $\mathbb{S}^d$ but $\mu$ ranges over $\mathcal{M}(\Omega)$ with $\Omega =
   \mathbb{R}^{d+1}$ — make it $\mu \in \mathcal{M}(\mathbb{S}^d)$; the operator
   $\mathcal{N}$ appears in (2.1)/l. 283 before it is defined (§3) — either move the
   definition up or write the constraint out.
 
-- [ ] **MATH-13 (minor). Lemma 3.1 (l. 441–465):** statement says "for all $a,b$"
+- [x] **MATH-13 — RESOLVED (chunk 5).** Lemma 3.1 (l. 441–465):** statement says "for all $a,b$"
   — restrict to $a, b \ge 0$; the two bullets vs "1./2." labels mismatch; part 2's
   computation needs $\phi(0)=0$ (cite Assumption 3.3); in the proof $z$, $z_1$,
   $z_2$ drift. In Lemma 3.3's proof (l. 521–533): the subadditivity step is
@@ -337,19 +337,19 @@ $u = -\frac{1}{2rml^2}\partial_\omega V$ ✓).
   Also the symbol $\phi_1$ is used in Lemmas 3.3/3.4 while the assumptions are
   stated for $\phi$ — unify (the subscript collides with $\Phi_1$).
 
-- [ ] **MATH-14 (minor). Prop 3.2 (second-order estimate, l. 487–494): no proof
+- [x] **MATH-14 — RESOLVED (chunk 5): proof added; renamed 'second-order envelopes'.** Prop 3.2 (second-order estimate, l. 487–494): no proof
   given.** It is two lines from $\phi(z) = \int_0^z \phi'(\xi)d\xi$ and Assumption
   3.4 — for a thesis, include it (also fixes the wrong-looking "the second order
   estimate" as a name: it is a pair of envelope bounds).
 
-- [ ] **MATH-15 (minor). Thm 3.6 (l. 667–711):** statement (2) has $\omega$ vs $w$
+- [x] **MATH-15 — RESOLVED (chunk 5).** Thm 3.6 (l. 667–711):** statement (2) has $\omega$ vs $w$
   typo; "defined $\mu$-a.s." → "$|\bar\mu|$-a.e."; l. 708 uses `*` for
   multiplication and integrates against $d|\bar\mu|$ where it should be
   $d|\bar\mu_{\mathrm{cont}}|$; the limit at l. 691 needs $c \ne 0$ (true for atoms of
   $\bar\mu$ — say it); minor: $u \in \mathcal{M}(\Omega)$ fixed then "$\tau$ small
   enough" — quantify as: for each fixed $u$ there is $\tau_0(u)$.
 
-- [ ] **MATH-16 (minor). Prop 4.3 (l. 1039–1076):** (i) "Under Assumption 3.3
+- [x] **MATH-16 — RESOLVED (chunk 5).** Prop 4.3 (l. 1039–1076):** (i) "Under Assumption 3.3
   [pen2]" — $\phi_k(z) = \frac1q z^q$ is not differentiable at $0$; state pen2
   with differentiability on $(0,\infty)$ or relax here; (ii) the case
   $(\hat a_n,\hat b_n) = 0$: by $k$-homogeneity $\sigma(x;0)=0$, drop such
@@ -358,7 +358,7 @@ $u = -\frac{1}{2rml^2}\partial_\omega V$ ✓).
   one direction (project inward-ball solutions to the sphere) — add the trivial
   converse inclusion sentence; (v) $\lneqq/\gneqq$ → $<$ / $>$.
 
-- [ ] **MATH-17 (minor). §4 Remark (l. 916–919):** "For $k > 2$ the activation is
+- [x] **MATH-17 — RESOLVED (chunk 5): remark rewritten; k-homogeneity stated for k ≥ 1 with usage note.** §4 Remark (l. 916–919):** "For $k > 2$ the activation is
   twice differentiable" — so is $k = 2+\epsilon$; the sentence "The value part of
   the loss is approximated by a high-order ReLU activation function
   $\mathrm{ReLU}^{2+\epsilon}$, and the gradient by $\mathrm{ReLU}^{1+\epsilon}$"
@@ -367,7 +367,7 @@ $u = -\frac{1}{2rml^2}\partial_\omega V$ ✓).
   rewrite. Assumption 4.1 fixes $k \ge 2$ but Prop 4.2/4.3 and the Remark use
   $k \ge 1$ — state the assumption for $k \ge 1$ and specialize where needed.
 
-- [ ] **MATH-18 (minor). Editing leftovers with mathematical content:**
+- [x] **MATH-18 — RESOLVED (chunks 3–5): (i) orphaned assumption sentence deleted + truncation fixed; (ii) chunk 3; (iii) oversampling sentence completed; (iv) inverse stereographic direction; (v) FW step over TV ball; (vi) U_ad removed; (vii) codomain multiplier; (viii) g^T; (ix) Leshno density-in-C(K).** Editing leftovers with mathematical content:**
   (i) l. 1099–1106: "More generally, we assume the activation function to satisfy
   the following condition:" is followed by *blank lines* and then "…the direct
   method of ." — a missing assumption block and a truncated sentence ("direct
@@ -387,7 +387,7 @@ $u = -\frac{1}{2rml^2}\partial_\omega V$ ✓).
   (ix) l. 1083: Leshno et al. say non-polynomial activations give *density in
   $C(K)$ on compacta*, not "linearly approximate any measurable function".
 
-- [ ] **MATH-19 (minor). Intro precision:** (i) l. 129/135: HJB here is a
+- [x] **MATH-19 — RESOLVED (chunk 5): all seven intro-precision items.** Intro precision:** (i) l. 129/135: HJB here is a
   first-order fully nonlinear PDE — "nonlinear hyperbolic" is nonstandard; say
   "first-order nonlinear (Hamilton–Jacobi) equation"; (ii) l. 106 "Hamilton
   Jacobi ODE" → Hamiltonian two-point boundary value problem; (iii) l. 124: the
@@ -869,7 +869,7 @@ Alternatives:
   p̄ → ρ(s₀)·∫_F ∂_n r dH^{d-1} ≠ 0). Fixed: decay holds iff ∂D meets every
   hyperplane in an H^{d-1}-null set (lem:dual_pairing(3)); on boxes (H) is a
   genuine flux-smallness condition. rem:no_escape rewritten accordingly.
-- Chunk 4 (this commit): J_ω̄ definition fixed (α added, y→V, H¹ fidelity);
+- Chunk 4 (647ccf8): J_ω̄ definition fixed (α added, y→V, H¹ fidelity);
   𝒴/𝒯/𝒱 product-space notation introduced; Lemma lem:dual_pairing
   (boundary representation: Green's identity [Grisvard], trace via solid
   averages [Evans–Gariepy], band-splitting decay proof); Thm sc_opt rewritten
@@ -886,3 +886,9 @@ Alternatives:
 - C_{D,ρ} (lem:dual_pairing(1) constant), C_ω̄ (Thm sc_opt, support-dependent),
   κ_∂ (local to lem:dual_pairing(3) proof).
 - Cor 4.2.2's undefined ‖·‖_H should become ‖·‖_𝒴 (MATH-9, later chunk).
+- Chunk 5: consolidated medium/minor repairs — MATH-5 (factor 2: (k+1)/2·k^{-k/(k+1)},
+  k=1 recovers PP exactly), MATH-6/7 (§2.2 rewrite), MATH-9 (Cor 4.2.2 via
+  H¹(D,ν) norm), MATH-10 (Riesz/C₀), MATH-12..17, MATH-18(i,iii–ix), MATH-19.
+  Build: 50 pp, zero warnings. NOTE: at the 50-page regulation cap in the
+  CURRENT (12pt/1.3) layout — TEX-1 relayout to 11pt will bring it back down;
+  re-check after Batch S adds front matter.

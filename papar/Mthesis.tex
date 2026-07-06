@@ -101,9 +101,9 @@ The problem under consideration is the dynamic optimal control problem in the sp
 \end{aligned}
 \end{equation}
 where we assume $y(t) \in \mathbb{R}^d, u(t) \in \mathbb{R}^k$, $l \in C^1(\mathbb{R}^d, \mathbb{R}), f \in C^1(\mathbb{R}^d, \mathbb{R}^d), g \in C^1(\mathbb{R}^d, \mathbb{R}^{d \times k})$. 
-We assume the minimizer exists.\par
+We assume throughout that a minimizer of \eqref{opt} exists.\par
 
-The first method to solve the optimization problem involves computing a state-adjoint-control triple originating from the initial condition $x$, known as the open-loop control. The Pontryagin's Maximum Principle(PMP) yields the first-order optimality condition in the form of a forward-backward coupling Hamilton Jacobi ODE:
+The first method to solve the optimization problem involves computing a state-adjoint-control triple originating from the initial condition $x$, known as the open-loop control. The Pontryagin Maximum Principle (PMP) yields the first-order optimality condition in the form of a coupled forward--backward two-point boundary value problem:
 \begin{equation}
 \label{TPBVP}
 \tag{TPBVP}
@@ -121,12 +121,12 @@ By the maximality condition of the Hamiltonian at the optimal control we get the
 	u^* = - \frac{1}{2\beta} g(y^*)^T p^* \quad \forall t \in (t_0, T). 
 \end{equation}
 
-The optimal trajectories obtained from the solution of the open-loop system are not robust with respect to disturbance \cite{azmi2021optimal}, since the existing numerical methods for two-point boundary value problem in general tend to diverge. 
-On the other hand, based on the Dynamic Programming principle,  we introduce the value function 
+The open-loop control is not robust with respect to disturbances of the state \cite{azmi2021optimal}: it is computed for a single initial condition, and deviations from the optimal trajectory are not corrected. In addition, numerical methods for the two-point boundary value problem are sensitive to the initial guess and may fail to converge.
+On the other hand, based on the Dynamic Programming principle,  we introduce the value function
 \begin{align*}
 	 V(t, y):= \inf_u J(u; t, y) \quad \text{ subject to the dynamic system},
 \end{align*}
-which satisfies the nonlinear hyperbolic partial differential equation, the Hamilton-Jacobi-Bellman (HJB) equation:
+which satisfies a fully nonlinear first-order partial differential equation, the Hamilton-Jacobi-Bellman (HJB) equation:
 \begin{equation}
 \label{HJB}
 \tag{HJB}
@@ -137,7 +137,7 @@ which satisfies the nonlinear hyperbolic partial differential equation, the Hami
 \end{aligned}
 \right.
 \end{equation}
-In this case the optimal control problem becomes solving a nonlinear hyperbolic partial differential equation, which is more robust compared to the open-loop method. 
+The value function encodes the optimal cost from every state at once; the feedback law synthesised from it corrects deviations along the trajectory, which is the robustness the open-loop control lacks.
 
 For most of the nonlinear dynamic control problems, one desires a feedback a feedback control law, which involves solving the optimal value function of 
 the HJB equation. 
@@ -174,7 +174,7 @@ We have the minimization problem
 	& l_M (\mathcal{N}_{\omega, c}; V) := \frac{1}{2M} \bigg( \sum_{m = 1}^M  |V(x^m) - \mathcal{N}_{\omega, c} (x^m)|^2 +  \sum_{m = 1}^M \sum_{i = 1}^d | \partial_{x_i} V(x^m) - \partial_{x_i} \mathcal{N}_{\omega, c} (x^m) |^2 \bigg),
 \end{aligned}
 \end{equation}
-where $x^m$ is a sample of the random variable $x \in L^2(D, \nu)$ with probability distribution $\nu$ on the domain $D$.
+where the $x^m$ are independent samples of a $D$-valued random variable with distribution $\nu$.
 Notice that $N$, the number of neurons, is also an optimization parameter. 
 The loss function can be understood as the empirical estimation of the $H^1$ loss
 \begin{align*}
@@ -187,7 +187,7 @@ A sparse learning procedure usually adopts convex reformulation of the problem a
 However it was indicated in  \cite{pieper2022nonconvex}(Pieper et al., 2022) that the convex penalty terms are not able to effectively eliminate the redundancy in a shallow neural network, especially when the neurons are clustering in a small neighborhood. 
 A nonconvex sparse learning method is proposed by the author. 
 However, in the paper the authors limit the activation function to ReLU. 
-The ReLU enjoys many nice properties such as Lipschitz continuity and positive homogeneity, but its second-order weak derivate does not exists as a function while it is a distribution, which makes it infeasible for the gradient training \cite{li2024twolayer}.\par
+The ReLU enjoys many useful properties, such as Lipschitz continuity and positive homogeneity, but its derivative is discontinuous: the gradient of a ReLU network is then discontinuous in the inner weights, which obstructs the smooth optimization of the gradient-augmented loss, and second derivatives of the model exist only as distributions \cite{li2024twolayer}.\par
 
 In this thesis, we develope a data-driven method that harnesses the precision of the gradient training and sparsity promoted by the nonconvex penalty at a higher level.
 For the gradient traning, we consider a wider range of the activation functions, including sigmoidal, ReLU-like and tanh form, etc.,  and discuss their approximation propertyies.
@@ -249,17 +249,17 @@ The \emph{total-variation measure} of a finite Radon measure $\mu$ is the positi
 We denote the space of finite Radon measures by $\mathcal{M}(\Omega, \mathbb{R}^m)$ (and $\mathcal{M}(\Omega)$ if $m = 1$). 
 The following spaces will be considered
 \begin{itemize}
-  \item $C_0(\Omega; \mathbb{R}^m)$, the space of all continuous functions $u : \Omega \to \mathbb{R}^m$ \emph{vanishing on the boundary}, that is, for every $\varepsilon > 0$ there exists a compact set $K_\varepsilon \subset \Omega$ such that $|u(x)| < \varepsilon$ for all $x \in \Omega \setminus K_\varepsilon$;
+  \item $C_0(\Omega; \mathbb{R}^m)$, the space of all continuous functions $u : \Omega \to \mathbb{R}^m$ \emph{vanishing at infinity}, that is, for every $\varepsilon > 0$ there exists a compact set $K_\varepsilon \subset \Omega$ such that $|u(x)| < \varepsilon$ for all $x \in \Omega \setminus K_\varepsilon$;
   \item $\mathcal{M}(\Omega; \mathbb{R}^m)$, the space of all vector-valued measures $\mu : \mathcal{B} \to \mathbb{R}^m$ with finite variation on $\Omega$.
 \end{itemize}
 
-It is well-known that the space $\mathcal{M}(\Omega, \mathbb{R}^m)$ can be identified as the dual space of $C_0(\Omega; \mathbb{R}^m)$ by the dual pairing:
+By the Riesz representation theorem, $\mathcal{M}(\Omega; \mathbb{R}^m)$ is isometrically the dual space of $C_0(\Omega; \mathbb{R}^m)$ under the pairing
 \begin{equation*}
 \langle \mu,\, u \rangle = \sum_{i=1}^{m} \int_\Omega u_i \, \mathrm{d}\mu_i,
-\end{equation*}  
-The Riesz theorem states that $(C(\Omega, \mathbb{R}^m))^* = \mathcal{M}(\Omega, \mathbb{R}^m)$, which also implies the completeness of the space of finite Radon measures. 
-For each $\mu \in \mathcal{M}(\Omega, \mathbb{R}^m)$ and $u \in C(\Omega, \mathbb{R}^m)$.
-Without further specification, we denote $\langle \cdot, \cdot\rangle$ the dual bracket $\langle \cdot, \cdot \rangle_{\mathcal{M}(\Omega), C(\Omega)}$. 
+\qquad \mu \in \mathcal{M}(\Omega; \mathbb{R}^m), \; u \in C_0(\Omega; \mathbb{R}^m);
+\end{equation*}
+in particular, $\mathcal{M}(\Omega; \mathbb{R}^m)$ equipped with the total variation norm is a Banach space.
+Without further specification, we denote by $\langle \cdot, \cdot\rangle$ the dual bracket $\langle \cdot, \cdot \rangle_{\mathcal{M}(\Omega), C_0(\Omega)}$.
 
 The following space of measures will also be considered:
 \begin{itemize}
@@ -274,54 +274,53 @@ We decompose $\mu \in \mathcal{M}(\Omega)$ by $\mu = \mu_{\cont} + \mu_{\atom}$,
 
 \subsection{Barron Space}
 In view of the approximation by neural networks, the seminal paper \cite{barron1993universal} develops a universal approximation theorem on function approximation by feedforward neural networks with sigmoidal activation functions.
-Later, due to the popularity of ReLU, the universal approximation property of the network with ReLU activation functions is investigated in the subsequent studies \cite{ongie2019function, savarese2019infinite, bengio2005convex, petrosyan2020neural}.
-In particular, it is argued that the generalization is achieved by limiting the size of the network, but rather by controlling the magnitute of the weights. 
-Let $\mathcal{W}(D)$ be the space of functions $f$ on $D$ that can be representated by $f(x) = \int_{\mathbb{S}^{d}} (a \cdot x + b)_+ d\mu(a, b)$ for every $x \in D$ and some $\mu \in \mathcal{M}(\Omega)$.
-For $f \in \mathcal{W}(D)$, we define the norm: 
+Later, due to the popularity of ReLU, the approximation properties of networks with ReLU activation are investigated in the subsequent studies \cite{ongie2019function, savarese2019infinite, bengio2005convex, petrosyan2020neural}.
+In particular, it is argued that generalization is achieved not by limiting the size of the network but by controlling the magnitude of the weights.
+Let $\mathcal{W}(D)$ be the space of functions $f$ on $D$ that can be represented by $f(x) = \int_{\mathbb{S}^{d}} (a \cdot x + b)_+ \, d\mu(a, b)$ for every $x \in D$ and some $\mu \in \mathcal{M}(\mathbb{S}^d)$.
+For $f \in \mathcal{W}(D)$, we define the norm
 \begin{equation}
 \label{W_norm}
-	\|f\|_{\mathcal{W}(D)} = \inf_{\mu \in \mathcal{M}(\Omega)} \|\mu\|_{\mathcal{M}(\Omega)} \quad \text{subject to } f(x) = [\mathcal{N}\mu](x) \text{ for every } x \in D.
+	\|f\|_{\mathcal{W}(D)} = \inf \bigg\{ \|\mu\|_{\mathcal{M}(\mathbb{S}^d)} : \; f(x) = \int_{\mathbb{S}^{d}} (a \cdot x + b)_+ \, d\mu(a, b) \text{ for every } x \in D \bigg\}.
 \end{equation}
+It is shown that this norm is closely related to a fractional Laplacian of $f$ \cite{ongie2019function, savarese2019infinite}.
 
-It is shown that the norm is closely related to the fractional Laplacian of $f$ \cite{ongie2019function, savarese2019infinite}.
-We want to leverage this norm representation for our gradient training. 
-However, we need to reinvestigate the function space since the higher regularity is required for the activation function. 
-It is natural to consider $\reluk$ with $k \ge 2$. We introduce the extended Barron norm as in \cite{li2024twolayer}.
-For a function $f$ with 
+For the gradient-augmented training, higher regularity of the activation is required, and it is natural to consider $\reluk$ with $k \ge 2$. We follow the extended Barron spaces of \cite{li2024twolayer}. There, a function of the form
 \begin{align*}
-	f(x) &= \int_{\mathbb{S}^{d}} (a \cdot x + b)_+^k \, d\mu(a, b),
+	f(x) &= \int c \, (a \cdot x + b)_+^k \, d\varrho(a, b, c),
 \end{align*}
-and $1\le p < \infty$ we define the representation cost
+with $\varrho$ a \emph{probability} measure over the parameters $(a, b) \in \mathbb{R}^{d+1}$ and the outer weight $c \in \mathbb{R}$, is assigned the representation cost
 \begin{equation*}
-	\| f \|_{B^k_{p,\mu}} := \left( \int_{\mathbb{S}^{d}} d\mu(a, b)^{kp} \right)^{1/p},
+	\| f \|_{B^k_{1,\varrho}} := \int |c| \, \big( \|a\|_1 + |b| \big)^{k} \, d\varrho(a, b, c),
 \end{equation*}
-and the extended Barron norm
+and the Barron norm is the infimum over all representing probabilities,
 \begin{equation*}
-	\| f \|_{B^{k}_{p}} := \inf_{\mu} \| f \|_{B^{k}_{p,\mu}}
-	= \inf_{\mu} \left( \sum_{|\alpha| \le k} \left\| \partial^\alpha f \right\|_{B^{k-|\alpha|}_{p,\mu_\alpha}}^{p} \right)^{1/p},
+	\| f \|_{B^{k}_{1}} := \inf_{\varrho} \| f \|_{B^{k}_{1,\varrho}} .
 \end{equation*}
-where $\alpha$ a multi-index and $\mu_\alpha$ the induced multi-dimensional measures to represent the derivatives.
-The infimum is taken over all $\mu$ that represents $f$. 
-As before, we define $B_p^k(D)$ to be the space of functions on $D$ with finite Barron norm. 
-The Barron space is a normed vector space for $p = 1$. 
-The following proposition links the Barron space to the standard Sobolev space.
-\begin{proposition}[Barron--Sobolev embedding, {\cite{li2024twolayer}}]
-	Given any fixed integer $k$, there holds $B_1^k (D) \subset H^k(D)$.
+The space $B_1^k(D)$ of functions on $D$ with finite Barron norm is a normed vector space \cite[Theorem~6]{li2024twolayer}. (In \cite{li2024twolayer} the construction is calibrated further by the derivatives up to an order $m \le k$, giving spaces $B^{k,m}_p$; the case $p = 1$, $m = 0$ recalled here is the one used below.) The two pictures are compatible: a finite signed measure $\mu \in \mathcal{M}(\mathbb{S}^d)$ representing $f$ through $\reluk$ atoms on the sphere induces, after normalization, a representing probability whose cost is bounded by a dimensional constant times $\|\mu\|_{\mathcal{M}(\mathbb{S}^d)}$, so that $\|f\|_{B^k_1} \le C(d, k)\, \|\mu\|_{\mathcal{M}(\mathbb{S}^d)}$.
+The following result links the Barron space to the standard Sobolev space.
+\begin{proposition}[Barron--Sobolev embedding, {\cite[Theorem~7]{li2024twolayer}}]
+	Given any fixed integer $k$, there holds $B_1^k (D) \subset H^k(D)$; moreover there is a constant $C(D, d, k)$ such that
+	\begin{equation*}
+		\|f\|_{H^m(D)} \le C(D, d, k)\, \|f\|_{B_1^k}, \qquad 0 \le m \le k,
+	\end{equation*}
+	for all $f \in B_1^k(D)$.
 \end{proposition}
 
-The proposition shows the power and limitation of the Barron space in terms of its representability. 
-For the smooth nonlinear systems it yield good approximation. 
-However, for the systems with switching profile, it shows limitation (see Figure~\ref{fig:neuron_h1_frontier}).
-We can improve the precision by choosing activation that mimics the kinks but the a priori error is always there.
+The proposition shows both the power and the limitation of the Barron space: every function that the $\reluk$ dictionary represents with finite total weight is automatically $H^k$-regular.
+For smooth value functions this yields good approximation together with control of the derivatives.
+Conversely, a value function whose gradient jumps across a switching set does not belong to $H^k$ near the jump, so its Barron norm cannot be finite --- the approximation error at the switching set is structural (see Figure~\ref{fig:neuron_h1_frontier}); choosing an activation whose derivative can break reduces the constant but not the phenomenon.
 
-Moreover, the approximation property of other other activation functions with enough smoothness is garanteed by the embedding result of the follwing proportion. 
+Moreover, the approximation properties of other sufficiently smooth activation functions are covered by embedding them into the $\reluk$ Barron scale. For a Lipschitz activation $\sigma$, let $B_\sigma$ denote the Barron space defined as above with atoms $\sigma(a \cdot x + b)$.
 
-\begin{proposition}[Embeddings into Barron spaces, {\cite{heeringa2024embeddings}}]
-	Let $\sigma$ be a Lipschitz activation function.
-	If $\sigma \in C^k(\mathbb{R})$ with $\partial^{k + 1} \sigma \in L^1(\mathbb{R})$, it holds
-	\begin{equation*}
-		B_\sigma \hookrightarrow B_{\relu^{k}}.
-	\end{equation*}
+\begin{proposition}[Embeddings into $\reluk$ Barron spaces, {\cite[Theorem~1]{heeringa2024embeddings}}]
+	Let $\sigma$ be a Lipschitz activation function and let $D$ be bounded.
+	\begin{enumerate}
+		\item If $\sigma \in C^1(\mathbb{R})$ and $\partial^2 \sigma \in L^1(\mathbb{R})$, then $B_\sigma \hookrightarrow B_{\relu}$.
+		\item If $k \ge 1$, $\sigma \in C^{k}(\mathbb{R})$, and the one-sided (Caputo) derivatives of order $k+1$ satisfy $\partial_+^{k+1}\sigma \in L^1((0, \infty))$ and $\partial_-^{k+1}\sigma \in L^1((-\infty, 0))$ --- for which it suffices that the $(k+1)$-st distributional derivative of $\sigma$ exists as a finite measure --- then
+		\begin{equation*}
+			B_\sigma \hookrightarrow B_{\relu^{k}}.
+		\end{equation*}
+	\end{enumerate}
 \end{proposition}
 
 
@@ -487,30 +486,26 @@ By introducing the nonconvexity the coercivity of the quadratic cost is compromi
 With Assumption \ref{pen1}, \ref{pen2} the optimization problem stays coercive such that we can apply the direct method of calculus of variation. 
 The following lemma follows from the assumption. 
  
-\begin{lemma} \label{firstorderestimate} If Assumption \ref{pen2} is satisfied, then it holds
-\begin{itemize}
-	\item subadditivity: for all $a, b$,  $\phi(a + b) \le \phi(a) + \phi(b)$. 
-\end{itemize}
-Furthermore, if Assumption \ref{pen1} is satisfied, it holds
-\begin{itemize}
-	\item $ \phi(z) \le z$.
-\end{itemize}
+\begin{lemma} \label{firstorderestimate} Let Assumption \ref{pen2} be satisfied. Then:
+\begin{enumerate}
+	\item (subadditivity) $\phi(z_1 + z_2) \le \phi(z_1) + \phi(z_2)$ for all $z_1, z_2 \ge 0$;
+	\item if in addition Assumption \ref{pen1} is satisfied, then $\phi(z) \le z$ for all $z \ge 0$.
+\end{enumerate}
 \end{lemma}
 \begin{proof}
-	\quad\\
-	\textbf{1.}  It holds
+	\textbf{1.}  Using $\phi(0) = 0$ and the fundamental theorem of calculus,
 	\begin{align*}
-		\phi(z_1 + z_2) &= \int_0^{z_1} \phi'(z) dz + \int_0^{z_2} \phi'(z_1 + z) dz, \\
-(\text{concavity)}\quad		&\le  \int_0^{z_1} \phi'(z) dz + \int_0^{z_2} \phi'(z) dz, \\
-\quad		& = \phi(z_1) + \phi(z_2).
+		\phi(z_1 + z_2) &= \int_0^{z_1} \phi'(s)\, ds + \int_0^{z_2} \phi'(z_1 + s)\, ds \\
+(\phi' \text{ nonincreasing by concavity})\quad		&\le  \int_0^{z_1} \phi'(s)\, ds + \int_0^{z_2} \phi'(s)\, ds \\
+		& = \phi(z_1) + \phi(z_2).
 	\end{align*}
-	\quad\\
-	\textbf{2.} it holds for $z \ge 0$:
+	\textbf{2.} For $z \ge 0$,
 	\begin{align*}
-		\phi(z_1) &= \int_0^{z_1} \phi'(z) dz\\
-		 (\phi \text{ concave and } \phi'(0) = 1)  & \le \int_0^{z_1} 1 dz \\
-		 &= z_1.
+		\phi(z) &= \int_0^{z} \phi'(s)\, ds
+		 \le \int_0^{z} \phi'(0)\, ds
+		 = z,
 	\end{align*}
+	using again that $\phi'$ is nonincreasing and $\phi'(0) = 1$.
 \end{proof}
  
  
@@ -533,14 +528,21 @@ We are mainly interested in the behavior of $\phi'$ in a neighborhood of $0$:
   
  \end{remark}
 
-\begin{proposition}[the second order estimate]
+\begin{proposition}[second-order envelopes]
 \label{secondorderestimate}
 	Given $\phi$ that satisfies the Assumption \ref{pen1}, \ref{pen2}, if $\phi$ satisfies further Assumption \ref{pen3}, then it holds
 	\begin{enumerate}
-		\item for all $ z \in [0, \hat{z}_1]: \phi(z) \ge z - \frac{\gamma_1}{2} z^2$, 
+		\item for all $ z \in [0, \hat{z}_1]: \phi(z) \ge z - \frac{\gamma_1}{2} z^2$,
 		\item for all $z \in [0, \hat{z}_2]: \phi(z) \le z - \frac{\gamma_2}{2}z^2$.
-	\end{enumerate} 
+	\end{enumerate}
 \end{proposition}
+\begin{proof}
+	By $\phi(0) = 0$ and $\phi'(0) = 1$ (Assumptions \ref{pen2}, \ref{pen1}),
+	\begin{align*}
+		\phi(z) - z = \int_0^{z} \big( \phi'(s) - \phi'(0) \big)\, ds .
+	\end{align*}
+	On $[0, \hat{z}_1]$, Assumption \ref{pen3}(1) gives $-\gamma_1 s \le \phi'(s) - \phi'(0) \le 0$, and integrating yields (1). On $[0, \hat{z}_2]$, Assumption \ref{pen3}(2) gives $\phi'(s) - \phi'(0) \le -\gamma_2 s$, and integrating yields (2).
+\end{proof}
 
 By the proposition above we know any penalty satisfies Assumption \ref{pen1} and \ref{pen3} admits such upper and lower bound. 
 The function
@@ -557,28 +559,30 @@ We leverage the direct method of calculus variation.
 Since we are working on the space of measure $\mathcal{M}(\Omega)$ we consider the weak-* convergence. 
 As usual, the difficulty is to prove the weak-* l.s.c.. 
 Furthermore, the coercivity is compromised by introducing the nonconvex penalty term $\Phi$. 
-The next lemma address this problem. 
-It proves that the coercivity of $\Phi_1$ is preserved by the Assumption \ref{pen1}, \ref{pen2} of $\phi_1$.  
+The next lemma address this problem.
+It proves that the coercivity of $\Phi_1$ is preserved by the Assumption \ref{pen1}, \ref{pen2} of $\phi$.
 
 \begin{lemma}[On the coercivity of $\Phi_1$] \label{envolop}
 Under the Assumption \ref{pen1}, \ref{pen2}, for any $\mu \in \mathcal{M}(\Omega)$, it holds
 \begin{align*}
-	\phi_1(\|\mu\|_{\mathcal{M}(\Omega)}) \le \Phi_1(\mu) \le \|\mu\|_{\mathcal{M}(\Omega)}. 
+	\phi(\|\mu\|_{\mathcal{M}(\Omega)}) \le \Phi_1(\mu) \le \|\mu\|_{\mathcal{M}(\Omega)}.
 \end{align*}
-In particular, the functional $\Phi_1$ is coercive. 
+In particular, the functional $\Phi_1$ is coercive.
 \end{lemma}
 \begin{proof}
-The proof relies on the subadditivity and $\phi_1(z) \le z$.
+The proof relies on the subadditivity and $\phi(z) \le z$ from Lemma
+\ref{firstorderestimate}; note that the subadditivity extends from two summands
+to countably many by induction and the continuity of $\phi$.
 \begin{align*}
-	\phi_1(\|\mu\|_{\mathcal{M}(\Omega)}) &= \phi_1 \bigg(|\mu|(\Omega \backslash \atom \mu) + \sum_{\omega \in \atom \mu } |\mu|(\{\omega\}) \bigg),\\
+	\phi(\|\mu\|_{\mathcal{M}(\Omega)}) &= \phi \bigg(|\mu|(\Omega \backslash \atom \mu) + \sum_{\omega \in \atom \mu } |\mu|(\{\omega\}) \bigg),\\
 	(\text{subadditivity) }
-	& \le \phi_1(|\mu|(\Omega\backslash \atom \mu) + \sum_{\omega \in \atom \mu } \phi_1(|\mu|(\{\omega\})), \\
-	\bigg(\phi_1(z) \le z\bigg)\quad
-	& \le |\mu|(\Omega\backslash \atom \mu) + \sum_{\omega \in  \atom \mu} \phi_1(|\mu|(\{\omega\})),\\
+	& \le \phi\big(|\mu|(\Omega\backslash \atom \mu)\big) + \sum_{\omega \in \atom \mu } \phi(|\mu|(\{\omega\})), \\
+	\big(\phi(z) \le z\big)\quad
+	& \le |\mu|(\Omega\backslash \atom \mu) + \sum_{\omega \in  \atom \mu} \phi(|\mu|(\{\omega\})),\\
 	& = \Phi_1(\mu).
 \end{align*}
-In particular, by the coercivity of $\phi_1$ it holds that $\Phi_1$ is also coercive. \\
-For the second inequality, we leverage that $\phi_1$ is  sublinear and $\phi_1(0)= 0$. We get $\Phi_1(\mu) \le \|\mu\|_{\mathcal{M}(\Omega)}$.  
+In particular, by the coercivity of $\phi$ it holds that $\Phi_1$ is also coercive. \\
+For the second inequality, we apply $\phi(z) \le z$ to every atom and use that the continuous part enters $\Phi_1$ with weight one; this gives $\Phi_1(\mu) \le \|\mu\|_{\mathcal{M}(\Omega)}$.
 \end{proof}
 
 The next lemma proves the weak-* l.s.c. of $\Phi_1$.
@@ -748,7 +752,7 @@ $\mathrm{ReLU}^k$ classes. For $k$-homogeneous activations Section~4 removes
 the restriction altogether via the sphere reformulation.
 \end{remark}
  
-\subsection{Optimality Condition and Finite Spport of the Solution}
+\subsection{Optimality Condition and Finite Support of the Solution}
 Since the optimization problem is nonconvex, the global minimizer is difficult to find in general. 
 Instead, we define the local minimum: 
 \begin{definition}[local minimizer]
@@ -768,11 +772,11 @@ We calculate the gradient $\bar{p}(\omega) \in C(\Omega)$:
  	& = \int_D \sigma(x, \omega) (\mathcal{N}[\bar{\mu}](x) - V) d\nu(x) + \sum_{i = 1}^d \int_D \partial_{x_i} \sigma(x, \omega) ( \partial_{x_i} \mathcal{N}[\bar{\mu}](x) - \partial_{x_i}V ) d\nu(x) .
  	 \end{aligned}
  \end{equation}
- For the finite sample and $\sigma(x) = \relu(x)^k$, the gradient admits the form:
+ For the finite sample and $\sigma(x, \omega) = \relu(\omega \cdot x)^k$, the gradient admits the form:
  \begin{equation*}
  \begin{aligned}
- 	p(\omega) ={}& \frac{1}{M} \sum_{m = 1}^M  \relu(\omega \cdot x_m)^k (\mathcal{N}_{\bar{\mu}}(x_m) - y_m) \\
- 	&+ \frac{1}{M} \sum_{m = 1}^M \sum_{i = 1}^d k \cdot \relu( \omega \cdot x_m )^{ k -1}  \omega_i (\partial_{x_i} \mathcal{N}(x_m) - \partial_{x_i}V(x_m)).
+ 	\bar{p}(\omega) ={}& \frac{1}{M} \sum_{m = 1}^M  \relu(\omega \cdot x_m)^k \big( (\mathcal{N}\bar{\mu})(x_m) - V(x_m) \big) \\
+ 	&+ \frac{1}{M} \sum_{m = 1}^M \sum_{i = 1}^d k \cdot \relu( \omega \cdot x_m )^{ k -1}  \omega_i \big(\partial_{x_i} (\mathcal{N}\bar{\mu})(x_m) - \partial_{x_i}V(x_m)\big).
  \end{aligned}
  \end{equation*}
 \end{remark} 
@@ -780,48 +784,48 @@ We calculate the gradient $\bar{p}(\omega) \in C(\Omega)$:
 
 \begin{theorem}[the optimality condition]
 \label{opt_cdt}
-	Under the Assumption \ref{pen1}, \ref{pen2}, if $\bar{\mu}$ is a local minimum of $J$, then it holds
+	Under the Assumption \ref{pen1}, \ref{pen2}, if $\bar{\mu}$ is a local minimum of $J$ with $L(\bar{\mu}) < \infty$, then it holds
 	\begin{enumerate}
-		\item $|\bar{p}| \le \alpha \qquad \text{for all } \omega$.
-		\item $\bar{p}(\omega) = -\alpha \phi'(|\bar{\mu}|(\omega)) \sign(\bar{\mu}\{ w \}), \qquad \text{for } \bar{\mu}\text{-almost all } \omega \in \Omega.$
+		\item $|\bar{p}(\omega)| \le \alpha \qquad \text{for all } \omega \in \Omega$,
+		\item $\bar{p}(\omega) = -\alpha \phi'(|\bar{\mu}|(\{\omega\})) \sign(\bar{\mu})(\omega), \qquad \text{for } |\bar{\mu}|\text{-almost all } \omega \in \Omega,$
 	\end{enumerate}
-	the signum function $\sign: \Omega \rightarrow \{-1, 1\}$ is defined $\mu$-a.s. by Hahn decomposition. 
+	where the sign density $\sign(\bar{\mu}): \Omega \rightarrow \{-1, 1\}$ is defined $|\bar{\mu}|$-almost everywhere by the Hahn decomposition of $\bar{\mu}$.
 \end{theorem}
-\begin{proof} 
-We leverage that dual evaluation of $\delta_\omega$ is the evaluation of $\bar{p}$ at $\omega$: $\langle \bar{p}, \delta_\omega\rangle_{C(\Omega), \mathcal{M}(\Omega)}= \bar{p}(\omega)$. 
-Since $\bar{\mu}$ is the local minimizer, it holds for all $u \in \mathcal{M}(\Omega)$ and $\tau$ small enough:
+\begin{proof}
+We leverage that the dual evaluation at $\delta_\omega$ is the evaluation of $\bar{p}$ at $\omega$: $\langle \bar{p}, \delta_\omega\rangle= \bar{p}(\omega)$.
+Since $\bar{\mu}$ is a local minimizer, for every fixed $u \in \mathcal{M}(\Omega)$ and all sufficiently small $\tau > 0$ (depending on $u$):
 \begin{align*}
-	J(\bar{\mu} + \tau u) - J(\bar{\mu}) = L(\bar{\mu} + \tau u) - L(\bar{\mu}) + \alpha \Phi(\bar{\mu} + \tau u) - \alpha \Phi(\bar{\mu}) \ge 0.
+	J(\bar{\mu} + \tau u) - J(\bar{\mu}) = L(\bar{\mu} + \tau u) - L(\bar{\mu}) + \alpha \Phi_1(\bar{\mu} + \tau u) - \alpha \Phi_1(\bar{\mu}) \ge 0.
 \end{align*}
-Taking $\tau \rightarrow 0$, it holds
+Dividing by $\tau$ and letting $\tau \rightarrow 0^+$, the fidelity difference converges to $\langle \bar{p}, u\rangle$, so
 \begin{align*}
-	-\langle \bar{p}, u\rangle \le \alpha \lim_{ \tau \rightarrow 0} \frac{1}{\tau} (\Phi(\bar{\mu} + \tau u) - \Phi(\bar{\mu}) ). 
+	-\langle \bar{p}, u\rangle \le \alpha \lim_{ \tau \rightarrow 0^+} \frac{1}{\tau} \big(\Phi_1(\bar{\mu} + \tau u) - \Phi_1(\bar{\mu}) \big),
 \end{align*}
-Now we separate 2 cases:
+whenever the right-hand side limit exists.
+Now we separate two cases.
 \quad\\
-\textbf{1)} For the atom part,  $\omega \in \atom \bar{\mu} $ with $\bar{\mu}(\{\omega\}) = c$, taking $u = \delta_\omega$.
-it holds
+\textbf{1)} For the atom part: let $\omega \in \atom \bar{\mu} $ with $c := \bar{\mu}(\{\omega\}) \neq 0$. Taking $u = \delta_\omega$ and using that $\phi$ is differentiable at $|c| > 0$,
 \begin{align*}
-	- p(\omega) =  -\langle \bar{p}, u \rangle \le \alpha \lim_{\tau \rightarrow 0} \frac{1}{\tau} (\phi (|c + \tau|) - \phi(|c|) = \alpha \phi'(|c|) \sign(c).  
+	- \bar{p}(\omega) =  -\langle \bar{p}, u \rangle \le \alpha \lim_{\tau \rightarrow 0^+} \frac{1}{\tau} \big(\phi (|c + \tau|) - \phi(|c|)\big) = \alpha \phi'(|c|) \sign(c).
 \end{align*}
-Taking $u = \pm \delta_\omega$, we get $p(\omega) = -\alpha \phi'(|c|) \sign(c)$. 
-Since $\phi'(0) = 1$ and $\phi'$ is decreasing we have $\phi'(|c|) \in [0, 1]$, hence $|\bar{p}| \le \alpha$. 
+Repeating the argument with $u = - \delta_\omega$ yields the reverse inequality, hence $\bar{p}(\omega) = -\alpha \phi'(|c|) \sign(c)$.
+Since $\phi'(0) = 1$ and $\phi'$ is nonincreasing and nonnegative, we have $\phi'(|c|) \in [0, 1]$, hence $|\bar{p}(\omega)| \le \alpha$ at every atom.
 
 \quad\\
-\textbf{2)} For the continuous part, first observe $\omega \notin \atom \bar{\mu}$ and perturb with $ u = \delta_\omega$, we have
+\textbf{2)} For the remaining points: let $\omega \notin \atom \bar{\mu}$ and perturb with $ u = \delta_\omega$; then
 \begin{align*}
-	-\bar{p}(\omega) =  - \langle p, u \rangle \le \alpha \lim_{\tau \rightarrow 0 } \frac{1}{\tau} ( \phi(\tau) - \phi(0) ) = \alpha \phi'(0) = \alpha.
+	-\bar{p}(\omega) =  - \langle \bar{p}, u \rangle \le \alpha \lim_{\tau \rightarrow 0^+ } \frac{1}{\tau} \big( \phi(\tau) - \phi(0) \big) = \alpha \phi'(0) = \alpha.
 \end{align*}
-Taking $u = - \delta_\omega$ we get $|p(\omega)| \le \alpha$ for all $\omega \notin \atom \bar{\mu}$.
-Next we take $u = \bar{\mu}_{\text{cont}}$, we have
+Taking $u = - \delta_\omega$ we get $|\bar{p}(\omega)| \le \alpha$ for all $\omega \notin \atom \bar{\mu}$, which together with case 1) proves claim (1).
+Next we take $u = \bar{\mu}_{\cont}$; since the perturbation only rescales the continuous part, $\Phi_1(\bar{\mu} + \tau \bar{\mu}_{\cont}) - \Phi_1(\bar{\mu}) = \tau \|\bar{\mu}_{\cont}\|_{\mathcal{M}(\Omega)}$, and
 \begin{align*}
-	-\langle \bar{p}, \bar{\mu}_{\text{cont}} \rangle \le \alpha \lim_{\tau \rightarrow 0} \frac{1}{\tau} \tau  \|\bar{\mu}_{\text{cont}}\|_{\mathcal{M}(\Omega)} =  \alpha \|\bar{\mu}_{\text{cont}}\|_{\mathcal{M}(\Omega)}.
+	-\langle \bar{p}, \bar{\mu}_{\cont} \rangle \le  \alpha \|\bar{\mu}_{\cont}\|_{\mathcal{M}(\Omega)}.
 \end{align*}
-Taking $u = - \bar{\mu}_{\text{cont}}$ we get $-\langle \bar{p}, \bar{\mu}_{\text{cont}} \rangle  = \alpha \|\bar{\mu}_{\text{cont}}\|_{\mathcal{M}(\Omega)}$, i.e., 
+Taking $u = - \bar{\mu}_{\cont}$ we get $-\langle \bar{p}, \bar{\mu}_{\cont} \rangle  = \alpha \|\bar{\mu}_{\cont}\|_{\mathcal{M}(\Omega)}$, i.e.,
 \begin{align*}
-	\int_\Omega \bigg( - \bar{p}(\omega) * \sign \bar{\mu}_{\cont} (\omega)  - \alpha \bigg) d|\bar{\mu}|(\omega) = 0. 
+	\int_\Omega \bigg( - \bar{p}(\omega) \, \sign( \bar{\mu}_{\cont}) (\omega)  - \alpha \bigg) \, d|\bar{\mu}_{\cont}|(\omega) = 0.
 \end{align*}
-By $|p(\omega)| \le \alpha$ we get $\bar{p} =  - \alpha *  \sign \bar{\mu}_{\cont}$ for almost all $\omega \in \cont \bar{\mu}$. 
+The integrand is nonpositive by claim (1), hence it vanishes $|\bar{\mu}_{\cont}|$-almost everywhere: $\bar{p} =  - \alpha \, \sign (\bar{\mu}_{\cont})$ for $|\bar{\mu}_{\cont}|$-almost all $\omega$. Together with case 1) this proves claim (2).
 \end{proof}
 
 The theorem gives a necessary optimality condition for the local minimizer. 
@@ -1302,17 +1306,17 @@ J_{\bar{\omega}}(\bar{c}) = J(\bar{\mu})$, which completes the proof.
 In this section, we discuss a specific class of activation function: the $k$-homogeneous activation function. 
 
 \begin{assumption}[k-homogeneity]
-	$\sigma$ is $k$-homogeneous w.r.t. $\omega$ for some $k \ge 2$, i.e., for all $x \in D$, $\lambda > 0$ it holds
+	$\sigma$ is positively $k$-homogeneous w.r.t. $\omega$ for some $k \ge 1$, i.e., for all $x \in D$, $\lambda > 0$ it holds
 \begin{align*}
 	\sigma(x, \lambda \omega) = \lambda^k \sigma (x, \omega)\quad \text{ for all } \omega \in \mathbb{R}^{d + 1}.
 \end{align*}
 \end{assumption}
 \begin{remark}
-For $k > 2$, the activation function is twice differentiable and the gradient-augmented optimization problem is a smooth optimization problem.
-The value part of the loss is approximated by a high-order ReLU activation function $\text{ReLU}^{2 + \epsilon}$, and the gradient by $\text{ReLU}^{1 + \epsilon}$,  for a small $\epsilon$. In the case of $k = 2$, the optimization problem is still well defined but we would have non-differentiable corners for $\partial_{x_i} \sigma$ as in the ReLU case. For $k < 2$, the Lipschitz continuity of the gradient function is compromised.
+For the gradient training we use $k \ge 2$: the $\reluk$ atom is then $C^1$ in $x$, so the gradient-augmented loss is well defined, and for $k > 2$ the inner optimization is even twice continuously differentiable. The derivative of a $\reluk$ ridge is, up to the factor $k$, a $\relu^{k-1}$ ridge: the value channel of the loss sees atoms of order $k$ while the gradient channel sees atoms of order $k - 1$. In the borderline case $k = 2$ the problem is still well defined, but $\partial_{x_i} \sigma$ has a non-differentiable kink, as in the ReLU case. For $k < 2$ the Lipschitz continuity of the gradient of the activation fails. The algebraic results of this section (Propositions \ref{prop:homogeneous_penalty} and \ref{prop:homogeneous_reformulation}) hold for every $k \ge 1$.
 \end{remark}
 
 \begin{proposition}[Generalization of {\cite[Proposition~3]{pieper2022nonconvex}} to $k$-homogeneous activations]
+\label{prop:homogeneous_penalty}
 	Let $p \geq 1$, $q \geq 1$, and let $r \colon \mathbb{R}^{d+1} \to \mathbb{R}_+$ be a positively $1$-homogeneous functional:
 	\begin{equation*}
 	  r(\tau\,\omega) = |\tau|\, r(\omega) \quad \text{for all } \omega \in \mathbb{R}^{d+1},\; \tau \in \mathbb{R}.
@@ -1340,11 +1344,11 @@ The value part of the loss is approximated by a high-order ReLU activation funct
 	are equivalent.
 \end{proposition}
 \begin{remark}\leavevmode
-	For $p = q = 2$, the exponent becomes $s/2 = 2/(k+1)$, and the constant is $(k+1)\,k^{-k/(k+1)}$, so the sphere penalty is
+	For $p = q = 2$ we get $s = 4/(k+1)$, so the exponent is $s/2 = 2/(k+1)$ and the constant is $2/s \cdot k^{-k/(k+1)} = \frac{k+1}{2}\,k^{-k/(k+1)}$: the sphere penalty is
 	\begin{equation*}
-	\alpha\,(k+1)\,k^{-k/(k+1)} \sum_{n=1}^N |c_n|^{2/(k+1)}.
+	\alpha\,\frac{k+1}{2}\,k^{-k/(k+1)} \sum_{n=1}^N |c_n|^{2/(k+1)}.
 	\end{equation*}
-	For $k = 1$ this gives $2\sum|c_n|$; for $k = 2$ this gives $3 \cdot 2^{-2/3}\sum|c_n|^{2/3}$.
+	For $k = 1$ this gives $\alpha \sum|c_n|$, recovering \cite[Proposition~3]{pieper2022nonconvex}; for $k = 2$ it gives $\frac{3}{2} \cdot 2^{-2/3}\, \alpha \sum|c_n|^{2/3}$.
 \end{remark}
 \begin{proof}
 	Since $\sigma$ is positively $k$-homogeneous, for any $\tau > 0$ we have
@@ -1431,7 +1435,8 @@ The optimization problem becomes:
 The following proposition states that, any optimal solution of (\ref{opt_dis_k}) can be contracted on the unit sphere without increasing its value of the cost function. 
 Hence we may constrain the optimization problem to a unit sphere. 
 \begin{proposition}[homogeneous reformulation]
-Under Assumption \ref{pen2}, assuming (\ref{opt_dis_k}) admits at least 1 global optimal solution and $\sigma$ is $k$-homogeneous with $k \ge 1$, then (\ref{opt_dis_k}) is equivalent to
+\label{prop:homogeneous_reformulation}
+Assume $\phi_k$ is nondecreasing with $\phi_k(0) = 0$ (in particular, Assumption \ref{pen2} without the differentiability at zero suffices), assume (\ref{opt_dis_k}) admits at least one global minimizer, and let $\sigma$ be $k$-homogeneous with $k \ge 1$. Then (\ref{opt_dis_k}) is equivalent to
 \begin{equation}
 \label{discrete nonconvex problem}
 \tag{$P_{\phi_k}$}
@@ -1443,7 +1448,7 @@ Under Assumption \ref{pen2}, assuming (\ref{opt_dis_k}) admits at least 1 global
 	\begin{align*}
 		 \frac{1}{2M} \sum_{m = 1}^M \bigg|\bigg( \sum_{n = 1}^{\hat{N}} \hat{c}_n \sigma(\hat{a}_n \cdot x_m + \hat{b}_n) \bigg) - V(x_m) \bigg|^2.
 	\end{align*}
-    For $(\hat{a}_n, \hat{b}_n)$ in the interior of the unit ball with $\|\hat{a}_n\|^2 + |\hat{b}_n|^2 \lneqq  1$ and $(\hat{a}_n,\hat{b}_n)\neq 0$, denote $\lambda_n =\frac{1}{ \sqrt{ \|\hat{a}_n\|^2 + |\hat{b}_n|^2} }\gneqq  1$. Projecting $(\hat{a}_n, \hat{b}_n)$ on the sphere by defining
+    Neurons with $(\hat{a}_n, \hat{b}_n) = 0$ satisfy $\sigma(x, 0) = 0$ by $k$-homogeneity and can be discarded without changing the network or increasing the penalty. For the remaining $(\hat{a}_n, \hat{b}_n)$ in the interior of the unit ball with $0 < \|\hat{a}_n\|^2 + |\hat{b}_n|^2 <  1$, denote $\lambda_n =\frac{1}{ \sqrt{ \|\hat{a}_n\|^2 + |\hat{b}_n|^2} } >  1$. We project $(\hat{a}_n, \hat{b}_n)$ onto the sphere by defining
         \begin{align*}
             (\tilde{a}_n,\tilde{b}_n) = \lambda_n (\hat{a}_n, \hat{b}_n).
         \end{align*}
@@ -1466,7 +1471,7 @@ Under Assumption \ref{pen2}, assuming (\ref{opt_dis_k}) admits at least 1 global
 	\begin{align*}
 		\tilde{N} = \hat{N} \in \mathbb{N},\quad (\tilde{a}_n,\tilde{b}_n) \in \mathbb{S}^d, \quad \tilde{c}_n \in \mathbb{R}, \quad n = 1, \dots, \tilde{N},
 	\end{align*}
-	is feasible for the sphere-constrained problem and yields a value no larger than the optimum of (\ref{opt_dis_k}).
+	is feasible for the sphere-constrained problem and yields a value no larger than the optimum of (\ref{opt_dis_k}). Conversely, every sphere-feasible point is feasible for (\ref{opt_dis_k}), so the two optimal values coincide; in particular the projected point is a global minimizer of \eqref{discrete nonconvex problem}, and the rescaling maps minimizers of one problem to minimizers of the other, which is the meaning of equivalence here.
 \end{proof}
 
 \subsubsection*{The $\reluk$ function}
@@ -1474,7 +1479,7 @@ First we consider the ReLU function with the power $k$:
 \begin{align*}
 	\sigma(x, \omega) = \max\{0, \omega \cdot x\}^{k}, \text{ with } k \in [2, \infty).
 \end{align*}
-Since they are not polynomial, they can linearly approximate any measurable function \cite{leshno1993multilayer}.
+Since these activations are not polynomials, the corresponding networks are dense in $C(K)$ on compact sets $K$ \cite{leshno1993multilayer}.
 In this case the gradient is
 \begin{align*}
 	\nabla_x \sigma(x, \omega) =
@@ -1490,14 +1495,9 @@ The activation function is non-decreasing and positive homogeneous of degree $k$
 For the standard ReLU activation ($k = 1$), the second-order weak derivative of an approximant $f_n$ fails to exist as a function (it is only a distribution), so $f_n$ cannot be used to mimic higher-order derivatives.
 Choosing $\sigma$ as a $\mathrm{ReLU}^k$ activation with $k > 1$ remedies this and enables simultaneous approximation of a function together with its derivatives.
 
-For $k > 1$,  the activation function not only preserves the nice property such as homogeneity of ReLU, but also smooths the kinks. We gain 2 things from the differentiability: 1. It circumvents the non-differentiable corners of the ReLU function; 2. The gradient information of the activation function can be used to calculate the gradient-augmented loss function. More generally, we assume the activation function to satisfy the following condition:
+For $k > 1$, the activation function not only preserves the homogeneity of ReLU but also smooths the kink. The differentiability buys two things: it removes the non-differentiable corners of the ReLU function, and it makes the gradient of the activation available for the gradient-augmented loss.
 
-
-
-
-
-
-In absence of Assumption \ref{pen1}, it is difficult to prove the existence of the global optimizer with the direct method of . 
+In the absence of Assumption \ref{pen1}, it is difficult to prove the existence of a global minimizer with the direct method of the calculus of variations.
 For example for the penalty $ \phi(c) = |c|^q$ with $q < 1$, we have $\phi'(0) = \infty$, the weak-* l.s.c. of the cost functional breaks.
 However, assuming the local optimizer exists, we can still derive the necessary optimality condition. 
 
@@ -1583,13 +1583,14 @@ Compared with Theorem~\ref{opt_cdt}:
 
 \begin{corollary}[Existence of minimizer for $\eqref{discrete nonconvex problem}$ with $\phi_k'(0^+) = +\infty$]
 \label{cor:discrete_existence}
-Suppose $\phi_k$ satisfies Assumption~\ref{pen2} with $\phi_k'(0^+) = +\infty$;
-$\sigma$ is continuous, the domain of $x$ $D$ is bounded. 
-Then the discrete problem $\eqref{discrete nonconvex problem}$ admits a global minimizer with at most $N_{\max}$ neurons with
+Suppose $\phi_k$ satisfies Assumption~\ref{pen2} on $(0, \infty)$ with $\phi_k'(0^+) = +\infty$;
+suppose $\sigma(\cdot, \omega) \in C^1(\overline{D})$ for every $\omega$ with $(x, \omega) \mapsto (\sigma, \nabla_x \sigma)$ continuous on $\overline{D} \times \mathbb{S}^d$ (satisfied by $\reluk$ with $k \ge 2$); and let $D$ be bounded and $V \in H^1(D, \nu)$.
+Then the discrete problem $\eqref{discrete nonconvex problem}$ admits a global minimizer with at most $N_{\max}$ neurons, where
 \begin{equation*}
-	N_{\max} = \frac{\|V\|_H^2}{2\,\alpha\,\phi_k(c_{\min})}, \qquad
-	c_{\min} = (\phi_k')^{-1}\!\bigg(\frac{\|V\|_H\;\sup_{\omega \in \mathbb{S}^d}\|\sigma(\cdot\,;\omega)\|_H}{\alpha}\bigg)
+	N_{\max} = \frac{\|V\|_{H^1(D,\nu)}^2}{2\,\alpha\,\phi_k(c_{\min})}, \qquad
+	c_{\min} = (\phi_k')^{-1}\!\bigg(\frac{\|V\|_{H^1(D,\nu)}\;\sup_{\omega \in \mathbb{S}^d}\|\sigma(\cdot, \omega)\|_{H^1(D,\nu)}}{\alpha}\bigg),
 \end{equation*}
+and $(\phi_k')^{-1}$ denotes the generalized inverse $t \mapsto \inf\{z > 0: \phi_k'(z) \le t\}$.
 \end{corollary}
 \begin{proof}\quad\\
 1. (Fixed $N$, existence by Weierstrass).
@@ -1602,34 +1603,34 @@ For fixed $N$, the objective is a real-valued function on $(\mathbb{S}^d)^N \tim
 \end{equation*}
 
 We verify $J$ is continuous in $(\omega, c)$.
-Since $\sigma$ is continuous and $\mathbb{S}^d \times \overline{D}$ is compact ($D$ bounded), both $\sigma(a \cdot x + b)$ and $\nabla_x \sigma(a \cdot x + b)$ are uniformly bounded on $\mathbb{S}^d \times \overline{D}$.
-For any convergent sequence $(\omega^k, c^k) \to (\omega, c)$, the integrand converges pointwise in $x$ and is dominated by $C(|V(x)|^2 + |\nabla V(x)|^2 + 1) \in L^1(D, \nu)$ with some constant $C$.
+By assumption both $\sigma(a \cdot x + b)$ and $\nabla_x \sigma(a \cdot x + b)$ are uniformly bounded on the compact set $\overline{D} \times \mathbb{S}^d$ ($D$ bounded).
+For any convergent sequence $(\omega^{(j)}, c^{(j)}) \to (\omega, c)$, the integrand converges pointwise in $x$ and is dominated by $C(|V(x)|^2 + |\nabla V(x)|^2 + 1) \in L^1(D, \nu)$ with some constant $C$.
 By dominated convergence, the integral is continuous in $(\omega, c)$. Combined with the continuity of $\phi_k$, $J$ is continuous.
 
 Since $\phi_k(z) \to \infty$ as $z \to \infty$ (Assumption~\ref{pen2}) and $J \ge 0$, any minimizing sequence is bounded.
-Furthermore, since taking $c = 0$ is feasible and the penalty is non-negative, we have
+Furthermore, since taking $c = 0$ is feasible and the penalty is non-negative, the optimal value is bounded by
 \begin{equation*}
-	L(\omega^*, c^*) \le J(\omega^*, c^*) \le J(\omega, 0) = L(0) = \frac{1}{2}\|V\|_H^2,
+	J(\omega, 0) = \frac{1}{2}\|V\|_{H^1(D,\nu)}^2 \quad \text{for any } \omega,
 \end{equation*}
-Therefore,
+so along a minimizing sequence eventually
 \begin{equation*}
-	\sum_{n = 1}^N \phi_k(|c_n^*|) \le \frac{1}{2\alpha}\|V\|_H^2
-\end{equation*} 
-The minimizing sequence lies in $(\mathbb{S}^d)^N \times [-R, R]^N$ for some $R > 0$, which is compact. By Weierstrass, $J$ attains its minimum for each $N$.
+	\sum_{n = 1}^N \phi_k(|c_n|) \le \frac{1}{2\alpha}\|V\|_{H^1(D,\nu)}^2 + 1.
+\end{equation*}
+By the coercivity of $\phi_k$, the minimizing sequence lies in $(\mathbb{S}^d)^N \times [-R, R]^N$ for some $R > 0$, which is compact. By Weierstrass, $J$ attains its minimum for each $N$.
 
 \medskip\noindent
 2. (Uniform bound on $N$).
-Let $(\omega^*, c^*)$ be a minimizer for $N$ neurons with all $c_n^* \neq 0$. The stationarity condition in $c_n$ gives $|p(\omega_n^*)| = \alpha\,\phi_k'(|c_n^*|)$, where $p(\omega) = \langle \mathcal{N}_{\omega^*, c^*} - V,\, \sigma(\cdot\,;\omega)\rangle_H$.
-By Cauchy--Schwarz:
+Let $(\omega^*, c^*)$ be a minimizer for $N$ neurons with all $c_n^* \neq 0$. The stationarity condition in $c_n$ gives $|p(\omega_n^*)| = \alpha\,\phi_k'(|c_n^*|)$, where
 \begin{equation*}
-	\alpha\,\phi_k'(|c_n^*|) = |p(\omega_n^*)| \le \|\mathcal{N}_{\omega^*, c^*} - V\|_H \;\|\sigma(\cdot\,;\omega_n^*)\|_H \le \|V\|_H\;\sup_{\omega \in \mathbb{S}^d}\|\sigma(\cdot\,;\omega)\|_H.
+	p(\omega) = \langle \mathcal{N}_{\omega^*, c^*} - V,\, \sigma(\cdot, \omega)\rangle_{H^1(D, \nu)}
 \end{equation*}
-Since $\phi_k'$ is decreasing with $\phi_k'(0^+) = +\infty$ we can define $c_{\min}$ with
+is the dual variable of Section~3 restricted to the sphere, with the $H^1(D,\nu)$ inner product collecting the value and gradient channels.
+By Cauchy--Schwarz and $\|\mathcal{N}_{\omega^*, c^*} - V\|_{H^1(D,\nu)}^2 \le 2 J(\omega^*, c^*) \le \|V\|_{H^1(D,\nu)}^2$:
 \begin{equation*}
-	c_{\min} := (\phi_k')^{-1}\!\bigg(\frac{\|V\|_H\;\sup_{\omega \in \mathbb{S}^d}\|\sigma(\cdot\,;\omega)\|_H}{\alpha}\bigg),
+	\alpha\,\phi_k'(|c_n^*|) = |p(\omega_n^*)| \le \|\mathcal{N}_{\omega^*, c^*} - V\|_{H^1(D,\nu)} \;\|\sigma(\cdot, \omega_n^*)\|_{H^1(D,\nu)} \le \|V\|_{H^1(D,\nu)}\;\sup_{\omega \in \mathbb{S}^d}\|\sigma(\cdot, \omega)\|_{H^1(D,\nu)}.
 \end{equation*}
-with $|c_n^*| \ge c_{\min} > 0$.
-Hence $N\,\phi_k(c_{\min}) \le \sum \phi_k(|c_n^*|) \le \frac{1}{2\alpha}\|V\|_H^2$, giving $N \le N_{\max}$.
+Since $\phi_k'$ is nonincreasing with $\phi_k'(0^+) = +\infty$, the generalized inverse gives $|c_n^*| \ge c_{\min} > 0$ with $c_{\min}$ as in the statement.
+Hence $N\,\phi_k(c_{\min}) \le \sum_n \phi_k(|c_n^*|) \le \frac{1}{2\alpha}\|V\|_{H^1(D,\nu)}^2$, giving $N \le N_{\max}$.
 
 For $N > N_{\max}$, any $N$-neuron minimizer must have some $c_n = 0$, reducing to an $N'$-neuron solution with $N' \le N_{\max}$.
 Therefore $\inf_N J_N^* = J_{N_{\max}}^*$, which is attained by Step~1.
@@ -1655,15 +1656,15 @@ with
 		y(0) - x 
 	\end{bmatrix}.
 \end{align*}
-Assuming the $y$ can be written the function of $u$, define $U:= L^2(t_0, T)$, $U_{ad}:= \{u \in U:  \hat{E}(u):= E(y(u), u) = 0 \}$,  we observe the reduced problem
+Assume that for every control the state equation admits a unique solution $y(u)$; setting $U:= L^2(t_0, T; \mathbb{R}^k)$, we obtain the unconstrained reduced problem
 \begin{align*}
-	& \inf_{u \in U_{ad}} \hat{J}(u)
+	& \inf_{u \in U} \hat{J}(u) := J(y(u), u).
 \end{align*}
-We assume the function $y(u)$ of $u$ is well-defined, the first variation at $\bar{u}$ evaluated at direction $u \in U_{ad}$ is
+The first variation at $\bar{u}$ in a direction $u \in U$ is
 \begin{align*}
 	&\langle \hat{J}_u(\bar{u}), u \rangle_{U^*, U} = \langle y_u^*(\bar{u}) \cdot  J_y(y(\bar{u}), \bar{u}) + J_u(y(\bar{u}), \bar{u}), u \rangle_{U^*, U},
 \end{align*}
-where we denote $*$ as the adjoint operator. Since $y(u)$ is implicitly defined in general and the derivative is difficult to solve, we leverage the Lagrange argument and implement the adjoint approach. Define the space $\mathcal{E}: = \ran(E)$ and $p \in  \mathcal{E}^*$. Observe
+where $*$ denotes the adjoint operator. Since $y(u)$ is implicitly defined in general and its derivative is expensive to form, we leverage the Lagrangian and implement the adjoint approach. Denote by $\mathcal{E}$ the codomain of $E$ and let $p \in  \mathcal{E}^*$ be the multiplier. Observe
 \begin{align*}
 	L(p, y, u) = J(y, u) + \langle p, E(y, u) \rangle_{\mathcal{E}^*, \mathcal{E}}.
 \end{align*}
@@ -1680,7 +1681,7 @@ where $E_y^{-*}:= (E_y^*)^{-1}$.
 Plug $p^*$ in the Lagrangian to get the gradient w.r.t. u:
 \begin{align*}
 	\langle L_u(y^*, u^*, p^*), u \rangle_{U^*, U} &= \langle J_u(y^*, u^*, p^*), u \rangle_{U^*, U} + \langle E_u^*(y^*, u^*) \cdot p^*, u \rangle_{U^*, U}\\
-    &= \langle 2 \beta u^* - g(y^*) p^*, u\rangle_{U^*, U} . 
+    &= \langle 2 \beta u^* - g(y^*)^T p^*, u\rangle_{U^*, U} .
 \end{align*}
 $p^*$ can be calculated by (\ref{adjoint equation}) and integration by parts: 
 \begin{equation*}
@@ -1696,24 +1697,19 @@ For the implemented data-driven approach, it is essential to have the causality-
 
 \subsection{Greedy Insertion}
 In \cite{bach2017breaking}, a conditional gradient algorithm for finitely many samples is presented. 
-To avoid the constraint, like in \cite{pieper2022nonconvex} we implement the stereographic projection for the ReLU activation function:
+To handle the sphere constraint, like in \cite{pieper2022nonconvex} we parametrize $\mathbb{S}^d$ by the inverse stereographic map
 \begin{align*}
-	\Psi: \mathbb{S}^d \rightarrow \mathbb{R}^d, \quad z \mapsto \bigg(\frac{2z}{1 + \|z\|^2}, \frac{1- \|z\|^2}{1 + \|z\|^2} \bigg).
-\end{align*} 
-Denote $K$ the number of the samples, the optimal neural net representation of the true target function is supported on at most $K$ atoms.  
-
-In each iteration $f_t$, we calculate $\bar{f}_t$ such that 
-\begin{align*}
-	\bar{f_t} \in \arg \min_{f } \langle f, J'(f_t) \rangle_{L^2(D, \nu)}. 
+	\Psi: \mathbb{R}^d \rightarrow \mathbb{S}^d \subset \mathbb{R}^{d+1}, \quad z \mapsto \bigg(\frac{2z}{1 + \|z\|^2}, \frac{1- \|z\|^2}{1 + \|z\|^2} \bigg),
 \end{align*}
+which turns the constrained candidate search into an unconstrained one.
+Denote by $K$ the number of samples; the optimal neural network representation of the target is then supported on at most $K$ atoms.
 
- Denote $g = - J'(f_t) \in L^2(D, \nu)$ for $f_t(x) = \int_{\Omega} \varphi_\omega^t(x) d\mu_{f_t}(\omega)$. The conditional gradient algorithm relies on solving at each iteration  the "Frank-Wolf step", namely, we maximize: 
+The conditional gradient method minimizes, at the current iterate $\mu_t$ with network $f_t := \mathcal{N}\mu_t$, the linearization of the fidelity term over the total-variation ball $\{\|\mu\|_{\mathcal{M}(\Omega)} \le M_0\}$; since the extreme points of the ball are the signed Dirac measures $\pm M_0 \delta_\omega$, this ``Frank--Wolfe step'' reduces to maximizing the absolute dual variable over the dictionary:
 \begin{equation}
-	\Omega \ni \omega \mapsto |p_t(\omega)|= \bigg|\frac{1}{M} \sum_{m = 1}^M \sigma(x_m; \omega) g_t(x_m) \bigg|.
+	\Omega \ni \omega \mapsto |p_t(\omega)|= \bigg|\frac{1}{M} \sum_{m = 1}^M \sigma(x_m; \omega)\, g_t(x_m) \bigg|,
+	\qquad g_t := -J'(f_t) \in L^2(D, \nu).
 \end{equation}
-
-
-To find the global maximal is a NP-hard problem. However heuristic approaches are available for greedy insertion.
+Finding the global maximum of this landscape is in general intractable (for ReLU-type dictionaries even NP-hard \cite{bach2017breaking}); heuristic multi-start approaches are used for the greedy insertion instead.
 
 
 \subsection{Nonconvex Penalized Algorithm}
@@ -2481,7 +2477,7 @@ discontinuity.}
 \end{figure}
 
 
-Since we are using the data-driven method, we investigate next if we can to some extend solve the problem by over. 
+Since the method is data-driven, we investigate next to what extent the representation limit can be mitigated by oversampling the switching region. 
 The assumption is: if the model can achieve good local approximation, by increasing the sample size around the switching set, we can improve the precision. 
 We test this with stratified sampling: 
 From the same generator we build four training sets that differ only in the
