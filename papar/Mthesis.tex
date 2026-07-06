@@ -662,7 +662,7 @@ Let Assumption~\ref{ass:ridge} hold and set
 $\kappa(\omega) := \|\sigma(\cdot, \omega)\|_{L^2(D)}$. Then
 $\kappa \in C_0(\Omega)$.
 Consequently, for every $\varphi \in L^2(D)$ the function
-$p_\varphi(\omega) := \langle \sigma(\cdot, \omega), \varphi\rangle_{L^2(D)}$
+$\omega \mapsto \langle \sigma(\cdot, \omega), \varphi\rangle_{L^2(D)}$
 belongs to $C_0(\Omega)$, and for every bounded sequence
 $\mu_n \overset{*}{\rightharpoonup} \mu$ in $\mathcal{M}(\Omega)$ it holds
 $\mathcal{N}\mu_n \rightharpoonup \mathcal{N}\mu$ weakly in $L^2(D)$.
@@ -682,9 +682,9 @@ $\inf_{x \in D} |a \cdot x + b| \ge |b| - |a|\,R_D\sqrt{d} \to \infty$ and
 $\rho(z) \to 0$ as $|z| \to \infty$; hence $\kappa(\omega) \to 0$ as
 $|\omega| \to \infty$ in either regime. Continuity of $\kappa$ follows from
 dominated convergence. The second claim follows from
-$|p_\varphi(\omega)| \le \kappa(\omega)\, \|\varphi\|_{L^2(D)}$ together with the
+$|\langle \sigma(\cdot,\omega), \varphi\rangle_{L^2(D)}| \le \kappa(\omega)\, \|\varphi\|_{L^2(D)}$ together with the
 continuity of $\omega \mapsto \sigma(\cdot, \omega) \in L^2(D)$; the third from
-$\langle \mathcal{N}\mu_n, \varphi\rangle_{L^2(D)} = \int_\Omega p_\varphi \, d\mu_n$,
+$\langle \mathcal{N}\mu_n, \varphi\rangle_{L^2(D)} = \int_\Omega \langle \sigma(\cdot,\omega), \varphi\rangle_{L^2(D)} \, d\mu_n(\omega)$,
 the definition of weak-* convergence, and the uniform bound
 $\|\mathcal{N}\mu_n\|_{L^2(D)} \le \|\rho\|_\infty \sup_n \|\mu_n\|_{\mathcal{M}(\Omega)}$.
 \end{proof}
@@ -1010,19 +1010,29 @@ gradient channels,
 The value channel always vanishes at infinity:
 $|\langle \mathcal{N}\bar{\mu} - V, \sigma(\cdot, \omega)\rangle| \le \|\mathcal{N}\bar{\mu} - V\|_{L^2(D)} \, \kappa(\omega) \rightarrow 0$
 by Lemma \ref{lem:value_decay}. If in addition the residual
-$\mathcal{N}\bar{\mu} - V$ belongs to $H^2(D)$, the gradient channel
-vanishes as well: writing $\nabla_x \sigma(x, \omega) = \rho'(a \cdot x + b)\, a = \nabla_x [\rho(a \cdot x + b)]$
-and integrating by parts,
+$\mathcal{N}\bar{\mu} - V$ belongs to $H^2(D)$, the dual variable admits the
+boundary representation of Lemma \ref{lem:dual_pairing}(1) below,
 \begin{equation*}
-	\langle \nabla(\mathcal{N}\bar{\mu} - V), \nabla_x \sigma(\cdot, \omega) \rangle_{L^2(D)}
-	= -\langle \Delta (\mathcal{N}\bar{\mu} - V), \, \rho(a \cdot x + b) \rangle_{L^2(D)}
-	+ \langle \partial_n (\mathcal{N}\bar{\mu} - V), \, \rho(a \cdot x + b) \rangle_{L^2(\partial D)},
+	\bar{p}(\omega)
+	= \langle r - \Delta r, \, \sigma(\cdot, \omega) \rangle_{L^2(D)}
+	+ \langle \partial_n r, \, \sigma(\cdot, \omega) \rangle_{L^2(\partial D)},
+	\qquad r := \mathcal{N}\bar{\mu} - V.
 \end{equation*}
-and both terms tend to zero by the slab estimates of Lemma
-\ref{lem:value_decay}, applied on $D$ and on the $(d-1)$-dimensional Lipschitz
-boundary $\partial D$. In this case
+The interior term vanishes as $|\omega| \rightarrow \infty$ by Lemma
+\ref{lem:value_decay}. The boundary term vanishes as well provided $\partial D$
+meets every hyperplane in an $\mathcal{H}^{d-1}$-null set
+(Lemma \ref{lem:dual_pairing}(3)) --- for instance when $D$ is smooth and
+strictly convex; in that case
 $\limsup_{|\omega| \rightarrow \infty} |\bar{p}(\omega)| = 0 < \alpha$ and
-\eqref{no_escape} holds. The residual lies in $H^2(D)$ for instance when
+\eqref{no_escape} holds unconditionally. On domains with flat faces (e.g.\
+boxes) the boundary term can persist along ridges aligned with a face
+$F \subset \partial D$ with unit normal $n_F$, $F \subset \{n_F \cdot x = c_F\}$:
+along $a_j = t_j\, n_F$, $b_j = -t_j c_F + s_0$ with $t_j \rightarrow \infty$
+one finds
+$\bar{p}(\omega_j) \rightarrow \rho(s_0) \int_F \partial_n r \, d\mathcal{H}^{d-1}$,
+so \eqref{no_escape} becomes a genuine smallness condition on the boundary flux
+of the residual across the faces, relative to $\alpha$. The residual lies in
+$H^2(D)$ for instance when
 $V \in H^2(D)$, $\rho \in C^2(\mathbb{R})$ with $\rho'' \in L^2(\mathbb{R})$,
 and $\bar{\mu}$ carries the moment
 $\int_\Omega (1 + |a|)^{3/2} \, d|\bar{\mu}|(\omega) < \infty$. Finally, note
@@ -1031,71 +1041,259 @@ counterexamples of Remark \ref{rem:sharpness}: there the escaping atoms
 satisfy $|\bar{p}(\omega_n)| \rightarrow \alpha$.
 \end{remark}
 
-Now we have a necessary optimality condition. But it is not sufficient. More importantly, we cannot formulate an algorithm to determine the optimal value of $N$. To overcome this difficulty, we apply a heuristic approach: For fixed $N$, the optimization problem
+Now we have a necessary optimality condition. But it is not sufficient. More importantly, we cannot formulate an algorithm to determine the optimal value of $N$. To overcome this difficulty, we apply a heuristic approach: for fixed inner weights $\bar{\omega} = (\bar{\omega}_n)_{n = 1}^N$, the finite-dimensional problem
 \begin{equation}\label{opt_fixN}
-	J_{\bar{\omega}}(c):= l(\mathcal{N}_{\bar{\omega}, c}; y) + \sum_{n = 1}^N \phi(|c_n|),
+	J_{\bar{\omega}}(c):= L\bigg( \sum_{n = 1}^N c_n \delta_{\bar{\omega}_n} \bigg) + \alpha \sum_{n = 1}^N \phi(|c_n|), \qquad c \in \mathbb{R}^N,
 \end{equation}
-is well-equipped to solve by traditional gradient-based optimization method. Now we need to find a way to heuristically determine the optimal $\bar{\omega}$ and the optimal number $N$. To this end, we introduce the following theorem as a sufficient condition. 
+is amenable to gradient-based optimization. Now we need to find a way to heuristically determine the optimal $\bar{\omega}$ and the optimal number $N$. To this end, we introduce the following theorem as a sufficient condition.
 
+For the analysis it is convenient to collect the two channels of the fidelity
+term in the product space
+\begin{equation*}
+	\mathcal{Y} := L^2(D, \nu) \times L^2(D, \nu)^d, \qquad
+	\mathcal{T}\mu := \big(\mathcal{N}\mu, \, \nabla(\mathcal{N}\mu)\big), \qquad
+	\mathcal{V} := (V, \nabla V),
+\end{equation*}
+so that $L(\mu) = \frac{1}{2}\|\mathcal{T}\mu - \mathcal{V}\|_{\mathcal{Y}}^2$
+whenever $\mathcal{N}\mu \in H^1(D)$, and the dual variable reads
+$\bar{p}(\omega) = \langle \mathcal{T}\bar{\mu} - \mathcal{V}, \,
+(\sigma(\cdot,\omega), \nabla_x \sigma(\cdot,\omega)) \rangle_{\mathcal{Y}}$.
+The next lemma provides a boundary representation of such pairings. It serves
+three purposes: it bounds them uniformly in $\omega$, it justifies exchanging
+the $\mathcal{Y}$-pairing with integration against a measure of merely bounded
+variation, and it gives the geometric condition under which the dual variable
+vanishes at infinity.
 
-\begin{theorem}
-\label{sc_opt}
- Assuming $\phi$ satisfies the Assumption \ref{pen1}, \ref{pen2}, \ref{pen3}, let $\bar{\mu}$ be a finitely supported measure $\bar{\mu}:= \sum_{n = 1}^N \bar{c}_n \delta_{\bar{\omega}_n}$ such that 
+\begin{lemma}[boundary representation of the dual pairing]\label{lem:dual_pairing}
+Let Assumption \ref{ass:ridge} hold with $\rho \in C^2(\mathbb{R})$, and let
+$r \in H^2(D)$. Define
+\begin{equation*}
+	p_r(\omega) := \langle r, \, \sigma(\cdot, \omega)\rangle_{L^2(D)}
+	+ \langle \nabla r, \, \nabla_x \sigma(\cdot, \omega)\rangle_{L^2(D)},
+	\qquad \omega \in \Omega.
+\end{equation*}
+Then:
 \begin{enumerate}
-	\item $\bar{c}_n \in (\mathbb{R} \backslash 0)^N$ is a local minimum of $J_{\bar{\omega}}$, 
-	\item For all $\omega \in \Omega \backslash \{\bar{\omega}_n \}_{n = 1, \dots, N}$, it holds $|\bar{p}(\omega)|  \lneqq  \alpha$, where $\bar{p} = \mathcal{N}^*(\mathcal{N}_{\bar{\omega}, \bar{c}} - y) + \sum_{i=1}^d (\partial_{x_i}\mathcal{N})^*(\partial_{x_i}\mathcal{N}_{\bar{\omega}, \bar{c}} - \partial_{x_i} V)$. 
+	\item For every $\omega \in \Omega$,
+	\begin{equation*}
+		p_r(\omega) = \langle r - \Delta r, \, \sigma(\cdot, \omega)\rangle_{L^2(D)}
+		+ \langle \partial_n r, \, \sigma(\cdot, \omega)\rangle_{L^2(\partial D)},
+	\end{equation*}
+	and consequently $p_r$ is continuous and bounded, with
+	$\sup_{\omega \in \Omega} |p_r(\omega)| \le C_{D, \rho}\, \|r\|_{H^2(D)}$
+	for a constant $C_{D, \rho}$ depending only on $D$ and $\|\rho\|_\infty$.
+	\item For every $\mu' \in \mathcal{M}(\Omega)$ with $\mathcal{N}\mu' \in H^1(D)$,
+	\begin{equation*}
+		\langle r, \, \mathcal{N}\mu' \rangle_{L^2(D)}
+		+ \langle \nabla r, \, \nabla(\mathcal{N}\mu') \rangle_{L^2(D)}
+		= \int_\Omega p_r(\omega)\, d\mu'(\omega).
+	\end{equation*}
+	\item If in addition $\mathcal{H}^{d-1}(\partial D \cap P) = 0$ for every
+	hyperplane $P \subset \mathbb{R}^d$ --- e.g.\ if $D$ is smooth and strictly
+	convex --- then $p_r \in C_0(\Omega)$.
 \end{enumerate}
-Then $\bar{\mu}$ is a local minimum of $J$.
+\end{lemma}
+\begin{proof}
+(1) Since $\rho \in C^2(\mathbb{R})$, each atom satisfies
+$\sigma(\cdot, \omega) \in C^1(\overline{D}) \subset H^1(D)$. Green's formula on
+the bounded Lipschitz domain $D$, valid for $r \in H^2(D)$ and $u \in H^1(D)$
+(see, e.g., \cite{grisvard1985elliptic}), gives
+$\langle \nabla r, \nabla u \rangle_{L^2(D)} = -\langle \Delta r, u\rangle_{L^2(D)}
++ \langle \partial_n r, u \rangle_{L^2(\partial D)}$, where
+$\partial_n r \in L^2(\partial D)$ is defined through the trace of
+$\nabla r \in H^1(D)^d$, with
+$\|\partial_n r\|_{L^2(\partial D)} \le C_D \|r\|_{H^2(D)}$. Applying this with
+$u = \sigma(\cdot, \omega)$ and adding the value term yields the
+representation. The bound follows from Cauchy--Schwarz,
+$\kappa(\omega) \le \|\rho\|_\infty \nu(D)^{1/2}$ and
+$\|\sigma(\cdot,\omega)\|_{L^2(\partial D)} \le \|\rho\|_\infty
+\mathcal{H}^{d-1}(\partial D)^{1/2}$; continuity from the continuity of
+$\omega \mapsto \sigma(\cdot, \omega)$ into $L^2(D)$ and $L^2(\partial D)$
+(dominated convergence).
+
+(2) Green's formula with $u = \mathcal{N}\mu' \in H^1(D)$ gives
+\begin{equation*}
+	\langle r, \mathcal{N}\mu' \rangle + \langle \nabla r, \nabla (\mathcal{N}\mu') \rangle
+	= \langle r - \Delta r, \, \mathcal{N}\mu' \rangle_{L^2(D)}
+	+ \langle \partial_n r, \, \operatorname{tr}(\mathcal{N}\mu') \rangle_{L^2(\partial D)}.
+\end{equation*}
+Since $|\sigma(x, \omega)| \le \|\rho\|_\infty$ and $|\mu'|$ is finite, Fubini's
+theorem applies to the interior term:
+$\langle r - \Delta r, \mathcal{N}\mu' \rangle = \int_\Omega \langle r - \Delta r,
+\sigma(\cdot,\omega)\rangle \, d\mu'(\omega)$. For the boundary term we identify
+the trace: the trace of a function in $H^1(D)$ coincides
+$\mathcal{H}^{d-1}$-almost everywhere on $\partial D$ with the limit of its
+solid averages over $B_t(x) \cap D$ as $t \rightarrow 0$
+\cite{evans2015measure}. By Fubini, the solid average of $\mathcal{N}\mu'$
+over $B_t(x) \cap D$ equals
+$\int_\Omega \big( |B_t(x) \cap D|^{-1} \int_{B_t(x) \cap D}
+\sigma(x', \omega)\,dx' \big) \, d\mu'(\omega)$, and since each
+$\sigma(\cdot, \omega)$ is continuous on $\overline{D}$ and uniformly bounded
+by $\|\rho\|_\infty$, dominated convergence gives
+$\operatorname{tr}(\mathcal{N}\mu')(x) = \int_\Omega \sigma(x, \omega)\,
+d\mu'(\omega)$ for $\mathcal{H}^{d-1}$-a.e.\ $x \in \partial D$. One more
+application of Fubini's theorem to the boundary term completes the identity.
+
+(3) The interior term of the representation vanishes as
+$|\omega| \rightarrow \infty$ since
+$|\langle r - \Delta r, \sigma(\cdot,\omega)\rangle| \le
+(\|r\|_{L^2} + \|\Delta r\|_{L^2})\, \kappa(\omega)$ and
+$\kappa \in C_0(\Omega)$ (Lemma \ref{lem:value_decay}). For the boundary term
+set $\kappa_\partial(\omega) := \|\sigma(\cdot, \omega)\|_{L^2(\partial D)}$
+and let $|\omega_j| \rightarrow \infty$. For $\tau > 0$ split $\partial D$ into
+the band $B_j(\tau) := \{x \in \partial D : |a_j \cdot x + b_j| \le \tau\}$ and
+its complement, on which $|\rho(a_j \cdot x + b_j)| \le \eta(\tau) :=
+\sup_{|z| \ge \tau} |\rho(z)|$:
+\begin{equation*}
+	\kappa_\partial(\omega_j)^2
+	\le \|\rho\|_\infty^2 \, \mathcal{H}^{d-1}(B_j(\tau))
+	+ \eta(\tau)^2 \, \mathcal{H}^{d-1}(\partial D).
+\end{equation*}
+If $|a_j|$ stays bounded, then $|b_j| \rightarrow \infty$ and
+$B_j(\tau) = \emptyset$ eventually, while
+$\inf_{x \in \partial D} |a_j \cdot x + b_j| \rightarrow \infty$ makes the
+second term vanish for every fixed $\tau$ as well; hence
+$\kappa_\partial(\omega_j) \rightarrow 0$. If $|a_j| \rightarrow \infty$, pass
+to a subsequence with $a_j / |a_j| \rightarrow e$ and
+$b_j / |a_j| \rightarrow -c \in [-\infty, +\infty]$. If $|c| = \infty$, then
+$B_j(\tau) = \emptyset$ eventually. Otherwise every $x \in B_j(\tau)$
+satisfies $|(a_j/|a_j|) \cdot x - (-b_j/|a_j|)| \le \tau / |a_j|$, so
+$B_j(\tau) \subset \{x \in \partial D : |e \cdot x - c| \le \epsilon_j\}$ with
+$\epsilon_j \rightarrow 0$, and by continuity from above of the finite measure
+$\mathcal{H}^{d-1}\llcorner\partial D$,
+\begin{equation*}
+	\limsup_j \mathcal{H}^{d-1}(B_j(\tau))
+	\le \mathcal{H}^{d-1}\big(\partial D \cap \{e \cdot x = c\}\big) = 0
+\end{equation*}
+by hypothesis. Hence $\limsup_j \kappa_\partial(\omega_j)^2 \le \eta(\tau)^2\,
+\mathcal{H}^{d-1}(\partial D)$ for every $\tau$, and $\eta(\tau) \rightarrow 0$
+as $\tau \rightarrow \infty$ gives $\kappa_\partial(\omega_j) \rightarrow 0$.
+Both terms of the representation therefore vanish at infinity, and $p_r \in
+C_0(\Omega)$.
+\end{proof}
+
+\begin{theorem}[sufficient condition for local optimality]
+\label{sc_opt}
+Let $\phi$ satisfy Assumptions \ref{pen1}, \ref{pen2}, \ref{pen3}, let $\sigma$
+satisfy Assumption \ref{ass:ridge} with $\rho \in C^2(\mathbb{R})$, and let
+$V \in H^2(D)$. Let $\bar{\mu} := \sum_{n = 1}^N \bar{c}_n \delta_{\bar{\omega}_n}$
+with distinct $\bar{\omega}_n$ and $\bar{c}_n \neq 0$ be such that
+\begin{enumerate}
+	\item $\bar{c} \in (\mathbb{R} \setminus \{0\})^N$ is a local minimum of $J_{\bar{\omega}}$,
+	\item $|\bar{p}(\omega)| < \alpha$ for all $\omega \in \Omega \setminus \{\bar{\omega}_n \}_{n = 1, \dots, N}$,
+	\item the no-escape condition \eqref{no_escape} holds. (By Remark
+	\ref{rem:no_escape} and Lemma \ref{lem:dual_pairing}(3), this is automatic
+	when $\partial D$ meets every hyperplane in an $\mathcal{H}^{d-1}$-null
+	set, and void on a compact parameter set $\Omega_R$.)
+\end{enumerate}
+Then $\bar{\mu}$ is a local minimizer of $J$: there exists $\epsilon > 0$ such
+that $J(\bar{\mu}) \le J(\mu)$ for all $\mu \in \mathcal{M}(\Omega)$ with
+$\|\mu - \bar{\mu}\|_{\mathcal{M}(\Omega)} \le \epsilon$.
 \end{theorem}
 \begin{proof}
-For arbitrary $\epsilon > 0$ we observe the open $\epsilon$-ball $B_\epsilon(\bar{\omega}_n)$ around a support point of $\bar{\mu} \in \mathcal{M}(\Omega)$ and define 
+Throughout, $\bar{r} := \mathcal{N}\bar{\mu} - V \in H^2(D)$ (a finite sum of
+$C^2(\overline{D})$ atoms plus $V \in H^2(D)$), and $\bar{p} = p_{\bar{r}}$ in
+the notation of Lemma \ref{lem:dual_pairing}.
+
+\emph{Step 1 (stationarity at the atoms).} Since $\bar{c}_n \neq 0$ and $\phi$
+is differentiable, $J_{\bar{\omega}}$ is differentiable at $\bar{c}$, and
+hypothesis (1) gives $\partial_{c_n} J_{\bar{\omega}}(\bar{c}) = 0$, i.e.
+$\bar{p}(\bar{\omega}_n) = -\alpha \phi'(|\bar{c}_n|) \sign(\bar{c}_n)$. By
+Assumption \ref{pen3}(2) and the monotonicity of $\phi'$ it holds
+$\phi'(|\bar{c}_n|) < \phi'(0) = 1$, hence $|\bar{p}(\bar{\omega}_n)| < \alpha$.
+
+\emph{Step 2 (uniform dual gap).} By Step 1 and hypothesis (2),
+$|\bar{p}(\omega)| < \alpha$ for every $\omega \in \Omega$; $\bar{p}$ is
+continuous (Lemma \ref{lem:dual_pairing}(1)); and by \eqref{no_escape} there is
+$R > 0$ with $\sup_{|\omega| > R} |\bar{p}(\omega)| < \alpha$. On the compact
+ball $\{|\omega| \le R\}$ the continuous function $|\bar{p}|$ attains its
+maximum, which is $< \alpha$. Hence there exists $\delta \in (0, 1)$ with
 \begin{equation*}
-    \Omega_\epsilon := \bigcup_{n = 1}^{n = N} B_\epsilon (\bar{\omega}_n)
-\end{equation*} 
-$\mu \in M (\Omega_\epsilon)$ admits the form:
-\begin{align*}
-	&\mu = \mu_0 + \tilde{\mu} \quad\text{ with }\quad \mu_0 = \sum_{n = 1}^N c_n \delta_{\bar{\omega}_n},
-    \quad 
-    \tilde{\mu} = \sum_n \tilde{c}_n \delta_{\tilde{\omega}_n} + \mu_{\cont}\\
-	&\text{where}\\
-	& \{\tilde{\omega}_n \}_{n = 1}^\infty = \atom \mu \backslash \atom \bar{\mu}, \\
-	& c_n = \mu(\{\bar{\omega}_n\}), \tilde{c}_n = \tilde{\mu}(\{\tilde{\omega}_n\}).
-\end{align*}
+	\sup_{\omega \in \Omega} |\bar{p}(\omega)| \le (1 - \delta)\, \alpha .
+\end{equation*}
 
-We want to prove for all $\mu \in B_\epsilon(\bar{\mu})$, it holds $J(\bar{\mu}) \le J(\mu)$. First we observe the quadratic fidelity term, it holds
-\begin{align*}
-	\frac{1}{2}\|\mathcal{N}\mu - y\|_{L^2(D, \nu)}^2 &\ge \frac{1}{2} \|\mathcal{N}_{\bar{\omega}, c} - y\|^2_{L^2(D, \nu)} + \langle \mathcal{N}[\mu_0] - y, \mathcal{N} [\tilde{\mu}] \rangle_{L^2(D, \mu)} + \frac{1}{2}\|\mathcal{N}\tilde{\mu}\|^2_{L^2(D, \nu)} \\
-	& \ge \frac{1}{2} \|\mathcal{N}_{\bar{\omega}, c} - y\|^2_{L^2(D, \nu)} + \langle \mathcal{N}[\mu_0 - \bar{\mu}] - y, \mathcal{N}\tilde{\mu} \rangle_{L^2(D, \mu)} + \langle \mathcal{N} \bar{\mu} - y, \mathcal{N} \tilde{\mu}\rangle_{L^2(D, \nu)}\\
-	& \ge  \frac{1}{2} \|\mathcal{N}_{\bar{\omega}, c} - y\|^2_{L^2(D, \nu)} - \|\mathcal{N}\|^2 \epsilon \|\tilde{\mu}\|_{\mathcal{M}(\Omega)} + \langle \bar{p}, \tilde{\mu}\rangle.
-\end{align*}
+\emph{Step 3 (decomposition of a competitor).} By hypothesis (1) there is
+$\epsilon_1 > 0$ with $J_{\bar{\omega}}(c) \ge J_{\bar{\omega}}(\bar{c})$ for
+all $\|c - \bar{c}\|_{\ell^1} \le \epsilon_1$. Fix
+\begin{equation*}
+	\epsilon := \min\bigg\{ \epsilon_1, \; \hat{z}_1, \;
+	\frac{\alpha \delta}{C_{\bar{\omega}} + \alpha \gamma_1 / 2} \bigg\},
+	\qquad
+	C_{\bar{\omega}} := C_{D, \rho} \max_{n = 1, \dots, N}
+	\|\sigma(\cdot, \bar{\omega}_n)\|_{H^2(D)},
+\end{equation*}
+with $C_{D,\rho}$ from Lemma \ref{lem:dual_pairing}(1). Let $\mu \in
+\mathcal{M}(\Omega)$ with $\|\mu - \bar{\mu}\|_{\mathcal{M}(\Omega)} \le
+\epsilon$. If $\mathcal{N}\mu \notin H^1(D)$ then $J(\mu) = +\infty$ and there
+is nothing to prove; so assume $\mathcal{N}\mu \in H^1(D)$ and decompose
+\begin{equation*}
+	\mu = \mu_0 + \tilde{\mu}, \qquad
+	\mu_0 := \sum_{n = 1}^N c_n \delta_{\bar{\omega}_n}, \quad
+	c_n := \mu(\{\bar{\omega}_n\}),
+\end{equation*}
+so that $\tilde{\mu} := \mu - \mu_0$ carries no mass at the support points, and
+\begin{equation*}
+	\|c - \bar{c}\|_{\ell^1} + \|\tilde{\mu}\|_{\mathcal{M}(\Omega)}
+	= \|\mu - \bar{\mu}\|_{\mathcal{M}(\Omega)} \le \epsilon .
+\end{equation*}
+Note $\mathcal{N}\mu_0 \in C^2(\overline{D})$ and hence
+$\mathcal{N}\tilde{\mu} = \mathcal{N}\mu - \mathcal{N}\mu_0 \in H^1(D)$.
 
-For the penalty term, it holds
-\begin{align*}
-	\Phi(\mu) = \Phi(\mu_0) + \Phi(\tilde{\mu}) = \sum_{n = 1}^N \phi(|c_n|) + \sum_n \phi(|\tilde{c}_n|) + \int_\Omega d|\mu_{\cont}|.
-\end{align*}
+\emph{Step 4 (expansion of the fidelity term).} Expanding the square in
+$\mathcal{Y}$ and discarding $\frac{1}{2}\|\mathcal{T}\tilde{\mu}\|_{\mathcal{Y}}^2 \ge 0$,
+\begin{equation*}
+	L(\mu)
+	= L(\mu_0) + \langle \mathcal{T}\mu_0 - \mathcal{V}, \mathcal{T}\tilde{\mu} \rangle_{\mathcal{Y}}
+	+ \frac{1}{2}\|\mathcal{T}\tilde{\mu}\|_{\mathcal{Y}}^2
+	\ge L(\mu_0)
+	+ \langle \mathcal{T}\bar{\mu} - \mathcal{V}, \mathcal{T}\tilde{\mu} \rangle_{\mathcal{Y}}
+	+ \langle \mathcal{T}(\mu_0 - \bar{\mu}), \mathcal{T}\tilde{\mu} \rangle_{\mathcal{Y}} .
+\end{equation*}
+By Lemma \ref{lem:dual_pairing}(2) with $r = \bar{r}$ and $\mu' = \tilde{\mu}$,
+\begin{equation*}
+	\langle \mathcal{T}\bar{\mu} - \mathcal{V}, \mathcal{T}\tilde{\mu} \rangle_{\mathcal{Y}}
+	= \int_\Omega \bar{p} \, d\tilde{\mu} .
+\end{equation*}
+For the second pairing, $r' := \mathcal{N}(\mu_0 - \bar{\mu})
+= \sum_n (c_n - \bar{c}_n) \sigma(\cdot, \bar{\omega}_n) \in H^2(D)$ with
+$\|r'\|_{H^2(D)} \le \max_n \|\sigma(\cdot,\bar{\omega}_n)\|_{H^2(D)}
+\|c - \bar{c}\|_{\ell^1}$, so Lemma \ref{lem:dual_pairing}(1)--(2) give
+\begin{equation*}
+	\big| \langle \mathcal{T}(\mu_0 - \bar{\mu}), \mathcal{T}\tilde{\mu} \rangle_{\mathcal{Y}} \big|
+	= \bigg| \int_\Omega p_{r'} \, d\tilde{\mu} \bigg|
+	\le C_{D, \rho} \|r'\|_{H^2(D)} \, \|\tilde{\mu}\|_{\mathcal{M}(\Omega)}
+	\le C_{\bar{\omega}} \, \epsilon \, \|\tilde{\mu}\|_{\mathcal{M}(\Omega)} .
+\end{equation*}
 
-Choosing $c_n = \bar{c}_n$, the cost thus satisfies
-\begin{align*}
-	J(\mu) \ge J_{\bar{\omega}}(\bar{c}) - \epsilon \|\mathcal{N}\|^2 \|\tilde{\mu}\|_{\mathcal{M}(\Omega)} + \underbrace{\alpha \Phi(\tilde{\mu}) + \langle \bar{p}, \tilde{\mu} \rangle}_{= (1)}.
-\end{align*}
+\emph{Step 5 (penalty split and lower bound).} The atoms of $\mu_0$ and
+$\tilde{\mu}$ are disjoint, so
+$\Phi_1(\mu) = \sum_{n = 1}^N \phi(|c_n|) + \Phi_1(\tilde{\mu})$. Every atom of
+$\tilde{\mu}$ has mass at most $\|\tilde{\mu}\|_{\mathcal{M}(\Omega)} \le
+\epsilon \le \hat{z}_1$, so by Proposition \ref{secondorderestimate}(1), as in
+the proof of Lemma \ref{l.s.c.},
+\begin{equation*}
+	\Phi_1(\tilde{\mu}) \ge \Big(1 - \frac{\gamma_1 \epsilon}{2}\Big)
+	\|\tilde{\mu}\|_{\mathcal{M}(\Omega)} ,
+\end{equation*}
+while Step 2 gives $\int_\Omega \bar{p}\, d\tilde{\mu} \ge -(1 - \delta)\,
+\alpha \, \|\tilde{\mu}\|_{\mathcal{M}(\Omega)}$.
 
-For $(1)$ we estimate
+\emph{Step 6 (assembly).} Combining Steps 4--5 and
+$L(\mu_0) + \alpha \sum_n \phi(|c_n|) = J_{\bar{\omega}}(c)$,
 \begin{align*}
-	\Phi(\tilde{\mu}) + \langle \bar{p}, \tilde{\mu} \rangle &= \int_\Omega \alpha + \bar{p}(\omega) d|\mu|_{\cont} + \sum_{n} \alpha \phi(|\tilde{c}_n|) + \bar{p}(\tilde{w}_n) \tilde{c}_n \\
-	\bigg(|\bar{p}| \le (1 - \delta) \alpha \bigg)
-	&\ge  \sum_n \alpha \phi(|\tilde{c}_n|) - (1 - \delta)|\tilde{c}_n| \\
-	\bigg(\text{Assumption } \ref{pen3} (1)\bigg)
-	&\ge \sum_n \alpha \delta |\tilde{c}_n| -  \frac{\gamma_1 |\tilde{c}_n|^2}{2},
+	J(\mu)
+	&\ge J_{\bar{\omega}}(c)
+	+ \int_\Omega \bar{p}\, d\tilde{\mu}
+	+ \alpha \Phi_1(\tilde{\mu})
+	- C_{\bar{\omega}} \epsilon \|\tilde{\mu}\|_{\mathcal{M}(\Omega)} \\
+	&\ge J_{\bar{\omega}}(c)
+	+ \Big( \alpha \delta - \frac{\alpha \gamma_1 \epsilon}{2}
+	- C_{\bar{\omega}} \epsilon \Big) \|\tilde{\mu}\|_{\mathcal{M}(\Omega)}
+	\ \ge \ J_{\bar{\omega}}(c),
 \end{align*}
-since $\tilde{c}_n$ is small, the $l^2$ term is dominated by the $l^1$ norm, we have 
-\begin{align*}
-	\Phi(\tilde{\mu}) + \langle \bar{p}, \tilde{\mu}\rangle \ge (\alpha \delta - \frac{\alpha\gamma_1}{2}) \|\tilde{c}\|_{l^1} \ge (\alpha \delta - \frac{\alpha\gamma_1}{2}) \|\tilde{\mu}\|_{\mathcal{M}(\Omega)} .
-\end{align*}
-Putting the estimates together, we have
-\begin{align*}
-	J(\mu) &\ge J(\bar{\mu}) - \bigg(\epsilon \|\mathcal{N}\|^2 + (\alpha \delta - \frac{\alpha\gamma_1}{2}) \bigg) \|\tilde{\mu}\|_{\mathcal{M}(\Omega)}
-\end{align*} 
-Choose $\epsilon$ such that  $\epsilon \|\mathcal{N}\|^2 + (\alpha \delta - \frac{\alpha\gamma_1}{2}) = 0$ we get the result. 
+by the choice of $\epsilon$. Since $\|c - \bar{c}\|_{\ell^1} \le \epsilon \le
+\epsilon_1$, hypothesis (1) gives $J_{\bar{\omega}}(c) \ge
+J_{\bar{\omega}}(\bar{c}) = J(\bar{\mu})$, which completes the proof.
 \end{proof}
 
 

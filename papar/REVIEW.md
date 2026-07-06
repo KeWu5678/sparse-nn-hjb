@@ -166,7 +166,7 @@ $\sin^2\theta+(\cos\theta-1)^2 = 2-2\cos\theta$ matching the code — LQR
 linearization ✓, feedback formulas $u^* = -\frac{1}{2\beta}g^Tp$ ✓ and
 $u = -\frac{1}{2rml^2}\partial_\omega V$ ✓).
 
-- [ ] **MATH-1 (major). Thm 3.8 (sufficient condition, l. 845–903): proof is a
+- [x] **MATH-1 (major) — RESOLVED in Batch M chunk 4 (2026-07-06).** Thm 3.8 rewritten from scratch: product-space notation (𝒴, 𝒯, 𝒱), full H¹ expansion, pairing and error term justified by the new Lemma lem:dual_pairing (Green + trace identification + Fubini), uniform gap from (H) + pointwise strictness, correct ε-choice; conclusion upgraded to TV-local minimality on unbounded Ω. Original finding: proof was a
   corrupted transcription of Pieper–Petrosyan Thm 4 and does not go through as
   written.** Concretely: (i) the $(1-\delta)$ bound at l. 889 appears from nowhere
   (source derives it from compactness — see HEAD-1.4); (ii) the proof only expands
@@ -852,3 +852,37 @@ Alternatives:
   (rename to $\dot\theta$), sample counts $M/K/N_x$, target $y$ vs $V$,
   the §5 curvature term $S_t(\omega)^2 = \|\sigma(\cdot,\omega)\|_H^2$
   (relate to $\kappa$).
+
+---
+
+## Batch M progress log
+
+- Chunk 1 (49e9b44): §3 setting, ass:ridge, distributional-gradient J,
+  lem:value_decay, thm:existence, rem:sharpness; intro claims rewritten.
+- Chunk 2 (869eebd): l.s.c. proof repaired in place (sequence-side split,
+  recombination step); statement fixed.
+- Chunk 3 (a045b43): thm:finite_support restructured — Hahn-decomposed merging,
+  factor-2 radius fix, escape leg replaced by no-escape condition (H);
+  rem:no_escape added. **Correction (chunk 4):** chunk 3's rem:no_escape
+  claimed boundary-term decay via "slab estimates on ∂D" unconditionally —
+  false on domains with flat faces (a face-aligned ridge keeps
+  p̄ → ρ(s₀)·∫_F ∂_n r dH^{d-1} ≠ 0). Fixed: decay holds iff ∂D meets every
+  hyperplane in an H^{d-1}-null set (lem:dual_pairing(3)); on boxes (H) is a
+  genuine flux-smallness condition. rem:no_escape rewritten accordingly.
+- Chunk 4 (this commit): J_ω̄ definition fixed (α added, y→V, H¹ fidelity);
+  𝒴/𝒯/𝒱 product-space notation introduced; Lemma lem:dual_pairing
+  (boundary representation: Green's identity [Grisvard], trace via solid
+  averages [Evans–Gariepy], band-splitting decay proof); Thm sc_opt rewritten
+  (6 steps; stationarity, uniform gap, TV-ball competitor, Y-expansion,
+  penalty split, assembly). MATH-1 and MATH-8 thereby resolved.
+
+## Notation ledger additions (chunk 4)
+
+- 𝒴 := L²(D,ν) × L²(D,ν)^d (data/product space; ℋ was rejected — collides
+  with Hausdorff measure H^{d-1}); 𝒯μ := (𝒩μ, ∇(𝒩μ)); 𝒱 := (V, ∇V).
+- p_r(ω) := ⟨r, σ(·,ω)⟩ + ⟨∇r, ∇ₓσ(·,ω)⟩ for r ∈ H²(D); p̄ = p_r̄ with
+  r̄ = 𝒩μ̄ − V. The value-channel pairing in lem:value_decay is now written
+  inline (no symbol) — p_φ retired.
+- C_{D,ρ} (lem:dual_pairing(1) constant), C_ω̄ (Thm sc_opt, support-dependent),
+  κ_∂ (local to lem:dual_pairing(3) proof).
+- Cor 4.2.2's undefined ‖·‖_H should become ‖·‖_𝒴 (MATH-9, later chunk).
