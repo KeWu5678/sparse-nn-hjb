@@ -192,7 +192,7 @@ The ReLU enjoys many nice properties such as Lipschitz continuity and positive h
 In this thesis, we develope a data-driven method that harnesses the precision of the gradient training and sparsity promoted by the nonconvex penalty at a higher level.
 For the gradient traning, we consider a wider range of the activation functions, including sigmoidal, ReLU-like and tanh form, etc.,  and discuss their approximation propertyies.
 In the case of the $k$-homogeneous activation function, we investigate besides the classical nonconvex penalty the fractional exponent penalty. 
-After removing the assumptions of bounded dictionary and positive homogeneity of the activation function (or the regularity condition of the penalty), we estabilised the new proofs of existence and optimality conditions, as well as the finite support statement.
+For localized activation functions we establish existence, optimality conditions, and the finite-support property of the penalized problem on the unbounded parameter domain $\mathbb{R}^{d+1}$, and we give counterexamples showing that the localization cannot be dropped: for saturating or growing activations (such as tanh and softplus) the problem degenerates at infinity, so that a compact parameter set becomes necessary; for $k$-homogeneous activations compactness is supplied by a sphere reformulation.
 We conducted experiments for different problems. By choosing the right activation function and penalty, we achieved better $H^1$ relative error with less neurones. \par
 
 \begin{figure}[htbp]
@@ -326,20 +326,35 @@ Moreover, the approximation property of other other activation functions with en
 
 
 \section{the sparse learning problem}
-We define the operator $\mathcal{N}: \mathcal{M}(\Omega) \rightarrow H^1(D, \nu) $: 
-\begin{align*}
-	[\mathcal{N}\mu] (x) = \int_\Omega \sigma (\omega , x) d\mu(\omega).
-\end{align*}
+Throughout this section $D \subset \mathbb{R}^d$ is a bounded Lipschitz domain
+and $\nu$ has a Lipschitz density $\theta$ with
+$0 < \theta_{\min} \le \theta \le \theta_{\max}$ on $D$; to simplify notation we
+write the proofs for $\nu$ the normalized Lebesgue measure, the general case
+being identical up to the constants $\theta_{\min}, \theta_{\max}$. We assume
+$V \in H^1(D)$.
 
-Since for all $x$, $\sigma(\cdot, x)$ is bounded by a $\mu$-integrable function , and for all $\omega$, $\sigma(\omega, \cdot )$ is continuous, we can differentiate under the integral sign and get
+We define the \emph{value network} of a measure $\mu \in \mathcal{M}(\Omega)$ by
 \begin{align*}
-	\nabla_x [\mathcal{N}\mu](x) = \int_\Omega \nabla_x \sigma(\omega,  x) d\mu(\omega). 
+	[\mathcal{N}\mu] (x) = \int_\Omega \sigma (x, \omega) \, d\mu(\omega).
 \end{align*}
-
-To abuse the notation, we define the operator
+The integral converges absolutely for every $\mu \in \mathcal{M}(\Omega)$
+whenever the value dictionary is bounded, i.e.
+$S_\infty := \sup_{\omega \in \Omega} \|\sigma(\cdot, \omega)\|_{L^\infty(D)} < \infty$,
+with $\|\mathcal{N}\mu\|_{L^\infty(D)} \le S_\infty \|\mu\|_{\mathcal{M}(\Omega)}$.
+This holds in each of the three settings considered in this thesis:
+(i) localized ridge activations on the unbounded domain $\Omega = \mathbb{R}^{d+1}$
+(Assumption~\ref{ass:ridge} below), (ii) arbitrary continuous activations on a
+compact parameter set $\Omega_R \subset \mathbb{R}^{d+1}$, and (iii)
+$k$-homogeneous activations on the sphere (Section~4).
+The gradient of the model is understood \emph{distributionally}; whenever
+$\int_\Omega \|\nabla_x \sigma(\cdot, \omega)\|_{L^2(D)} \, d|\mu|(\omega) < \infty$
+— in particular for every finitely supported $\mu$ — it is given by the
+classical formula
 \begin{align*}
-	\nabla \mathcal{N}: \mathcal{M}(\Omega) \rightarrow L^2(D, \nu)^d, \quad [\nabla\mathcal{N} \mu](x) = \nabla_x[\mathcal{N} \mu](x). 
+	\nabla (\mathcal{N}\mu)(x) = \int_\Omega \nabla_x \sigma(x, \omega) \, d\mu(\omega),
 \end{align*}
+by Fubini's theorem against test functions, and we write
+$\nabla \mathcal{N} \mu := \nabla(\mathcal{N}\mu)$ in this case.
 
 In the case that the measure is supported on finite number of atoms, it can be written as
 \begin{align*}
@@ -360,21 +375,29 @@ Concretely, observe $\Omega = \atom \mu \cup \cont\mu $, we define the penalty t
 	\Phi_1(\mu) = \|\mu_{\cont}\|_{\mathcal{M}(\Omega)} + \sum_{\omega \in \atom \mu} \phi(|\mu|(\omega)).
 \end{equation}
 
-We formulate now the optimization problem as following:
+We formulate the optimization problem as
 \begin{equation}
 	\label{int_noncon}
 	\tag{$P_{\Phi_1}$}
-	\left\{
-	\begin{aligned}
-	& \min_{\mu \in \mathcal{M}(\Omega)} J (\mu):= L(\mu) + \alpha \Phi_1(\mu),\\
-	& \text{with},\\
-	& L(\mu) = \frac{1}{2} \bigg( \|[\mathcal{N}\mu] - V \|^2_{L^2(D, \nu)} + \sum_{i = 1}^d \|  \partial_{x_i}[\mathcal{N}\mu] - \partial_{x_i} V \|_{L^2(D, \nu)}^2 \bigg) .
-	\end{aligned}
-	\right.
+	\min_{\mu \in \mathcal{M}(\Omega)} J (\mu):= L(\mu) + \alpha \Phi_1(\mu),
 \end{equation}
-
-We can still perform the gradient-based optimization in the integral setting. 
-From the review above we know the gradient is in the space of the continuous function. 
+where the fidelity term is the gradient-augmented loss with the distributional
+gradient convention,
+\begin{equation*}
+	L(\mu) :=
+	\begin{cases}
+	\dfrac{1}{2} \|\mathcal{N}\mu - V \|^2_{L^2(D, \nu)}
+	+ \dfrac{1}{2} \|\nabla(\mathcal{N}\mu) - \nabla V \|_{L^2(D, \nu)}^2,
+	& \mathcal{N}\mu \in H^1(D),\\[4pt]
+	+\infty, & \text{otherwise.}
+	\end{cases}
+\end{equation*}
+On measures with
+$\int_\Omega \|\nabla_x \sigma(\cdot,\omega)\|_{L^2(D)} d|\mu|(\omega) < \infty$
+this coincides with the loss written channel by channel,
+$L(\mu) = \frac{1}{2} \big( \|\mathcal{N}\mu - V \|^2_{L^2(D, \nu)}
++ \sum_{i = 1}^d \| \partial_{x_i}\mathcal{N}\mu - \partial_{x_i} V \|_{L^2(D, \nu)}^2 \big)$,
+which is the form used in the local analysis of Section~3.4.
 
 \subsection{The Activation Functions}
 First we discuss the choice of activation functions. 
@@ -392,6 +415,30 @@ The activations function we consider satisfy the following assumption.
 \end{enumerate}
 \end{assumption}
 The Lipschitz continuity of each partial derivative is also required since we are including the gradient information of the value function.
+Assumption~\ref{assumption on actfun} is the standing \emph{local} assumption:
+it carries the optimality conditions and the finite-support analysis of
+Section~3.4, whose arguments are local in $\omega$. The global existence theory
+of Section~3.3 on the unbounded parameter domain requires in addition a
+structural condition on the behaviour of the activation at infinity in the
+parameter:
+
+\begin{assumption}[localized ridge activation]\label{ass:ridge}
+The activation has the ridge form $\sigma(x, \omega) = \rho(a \cdot x + b)$,
+$\omega = (a,b) \in \Omega = \mathbb{R}^{d+1}$, where
+\begin{enumerate}
+	\item $\rho \in C^1(\mathbb{R})$ and $\rho$, $\rho'$ are Lipschitz continuous;
+	\item \emph{(localization)} $\rho, \ \rho' \in L^2(\mathbb{R})$.
+\end{enumerate}
+\end{assumption}
+
+Conditions (1)--(2) force $\rho(z) \to 0$ as $z \to \pm\infty$: a Lipschitz
+function bounded away from zero on intervals of fixed length cannot be square
+integrable. The Gaussian $\rho(z) = e^{-z^2}$ and related localized kernels
+satisfy Assumption~\ref{ass:ridge}; $\tanh$ (nonzero limits at infinity) and
+softplus (unbounded) do not --- and Remark~\ref{rem:sharpness} below shows that
+this exclusion is not an artifact of the proof: for those activation classes
+the existence theory on $\mathbb{R}^{d+1}$ genuinely fails, and a compact
+parameter set is used instead.
 
 \subsubsection*{Fitting the smooth semiconcave value function}
 Because the gradient-augmented loss combines the value error with the gradient error, each neuron $\sigma(\cdot,\omega)$ contributes $\sigma$ to the reconstruction of $V$ and $\partial_{x}\sigma$ to that of $\nabla V$. 
@@ -615,24 +662,100 @@ is weak-* sequentially l.s.c..
 Taking $\epsilon \rightarrow 0$ we get $\delta \rightarrow 0$ and the result is proven. 
 \end{proof}
 
-\begin{theorem}[Existence of the global minimizer]
-Assuming Assumption \ref{pen1}, \ref{pen2}, \ref{pen3} are fulfilled, problem (\ref{int_noncon}) admits at least one global minimizer in $\mathcal{M}(\Omega)$. 
+On the unbounded parameter domain the difficulty beyond the lower
+semicontinuity of $\Phi_1$ is the behaviour of the fidelity term under mass
+escaping to infinity. Under Assumption~\ref{ass:ridge} the value channel of the
+dictionary vanishes at infinity in the parameter; this is the content of the
+next lemma, and it is exactly what rules the escape out.
+
+\begin{lemma}[value-channel decay]\label{lem:value_decay}
+Let Assumption~\ref{ass:ridge} hold and set
+$w_0(\omega) := \|\rho(a \cdot x + b)\|_{L^2(D)}$. Then $w_0 \in C_0(\Omega)$.
+Consequently, for every $\varphi \in L^2(D)$ the function
+$p^0_\varphi(\omega) := \langle \rho(a \cdot x + b), \varphi\rangle_{L^2(D)}$
+belongs to $C_0(\Omega)$, and for every bounded sequence
+$\mu_n \overset{*}{\rightharpoonup} \mu$ in $\mathcal{M}(\Omega)$ it holds
+$\mathcal{N}\mu_n \rightharpoonup \mathcal{N}\mu$ weakly in $L^2(D)$.
+\end{lemma}
+\begin{proof}
+Boundedness is clear from $w_0 \le \|\rho\|_\infty$. Let $R_D > 0$ be such that
+$D \subset [-R_D, R_D]^d$. For $|a| \ge 1$ choose coordinates with
+$a/|a| = e_1$; then
+\begin{equation*}
+	\int_D |\rho(a \cdot x + b)|^2\, dx
+	\le (2R_D)^{d-1} \int_{\mathbb{R}} |\rho(|a| t + b)|^2\, dt
+	= (2R_D)^{d-1}\, |a|^{-1}\, \|\rho\|_{L^2(\mathbb{R})}^2 .
+\end{equation*}
+For $|a| \le R$ and $|b| \to \infty$ we have
+$\inf_{x \in D} |a \cdot x + b| \ge |b| - R\,R_D\sqrt{d} \to \infty$ and
+$\rho(z) \to 0$ as $|z| \to \infty$; hence $w_0(\omega) \to 0$ as
+$|\omega| \to \infty$ in either regime. Continuity of $w_0$ follows from
+dominated convergence. The second claim follows from
+$|p^0_\varphi(\omega)| \le w_0(\omega)\, \|\varphi\|_{L^2(D)}$ together with the
+continuity of $\omega \mapsto \rho(a \cdot x + b) \in L^2(D)$; the third from
+$\langle \mathcal{N}\mu_n, \varphi\rangle_{L^2(D)} = \int_\Omega p^0_\varphi \, d\mu_n$,
+the definition of weak-* convergence, and the uniform bound
+$\|\mathcal{N}\mu_n\|_{L^2(D)} \le \|\rho\|_\infty \sup_n \|\mu_n\|_{\mathcal{M}(\Omega)}$.
+\end{proof}
+
+\begin{theorem}[Existence on the unbounded parameter domain]\label{thm:existence}
+Let Assumption~\ref{ass:ridge} and Assumptions \ref{pen1}, \ref{pen2},
+\ref{pen3} hold. Then problem (\ref{int_noncon}) admits at least one global
+minimizer in $\mathcal{M}(\Omega)$.
 \end{theorem}
 \begin{proof}
-We apply the direct method of the calculus of variation:\\ 
-1. Boundedness (ability to take a minimizing sequence in $\mathcal{M}(\Omega)$): $J \ge 0$, therefore $J$ is bounded from below.\\
-2. Coercivity: By the non-convexity of the penalty term, the coercivity of the cost function is compromised. 
-However, we get form lemma \ref{envolop} that $\Phi_1$ is coercive. 
-Moreover, $L(\mu)$ is also coercive, hence $J$ is coercive. \\
-3. Lower-semi continuity: by the lemma \ref{l.s.c.}  $\Phi_1(\mu)$, is weak-* l.s.c., therefore we have for $\mu_n \overset{*}{\rightharpoonup} \hat{\mu}$,
-\begin{align*}
-\liminf_{n \rightarrow \infty } J(\mu_n) &= \liminf_{n \rightarrow \infty} \bigg( L(\mu_n)  + \alpha \Phi_1(\mu_n) \bigg)\\
-&\ge L(\hat{\mu}) + \alpha \liminf_{n \rightarrow \infty} \Phi_1(\mu_n)\\
-& \ge L(\hat{\mu}) + \alpha\Phi_1(\hat{\mu})\\
-& = J(\hat{\mu}),
-\end{align*}
-where the inequality in the second line follows from the weak-* l.s.c. of $L$ (since $L$ is convex and continuous composed with the weak-*-to-weak continuous operator $\mathcal{N}$) and the inequality in the third line follows from weak-* l.s.c. of the functional $\Phi_1$.
+Since $V \in H^1(D)$ we have $\inf J \le J(0) < \infty$. Let $(\mu_n)$ be a
+minimizing sequence with $J(\mu_n) \le C$. By Lemma~\ref{envolop},
+$\phi(\|\mu_n\|_{\mathcal{M}(\Omega)}) \le \Phi_1(\mu_n) \le C/\alpha$, and the
+coercivity of $\phi$ yields $\sup_n \|\mu_n\|_{\mathcal{M}(\Omega)} < \infty$.
+As $C_0(\Omega)$ is separable, bounded sets of $\mathcal{M}(\Omega)$ are
+sequentially weak-* compact; after extraction,
+$\mu_n \overset{*}{\rightharpoonup} \bar{\mu}$.
+
+By Lemma~\ref{lem:value_decay}, $\mathcal{N}\mu_n \rightharpoonup
+\mathcal{N}\bar{\mu}$ weakly in $L^2(D)$. Moreover $J(\mu_n) \le C$ implies
+$\mathcal{N}\mu_n \in H^1(D)$ with
+$\|\nabla(\mathcal{N}\mu_n)\|_{L^2(D)} \le \|\nabla V\|_{L^2(D)} + \sqrt{2C}$,
+so after a further extraction $\nabla(\mathcal{N}\mu_n) \rightharpoonup g$
+weakly in $L^2(D)^d$. For every $\psi \in C_c^\infty(D)^d$,
+\begin{equation*}
+	\int_D g \cdot \psi\, dx
+	= \lim_n \int_D \nabla(\mathcal{N}\mu_n) \cdot \psi\, dx
+	= -\lim_n \int_D \mathcal{N}\mu_n\, \div \psi\, dx
+	= -\int_D \mathcal{N}\bar{\mu}\, \div \psi\, dx,
+\end{equation*}
+hence $g = \nabla(\mathcal{N}\bar{\mu})$ in the sense of distributions, and
+$\mathcal{N}\bar{\mu} \in H^1(D)$. The two fidelity terms are weakly lower
+semicontinuous norms evaluated at the weak limits $\mathcal{N}\bar{\mu} - V$
+and $\nabla(\mathcal{N}\bar{\mu}) - \nabla V$, and $\Phi_1$ is weak-* lower
+semicontinuous by Lemma~\ref{l.s.c.}, whose proof requires only local
+compactness of $\Omega$. Therefore
+$J(\bar{\mu}) \le \liminf_n J(\mu_n) = \inf J$.
 \end{proof}
+
+\begin{remark}[sharpness of the localization]\label{rem:sharpness}
+The localization in Assumption~\ref{ass:ridge} cannot be dropped, and its
+failure is not a technical artifact.
+(i) For $\rho = \tanh$ take $V \equiv 1$ and $\mu_n = \delta_{(a, b_n)}$ with
+$b_n \to \infty$: then $\mu_n \overset{*}{\rightharpoonup} 0$, yet
+$\mathcal{N}\mu_n = \tanh(a \cdot x + b_n) \to 1$ strongly in $H^1(D)$, so
+$\liminf_n L(\mu_n) = 0 < L(0)$: the fidelity term is not weak-* lower
+semicontinuous, and mass escapes to infinity together with its fit
+contribution.
+(ii) For $\rho(z) = \log(1 + e^z)$ (softplus) the measures
+$\mu_n = \rho(b_n)^{-1}\delta_{(0, b_n)}$ fit $V \equiv 1$ exactly for every
+$n$ at penalty $\alpha\,\phi(1/\rho(b_n)) \to 0$, so $\inf J = 0$ is not
+attained; moreover $n^{-1}\rho(n(e \cdot x - t)) \to (e \cdot x - t)_+$ in
+$H^1(D)$, so every ReLU network is reached at vanishing penalty and the
+regularization degenerates entirely.
+For such saturating or growing activations we therefore restrict the parameter
+domain to a compact set $\Omega_R \subset \mathbb{R}^{d+1}$, on which all
+results of this section hold with simpler proofs ($\mathcal{N}$ is then
+weak-*-to-weak continuous outright); by the embeddings of Section~2.2 this
+restriction entails no loss of approximation power relative to the
+$\mathrm{ReLU}^k$ classes. For $k$-homogeneous activations Section~4 removes
+the restriction altogether via the sphere reformulation.
+\end{remark}
  
 \subsection{Optimality Condition and Finite Spport of the Solution}
 Since the optimization problem is nonconvex, the global minimizer is difficult to find in general. 
@@ -714,7 +837,9 @@ The theorem gives a necessary optimality condition for the local minimizer.
 But on the other hand, it lays the ground to prove that the local optimizer admits finite support. 
 If the sample size is finite, then the optimal solution admits finite support by the Carath\'eodory's theorem. 
 The following theorem proves that the optimal solution admits the finite support even though the dataset is infinitely large. 
-Unlike the \cite{pieper2022nonconvex}, we don't assume $\Omega$ is compact. 
+In contrast to \cite{pieper2022nonconvex} the parameter domain is not assumed
+compact; the localization of Assumption~\ref{ass:ridge} takes its place
+(cf.\ Remark~\ref{rem:sharpness}).
 
 \begin{theorem}
 	If the Assumption \ref{pen1}, \ref{pen2}, \ref{pen3} are satisfied, then the optimal solution of (\ref{int_noncon}) admits at most finite nodes.
