@@ -620,7 +620,7 @@ is sequentially weak-* l.s.c. on $\mathcal{M}(\Omega)$.
 
 	\quad\\
 	\textbf{Light part:} \par
-	Since $\phi$ is concave with $\phi(0) = 0$, the chord bound gives, for all $z \in [0, \epsilon]$,
+	Since $\phi$ is concave with $\phi(0) = 0$, it holds for all $z \in [0, \epsilon]$,
 	\begin{equation*}
 			\phi(z) \ge \frac{\phi(\epsilon)}{\epsilon}\, z =: (1 - \delta_\epsilon)\, z,
 			\qquad \text{where } \delta_\epsilon = 1 - \frac{\phi(\epsilon)}{\epsilon} \rightarrow 1 - \phi'(0) = 0 \text{ as } \epsilon \rightarrow 0
@@ -649,16 +649,16 @@ is sequentially weak-* l.s.c. on $\mathcal{M}(\Omega)$.
 		\ge \Phi_1(\zeta) + (1 - \delta_\epsilon)\, \Phi_1(\eta)
 		\ge (1 - \delta_\epsilon)\, \Phi_1(\mu).
 	\end{align*}
-	Since $\epsilon > 0$ was arbitrary and $\delta_\epsilon \rightarrow 0$ as $\epsilon \rightarrow 0$ --- the extractions above may depend on $\epsilon$, but the conclusion does not --- we obtain $\ell \ge \Phi_1(\mu)$.
+	Since $\epsilon > 0$ was arbitrary and $\delta_\epsilon \rightarrow 0$ as $\epsilon \rightarrow 0$ --- the selections above may depend on $\epsilon$, but the conclusion does not --- we obtain $\ell \ge \Phi_1(\mu)$.
 \end{proof}
 
 On the unbounded parameter domain the difficulty beyond the lower
 semicontinuity of $\Phi_1$ is the behavior of the fidelity term under mass
-escaping to infinity. Under Assumption~\ref{ass:ridge} the value channel of the
-dictionary vanishes at infinity in the parameter; this is the content of the
-next lemma, and it is exactly what rules the escape out.
+escaping to infinity. Under Assumption~\ref{ass:ridge} the atoms of the dictionary vanish in
+$L^2(D)$ as the parameter tends to infinity; this is the content of the next
+lemma, and it is exactly what rules the escape out.
 
-\begin{lemma}[value-channel decay]\label{lem:value_decay}
+\begin{lemma}[decay of the atoms in $L^2(D)$]\label{lem:value_decay}
 Let Assumption~\ref{ass:ridge} hold and set
 $\kappa(\omega) := \|\sigma(\cdot, \omega)\|_{L^2(D)}$. Then
 $\kappa \in C_0(\Omega)$.
@@ -1002,13 +1002,13 @@ finite, and together with step 1 the claim follows.
 \end{proof}
 
 \begin{remark}[sufficient conditions for \eqref{no_escape}]\label{rem:no_escape}
-Under Assumption~\ref{ass:ridge}, split the dual variable into its value and
-gradient channels,
+Under Assumption~\ref{ass:ridge}, split the dual variable into its value term
+and its gradient term,
 \begin{equation*}
 	\bar{p}(\omega) = \langle \mathcal{N}\bar{\mu} - V, \, \sigma(\cdot, \omega) \rangle_{L^2(D)}
 	+ \langle \nabla(\mathcal{N}\bar{\mu}) - \nabla V, \, \nabla_x \sigma(\cdot, \omega) \rangle_{L^2(D)}.
 \end{equation*}
-The value channel always vanishes at infinity:
+The value term always vanishes at infinity:
 $|\langle \mathcal{N}\bar{\mu} - V, \sigma(\cdot, \omega)\rangle| \le \|\mathcal{N}\bar{\mu} - V\|_{L^2(D)} \, \kappa(\omega) \rightarrow 0$
 by Lemma~\ref{lem:value_decay}. If in addition the residual
 $\mathcal{N}\bar{\mu} - V$ belongs to $H^2(D)$, the dual variable admits the
@@ -1048,8 +1048,8 @@ Now we have a necessary optimality condition. But it is not sufficient. More imp
 \end{equation}
 is amenable to gradient-based optimization. Now we need to find a way to heuristically determine the optimal $\bar{\omega}$ and the optimal number $N$. To this end, we introduce the following theorem as a sufficient condition.
 
-For the analysis it is convenient to collect the two channels of the fidelity
-term in the product space
+For the analysis it is convenient to collect the two components of the
+fidelity term in the product space
 \begin{equation*}
 	\mathcal{Y} := L^2(D, \nu) \times L^2(D, \nu)^d, \qquad
 	\mathcal{T}\mu := \big(\mathcal{N}\mu, \, \nabla(\mathcal{N}\mu)\big), \qquad
@@ -1308,7 +1308,7 @@ In this section, we discuss a specific class of activation function: the $k$-hom
 \end{align*}
 \end{assumption}
 \begin{remark}
-For the gradient training we use $k \ge 2$: the $\reluk$ atom is then $C^1$ in $x$, so the gradient-augmented loss is well defined, and for $k > 2$ the inner optimization is even twice continuously differentiable. The derivative of a $\reluk$ ridge is, up to the factor $k$, a $\relu^{k-1}$ ridge: the value channel of the loss sees atoms of order $k$ while the gradient channel sees atoms of order $k - 1$. In the borderline case $k = 2$ the problem is still well defined, but $\partial_{x_i} \sigma$ has a non-differentiable kink, as in the ReLU case. For $k < 2$ the Lipschitz continuity of the gradient of the activation fails. The algebraic results of this section (Propositions \ref{prop:homogeneous_penalty} and \ref{prop:homogeneous_reformulation}) hold for every $k \ge 1$.
+For the gradient training we use $k \ge 2$: the $\reluk$ atom is then $C^1$ in $x$, so the gradient-augmented loss is well defined, and for $k > 2$ the inner optimization is even twice continuously differentiable. The derivative of a $\reluk$ ridge is, up to the factor $k$, a $\relu^{k-1}$ ridge: the value term of the loss sees atoms of order $k$ while the gradient term sees atoms of order $k - 1$. In the borderline case $k = 2$ the problem is still well defined, but $\partial_{x_i} \sigma$ has a non-differentiable kink, as in the ReLU case. For $k < 2$ the Lipschitz continuity of the gradient of the activation fails. The algebraic results of this section (Propositions \ref{prop:homogeneous_penalty} and \ref{prop:homogeneous_reformulation}) hold for every $k \ge 1$.
 \end{remark}
 
 \begin{proposition}[Generalization of {\cite[Proposition~3]{pieper2022nonconvex}} to $k$-homogeneous activations]
@@ -1620,7 +1620,7 @@ Let $(\omega^*, c^*)$ be a minimizer for $N$ neurons with all $c_n^* \neq 0$. Th
 \begin{equation*}
 	p(\omega) = \langle \mathcal{N}_{\omega^*, c^*} - V,\, \sigma(\cdot, \omega)\rangle_{H^1(D, \nu)}
 \end{equation*}
-is the dual variable of Section~3 restricted to the sphere, with the $H^1(D,\nu)$ inner product collecting the value and gradient channels.
+is the dual variable of Section~3 restricted to the sphere, with the $H^1(D,\nu)$ inner product collecting the value term and the gradient term.
 By Cauchy--Schwarz and $\|\mathcal{N}_{\omega^*, c^*} - V\|_{H^1(D,\nu)}^2 \le 2 J(\omega^*, c^*) \le \|V\|_{H^1(D,\nu)}^2$:
 \begin{equation*}
 	\alpha\,\phi_k'(|c_n^*|) = |p(\omega_n^*)| \le \|\mathcal{N}_{\omega^*, c^*} - V\|_{H^1(D,\nu)} \;\|\sigma(\cdot, \omega_n^*)\|_{H^1(D,\nu)} \le \|V\|_{H^1(D,\nu)}\;\sup_{\omega \in \mathbb{S}^d}\|\sigma(\cdot, \omega)\|_{H^1(D,\nu)}.
@@ -1885,10 +1885,10 @@ rather than by that of $\sigma$ itself.
 Figure~\ref{fig:activation_shapes} contrasts the three activations through
 their value, first derivative, and second derivative.
 A monotone, single-signed derivative that stays active over the whole axis
-(softplus) endows every neuron with a coherent gradient channel of broad,
+(softplus) endows every neuron with a coherent gradient contribution of broad,
 bounded curvature, so that few atoms suffice to represent a smooth $\nabla V$;
-a derivative that saturates on both tails (tanh) supplies only a narrow,
-localized channel;
+a derivative that saturates on both tails (tanh) contributes only on a narrow,
+localized range;
 and a localized bump ($e^{-x^2}$) concentrates its curvature near the origin
 and reverses the sign of its derivative, fitting a smooth field accurately
 only when densely tiled.
@@ -2838,11 +2838,11 @@ per-sample objective weighting is the natural untried lever against the
 interior cost of two-sided switching data. On the theory side, the
 counterexamples suggest a well-posed completion for the saturating class: an
 impact-normalized penalty $\phi(|c|\,\|\sigma(\cdot,\omega)\|_{H^1})$ closes
-the zero-cost escape channels, and the compactified dictionary --- whose
+the zero-cost escape directions, and the compactified dictionary --- whose
 boundary atoms are exactly the ReLU ridges and constants reached by the
 dilation limits, cf.\ the embedding of Section~2.2 --- would carry the
 sparse-measure theory for softplus-type activations. Finally, an explicit
-affine term in the model would absorb the constant and affine escape channels
+affine term in the model would absorb the constant and affine escape directions
 directly and plausibly restore existence on the unbounded domain for the
 saturating class.
 
