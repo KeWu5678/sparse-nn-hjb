@@ -438,7 +438,9 @@ satisfy Assumption~\ref{ass:ridge}; $\tanh$ (nonzero limits at infinity) and
 softplus (unbounded) do not --- and Remark~\ref{rem:sharpness} below shows that
 this exclusion is not an artifact of the proof: for those activation classes
 the existence theory on $\mathbb{R}^{d+1}$ genuinely fails, and a compact
-parameter set is used instead.
+parameter set is used instead. Throughout, $\sigma$ denotes the activation
+atom as a function on $D$, $\rho$ its scalar ridge profile, and the letter
+$\omega = (a, b)$ is reserved for the parameter.
 
 \subsubsection*{Fitting the smooth semiconcave value function}
 Because the gradient-augmented loss combines the value error with the gradient error, each neuron $\sigma(\cdot,\omega)$ contributes $\sigma$ to the reconstruction of $V$ and $\partial_{x}\sigma$ to that of $\nabla V$. 
@@ -591,29 +593,29 @@ Under Assumption \ref{pen1}, \ref{pen2}, \ref{pen3}, the functional
 is sequentially weak-* l.s.c. on $\mathcal{M}(\Omega)$.
 \end{lemma}
 \begin{proof}
-	Let $\mu_h \overset{*}{\rightharpoonup} \mu$; then $M := \sup_h \|\mu_h\|_{\mathcal{M}(\Omega)} < \infty$ by the uniform boundedness principle. Passing to a subsequence we may assume $\lim_h \Phi_1(\mu_h) = \liminf_h \Phi_1(\mu_h) =: \ell < \infty$ (otherwise there is nothing to prove). Fix $\epsilon \in (0, \hat{z}_1]$. We decompose each element of the \emph{sequence} --- not the limit --- into its $\epsilon$-heavy atomic part and the rest:
+	Let $\mu_h \overset{*}{\rightharpoonup} \mu$; then $M := \sup_h \|\mu_h\|_{\mathcal{M}(\Omega)} < \infty$ by the uniform boundedness principle. Passing to a subsequence we may assume $\lim_h \Phi_1(\mu_h) = \liminf_h \Phi_1(\mu_h) =: \ell < \infty$ (otherwise there is nothing to prove). Fix $\epsilon \in (0, \hat{z}_1]$. We decompose each element of the \emph{sequence} --- not the limit --- into its $\epsilon$-heavy atomic part $\zeta_h$ and the rest $\eta_h$:
 	\begin{align*}
-		\mu_h = \nu_h + \lambda_h, \qquad
-		\nu_h := \mu_h|_{A_h}, \qquad
+		\mu_h = \zeta_h + \eta_h, \qquad
+		\zeta_h := \mu_h|_{A_h}, \qquad
 		A_h:= \{ \omega \in \Omega: |\mu_h|(\{\omega\}) \ge \epsilon \},
 	\end{align*}
-	so that $\lambda_h$ collects the atoms of mass below $\epsilon$ together with the continuous part, and, the two parts living on disjoint atom sets,
+	so that $\eta_h$ collects the atoms of mass below $\epsilon$ together with the continuous part, and, the two parts living on disjoint atom sets,
 	\begin{align*}
-		\Phi_1(\mu_h) = \Phi_1(\nu_h) + \Phi_1(\lambda_h).
+		\Phi_1(\mu_h) = \Phi_1(\zeta_h) + \Phi_1(\eta_h).
 	\end{align*}
 	Since $\|\mu_h\|_{\mathcal{M}(\Omega)} \le M$, the set $A_h$ contains at most $k := \lfloor M/\epsilon \rfloor$ points. Both parts are bounded by $M$ in variation, so after a further extraction
 	\begin{equation*}
-		\nu_h \overset{*}{\rightharpoonup} \nu, \qquad
-		\lambda_h \overset{*}{\rightharpoonup} \lambda, \qquad
-		\nu + \lambda = \mu .
+		\zeta_h \overset{*}{\rightharpoonup} \zeta, \qquad
+		\eta_h \overset{*}{\rightharpoonup} \eta, \qquad
+		\zeta + \eta = \mu .
 	\end{equation*}
 	We estimate the two parts separately. \\
 	\textbf{Heavy part:} \par
-	Each $\nu_h$ is purely atomic with at most $k$ atoms. By lemma 3.6 in \cite{bouchitte1990new}, the set of measures with at most $k$ atoms is sequentially weak-* closed --- hence $\nu$ is purely atomic with at most $k$ atoms --- and on this set the functional $\lambda \mapsto \sum_{\omega} \phi(|\lambda|(\{\omega\}))$ is sequentially weak-* l.s.c., since $\phi$ is continuous and subadditive (Lemma \ref{firstorderestimate}). Therefore
+	Each $\zeta_h$ is purely atomic with at most $k$ atoms. By lemma 3.6 in \cite{bouchitte1990new}, the set of measures with at most $k$ atoms is sequentially weak-* closed --- hence $\zeta$ is purely atomic with at most $k$ atoms --- and on this set the functional $\mu' \mapsto \sum_{\omega} \phi(|\mu'|(\{\omega\}))$ is sequentially weak-* l.s.c., since $\phi$ is continuous and subadditive (Lemma \ref{firstorderestimate}). Therefore
 	\begin{align*}
-		\liminf_{h} \Phi_1(\nu_h)
-		= \liminf_h  \sum_{ \omega \in \atom \nu_h } \phi(|\nu_{h}|(\{\omega\}))
-		\ge \sum_{ \omega \in \atom \nu } \phi(|\nu|(\{\omega\})) = \Phi_1 ( \nu).
+		\liminf_{h} \Phi_1(\zeta_h)
+		= \liminf_h  \sum_{ \omega \in \atom \zeta_h } \phi(|\zeta_{h}|(\{\omega\}))
+		\ge \sum_{ \omega \in \atom \zeta } \phi(|\zeta|(\{\omega\})) = \Phi_1 ( \zeta).
 	\end{align*}
 
 	\quad\\
@@ -623,27 +625,27 @@ is sequentially weak-* l.s.c. on $\mathcal{M}(\Omega)$.
 			\phi(z) \ge z - \frac{\gamma_1 z^2}{2} \ge (1 - \delta)\, z,
 			\qquad \delta := \frac{\gamma_1 \epsilon}{2}.
 	\end{equation*}
-	Every atom of $\lambda_h$ has mass below $\epsilon$, and the continuous part enters $\Phi_1$ with weight one, so
+	Every atom of $\eta_h$ has mass below $\epsilon$, and the continuous part enters $\Phi_1$ with weight one, so
 	\begin{equation*}
 	\begin{aligned}
-		\Phi_1(\lambda_h)
-		&= \|\lambda_{h, \cont}\|_{\mathcal{M}(\Omega)} + \sum_{\omega \in \atom \lambda_h} \phi(|\lambda_{h}|(\{\omega\}))\\
-		&\ge (1 - \delta) \bigg( \|\lambda_{h, \cont}\|_{\mathcal{M}(\Omega)} + \sum_{\omega \in \atom \lambda_h} |\lambda_{h}|(\{\omega\}) \bigg)
-		= (1 - \delta)\, \|\lambda_h\|_{\mathcal{M}(\Omega)}.
+		\Phi_1(\eta_h)
+		&= \|\eta_{h, \cont}\|_{\mathcal{M}(\Omega)} + \sum_{\omega \in \atom \eta_h} \phi(|\eta_{h}|(\{\omega\}))\\
+		&\ge (1 - \delta) \bigg( \|\eta_{h, \cont}\|_{\mathcal{M}(\Omega)} + \sum_{\omega \in \atom \eta_h} |\eta_{h}|(\{\omega\}) \bigg)
+		= (1 - \delta)\, \|\eta_h\|_{\mathcal{M}(\Omega)}.
 	\end{aligned}
 	\end{equation*}
 	By the weak-* l.s.c. of the norm $\|\cdot\|_{\mathcal{M}(\Omega)}$ and by $\Phi_1 \le \|\cdot\|_{\mathcal{M}(\Omega)}$ (Lemma \ref{envolop}),
 	\begin{equation*}
-		\liminf_h \Phi_1(\lambda_h) \ge (1 - \delta)\, \|\lambda\|_{\mathcal{M}(\Omega)} \ge (1 - \delta)\, \Phi_1(\lambda).
+		\liminf_h \Phi_1(\eta_h) \ge (1 - \delta)\, \|\eta\|_{\mathcal{M}(\Omega)} \ge (1 - \delta)\, \Phi_1(\eta).
 	\end{equation*}
 
 	\quad\\
 	\textbf{Recombination:} \par
-	The functional $\Phi_1$ is subadditive: for $\mu = \nu + \lambda$ with $\nu$ purely atomic we have $\mu_{\cont} = \lambda_{\cont}$, every atom of $\mu$ is an atom of $\nu$ or of $\lambda$, and $\phi(|\nu + \lambda|(\{\omega\})) \le \phi(|\nu|(\{\omega\})) + \phi(|\lambda|(\{\omega\}))$ by the monotonicity and subadditivity of $\phi$; hence $\Phi_1(\mu) \le \Phi_1(\nu) + \Phi_1(\lambda)$. Combining the two parts,
+	The functional $\Phi_1$ is subadditive: for $\mu = \zeta + \eta$ with $\zeta$ purely atomic we have $\mu_{\cont} = \eta_{\cont}$, every atom of $\mu$ is an atom of $\zeta$ or of $\eta$, and $\phi(|\zeta + \eta|(\{\omega\})) \le \phi(|\zeta|(\{\omega\})) + \phi(|\eta|(\{\omega\}))$ by the monotonicity and subadditivity of $\phi$; hence $\Phi_1(\mu) \le \Phi_1(\zeta) + \Phi_1(\eta)$. Combining the two parts,
 	\begin{align*}
 		\ell = \lim_h \Phi_1(\mu_h)
-		\ge \liminf_h \Phi_1(\nu_h) + \liminf_h \Phi_1(\lambda_h)
-		\ge \Phi_1(\nu) + (1 - \delta)\, \Phi_1(\lambda)
+		\ge \liminf_h \Phi_1(\zeta_h) + \liminf_h \Phi_1(\eta_h)
+		\ge \Phi_1(\zeta) + (1 - \delta)\, \Phi_1(\eta)
 		\ge (1 - \delta)\, \Phi_1(\mu).
 	\end{align*}
 	Since $\epsilon \in (0, \hat{z}_1]$ was arbitrary and $\delta = \gamma_1 \epsilon /2 \rightarrow 0$ as $\epsilon \rightarrow 0$ --- the extractions above may depend on $\epsilon$, but the conclusion does not --- we obtain $\ell \ge \Phi_1(\mu)$.
@@ -657,30 +659,32 @@ next lemma, and it is exactly what rules the escape out.
 
 \begin{lemma}[value-channel decay]\label{lem:value_decay}
 Let Assumption~\ref{ass:ridge} hold and set
-$w_0(\omega) := \|\rho(a \cdot x + b)\|_{L^2(D)}$. Then $w_0 \in C_0(\Omega)$.
+$\kappa(\omega) := \|\sigma(\cdot, \omega)\|_{L^2(D)}$. Then
+$\kappa \in C_0(\Omega)$.
 Consequently, for every $\varphi \in L^2(D)$ the function
-$p^0_\varphi(\omega) := \langle \rho(a \cdot x + b), \varphi\rangle_{L^2(D)}$
+$p_\varphi(\omega) := \langle \sigma(\cdot, \omega), \varphi\rangle_{L^2(D)}$
 belongs to $C_0(\Omega)$, and for every bounded sequence
 $\mu_n \overset{*}{\rightharpoonup} \mu$ in $\mathcal{M}(\Omega)$ it holds
 $\mathcal{N}\mu_n \rightharpoonup \mathcal{N}\mu$ weakly in $L^2(D)$.
 \end{lemma}
 \begin{proof}
-Boundedness is clear from $w_0 \le \|\rho\|_\infty$. Let $R_D > 0$ be such that
-$D \subset [-R_D, R_D]^d$. For $|a| \ge 1$ choose coordinates with
+By the ridge form, $\kappa(\omega) = \|\rho(a \cdot x + b)\|_{L^2(D)}$, and
+boundedness is clear from $\kappa \le \|\rho\|_\infty$. Let $R_D > 0$ be such
+that $D \subset [-R_D, R_D]^d$. For $|a| \ge 1$ choose coordinates with
 $a/|a| = e_1$; then
 \begin{equation*}
 	\int_D |\rho(a \cdot x + b)|^2\, dx
 	\le (2R_D)^{d-1} \int_{\mathbb{R}} |\rho(|a| t + b)|^2\, dt
 	= (2R_D)^{d-1}\, |a|^{-1}\, \|\rho\|_{L^2(\mathbb{R})}^2 .
 \end{equation*}
-For $|a| \le R$ and $|b| \to \infty$ we have
-$\inf_{x \in D} |a \cdot x + b| \ge |b| - R\,R_D\sqrt{d} \to \infty$ and
-$\rho(z) \to 0$ as $|z| \to \infty$; hence $w_0(\omega) \to 0$ as
-$|\omega| \to \infty$ in either regime. Continuity of $w_0$ follows from
+If instead $|a|$ stays bounded and $|b| \to \infty$, then
+$\inf_{x \in D} |a \cdot x + b| \ge |b| - |a|\,R_D\sqrt{d} \to \infty$ and
+$\rho(z) \to 0$ as $|z| \to \infty$; hence $\kappa(\omega) \to 0$ as
+$|\omega| \to \infty$ in either regime. Continuity of $\kappa$ follows from
 dominated convergence. The second claim follows from
-$|p^0_\varphi(\omega)| \le w_0(\omega)\, \|\varphi\|_{L^2(D)}$ together with the
-continuity of $\omega \mapsto \rho(a \cdot x + b) \in L^2(D)$; the third from
-$\langle \mathcal{N}\mu_n, \varphi\rangle_{L^2(D)} = \int_\Omega p^0_\varphi \, d\mu_n$,
+$|p_\varphi(\omega)| \le \kappa(\omega)\, \|\varphi\|_{L^2(D)}$ together with the
+continuity of $\omega \mapsto \sigma(\cdot, \omega) \in L^2(D)$; the third from
+$\langle \mathcal{N}\mu_n, \varphi\rangle_{L^2(D)} = \int_\Omega p_\varphi \, d\mu_n$,
 the definition of weak-* convergence, and the uniform bound
 $\|\mathcal{N}\mu_n\|_{L^2(D)} \le \|\rho\|_\infty \sup_n \|\mu_n\|_{\mathcal{M}(\Omega)}$.
 \end{proof}
@@ -723,13 +727,13 @@ $J(\bar{\mu}) \le \liminf_n J(\mu_n) = \inf J$.
 \begin{remark}[sharpness of the localization]\label{rem:sharpness}
 The localization in Assumption~\ref{ass:ridge} cannot be dropped, and its
 failure is not a technical artifact.
-(i) For $\rho = \tanh$ take $V \equiv 1$ and $\mu_n = \delta_{(a, b_n)}$ with
+(i) For the profile $\rho = \tanh$ take $V \equiv 1$ and $\mu_n = \delta_{(a, b_n)}$ with
 $b_n \to \infty$: then $\mu_n \overset{*}{\rightharpoonup} 0$, yet
 $\mathcal{N}\mu_n = \tanh(a \cdot x + b_n) \to 1$ strongly in $H^1(D)$, so
 $\liminf_n L(\mu_n) = 0 < L(0)$: the fidelity term is not weak-* lower
 semicontinuous, and mass escapes to infinity together with its fit
 contribution.
-(ii) For $\rho(z) = \log(1 + e^z)$ (softplus) the measures
+(ii) For the profile $\rho(z) = \log(1 + e^z)$ (softplus) the measures
 $\mu_n = \rho(b_n)^{-1}\delta_{(0, b_n)}$ fit $V \equiv 1$ exactly for every
 $n$ at penalty $\alpha\,\phi(1/\rho(b_n)) \to 0$, so $\inf J = 0$ is not
 attained; moreover $n^{-1}\rho(n(e \cdot x - t)) \to (e \cdot x - t)_+$ in
@@ -939,7 +943,7 @@ $\atom \bar{\mu}$ is contained in a compact subset of $\Omega$.
 Now assume by contradiction that $\atom \bar{\mu}$ is infinite. Then there
 exists a sequence of distinct atoms with $\omega_n \rightarrow \hat{\omega}$
 for some $\hat{\omega} \in \Omega$; after passing to a subsequence, infinitely
-many of the weights share one sign, w.l.o.g.\
+many of the weights share one sign, w.l.o.g.\ 
 $c_n := \bar{\mu}(\{\omega_n\}) > 0$. By the boundedness of the total
 variation it holds $\lim_{n \rightarrow \infty} c_n = 0$, and by Theorem
 \ref{opt_cdt} and the continuity of $\bar{p}$,
@@ -1000,19 +1004,19 @@ finite, and together with step 1 the claim follows.
 Under Assumption \ref{ass:ridge}, split the dual variable into its value and
 gradient channels,
 \begin{equation*}
-	\bar{p}(\omega) = \langle \mathcal{N}\bar{\mu} - V, \, \rho(a \cdot x + b) \rangle_{L^2(D)}
-	+ \langle \nabla(\mathcal{N}\bar{\mu}) - \nabla V, \, \rho'(a \cdot x + b)\, a \rangle_{L^2(D)}.
+	\bar{p}(\omega) = \langle \mathcal{N}\bar{\mu} - V, \, \sigma(\cdot, \omega) \rangle_{L^2(D)}
+	+ \langle \nabla(\mathcal{N}\bar{\mu}) - \nabla V, \, \nabla_x \sigma(\cdot, \omega) \rangle_{L^2(D)}.
 \end{equation*}
 The value channel always vanishes at infinity:
-$|\langle \mathcal{N}\bar{\mu} - V, \rho(a \cdot x + b)\rangle| \le \|\mathcal{N}\bar{\mu} - V\|_{L^2(D)} \, w_0(\omega) \rightarrow 0$
+$|\langle \mathcal{N}\bar{\mu} - V, \sigma(\cdot, \omega)\rangle| \le \|\mathcal{N}\bar{\mu} - V\|_{L^2(D)} \, \kappa(\omega) \rightarrow 0$
 by Lemma \ref{lem:value_decay}. If in addition the residual
-$w := \mathcal{N}\bar{\mu} - V$ belongs to $H^2(D)$, the gradient channel
-vanishes as well: writing $\rho'(a \cdot x + b)\, a = \nabla_x [\rho(a \cdot x + b)]$
+$\mathcal{N}\bar{\mu} - V$ belongs to $H^2(D)$, the gradient channel
+vanishes as well: writing $\nabla_x \sigma(x, \omega) = \rho'(a \cdot x + b)\, a = \nabla_x [\rho(a \cdot x + b)]$
 and integrating by parts,
 \begin{equation*}
-	\langle \nabla w, \nabla_x[\rho(a \cdot x + b)] \rangle_{L^2(D)}
-	= -\langle \Delta w, \rho(a \cdot x + b) \rangle_{L^2(D)}
-	+ \langle \partial_n w, \rho(a \cdot x + b) \rangle_{L^2(\partial D)},
+	\langle \nabla(\mathcal{N}\bar{\mu} - V), \nabla_x \sigma(\cdot, \omega) \rangle_{L^2(D)}
+	= -\langle \Delta (\mathcal{N}\bar{\mu} - V), \, \rho(a \cdot x + b) \rangle_{L^2(D)}
+	+ \langle \partial_n (\mathcal{N}\bar{\mu} - V), \, \rho(a \cdot x + b) \rangle_{L^2(\partial D)},
 \end{equation*}
 and both terms tend to zero by the slab estimates of Lemma
 \ref{lem:value_decay}, applied on $D$ and on the $(d-1)$-dimensional Lipschitz

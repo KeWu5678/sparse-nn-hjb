@@ -824,3 +824,31 @@ Alternatives:
 4. **Batch W (wording):** WORD-1…-5, section by section (5–6 passes).
 5. **Batch P/T (plots + LaTeX):** PLOT-1…-6, TEX-1…-8; `make paper-figures`
    after any `analysis.py` change; rebuild and re-check the 50-page cap.
+
+---
+
+## Notation ledger (binding for all Batch M–W edits; established 2026-07-06)
+
+- $\sigma(x, \omega)$ — the activation atom, always a function of $x$;
+  argument order $(x, \omega)$ everywhere.
+- $\rho$ — the scalar ridge profile, existing only through the declaration
+  $\sigma(x,\omega) = \rho(a \cdot x + b)$ (Assumption ass:ridge); used when a
+  statement is genuinely one-dimensional (profile decay, slab estimates).
+- $\omega = (a, b) \in \Omega$ — parameters, nothing else. The Latin letter
+  $w$ is banned in §3 (visual clash with $\omega$): the value-channel atom
+  norm is $\kappa(\omega) := \|\sigma(\cdot,\omega)\|_{L^2(D)}$; the residual
+  is always written out as $\mathcal{N}\bar\mu - V$, no dedicated letter.
+- $p_\varphi(\omega) = \langle \sigma(\cdot,\omega), \varphi \rangle$ — dual
+  test functions; $\bar p$ — the dual variable at a minimizer.
+- l.s.c. proof split: heavy part $\zeta_h$, light part $\eta_h$ ($\nu$ is
+  reserved for the data measure; $\lambda$ avoided — Prop 4.3 uses
+  $\lambda_n$ for scaling).
+- Reserved and untouchable: $\nu$ (data measure), $\theta$ (its density),
+  $\alpha$ (penalty weight), $\beta$ (control cost), $\gamma_{1,2}$ (pen3),
+  $\phi$/$\psi_k$ (penalties), $\Lambda$ (Lipschitz), $S_\infty$ (sup value
+  bound, §3 opening), $m_\delta$/$C_N$ (masses in thm:finite_support),
+  $\epsilon$, $\delta$ (radii/thresholds).
+- Still to unify in later batches (STR-8): $\omega = \dot\theta$ in §6.2
+  (rename to $\dot\theta$), sample counts $M/K/N_x$, target $y$ vs $V$,
+  the §5 curvature term $S_t(\omega)^2 = \|\sigma(\cdot,\omega)\|_H^2$
+  (relate to $\kappa$).
