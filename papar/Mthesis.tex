@@ -584,82 +584,69 @@ The proof follows the idea in the paper \cite{bouchitte1990new}.
 Since the original proof is valid for $\Omega$ locally compact, the result applies to the current setting.
 Moreover, since our functional doesn't have the singular part, the proof and assumptions can be simplified.
 \begin{lemma} \label{l.s.c.}
-Given $\mu = \mu_{\cont} + \mu_{\atom}$, under Assumption \ref{pen1}, \ref{pen2}, \ref{pen3} it holds
+Under Assumption \ref{pen1}, \ref{pen2}, \ref{pen3}, the functional
 \begin{align*}
-	\Phi_1(\mu) = \int_\Omega d\mu_{\cont} + \sum_{ \omega \in \atom \mu } \phi_1(|\mu_{\atom}|(\{\omega\}))
+	\Phi_1(\mu) = \|\mu_{\cont}\|_{\mathcal{M}(\Omega)} + \sum_{ \omega \in \atom \mu } \phi(|\mu|(\{\omega\}))
 \end{align*}
-is weak-* sequentially l.s.c..
+is sequentially weak-* l.s.c. on $\mathcal{M}(\Omega)$.
 \end{lemma}
 \begin{proof}
-	Let $\mu_h \overset{*}{\rightharpoonup} \mu$, we decompose $\Omega$ by heavy atomes and small atoms combined the continuous part:
+	Let $\mu_h \overset{*}{\rightharpoonup} \mu$; then $M := \sup_h \|\mu_h\|_{\mathcal{M}(\Omega)} < \infty$ by the uniform boundedness principle. Passing to a subsequence we may assume $\lim_h \Phi_1(\mu_h) = \liminf_h \Phi_1(\mu_h) =: \ell < \infty$ (otherwise there is nothing to prove). Fix $\epsilon \in (0, \hat{z}_1]$. We decompose each element of the \emph{sequence} --- not the limit --- into its $\epsilon$-heavy atomic part and the rest:
 	\begin{align*}
-		\Omega = A_h + (\Omega - A_h), \text{ where } A_h:= \{ \omega \in \Omega: \mu_h(\omega) \ge \epsilon \}.
+		\mu_h = \nu_h + \lambda_h, \qquad
+		\nu_h := \mu_h|_{A_h}, \qquad
+		A_h:= \{ \omega \in \Omega: |\mu_h|(\{\omega\}) \ge \epsilon \},
 	\end{align*}
-	By passing to a subsequence we have
-	\begin{equation*}
-		\mu_{h}|_{A_h} \overset{*}{\rightharpoonup} \mu|_{A_h}, \quad
-		\mu_{h}|_{\Omega - A_h} \overset{*}{\rightharpoonup} \mu|_{\Omega - A_h},
-	\end{equation*}
-	We prove the weak-* l.s.c. of each part. \\
-	\textbf{On $ A_h $:} \par
-	Since $\mu_h$ has bounded variation and $\mu_h(\omega) \ge \epsilon$ for $\omega \in A_h$, we know the cardinality of $A_h$ is bounded.
-	By lemma 3.6 in \cite{bouchitte1990new} we know $M(A_h)$ is sequentially weak-* closed.
-	Moreover, $\Phi_1(\mu_h \mathbbm{1}_{A_h})$ is weak-* l.s.c. if $\phi_1$ is l.s.c. and subadditive, therefore we have
+	so that $\lambda_h$ collects the atoms of mass below $\epsilon$ together with the continuous part, and, the two parts living on disjoint atom sets,
 	\begin{align*}
-		\liminf_{h} \Phi_1(\mu_h \mathbbm{1}_{A_h})
-		= \liminf  \sum_{ \omega \in \atom \mu_h \cap A_h } \phi_1(|\mu_{h, \atom}|(\{\omega\}))
-		\ge \Phi_1 ( \mu \mathbbm{1}_{A_h}).
+		\Phi_1(\mu_h) = \Phi_1(\nu_h) + \Phi_1(\lambda_h).
+	\end{align*}
+	Since $\|\mu_h\|_{\mathcal{M}(\Omega)} \le M$, the set $A_h$ contains at most $k := \lfloor M/\epsilon \rfloor$ points. Both parts are bounded by $M$ in variation, so after a further extraction
+	\begin{equation*}
+		\nu_h \overset{*}{\rightharpoonup} \nu, \qquad
+		\lambda_h \overset{*}{\rightharpoonup} \lambda, \qquad
+		\nu + \lambda = \mu .
+	\end{equation*}
+	We estimate the two parts separately. \\
+	\textbf{Heavy part:} \par
+	Each $\nu_h$ is purely atomic with at most $k$ atoms. By lemma 3.6 in \cite{bouchitte1990new}, the set of measures with at most $k$ atoms is sequentially weak-* closed --- hence $\nu$ is purely atomic with at most $k$ atoms --- and on this set the functional $\lambda \mapsto \sum_{\omega} \phi(|\lambda|(\{\omega\}))$ is sequentially weak-* l.s.c., since $\phi$ is continuous and subadditive (Lemma \ref{firstorderestimate}). Therefore
+	\begin{align*}
+		\liminf_{h} \Phi_1(\nu_h)
+		= \liminf_h  \sum_{ \omega \in \atom \nu_h } \phi(|\nu_{h}|(\{\omega\}))
+		\ge \sum_{ \omega \in \atom \nu } \phi(|\nu|(\{\omega\})) = \Phi_1 ( \nu).
 	\end{align*}
 
 	\quad\\
-	\textbf{On $\Omega - A_h$:} \par
-	By proposition \ref{firstorderestimate}, \ref{secondorderestimate}, we have for $\epsilon$ small enough, for all $z \in [0, \epsilon]$:
+	\textbf{Light part:} \par
+	By Proposition \ref{secondorderestimate}, for all $z \in [0, \epsilon]$ it holds
 	\begin{equation*}
-		\begin{aligned}
-			&\phi_1(z) \ge z - \frac{\gamma_1 z^2}{2}, \\
-			&\phi_1(z) \le z.
-		\end{aligned}
+			\phi(z) \ge z - \frac{\gamma_1 z^2}{2} \ge (1 - \delta)\, z,
+			\qquad \delta := \frac{\gamma_1 \epsilon}{2}.
 	\end{equation*}
-	We have
+	Every atom of $\lambda_h$ has mass below $\epsilon$, and the continuous part enters $\Phi_1$ with weight one, so
 	\begin{equation*}
 	\begin{aligned}
-		&\liminf_h \Phi_1(\mu_h \mathbbm{1}_{\Omega - A_h}) \\
-		= & \liminf_h \bigg( \int_{\Omega - A_h} d\mu_{\cont} + \sum_{\omega \in (\Omega - A_h) \cap \atom \mu_h} \phi_1(|\mu_{h, \atom}|(\{\omega\})) \bigg)\\
-		\ge & \liminf_h \bigg( \int_{\Omega - A_h} d\mu_{\cont} + \sum_{\omega \in (\Omega - A_h) \cap \atom \mu_h} |\mu_{h, \atom}|(\{\omega\})  - \frac{\gamma_1}{2} |\mu_{h, \atom}|(\{\omega\})^2  \bigg).
+		\Phi_1(\lambda_h)
+		&= \|\lambda_{h, \cont}\|_{\mathcal{M}(\Omega)} + \sum_{\omega \in \atom \lambda_h} \phi(|\lambda_{h}|(\{\omega\}))\\
+		&\ge (1 - \delta) \bigg( \|\lambda_{h, \cont}\|_{\mathcal{M}(\Omega)} + \sum_{\omega \in \atom \lambda_h} |\lambda_{h}|(\{\omega\}) \bigg)
+		= (1 - \delta)\, \|\lambda_h\|_{\mathcal{M}(\Omega)}.
 	\end{aligned}
 	\end{equation*}
-	Choose $\delta \ge \frac{\gamma_1}{2} \epsilon$, we have
+	By the weak-* l.s.c. of the norm $\|\cdot\|_{\mathcal{M}(\Omega)}$ and by $\Phi_1 \le \|\cdot\|_{\mathcal{M}(\Omega)}$ (Lemma \ref{envolop}),
 	\begin{equation*}
-		\sum_{\omega \in (\Omega - A_h) \cap \atom \mu_h} |\mu_{h, \atom}|(\{\omega\})  - \frac{\gamma_1}{2} |\mu_{h, \atom}|(\{\omega\})^2
-		\ge \sum_{\omega \in (\Omega - A_h) \cap \atom \mu_h} ( 1 - \delta) |\mu_{h, \atom}|(\{\omega\}).
+		\liminf_h \Phi_1(\lambda_h) \ge (1 - \delta)\, \|\lambda\|_{\mathcal{M}(\Omega)} \ge (1 - \delta)\, \Phi_1(\lambda).
 	\end{equation*}
-	Hence
-	\begin{equation*}
-		\begin{aligned}
-			&\liminf_h \Phi_1(\mu_h \mathbbm{1}_{\Omega - A_h}) \\
-			\ge & \liminf_h (1 - \delta) \int_{\Omega - A_h} d\mu_{\cont} + \liminf_h( 1 - \delta) \sum_{\omega \in (\Omega - A_h) \cap \atom \mu_h} |\mu_{h, \atom}|(\{\omega\})\\
-			= & \liminf_h (1 - \delta) \|\mu_h \mathbbm{1}_{\Omega - A_h}\|_{\mathcal{M}(\Omega)}.
-		\end{aligned}
-	\end{equation*}
-	By the weak-* l.s.c. of the norm $\|\cdot\|_{\mathcal{M}(\Omega)}$ we have
-	\begin{equation*}
-		\liminf_h \Phi_1(\mu_h \mathbbm{1}_{\Omega - A_h}) \ge (1 - \delta) \|\mu \mathbbm{1}_{\Omega - A_h}\|_{\mathcal{M}(\Omega)}.
-	\end{equation*}
-	Furthermore, applying $\phi_1(z) \le z$ we get
+
+	\quad\\
+	\textbf{Recombination:} \par
+	The functional $\Phi_1$ is subadditive: for $\mu = \nu + \lambda$ with $\nu$ purely atomic we have $\mu_{\cont} = \lambda_{\cont}$, every atom of $\mu$ is an atom of $\nu$ or of $\lambda$, and $\phi(|\nu + \lambda|(\{\omega\})) \le \phi(|\nu|(\{\omega\})) + \phi(|\lambda|(\{\omega\}))$ by the monotonicity and subadditivity of $\phi$; hence $\Phi_1(\mu) \le \Phi_1(\nu) + \Phi_1(\lambda)$. Combining the two parts,
 	\begin{align*}
-		\sum_{\omega \in (\Omega - A_h) \cap \atom \mu_h}  |\mu_{\atom}|(\{\omega\})
-		\ge \sum_{\omega \in (\Omega - A_h) \cap \atom \mu_h} \phi_1(|\mu_{h, \atom}|(\{\omega\})).
+		\ell = \lim_h \Phi_1(\mu_h)
+		\ge \liminf_h \Phi_1(\nu_h) + \liminf_h \Phi_1(\lambda_h)
+		\ge \Phi_1(\nu) + (1 - \delta)\, \Phi_1(\lambda)
+		\ge (1 - \delta)\, \Phi_1(\mu).
 	\end{align*}
-	Therefore
-	\begin{equation*}
-		\begin{aligned}
-			& \liminf_h \Phi_1(\mu_h \mathbbm{1}_{\Omega - A_h})\\
-			\ge & (1 - \delta) \|\mu \mathbbm{1}_{\Omega - A_h}\|_{\mathcal{M}(\Omega)}\\
-			\ge & (1 - \delta)\int_{\Omega - A_h} d\mu_{\cont} + \sum_{\omega \in (\Omega - A_h) \cap \atom \mu_h} \phi_1(|\mu_{h, \atom}|(\{\omega\}))\\
-			= & (1 - \delta) \Phi_1(\mu \mathbbm{1}_{\Omega - A_h}).
-		\end{aligned}
-	\end{equation*}
-Taking $\epsilon \rightarrow 0$ we get $\delta \rightarrow 0$ and the result is proven. 
+	Since $\epsilon \in (0, \hat{z}_1]$ was arbitrary and $\delta = \gamma_1 \epsilon /2 \rightarrow 0$ as $\epsilon \rightarrow 0$ --- the extractions above may depend on $\epsilon$, but the conclusion does not --- we obtain $\ell \ge \Phi_1(\mu)$.
 \end{proof}
 
 On the unbounded parameter domain the difficulty beyond the lower
