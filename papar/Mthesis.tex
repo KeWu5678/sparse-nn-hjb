@@ -191,7 +191,7 @@ The thesis is organized as follows. Section~2 reviews the space of finite Radon 
 
 \begin{figure}[htbp]
 \centering
-\begin{subfigure}[t]{0.48\textwidth}
+\begin{subfigure}[t]{0.48\textwidth} 
 \centering
 \includegraphics[width=\textwidth]{plot/neuron_h1_frontier_vdp.png}
 \caption{Van der Pol oscillator.}
@@ -312,7 +312,7 @@ Moreover, the approximation properties of other sufficiently smooth activation f
 	\end{enumerate}
 \end{proposition}
 
-\subsection*{Notation}
+\subsubsection*{Notation}
 Throughout the thesis: $D \subset \mathbb{R}^d$ is the bounded state domain
 and $\nu$ the data distribution on $D$; $M$ denotes the number of samples.
 $\Omega = \mathbb{R}^{d+1}$ is the parameter domain with generic element
@@ -330,12 +330,19 @@ gradient-augmented inner product.
 
 
 \section{The sparse learning problem}
-Throughout this section $D \subset \mathbb{R}^d$ is a bounded Lipschitz domain
-and $\nu$ has a Lipschitz density $\theta$ with
-$0 < \theta_{\min} \le \theta \le \theta_{\max}$ on $D$; to simplify notation we
-write the proofs for $\nu$ the normalized Lebesgue measure, the general case
-being identical up to the constants $\theta_{\min}, \theta_{\max}$. We assume
-$V \in H^1(D)$.
+Throughout this section $D \subset \mathbb{R}^d$ is a bounded Lipschitz domain,
+$\nu$ is the normalized Lebesgue measure on $D$, and $V \in H^1(D)$.
+
+\begin{remark}[general data distributions]\label{rem:density}
+All results of this section extend, with the same proofs, to data
+distributions $\nu = \theta\,dx$ with a Lipschitz density $\theta$ bounded
+between positive constants: the upper bound transfers the decay estimates of
+Lemma~\ref{lem:value_decay} to the $\nu$-norms, the lower bound identifies
+weak $L^2(\nu)$-limits with distributional gradients and gives
+$H^1(D,\nu) = H^1(D)$, and the Lipschitz regularity enters only through
+Green's identity in Lemma~\ref{lem:dual_pairing}. Sampling densities that
+degenerate on parts of $D$ are not covered.
+\end{remark}
 
 We define the \emph{value network} of a measure $\mu \in \mathcal{M}(\Omega)$ by
 \begin{align*}
@@ -350,7 +357,7 @@ This holds in each of the three settings considered in this thesis:
 (Assumption~\ref{ass:ridge} below), (ii) arbitrary continuous activations on a
 compact parameter set $\Omega_R \subset \mathbb{R}^{d+1}$, and (iii)
 $k$-homogeneous activations on the sphere (Section~4).
-The gradient of the model is understood \emph{distributionally}; whenever
+The gradient of the model is understood distributionally; whenever
 $\int_\Omega \|\nabla_x \sigma(\cdot, \omega)\|_{L^2(D)} \, d|\mu|(\omega) < \infty$
 — in particular for every finitely supported $\mu$ — it is given by the
 classical formula
@@ -398,7 +405,7 @@ gradient convention,
 \end{equation*}
 On measures with
 $\int_\Omega \|\nabla_x \sigma(\cdot,\omega)\|_{L^2(D)} d|\mu|(\omega) < \infty$
-this coincides with the loss written channel by channel,
+this coincides with the loss
 $L(\mu) = \frac{1}{2} \big( \|\mathcal{N}\mu - V \|^2_{L^2(D, \nu)}
 + \sum_{i = 1}^d \| \partial_{x_i}\mathcal{N}\mu - \partial_{x_i} V \|_{L^2(D, \nu)}^2 \big)$,
 which is the form used in the local analysis of Section~3.4.
@@ -446,7 +453,7 @@ parameter set is used instead. Throughout, $\sigma$ denotes the activation
 atom as a function on $D$, $\rho$ its scalar ridge profile, and the letter
 $\omega = (a, b)$ is reserved for the parameter.
 
-Which activation suits which target is a question about the \emph{derivative}
+Which activation suits which target is a question about the derivative
 $\partial_x \sigma$: under the gradient-augmented loss each neuron contributes
 $\sigma$ to the reconstruction of $V$ and $\partial_x \sigma$ to that of
 $\nabla V$, so the shape of $\partial_x\sigma$ governs the approximation
@@ -458,7 +465,7 @@ discontinuity in Section~6.2.
 We implement an explicit sparsity-promoting penalty term. 
 The penalization does not enhance the generalization performance for large neural networks \cite{zhang2021understanding}. 
 Nevertheless, the explicit regularization still plays a central role in the sparse learning. 
-As introduced in the abstract, the $l^1$ penalty fails to detect the redundancy of the neurons clustering in a small neighborhood, which motivates the nonconvex penalty term. First we introduce the following assumption:
+As introduced in the introduction, the $l^1$ penalty fails to detect the redundancy of the neurons clustering in a small neighborhood, which motivates the nonconvex penalty term. First we introduce the following assumption:
 \begin{assumption} \label{pen1}
 	The penalty term $\phi: \mathbb{R}_+ \rightarrow \mathbb{R}_+$ satisfies: $\phi$ is differentiable at 0 with $\phi'(0) = 1$. 
 \end{assumption}
@@ -571,19 +578,22 @@ In particular, by the coercivity of $\phi$ it holds that $\Phi_1$ is also coerci
 For the second inequality, we apply $\phi(z) \le z$ to every atom and use that the continuous part enters $\Phi_1$ with weight one; this gives $\Phi_1(\mu) \le \|\mu\|_{\mathcal{M}(\Omega)}$.
 \end{proof}
 
-The next lemma proves the weak-* l.s.c. of $\Phi_1$.
-The proof follows the idea in the paper \cite{bouchitte1990new}.
-Since the original proof is valid for $\Omega$ locally compact, the result applies to the current setting.
-Moreover, since our functional does not have the singular part, the proof and assumptions can be simplified.
+The next lemma proves the weak-* l.s.c. of $\Phi_1$. It is a special case of
+the lower-semicontinuity theory of \cite{bouchitte1990new} for nonconvex
+functionals on measures, which is developed on locally compact domains and so
+applies to $\Omega = \mathbb{R}^{d+1}$. Since $\Phi_1$ carries no
+singular-part integrand, a short self-contained proof is available. Note that
+only Assumptions \ref{pen1} and \ref{pen2} are needed --- in particular not
+the local concavity of Assumption~\ref{pen3}.
 \begin{lemma} \label{lem:lsc}
-Under Assumption~\ref{pen1}, \ref{pen2}, \ref{pen3}, the functional
+Under Assumptions \ref{pen1} and \ref{pen2}, the functional
 \begin{align*}
 	\Phi_1(\mu) = \|\mu_{\cont}\|_{\mathcal{M}(\Omega)} + \sum_{ \omega \in \atom \mu } \phi(|\mu|(\{\omega\}))
 \end{align*}
 is sequentially weak-* l.s.c. on $\mathcal{M}(\Omega)$.
 \end{lemma}
 \begin{proof}
-	Let $\mu_h \overset{*}{\rightharpoonup} \mu$; then $M := \sup_h \|\mu_h\|_{\mathcal{M}(\Omega)} < \infty$ by the uniform boundedness principle. Passing to a subsequence we may assume $\lim_h \Phi_1(\mu_h) = \liminf_h \Phi_1(\mu_h) =: \ell < \infty$ (otherwise there is nothing to prove). Fix $\epsilon \in (0, \hat{z}_1]$. We decompose each element of the \emph{sequence} --- not the limit --- into its $\epsilon$-heavy atomic part $\zeta_h$ and the rest $\eta_h$:
+	Let $\mu_h \overset{*}{\rightharpoonup} \mu$; then $M := \sup_h \|\mu_h\|_{\mathcal{M}(\Omega)} < \infty$ by the uniform boundedness principle. Passing to a subsequence we may assume $\lim_h \Phi_1(\mu_h) = \liminf_h \Phi_1(\mu_h) =: \ell < \infty$ (otherwise there is nothing to prove). Fix $\epsilon > 0$. We decompose each element of the \emph{sequence} --- not the limit --- into its $\epsilon$-heavy atomic part $\zeta_h$ and the rest $\eta_h$:
 	\begin{align*}
 		\mu_h = \zeta_h + \eta_h, \qquad
 		\zeta_h := \mu_h|_{A_h}, \qquad
@@ -610,23 +620,24 @@ is sequentially weak-* l.s.c. on $\mathcal{M}(\Omega)$.
 
 	\quad\\
 	\textbf{Light part:} \par
-	By Proposition~\ref{secondorderestimate}, for all $z \in [0, \epsilon]$ it holds
+	Since $\phi$ is concave with $\phi(0) = 0$, the chord bound gives, for all $z \in [0, \epsilon]$,
 	\begin{equation*}
-			\phi(z) \ge z - \frac{\gamma_1 z^2}{2} \ge (1 - \delta)\, z,
-			\qquad \delta := \frac{\gamma_1 \epsilon}{2}.
+			\phi(z) \ge \frac{\phi(\epsilon)}{\epsilon}\, z =: (1 - \delta_\epsilon)\, z,
+			\qquad \text{where } \delta_\epsilon = 1 - \frac{\phi(\epsilon)}{\epsilon} \rightarrow 1 - \phi'(0) = 0 \text{ as } \epsilon \rightarrow 0
 	\end{equation*}
+	by Assumption~\ref{pen1}.
 	Every atom of $\eta_h$ has mass below $\epsilon$, and the continuous part enters $\Phi_1$ with weight one, so
 	\begin{equation*}
 	\begin{aligned}
 		\Phi_1(\eta_h)
 		&= \|\eta_{h, \cont}\|_{\mathcal{M}(\Omega)} + \sum_{\omega \in \atom \eta_h} \phi(|\eta_{h}|(\{\omega\}))\\
-		&\ge (1 - \delta) \bigg( \|\eta_{h, \cont}\|_{\mathcal{M}(\Omega)} + \sum_{\omega \in \atom \eta_h} |\eta_{h}|(\{\omega\}) \bigg)
-		= (1 - \delta)\, \|\eta_h\|_{\mathcal{M}(\Omega)}.
+		&\ge (1 - \delta_\epsilon) \bigg( \|\eta_{h, \cont}\|_{\mathcal{M}(\Omega)} + \sum_{\omega \in \atom \eta_h} |\eta_{h}|(\{\omega\}) \bigg)
+		= (1 - \delta_\epsilon)\, \|\eta_h\|_{\mathcal{M}(\Omega)}.
 	\end{aligned}
 	\end{equation*}
 	By the weak-* l.s.c. of the norm $\|\cdot\|_{\mathcal{M}(\Omega)}$ and by $\Phi_1 \le \|\cdot\|_{\mathcal{M}(\Omega)}$ (Lemma~\ref{lem:coercivity}),
 	\begin{equation*}
-		\liminf_h \Phi_1(\eta_h) \ge (1 - \delta)\, \|\eta\|_{\mathcal{M}(\Omega)} \ge (1 - \delta)\, \Phi_1(\eta).
+		\liminf_h \Phi_1(\eta_h) \ge (1 - \delta_\epsilon)\, \|\eta\|_{\mathcal{M}(\Omega)} \ge (1 - \delta_\epsilon)\, \Phi_1(\eta).
 	\end{equation*}
 
 	\quad\\
@@ -635,10 +646,10 @@ is sequentially weak-* l.s.c. on $\mathcal{M}(\Omega)$.
 	\begin{align*}
 		\ell = \lim_h \Phi_1(\mu_h)
 		\ge \liminf_h \Phi_1(\zeta_h) + \liminf_h \Phi_1(\eta_h)
-		\ge \Phi_1(\zeta) + (1 - \delta)\, \Phi_1(\eta)
-		\ge (1 - \delta)\, \Phi_1(\mu).
+		\ge \Phi_1(\zeta) + (1 - \delta_\epsilon)\, \Phi_1(\eta)
+		\ge (1 - \delta_\epsilon)\, \Phi_1(\mu).
 	\end{align*}
-	Since $\epsilon \in (0, \hat{z}_1]$ was arbitrary and $\delta = \gamma_1 \epsilon /2 \rightarrow 0$ as $\epsilon \rightarrow 0$ --- the extractions above may depend on $\epsilon$, but the conclusion does not --- we obtain $\ell \ge \Phi_1(\mu)$.
+	Since $\epsilon > 0$ was arbitrary and $\delta_\epsilon \rightarrow 0$ as $\epsilon \rightarrow 0$ --- the extractions above may depend on $\epsilon$, but the conclusion does not --- we obtain $\ell \ge \Phi_1(\mu)$.
 \end{proof}
 
 On the unbounded parameter domain the difficulty beyond the lower
@@ -680,8 +691,8 @@ $\|\mathcal{N}\mu_n\|_{L^2(D)} \le \|\rho\|_\infty \sup_n \|\mu_n\|_{\mathcal{M}
 \end{proof}
 
 \begin{theorem}[Existence on the unbounded parameter domain]\label{thm:existence}
-Let Assumption~\ref{ass:ridge} and Assumptions \ref{pen1}, \ref{pen2},
-\ref{pen3} hold. Then problem \eqref{int_noncon} admits at least one global
+Let Assumption~\ref{ass:ridge} and Assumptions \ref{pen1}, \ref{pen2} hold.
+Then problem \eqref{int_noncon} admits at least one global
 minimizer in $\mathcal{M}(\Omega)$.
 \end{theorem}
 \begin{proof}
@@ -1259,8 +1270,7 @@ $\|r'\|_{H^2(D)} \le \max_n \|\sigma(\cdot,\bar{\omega}_n)\|_{H^2(D)}
 $\tilde{\mu}$ are disjoint, so
 $\Phi_1(\mu) = \sum_{n = 1}^N \phi(|c_n|) + \Phi_1(\tilde{\mu})$. Every atom of
 $\tilde{\mu}$ has mass at most $\|\tilde{\mu}\|_{\mathcal{M}(\Omega)} \le
-\epsilon \le \hat{z}_1$, so by Proposition~\ref{secondorderestimate}(1), as in
-the proof of Lemma~\ref{lem:lsc},
+\epsilon \le \hat{z}_1$, so by Proposition~\ref{secondorderestimate}(1),
 \begin{equation*}
 	\Phi_1(\tilde{\mu}) \ge \Big(1 - \frac{\gamma_1 \epsilon}{2}\Big)
 	\|\tilde{\mu}\|_{\mathcal{M}(\Omega)} ,

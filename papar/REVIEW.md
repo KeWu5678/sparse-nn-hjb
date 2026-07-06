@@ -923,3 +923,15 @@ Alternatives:
   series switched to k = 2 per user decision (ReLU² is the pendulum star).
   Notation consolidated thesis-wide: φ_{log,γ} → φ_γ (user decision);
   specific γ values pinned in the two VDP weight-portrait subcaptions.
+- User-review round (2026-07-06, post-batch): (1) 'slab estimate' confirmed
+  absent from the thesis (chat-only shorthand; retired — plain language in
+  any future edit). (2) §3 setting simplified per user decision (b): ν =
+  normalized Lebesgue outright; extension to Lipschitz densities bounded
+  above/below moved to rem:density with the role of each hypothesis stated;
+  degenerate sampling densities explicitly excluded. (3) User correctly
+  observed the l.s.c. lemma still assumed pen1–pen3 despite the 'simplified
+  assumptions' claim: pen3 dropped — the light-part envelope now uses the
+  concavity chord bound φ(z) ≥ (φ(ε)/ε)z with φ(ε)/ε → φ'(0) = 1 instead of
+  the second-order envelope; lead-in rewritten honestly; Theorem
+  thm:existence consequently weakened to pen1+pen2 only; stale cross-ref in
+  Thm sc_opt Step 5 removed.
