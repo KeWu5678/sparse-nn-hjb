@@ -505,7 +505,7 @@ A=(0.71,0.68), B=(0.23,0.53), T=10 ✓; 3,900 = 3,000 + 900 ✓; oversampling ta
 
 ## 3. Structure
 
-- [ ] **STR-1 (critical). Thesis apparatus is missing entirely:** placeholder
+- [x] **STR-1 — PARTIALLY RESOLVED (Batch S): TOC + Conclusion-and-outlook section added. ON HOLD per user: title, abstract, declaration (placeholder \title remains; TODO comment in preamble; drafts in §7 below).** Thesis apparatus is missing entirely:** placeholder
   `\title[Review]{Review}`, **no `\maketitle`**, no author, no abstract, no table
   of contents, no declaration of originality, no acknowledgments, no conclusion
   section — the document ends mid-§6.2.3 summary paragraph (l. 2300–2310) and goes
@@ -518,7 +518,7 @@ A=(0.71,0.68), B=(0.23,0.53), T=10 ✓; 3,900 = 3,000 + 900 ✓; oversampling ta
   lever from the oversampling study; outlook — higher-dimensional problems,
   semiconcave/structured models), and the declaration page.
 
-- [ ] **STR-2 (major). The introduction never states the contributions or the
+- [x] **STR-2 — RESOLVED (Batch S): enumerated contributions (4 items, each with theorem refs) + outline paragraph.** The introduction never states the contributions or the
   outline.** L. 192–196 gestures at contributions in four unlabeled sentences
   (with the overclaim flagged in HEAD-1). Add a "Contributions" paragraph with a
   short enumerated list matched 1:1 to sections (theory: existence/optimality/
@@ -526,14 +526,14 @@ A=(0.71,0.68), B=(0.23,0.53), T=10 ✓; 3,900 = 3,000 + 900 ✓; oversampling ta
   $k$-homogeneous reformulation and singular-penalty corollaries; algorithms;
   benchmark findings), and an "Outline" paragraph ("Section 2 reviews …").
 
-- [ ] **STR-3 (major). §5 "algorithms" front half re-derives standard material at
+- [x] **STR-3 — RESOLVED (Batch S): §5.1 adjoint derivation compressed to reduced-gradient statement + adjoint ODE + cost note, citing Hinze et al.; BB usage clarified.** §5 "algorithms" front half re-derives standard material at
   length** (l. 1249–1300: constrained→reduced problem, Lagrangian, adjoint — with
   the errors flagged in MATH-18(vi–viii)). For a 50-page thesis this is the right
   place to *compress*: the adjoint equation is already (TPBVP) from §1; a
   half-page with a citation (Hinze–Pinnau–Ulbrich–Ulbrich or Tröltzsch) suffices.
   The freed space pays for the missing conclusion.
 
-- [ ] **STR-4 (medium). §4 internal organization:** the section starts in the
+- [x] **STR-4 — RESOLVED (Batches M5+S): §4 debris removed earlier; activation-shape subsubsections moved from §3.1 into §6.1.1 (smooth) and §6.2 (switching), with a pointer sentence left in §3.1.** §4 internal organization:** the section starts in the
   measure setting, jumps to the discrete problem (l. 1028–1034) without saying it
   is now finite-sample, has the orphaned "The ReLU^k function" subsubsection
   whose second half (l. 1095–1106) contains the editing debris of MATH-18(i), and
@@ -546,7 +546,7 @@ A=(0.71,0.68), B=(0.23,0.53), T=10 ✓; 3,900 = 3,000 + 900 ✓; oversampling ta
   keeps the *assumption-level* content only, the shape/economy story moves to §6
   where the figures are).
 
-- [ ] **STR-5 (medium). Numbering scheme is inconsistent and produces oddities:**
+- [x] **STR-5 — RESOLVED (Batch S): one shared counter for theorem/lemma/prop/cor/definition/assumption/remark, numbered by section; redundant \thetheorem overrides and unused example env removed.** Numbering scheme is inconsistent and produces oddities:**
   corollaries are numbered *within theorems* (`\newtheorem{corollary}{Corollary}[theorem]`),
   yielding "Corollary 4.2.1 / 4.2.2" — and since they appear after Proposition
   4.3, the numbers run *backwards* in the text. Remarks are numbered globally
@@ -557,14 +557,14 @@ A=(0.71,0.68), B=(0.23,0.53), T=10 ✓; 3,900 = 3,000 + 900 ✓; oversampling ta
   definition, assumption, remark. Everything becomes "3.1, 3.2, …" in order of
   appearance.
 
-- [ ] **STR-6 (medium). Scope statement.** The motivation leans on the curse of
+- [x] **STR-6 — RESOLVED (Batch S): scope paragraph at the head of §6 + limitations paragraph in the conclusion.** Scope statement.** The motivation leans on the curse of
   dimensionality (l. 144–152, l. 229), but every experiment is $d = 2$. That is
   fine for a thesis benchmarking *representation* questions — but say so once
   ("high-dimensional deployment is outside the scope; the $d=2$ benchmarks isolate
   the switching-set representation question") to preempt the obvious committee
   question.
 
-- [ ] **STR-7 (minor). Section/subsection title style:** `\section{introduction}`,
+- [x] **STR-7 — RESOLVED (Batch S): all section/subsection/subsubsection titles unified to sentence case; Spport fixed earlier; ReLU² head de-italicized (Batch N).** Section/subsection title style:** `\section{introduction}`,
   `\section{numerical Example}` etc. — amsart small-caps the section heads so
   casing survives; unify to sentence case or title case ("Introduction",
   "Preliminaries", "The sparse learning problem", "Numerical examples"). Fix
@@ -572,7 +572,7 @@ A=(0.71,0.68), B=(0.23,0.53), T=10 ✓; 3,900 = 3,000 + 900 ✓; oversampling ta
   fits the discontinuous gradient` (l. 2151) has math-italic ReLU and reads like a
   caption — "ReLU² fits the discontinuous gradient" with `\reluk` macro.
 
-- [ ] **STR-8 (minor). A notation section is needed** (thesis-standard): the
+- [x] **STR-8 — MOSTLY RESOLVED (Batch S): Notation subsection at end of §2; pendulum ω → θ̇ throughout §6.2 (second-order form; ∂_θ̇V feedback); K → M; Prop 4.2 targets y → V. Remaining (wording batch): relate §5's S_t(ω)² to the H¹ atom norm.** A notation section is needed** (thesis-standard): the
   same symbols carry multiple meanings — $\omega$ (neuron parameter) vs $\omega =
   \dot\theta$ (pendulum velocity, §6.2); $k$ (control dimension in (P), ReLU
   power, sequence index in Cor 4.2.2's proof); $N$ (network width, dataset size
@@ -710,7 +710,7 @@ A=(0.71,0.68), B=(0.23,0.53), T=10 ✓; 3,900 = 3,000 + 900 ✓; oversampling ta
 
 ## 6. LaTeX code
 
-- [ ] **TEX-1 (major). Regulation-conformant layout:** switch to 11pt, drop
+- [x] **TEX-1 — RESOLVED (Batch S): 11pt amsart, linespread 1.08, 25mm margins. 47 pp incl. TOC + conclusion — under the 50-page cap with front matter still to come (~3 pp headroom).** Regulation-conformant layout:** switch to 11pt, drop
   `\linespread{1.3}` (or ≤1.05), replace the 15mm `geometry` with standard
   thesis margins (~2.5cm; binding offset per Prüfungsbüro). Keep amsart or move
   to `amsbook`/`scrreprt` — amsart at 11pt is fine for a math thesis. **Then
@@ -718,7 +718,7 @@ A=(0.71,0.68), B=(0.23,0.53), T=10 ✓; 3,900 = 3,000 + 900 ✓; oversampling ta
   will land somewhere new after reflow + added front matter/conclusion; §5
   compression (STR-3) is the reserve lever.
 
-- [ ] **TEX-2 (medium). Preamble hygiene:** remove unused packages — `tikz`,
+- [x] **TEX-2 — RESOLVED (Batch S): removed tikz/ulem/multicol/multirow/marvosym/stmaryrd/url and the mathcal override; hyperref+bookmark moved to preamble end; microtype added.** Preamble hygiene:** remove unused packages — `tikz`,
   `ulem`, `multicol`, `multirow`, `marvosym`, `stmaryrd` (all have zero uses;
   verified) — and `url` (hyperref covers it); load `hyperref` (+`bookmark`)
   *after* amsmath/amsthm/amssymb (currently before, l. 21 vs 26); drop the
@@ -726,13 +726,13 @@ A=(0.71,0.68), B=(0.23,0.53), T=10 ✓; 3,900 = 3,000 + 900 ✓; oversampling ta
   (flush-left displays are unusual in math theses; default centering
   recommended); add `microtype`.
 
-- [ ] **TEX-3 (medium). Operators:** `\DeclareMathOperator*` is only right for
+- [x] **TEX-3 — RESOLVED (Batch S): operators unstarred except esssup; \div kept as-is.** Operators:** `\DeclareMathOperator*` is only right for
   operators taking limits underneath (`\esssup`); `dist`, `span`, `sign`,
   `supp`, `dom`, `cl`, `ran`, `atom`, `cont` should be unstarred. The `\div`
   redefinition shadows the TeX primitive — harmless as done, but `\dvg` or
   `\operatorname{div}` inline avoids the `\AtBeginDocument` dance.
 
-- [ ] **TEX-4 (medium). References & citations:** `\bibliography{ref.bib}` →
+- [x] **TEX-4 — MOSTLY RESOLVED (Batch S): all (\ref{}) → \eqref{}; non-breaking ties swept (incl. lowercase 'lemma \ref' capitalized); \bibliography{ref}; envolop → lem:coercivity, l.s.c. → lem:lsc. Skipped as churn: full label prefixing, cleveref.** References & citations:** `\bibliography{ref.bib}` →
   `\bibliography{ref}`; `plain` style with numeric labels is fine, or `alpha`
   for a thesis; make all equation references `\eqref` (currently 7 `\eqref` vs
   11 `(\ref{...})`); replace the hard-coded "Theorem~5.2" (MATH-18(ii));
@@ -741,7 +741,7 @@ A=(0.71,0.68), B=(0.23,0.53), T=10 ✓; 3,900 = 3,000 + 900 ✓; oversampling ta
   add non-breaking ties before every `\ref`/`\cite` ("Theorem~\ref{…}").
   Consider `cleveref` (`\cref`) to stop hand-typing "Theorem"/"Assumption".
 
-- [ ] **TEX-5 (medium). Theorem environments:** implement the shared counter of
+- [x] **TEX-5 — RESOLVED with STR-5.** Theorem environments:** implement the shared counter of
   STR-5; delete the redundant `\renewcommand{\thetheorem}` /
   `\renewcommand{\thedefinition}` lines; `remark` should get the shared counter
   too; the unnumbered `example` env is unused — remove.
@@ -756,7 +756,7 @@ A=(0.71,0.68), B=(0.23,0.53), T=10 ✓; 3,900 = 3,000 + 900 ✓; oversampling ta
   `\cdot` or juxtaposition; `\dots` in the ReLU^k gradient display (l. 1090)
   → `\vdots`; the tag `\tag{$P_{\Phi_1}$}` etc. ✓ good practice, keep.
 
-- [ ] **TEX-7 (minor). Algorithms:** `algorithmic` (all-caps `\STATE`) is the
+- [x] **TEX-7 — RESOLVED (Batch S): algpseudocode (\State/\While); loop bound renamed T_out.** Algorithms:** `algorithmic` (all-caps `\STATE`) is the
   legacy package — `algpseudocode` is the maintained successor (mechanical
   rename); Algorithm 1/2 bodies use inline math with text subscripts
   (`N_{\mathrm{trial}}` ✓ good); the `$t < T$` loop bound collides with the
@@ -897,3 +897,8 @@ Alternatives:
   11pt relayout, TEX-1). New follow-ups filed: figure legends use ψ_γ for the
   log penalty (unify to φ_γ in analysis.py, plot batch); curate the L²
   fixed-point cells into 01_vdp/log_penalty/results.md.
+- Batch S + TEX (this commit): structure and LaTeX batches applied except the
+  on-hold front matter (title/abstract/declaration) and the deferred TEX-6
+  full display-punctuation sweep (wording batch) / TEX-8 print-link colors
+  (submission time). Layout now 11pt / 1.08 / 25mm: 47 pp — cap satisfied,
+  ~3 pp headroom for front matter.
