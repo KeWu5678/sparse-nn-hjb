@@ -5,6 +5,18 @@
 \usepackage{graphicx}
 \usepackage{subcaption}
 \usepackage{float}
+\usepackage{placeins}
+\usepackage{etoolbox}
+% keep floats inside their own (sub)section so figures stay with the text
+% that references them
+\pretocmd{\section}{\FloatBarrier}{}{}
+\pretocmd{\subsection}{\FloatBarrier}{}{}
+\pretocmd{\subsubsection}{\FloatBarrier}{}{}
+% loosen float-placement thresholds so tall figures share pages with text
+\renewcommand{\topfraction}{0.9}
+\renewcommand{\bottomfraction}{0.6}
+\renewcommand{\textfraction}{0.07}
+\renewcommand{\floatpagefraction}{0.8}
 \usepackage{xcolor}
 \usepackage[colorlinks = true, linkcolor = blue]{hyperref}
 \usepackage{url}
@@ -183,7 +195,7 @@ In the case of the $k$-homogeneous activation function, we investigate besides t
 After removing the assumptions of bounded dictionary and positive homogeneity of the activation function (or the regularity condition of the penalty), we estabilised the new proofs of existence and optimality conditions, as well as the finite support statement.
 We conducted experiments for different problems. By choosing the right activation function and penalty, we achieved better $H^1$ relative error with less neurones. \par
 
-\begin{figure}[H]
+\begin{figure}[htbp]
 \centering
 \begin{subfigure}[t]{0.48\textwidth}
 \centering
@@ -390,7 +402,7 @@ a derivative that saturates on both tails (tanh) supplies only a narrow, localiz
 and a localized bump ($e^{-x^2}$) concentrates its curvature near the origin and reverses the sign of its derivative, fitting a smooth field accurately only when densely tiled. 
 The regularity of $\partial_{x}\sigma$ should therefore match that of the target gradient field: a smooth, broadly curved derivative suits a smooth value function.
 
-\begin{figure}[H]
+\begin{figure}[htbp]
 \centering
 \includegraphics[width=\textwidth]{plot/activation_shapes_smooth.png}
 \caption{Three activations admissible under Assumption~\ref{assumption on actfun} --- softplus, tanh, and the Gaussian bump $e^{-x^2}$ --- shown, from left to right, as the value $\sigma$, its first derivative $\sigma'$, and its second derivative (curvature) $\sigma''$ with respect to the pre-activation argument. Under the gradient-augmented loss the first derivative is the basis that reconstructs $\nabla V$.}
@@ -401,7 +413,7 @@ The regularity of $\partial_{x}\sigma$ should therefore match that of the target
 
 When the value function possesses a switching set --- a manifold across which $\nabla V$ is discontinuous, as in the pendulum swing-up problem --- a smooth derivative can no longer reproduce the target gradient field economically. Representing a jump in $\nabla V$ requires a derivative $\partial_{x}\sigma$ that is itself able to break across a hyperplane, which relaxes the differentiability of Assumption~\ref{assumption on actfun}. Figure~\ref{fig:activation_shapes_switching} contrasts three such shapes. The rectified linear unit $\mathrm{ReLU}$ has a step derivative, so a single neuron seats a finite gradient jump exactly on its hyperplane; its squared variant $\mathrm{ReLU}^{2}$ has a kinked but continuous derivative --- a jump in the curvature --- that builds a sharp gradient transition while its quadratic growth still fits the smooth far field, making it the more accurate choice; softplus, whose derivative is smooth, can only smear the jump over a width of order $1/\beta$ and consequently plateaus near the switching set. The positive homogeneity of the rectified families also makes them the natural setting for the sparsity penalty introduced next.
 
-\begin{figure}[H]
+\begin{figure}[htbp]
 \centering
 \includegraphics[width=\textwidth]{plot/activation_shapes_discontinuous.png}
 \caption{Three activations for a target gradient that jumps across a switching set --- $\mathrm{ReLU}$, $\mathrm{ReLU}^{2}$, and softplus (smooth reference) --- shown, from left to right, as the value $\sigma$, its first derivative $\sigma'$, and its second derivative $\sigma''$ with respect to the pre-activation argument. Only the rectified derivatives can break at the origin: $\mathrm{ReLU}'$ jumps and $(\mathrm{ReLU}^{2})'$ kinks, whereas the softplus derivative is smooth. The curvature of $\mathrm{ReLU}$ is a Dirac mass at the origin (marked).}
@@ -1338,7 +1350,7 @@ The relative errors used to evaluate the approximation quality are
 \end{align*}
 where $|\cdot|_{H^1}$ denotes the $H^1$ semi-norm (gradient error only) and the norms are computed empirically over the data set.
 
-\begin{algorithm}[H]
+\begin{algorithm}[htbp]
 \caption{Iterative node insertion and optimization with $\phi_{\log,\gamma}$-penalty}
 \label{alg:log}
 \begin{algorithmic}[1]
@@ -1370,7 +1382,7 @@ The minimizer $c^*$ is computed by Newton's method on the stationarity equation
 $S_t(\omega)^2 c + \alpha |c|^{q-1} = |p_t(\omega)|$,
 and is used directly as the initial outer weight.
 
-\begin{algorithm}[H]
+\begin{algorithm}[htbp]
 \caption{Iterative node insertion and optimization with $|c|^q$-penalty}
 \label{alg:q}
 \begin{algorithmic}[1]
@@ -1431,7 +1443,7 @@ For each initial condition $x = (x_1, x_2)$ sampled on the grid $[-3, 3]^2$, we 
 The control is represented in a Legendre polynomial basis $u(t) = \sum_{i=0}^{N_b - 1} c_i P_i(t)$.
 The optimization yields the dataset $\{x^m, V(x^m), \nabla V(x^m)\}_{m=1}^M$, where $V(x^m) = J(u^*; 0, x^m)$ and $\nabla V(0, x^m) = p^*(0)$.
 
-\begin{figure}[H]
+\begin{figure}[htbp]
 \centering
 \includegraphics[width=0.48\textwidth]{plot/v.png}
 \hfill
@@ -1452,7 +1464,7 @@ We sweep over different activation function and hypeparameter groups and observe
 
 Table~\ref{tab:alg1_gradient} isolates the effect of gradient augmentation ($L^2$ loss, value only, vs.\ $H^1$ loss, value + gradient) on the validation error. 
 
-\begin{table}[H]
+\begin{table}[htbp]
 \centering
 \caption{Effect of gradient training on validation error ($\alpha = 10^{-5}$, $\gamma = 1$).}
 \label{tab:alg1_gradient}
@@ -1496,7 +1508,7 @@ We choose 3 classes of activation functions: ReLU-like (softplus), sigmoidal (ta
 As observed in Table \ref{tab:alg1_gradient}, the Gaussian activation achieves in general the best precision among the 3.
 Overall, All three capture the smooth bowl; they differ in how many neurons it takes. 
 
-\begin{figure}[H]
+\begin{figure}[htbp]
 \centering
 \captionsetup[subfigure]{justification=centering}
 \begin{subfigure}[t]{0.32\textwidth}
@@ -1527,7 +1539,7 @@ Tanh saturates for large $|z|$, causing vanishing gradients.
 Softplus grows linearly and avoids saturation.
 The Gaussian is localized with exponential decay and has a sign-changing derivative $\sigma'(z) = -2z\,e^{-z^2}$ (a bump that is accurate where it sits but must be tiled densely to cover a smooth field).
 
-\begin{table}[H]
+\begin{table}[htbp]
 \centering
 \caption{Network size (sparsity) for each activation, paired with the validation error natural to each loss ($\mathrm{Err}_{L^2}$ for the $L^2$ loss, $\mathrm{Err}_{H^1}$ for the $H^1$ loss; $\alpha = 10^{-5}$, $\gamma = 1$).}
 \label{tab:alg1_sparsity}
@@ -1575,7 +1587,7 @@ The performance differences across activations can be understood from two angles
 The gradient kernel column for neuron~$n$ at data point~$x_m$ is $\sigma'(a_n \cdot x_m + b_n) \cdot a_n$; the diversity of these columns determines how well the network can fit the gradient field.
 The distribution of $\sigma'(z)$ across all (neuron, data point) pairs indicates the mass saturation near zero:
 
-\begin{figure}[H]
+\begin{figure}[htbp]
 \centering
 \captionsetup[subfigure]{justification=centering}
 \begin{subfigure}[t]{0.32\textwidth}
@@ -1610,7 +1622,7 @@ Table~\ref{tab:insertion_diag} tracks the two fits neuron-by-neuron.
 The full objective $J = L(\mu) + \alpha\,\Phi(\mu)$ decreases at every iteration for both, confirming that the inserted neurons are genuine descent directions.
 But the Gaussian adds them in large batches (7--15 per iteration) whereas softplus adds only 1--5, and the descent per neuron differs accordingly: each Gaussian neuron lowers~$J$ by $\sim 10^{-4}$ (down to $2 \times 10^{-5}$ by the final iteration), while a softplus neuron typically lowers it by $10^{-3}$--$10^{-2}$.
 
-\begin{table}[H]
+\begin{table}[htbp]
 \centering
 \setlength{\tabcolsep}{10pt}
 \renewcommand{\arraystretch}{1.2}
@@ -1668,7 +1680,7 @@ Table~\ref{tab:alg1_alpha} sweeps $\alpha$ for $\gamma = 0$ (pure $\ell^1$) and 
 Smaller $\alpha$ increases accuracy at the cost of more neurons for both.
 The nonconvex correction sharpens this frontier most for softplus---at $\alpha = 10^{-4}$ it halves the $H^1$ error ($3.24 \times 10^{-1} \to 1.68 \times 10^{-1}$) at a similar neuron count---while for the Gaussian it yields only a modest gain.
 
-\begin{table}[H]
+\begin{table}[htbp]
 \centering
 \caption{Algorithm~1: effect of $\alpha$ with $\gamma = 0$ vs.\ $\gamma = 10$ ($H^1$ loss).}
 \label{tab:alg1_alpha}
@@ -1722,7 +1734,7 @@ Algorithm~2 uses the $\reluk$ atom $\sigma(z) = \mathrm{ReLU}(z)^k$ with the pur
 The swept knob is the power $k$; all fits below are at the fixed operating point $\alpha = 10^{-5}$.
 
 
-\begin{figure}[H]
+\begin{figure}[htbp]
 \centering
 \captionsetup[subfigure]{justification=centering}
 \begin{subfigure}[t]{0.32\textwidth}
@@ -1753,7 +1765,7 @@ Under the $L^2$ loss the gradient error stays large for every power ($\mathrm{Er
 The $H^1$ loss drives the gradient error down to $\approx 1.0 \times 10^{-1}$ for \emph{all} powers (Table~\ref{tab:alg2_gradient}).
 Gradient augmentation is decisive and uniform in $k$: the fit becomes gradient-accurate regardless of the atom power.
 
-\begin{table}[H]
+\begin{table}[htbp]
 \centering
 \caption{Algorithm~2: network size and validation error vs.\ the atom power $k$ ($\alpha = 10^{-5}$).}
 \label{tab:alg2_gradient}
@@ -1810,7 +1822,7 @@ Under the $L^2$ loss the fits are uniformly sparse ($10$--$14$ atoms) but gradie
 Figure~\ref{fig:summary_frontier} plots insertion growth trajectory --- the best relative $H^1$ error reached with a given number of neurons. 
 Algorithm~2 dominates: $\reluk$ at $k = 5$ and $k = 2$ reach the best gradient accuracy ($\mathrm{Err}_{H^1} \approx 1.0 \times 10^{-1}$) with only $\approx 20$--$40$ neurons, whereas the most accurate Algorithm-1 activation, the Gaussian, needs $113$ neurons for the same accuracy, and softplus/tanh plateau at a coarser error. 
 At equal gradient accuracy Algorithm~2 uses a fraction of the atoms.
-\begin{figure}[H]
+\begin{figure}[htbp]
 \centering
 \includegraphics[width=0.8\textwidth]{plot/frontier.png}
 \caption{Running best relative $H^1$ validation error vs.\ network size ($\alpha = 10^{-5}$).}
@@ -1820,7 +1832,7 @@ At equal gradient accuracy Algorithm~2 uses a fraction of the atoms.
 We synthesise the optimal feedback law from $y_0 = (2, 1)$. 
 Figure~\ref{fig:summary_feedback} shows $\|y(t)\|$ and $|u(t)|$ for softplus, the Gaussian, and $\reluk$ ($k = 5$), beside the true optimal control. 
 All three drive the state to the origin and track the true control, at essentially the true optimal closed-loop cost ($6.68$, $6.51$, $6.49$ vs.\ $6.48$). 
-\begin{figure}[H]
+\begin{figure}[htbp]
 \centering
 \captionsetup[subfigure]{justification=centering}
 \begin{subfigure}[t]{0.48\textwidth}
@@ -1842,7 +1854,7 @@ All three drive the state to the origin and track the true control, at essential
 
 Figure~\ref{fig:summary_weights_raw} shows where the inner weights sit for the Gaussian, softplus, and $\reluk$ ($k = 5$).
 The two algorithms produce structurally different representations: Algorithm~2 constrains its atoms to the unit sphere $\mathbb{S}^2$, while Algorithm~1 leaves them free --- the Gaussian atoms in particular span a wide range of norms. 
-\begin{figure}[H]
+\begin{figure}[htbp]
 \centering
 \captionsetup[subfigure]{justification=centering}
 \begin{subfigure}[t]{0.32\textwidth}
@@ -1949,11 +1961,12 @@ This yields the dataset
 This construction records the nonsmooth geometry of the pendulum value function.
 Because the clockwise and counter-clockwise swing-up branches have equal cost at the bottom position $((2k+1)\pi,0)$, the optimal value function is not globally $C^1$.
 The generator detects the switching curve by intersecting equal-value contours with their $2\pi$-shifted copies and restricts the PMP trajectories to a consistent smooth branch.
-Restriction alone, however, produces \emph{one-sided} data --- every sample stops at the switching curve, so the gradient jump itself would never appear in the training set.
-The generator therefore adds an envelope-certified band straddling the switching arms: the raw trajectories are tiled by $\pm 2\pi$ in $\theta$, and a tiled point within the band is kept only if its branch value beats the competing branch's locally extrapolated value, certifying that it carries the true $(V,\nabla V)$ on its side of the curve.
-The final $(x,V,dV)$ dataset (3{,}900 samples: a 3{,}000-sample in-basin body plus a 900-sample two-sided band) thus contains the gradient discontinuity as an \emph{interior} feature.
+Restriction alone, however, produces one-sided data --- every sample stops at the switching curve, so the gradient jump itself would never appear in the training set.
+The generator therefore does the following: the raw trajectories are tiled by $\pm 2\pi$ in $\theta$, and a tiled point within the band is kept only if its branch value beats the competing branch's locally extrapolated value, certifying that it carries the true $(V,\nabla V)$ on its side of the curve.
+The final $(x,V,dV)$ dataset (3{,}900 samples: a 3{,}000-sample in-basin body plus a 900-sample two-sided band) thus contains the gradient discontinuity as an interior feature.
 This makes the pendulum benchmark a stress test for the gradient-augmented sparse neural approximation: the value is continuous while its gradient jumps across a switching set that the models see from both sides.
-\begin{figure}[H]
+Figure \ref{fig:pendulum_data} shows the dataset generated. 
+\begin{figure}[htbp]
 \centering
 \captionsetup[subfigure]{justification=centering}
 \begin{subfigure}[b]{0.32\textwidth}
@@ -1988,47 +2001,50 @@ $\nabla V$ is discontinuous.}
 
 \subsubsection{The Representation Limit at the Switching Set}
 As in the last example we fit the training data with the models we selected.
-Figure~\ref{fig:rs_surfaces} shows the
-four fitted surfaces on the same physical window and value range as the true
+Figure~\ref{fig:rs_surfaces} shows the fitted surfaces on the same physical window and value range as the true
 surface of Figure~\ref{fig:pendulum_data_surface}.
-With the two-sided band in the training data the models now shape the full multi-well landscape rather than a single central bowl: $\mathrm{ReLU}^{2}$ raises sharp diagonal walls along the switching arms between the $2k\pi$ wells, the Gaussian reproduces the wells but rounds the ridge off, and softplus smears the structure.
-The switching walls are, however, reproduced only approximately --- the quantitative limitation appears on the transect below.
-
-\begin{figure}[H]
+The switching profiles are reproduced only approximately --- the quantitative limitation appears on the transect below.
+ 
+\begin{figure}[htbp]
 \centering
 \captionsetup[subfigure]{justification=centering}
-\begin{subfigure}[b]{0.24\textwidth}
+\begin{subfigure}[b]{0.19\textwidth}
 \centering
 \includegraphics[width=\textwidth]{plot/surface_gaussian.png}
-\caption{Gaussian + $\phi_{1}$}
+\caption{Gaussian}
 \label{fig:rs_surface_gaussian}
 \end{subfigure}
 \hfill
-\begin{subfigure}[b]{0.24\textwidth}
+\begin{subfigure}[b]{0.19\textwidth}
 \centering
 \includegraphics[width=\textwidth]{plot/surface_softplus.png}
-\caption{softplus+ $\phi_{1}$}
+\caption{softplus}
 \label{fig:rs_surface_softplus}
 \end{subfigure}
 \hfill
-\begin{subfigure}[b]{0.24\textwidth}
+\begin{subfigure}[b]{0.19\textwidth}
+\centering
+\includegraphics[width=\textwidth]{plot/surface_leaky_relu.png}
+\caption{leaky ReLU}
+\label{fig:rs_surface_leaky_relu}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.19\textwidth}
 \centering
 \includegraphics[width=\textwidth]{plot/surface_relu2.png}
-\caption{$\mathrm{ReLU}^{2}$+$\phi_2$.}
+\caption{$\mathrm{ReLU}^{2}$}
 \label{fig:rs_surface_relu2}
-\end{subfigure} 
+\end{subfigure}
 \hfill
-\begin{subfigure}[b]{0.24\textwidth}
+\begin{subfigure}[b]{0.19\textwidth}
 \centering
 \includegraphics[width=\textwidth]{plot/surface_relu5.png}
-\caption{$\mathrm{ReLU}^{5}$+$\phi_5$.}
+\caption{$\mathrm{ReLU}^{5}$}
 \label{fig:rs_surface_relu5}
 \end{subfigure}
 \caption{Learned value surfaces $\hat V(x)$ over the $(\theta,\dot\theta)$
 window $[-8,8]^{2}$, displayed on the common range $\hat V\in[0,60]$.
-Trained on the two-sided data, the models shape the multi-well landscape;
-the sharpness of the switching walls varies with the atom class, from the
-crisp $\mathrm{ReLU}^{2}$ ridges to the smeared softplus surface.}
+the $\reluk$ functions are trained with the $\psi_k$ penalty, while the others with $\phi_1$.}
 \label{fig:rs_surfaces}
 \end{figure}
 
@@ -2036,22 +2052,16 @@ In Figure~\ref{fig:rs_transect}, a normal cross-section of the
 switching curve through the densest data region. The true value (left) is the
 continuous lower envelope of the two PMP branches, with a concave kink at the
 crossing; the true normal gradient $n\cdot\nabla V$ (right) therefore
-\emph{jumps} at the switching set $s=0$.
-Unlike the branch-restricted construction, the training data here carry samples
-on \emph{both} sides of the curve, so the jump is in-sample --- and the
-transect shows that this is necessary but not sufficient. No model reproduces
-the jump's magnitude: all of them undershoot the steep pre-jump gradient
-(true $n\cdot\nabla V\approx-100$ just before the curve against fitted values
-between $-20$ and $-58$), because the finite-width band bounds how much
-one-sided steepness the global $H^{1}$ fit will spend neurons on.
+jumps at the switching set $s=0$.
+The training data here carry samples on both sides of the curve, so the jump is in-sample.
+As we observe, no model reproduces the jump: all of them undershoot the steep pre-jump gradient.
 $\mathrm{ReLU}^{2}$ comes closest: it is the only model that develops a visible
 kink at $s\approx 0$ --- its piecewise-quadratic atoms can break the derivative
 across a line --- while the smooth activations necessarily interpolate a gentle
-slope through the discontinuity. The switching-band error is thus a genuine
-representation cost at a \emph{seen} discontinuity, no longer a boundary-layer
-artifact of one-sided sampling.
+slope through the discontinuity. The discontinuous gradient is thus a genuine
+representation cost.
 
-\begin{figure}[H]
+\begin{figure}[htbp]
 \centering
 \captionsetup[subfigure]{justification=centering}
 \begin{subfigure}[b]{0.48\textwidth}
@@ -2067,16 +2077,76 @@ artifact of one-sided sampling.
 \caption{normal gradient $n\cdot\nabla V$ along the normal.}
 \label{fig:rs_transect_gradient}
 \end{subfigure}
-\caption{Normal cross-section of the switching curve, parametrized by signed
-distance $s$ (the models saw data on both sides). Left: the true value (dashed)
+\caption{Normal cross-section of the switching curve, parametrized by the normal
+distance $s$. Left: the true value (dashed)
 is a continuous lower envelope with a kink at $s=0$. Right: the true normal
-gradient jumps at $s=0$ by ${\approx}100$ units; $\mathrm{ReLU}^{2}$ alone
+gradient jumps at $s=0$; $\mathrm{ReLU}^{2}$ alone
 develops a kink near $s=0$, while the smooth models interpolate through the
-discontinuity, and no model reproduces the jump's full magnitude --- a
-representation limit at a seen discontinuity.}
+discontinuity.}
 \label{fig:rs_transect}
 \end{figure}
 
+
+Since we are using the data-driven method, we investigate next if we can to some extend solve the problem by over. 
+The assumption is: if the model can achieve good local approximation, by increasing the sample size around the switching set, we can improve the precision. 
+We test this with stratified sampling: 
+From the same generator we build four training sets that differ only in the
+fraction of samples placed around the switching curve:
+6{,}000 samples with the reference fraction of $23\%$, the same 6{,}000 budget
+reallocated to $40\%$ and to $60\%$, and the reference set with 2{,}000
+additional samples ($8{,}000$ total). On each set we train the Gaussian
+with $\phi_{1}$ and $\mathrm{ReLU}^{2}$ with $\psi_{2}$, each for three
+regularization weights $\alpha$, and keep the best run per set. All models are
+evaluated on one common held-out set of ${\approx}9.4\times10^{5}$ points,
+disjoint from every training set, with the relative $H^{1}$ error reported
+separately on the switching set with distance $\le 0.3$ to the switching curve and on the
+rest of the domain.
+
+\begin{table}[htbp]
+\centering
+\setlength{\tabcolsep}{12pt}
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{llcc}
+\toprule
+Model & Training set & Switching tube & Rest \\
+\midrule
+Gaussian + $\phi_{1}$ & 6k, $23\%$ band (reference) & $5.81\text{e-}1$ & $5.89\text{e-}1$ \\
+ & 6k, $40\%$ band & $5.72\text{e-}1$ & $5.30\text{e-}1$ \\
+ & 6k, $60\%$ band & $6.02\text{e-}1$ & $6.68\text{e-}1$ \\
+ & 6k $+$ 2k band & $5.97\text{e-}1$ & $5.68\text{e-}1$ \\
+\midrule
+$\mathrm{ReLU}^{2}$ + $\psi_{2}$ & 6k, $23\%$ band (reference) & $2.46\text{e-}1$ & $1.56\text{e-}1$ \\
+ & 6k, $40\%$ band & $2.89\text{e-}1$ & $1.72\text{e-}1$ \\
+ & 6k, $60\%$ band & $3.46\text{e-}1$ & $2.20\text{e-}1$ \\
+ & 6k $+$ 2k band & $2.88\text{e-}1$ & $1.84\text{e-}1$ \\
+\bottomrule
+\end{tabular}
+\caption{Relative $H^{1}$ error on the common held-out set (best of three
+regularization weights per training set), inside the tube of distance $\le 0.3$
+to the switching curve and on the rest of the domain.}
+\label{tab:rs_oversampling}
+\end{table}
+
+Neither model improves at the switching set
+(Table~\ref{tab:rs_oversampling}, Figure~\ref{fig:rs_oversampling}). The
+Gaussian is flat across all four sets: a smooth atom cannot represent the kink, and more samples of it do not change that.
+$\mathrm{ReLU}^{2}$ \emph{degrades monotonically} as the fraction grows
+($0.25 \to 0.29 \to 0.35$, with the rest error rising in step):
+samples moved into the switching set are samples removed from the interior, and the fit
+loses more there than it gains at the curve. Adding 2{,}000 band samples on top
+of the budget is less harmful than reallocation but still does not beat the
+reference. In particular we see the limitation of approximation can not be solved by adding more data.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.85\textwidth]{plot/oversampling_control.png}
+\caption{Relative $H^{1}$ error on the common held-out set against the four
+training sets, inside the switching tube (red) and on the rest (blue), for the
+Gaussian (solid) and $\mathrm{ReLU}^{2}$ (dashed). Faint dots: the three
+regularization weights; markers: the best run per set. Increasing the band
+fraction improves neither region for either model.}
+\label{fig:rs_oversampling}
+\end{figure}
 
 \subsubsection{The $ReLU^2$ fits the discontinuous gradient}
 Despite the limitation of fitting the discontinuous gradient in general, ReLU$^2$ demonstrate better performance in fitting the swtiching profile than other activation function. 
@@ -2088,19 +2158,16 @@ inserted, for each activation paired with its penalty. $\mathrm{ReLU}^{2}$
 (fractional penalty $\psi_{2}$) separates from the field almost immediately and
 reaches the lowest error of all ($\approx 3.6\times10^{-1}$ at 113 neurons);
 softplus plateaus near $5.4\times10^{-1}$, and $\mathrm{ReLU}^{5}$ ($\psi_{5}$)
-and the Gaussian stall around $5.5$--$5.9\times10^{-1}$. The errors are
-uniformly higher than on a smooth target --- the two-sided switching band makes
-the fit genuinely harder for every atom class --- but the per-neuron accuracy
-advantage of the \emph{low-power} rectified atom is unambiguous; raising the
+and the Gaussian stall around $5.5$--$5.9\times10^{-1}$. The per-neuron accuracy
+advantage of the $\mathrm{ReLU}^{2}$ atom is unambiguous; raising the
 power to $5$ forfeits it.
 
-\begin{figure}[H]
+\begin{figure}[htbp]
 \centering
 \includegraphics[width=0.7\textwidth]{plot/pendulum_insertion_frontier.png}
 \caption{Best relative $H^{1}$ validation error against
 neuron count, one curve per activation--penalty pair
-($\phi_{\gamma}$ the log penalty, $\psi_{k}$ the fractional-exponent penalty),
-on the two-sided switching-set data.
+($\phi_{\gamma}$ the log penalty, $\psi_{k}$ the fractional-exponent penalty).
 $\mathrm{ReLU}^{2}$ reaches the lowest error overall by a wide margin;
 softplus, the Gaussian, and $\mathrm{ReLU}^{5}$ plateau at $1.5$--$1.6\times$
 its error.}
@@ -2118,7 +2185,7 @@ the wells but cannot seat a gradient break. This alignment is the mechanism
 behind the frontier advantage above and behind the transect kink of
 Figure~\ref{fig:rs_transect}.
 
-\begin{figure}[H]
+\begin{figure}[htbp]
 \centering
 \includegraphics[width=0.85\textwidth]{plot/atom_portrait.png}
 \caption{Active atom lines $\{a\cdot x + b = 0\}$ in the $(\theta,\dot\theta)$
@@ -2129,25 +2196,120 @@ isotropically.}
 \label{fig:rs_atoms}
 \end{figure}
 
+\subsubsection{Feedback Synthesis Across the Switching Set}
+Minimizing the Hamiltonian in $u$ gives the optimal control in feedback form,
+\begin{equation*}
+u(x) = -\frac{1}{2\,r\,ml^{2}}\,\partial_{\omega}V(x);
+\end{equation*}
+replacing $V$ by a fitted $\hat V$ yields a candidate feedback law. We test
+each law in closed loop from two initial states placed on either side of the
+switching curve, $A=(0.71,\,0.68)$ and $B=(0.23,\,0.53)$, integrating the
+dynamics over the horizon $T=10$. The two starts demand different optimal
+behaviour: from $A$ the optimal law swings the pendulum over the top to the
+upright at $\theta=2\pi$, while from $B$ it brakes directly to the upright at
+$\theta=0$ --- so a correct law must change branch across the curve. The
+reference law evaluates the same formula on the PMP solution itself.
+
+\begin{figure}[htbp]
+\centering  
+\captionsetup[subfigure]{justification=centering}
+\begin{subfigure}[b]{0.32\textwidth}
+\centering
+\includegraphics[width=\textwidth]{plot/feedback_true_pmp.png}
+\caption{reference (PMP)}
+\label{fig:rs_feedback_true}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.32\textwidth}
+\centering
+\includegraphics[width=\textwidth]{plot/feedback_gaussian.png}
+\caption{Gaussian + $\phi_{1}$}
+\label{fig:rs_feedback_gaussian}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.32\textwidth}
+\centering
+\includegraphics[width=\textwidth]{plot/feedback_softplus.png}
+\caption{softplus + $\phi_{1}$}
+\label{fig:rs_feedback_softplus}
+\end{subfigure}
+\vspace{0.6em}
+\begin{subfigure}[b]{0.32\textwidth}
+\centering
+\includegraphics[width=\textwidth]{plot/feedback_leaky_relu.png}
+\caption{leaky ReLU + $\phi_{1}$}
+\label{fig:rs_feedback_leaky}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.32\textwidth}
+\centering
+\includegraphics[width=\textwidth]{plot/feedback_relu2.png}
+\caption{$\mathrm{ReLU}^{2}$ + $\psi_{2}$}
+\label{fig:rs_feedback_relu2}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.32\textwidth}
+\centering
+\includegraphics[width=\textwidth]{plot/feedback_relu5.png}
+\caption{$\mathrm{ReLU}^{5}$ + $\psi_{5}$}
+\label{fig:rs_feedback_relu5}
+\end{subfigure}
+\caption{Closed-loop trajectories in the $(\theta,\dot\theta)$ plane from the
+two starts $A$ (blue) and $B$ (red) on either side of the switching curve
+(black), one panel per feedback law; all panels share the same axes. The
+reference law swings over the top from $A$ and brakes to $\theta=0$ from $B$;
+$\mathrm{ReLU}^{2}$ reproduces both behaviours.}
+\label{fig:rs_feedback}
+\end{figure}
+
+Only $\mathrm{ReLU}^{2}$ stabalizes. Every
+other law fails from both starts: softplus and leaky ReLU over-accelerate,
+pass the uprights and never brake; the Gaussian settles into a periodic orbit
+around the wells without reaching an upright; $\mathrm{ReLU}^{5}$ swings over
+from $A$ but arrives at $2\pi$ too slowly to be captured, and from $B$ stalls
+short of the upright. Figure~\ref{fig:rs_feedback_control} shows the control
+signal from $B$: the $\mathrm{ReLU}^{2}$ law tracks the reference almost
+exactly, while the others oscillate or saturate. The failures track the global
+fit quality of the value approximation: a
+feedback law is only as good as the gradient field.
+
+\begin{figure}[htbp]
+\centering
+\captionsetup[subfigure]{justification=centering}
+\begin{subfigure}[b]{0.48\textwidth}
+\centering
+\includegraphics[width=\textwidth]{plot/feedback_control_b_log_penalty.png}
+\caption{log-penalty models.}
+\label{fig:rs_feedback_control_log}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.48\textwidth}
+\centering
+\includegraphics[width=\textwidth]{plot/feedback_control_b_relu.png}
+\caption{$\mathrm{ReLU}^{k}$ models.}
+\label{fig:rs_feedback_control_relu}
+\end{subfigure}
+\caption{Feedback control $u(t)$ from start $B$, per law, beside the reference
+(black); the axis is clipped to the informative band --- softplus's
+actuator-saturation excursion of $\pm 30$ leaves the frame. The reference
+brakes to $\theta=0$ with $u$ rising from ${\approx}{-7}$ to $0$;
+$\mathrm{ReLU}^{2}$ tracks it almost exactly.}
+\label{fig:rs_feedback_control}
+\end{figure}
 
 In summary, $\mathrm{ReLU}^{2}$ with the fractional-exponent penalty is the
-best atom class for this nonsmooth target. With the two-sided band the
-switching set is an \emph{interior} kink of the training data, and the
-experiment measures representation rather than extrapolation: every atom class
-pays a several-fold accuracy penalty in the band around the curve, and only
+best atom class for this nonsmooth target. With the switching set in the training data, only
 $\mathrm{ReLU}^{2}$ --- whose derivative can break across a hyperplane ---
-partially seats the jump (Figure~\ref{fig:rs_transect}). The two-sided
-coverage also has a price: the band carries most of the squared mass of the
-unweighted $H^{1}$ objective, so interior accuracy degrades relative to
-training on the basin alone --- least for $\mathrm{ReLU}^{2}$, most for the
-stiff high-power atoms. In closed loop the branch decision at the curve
+partially seats the jump (Figure~\ref{fig:rs_transect}).
+In closed loop the branch decision at the curve
 becomes learnable, and $\mathrm{ReLU}^{2}$ alone makes it correctly from both
-sides of the switching set, matching the optimal cost from the braking side;
+sides of the switching set, matching the optimal cost;
 the smooth models fail from both starts. The bottleneck has moved from data
 coverage across the curve to the atoms' ability to represent the kink ---
-which is precisely the regime the sparse rectified atoms are built for.
+which is the regime the sparse rectified atoms are built for.
 
 
+\FloatBarrier
 \newpage
 \bibliographystyle{plain}
 \bibliography{ref.bib}
