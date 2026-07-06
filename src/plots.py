@@ -192,15 +192,20 @@ def penalty_symbol(insertion: str) -> str:
 
 
 def frontier_penalty_label(activation_tex: str, *, insertion: str,
-                           subscript: str, coeff: str = r"\alpha") -> str:
+                           subscript: str, coeff: str = r"\alpha",
+                           symbol: str | None = None) -> str:
     """Legend label ``$<activation> + <coeff> <sym>_<subscript>$`` with the penalty
-    symbol (phi/psi) selected from ``insertion`` (see :func:`penalty_symbol`).
+    symbol (phi/psi) selected from ``insertion`` (see :func:`penalty_symbol`),
+    unless ``symbol`` overrides it. The thesis convention keys the symbol to the
+    penalty *family* (log -> ``\\phi``, fractional-exponent -> ``\\psi``), which
+    for log-penalty series trained with finite-step insertion requires the
+    override ``symbol=r"\\phi"``.
 
     Example: ``frontier_penalty_label(r"\\mathrm{ReLU}^k",
     insertion="finite_step", subscript="k")`` ->
     ``$\\mathrm{ReLU}^k + \\alpha\\,\\psi_{k}$``.
     """
-    sym = penalty_symbol(insertion)
+    sym = symbol if symbol is not None else penalty_symbol(insertion)
     return rf"${activation_tex} + {coeff}\,{sym}_{{{subscript}}}$"
 
 

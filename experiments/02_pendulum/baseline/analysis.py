@@ -157,12 +157,12 @@ def build_series(dataset: str) -> list[dict[str, Any]]:
          f"**ReLU^k + alpha*psi_k** — penaltypowers, relu, power=k (k={K}), "
          "gamma=0 (fractional penalty, finite_step)."),
         (frontier_penalty_label(r"\mathrm{softplus}", insertion=act_insertion,
-                                subscript=r"\gamma"), "#E8000B", "s",
+                                subscript=r"\gamma", symbol=r"\phi"), "#E8000B", "s",
          collect(act_sweep, act_keep("softplus"), dataset),
          "**softplus + alpha*phi_gamma** — activationsearch, softplus, gamma=10 "
          "(non-convex log); best classical/monotone activation."),
         (frontier_penalty_label(r"\mathrm{gaussian}", insertion=act_insertion,
-                                subscript=r"\gamma"), "#9C27B0", "o",
+                                subscript=r"\gamma", symbol=r"\phi"), "#9C27B0", "o",
          collect(act_sweep, act_keep("gaussian"), dataset),
          "**gaussian + alpha*phi_gamma** — activationsearch, gaussian, gamma=10 "
          "(non-convex log); a radial kernel activation (same family as the "

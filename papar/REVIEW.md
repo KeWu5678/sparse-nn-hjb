@@ -586,7 +586,7 @@ A=(0.71,0.68), B=(0.23,0.53), T=10 ✓; 3,900 = 3,000 + 900 ✓; oversampling ta
 
 ## 4. Wording (full-polish pass: patterns; the fix phase edits section by section)
 
-- [ ] **WORD-1 (major). Typo density is high (~45 unique):** developе→develop,
+- [x] **WORD-1 — RESOLVED (Batch W): full typo sweep applied (mechanical perl pass + inline fixes in rewritten passages).** Typo density is high (~45 unique):** developе→develop,
   poplular→popular, estabilised→established, traning→training,
   propertyies→properties, appraoch→approach, validataion→validation,
   pipelind→pipeline, sparcification→sparsification, magnitute→magnitude,
@@ -601,7 +601,7 @@ A=(0.71,0.68), B=(0.23,0.53), T=10 ✓; 3,900 = 3,000 + 900 ✓; oversampling ta
   "envolop" (label), "1 global optimal solution" → "one global minimizer".
   A full spell-pass will be part of the wording batch.
 
-- [ ] **WORD-2 (medium). Grammar patterns to fix globally:** subject–verb
+- [x] **WORD-2 — RESOLVED (Batch W): agreement/article fixes, w.r.t. expanded, contractions formalized, l.s.c. expanded at first use, US spelling unified (behavior/synthesize/neighboring).** Grammar patterns to fix globally:** subject–verb
   agreement ("the number of neurons don't serve", "our current network
   approximate", "ReLU² demonstrate"); missing articles ("solving HJB function is
   notorious difficult"); "w.r.t." in prose → "with respect to"; digits for small
@@ -610,7 +610,7 @@ A=(0.71,0.68), B=(0.23,0.53), T=10 ✓; 3,900 = 3,000 + 900 ✓; oversampling ta
   then l.s.c.; inconsistent British/US spelling (synthesise/synthesized,
   behaviour/behavior) → pick US.
 
-- [ ] **WORD-3 (medium). De-AI / de-hype pass (targeted, not blanket):** the §6
+- [x] **WORD-3 — RESOLVED (Batch W): §6 de-hype pass (buys-for-free, not-free, decisive-and-uniform, separates-from-the-field, built-for reworded; scare quotes removed); intro hype items rewritten or deleted.** De-AI / de-hype pass (targeted, not blanket):** the §6
   prose imported from results.md carries a repeated rhetorical cadence that reads
   generated: "Raising the power buys sparsity for free", "This accuracy is not
   free: the Gaussian pays with…", "Algorithm 2 dominates", "separates from the
@@ -625,7 +625,7 @@ A=(0.71,0.68), B=(0.23,0.53), T=10 ✓; 3,900 = 3,000 + 900 ✓; oversampling ta
   "It is in particular effective when the system is high-dimensional" (l. 229) —
   unsupported here, delete or cite.
 
-- [ ] **WORD-4 (medium). Consistency decisions to make once and enforce:**
+- [x] **WORD-4 — RESOLVED (Batches M–W): (i) V everywhere; (ii) σ(x, ω) argument order swept; (iii) φ_{log,γ}/ψ_k defined in §5 and used throughout §6 (φ₁ eliminated); (iv) switching set/band/tube terminology fixed by a definitional sentence in §6.2 and applied.** Consistency decisions to make once and enforce:**
   (i) target symbol $V$ everywhere (drop $y$ from l. 840, 850, 871…);
   (ii) $\sigma(x;\omega)$ argument order; (iii) penalty symbols: $\phi$ (abstract),
   $\phi_{\log,\gamma}$ (log), $\psi_k$ or $\phi_k$ (fractional) — currently
@@ -636,7 +636,7 @@ A=(0.71,0.68), B=(0.23,0.53), T=10 ✓; 3,900 = 3,000 + 900 ✓; oversampling ta
   (set = the geometric locus; band = the training-data slice; tube = the
   evaluation region d ≤ 0.3) and use consistently.
 
-- [ ] **WORD-5 (minor). Assorted sentence repairs flagged during the read**
+- [x] **WORD-5 — RESOLVED (Batch W): all itemized sentence repairs applied (intro citation glosses with author names, §2 opening rewritten, §5 opening rewritten, projected-onto-sphere, hypothesis sentence, barzilai citation removed from the data-generation list, etc.).** Assorted sentence repairs flagged during the read**
   (will be itemized in the fix batch): l. 104 "We assume the minimizer exists."
   (floating — attach to the standing assumptions); l. 140 "more robust compared
   to the open-loop method" (than); l. 147–151 citation-glosses "(Kunisch et al.,
@@ -660,13 +660,13 @@ A=(0.71,0.68), B=(0.23,0.53), T=10 ✓; 3,900 = 3,000 + 900 ✓; oversampling ta
 
 ## 5. Plots & layout
 
-- [ ] **PLOT-1 (medium). Number formatting is inconsistent across tables:**
+- [x] **PLOT-1 — RESOLVED (Batch P): all \text{e-} table cells converted to m.mm × 10^{-e}; every table now uses one format.** Number formatting is inconsistent across tables:**
   `tab:alg1_gradient`/`tab:alg1_sparsity`/`tab:rs_oversampling` use `8.61e-2`
   (via `\text{e-}`) while `tab:alg1_alpha`/`tab:alg2_gradient` use
   $3.57 \times 10^{-1}$. Pick one (recommend $m.mm \times 10^{-e}$, or siunitx
   `\num{8.61e-2}` everywhere) — one macro, applied to all six tables.
 
-- [ ] **PLOT-2 (medium). Unused/legacy figures in `papar/plot/`:** 7 files are
+- [x] **PLOT-2 — RESOLVED (Batch P): 4 legacy + 2 unused error-vs-distance figures removed from papar/plot (sources remain in experiments/); near_far_dumbbell added to §6.2.2 as fig:rs_dumbbell with supporting paragraph.** Unused/legacy figures in `papar/plot/`:** 7 files are
   not referenced: `H1_activation.png`, `L2_activation.png`, `L2_power.png`,
   `activation.png` (legacy, no experiment source — delete), and
   `near_far_dumbbell.png`, `error_vs_distance_value.png`,
@@ -676,7 +676,7 @@ A=(0.71,0.68), B=(0.23,0.53), T=10 ✓; 3,900 = 3,000 + 900 ✓; oversampling ta
   — **consider adding it** to §6.2.2 rather than deleting; the error-vs-distance
   pair backs the "interior price" discussion if NUM-4/§3-price content is kept.
 
-- [ ] **PLOT-3 (minor). 3D view-angle uniformity:** house style fixes
+- [x] **PLOT-3 — CLOSED as accepted (Batch P): v.png/dv.png follow the data-figure family (external paper's figure code); learned-surface family is internally consistent at the house angle. No regeneration.** 3D view-angle uniformity:** house style fixes
   elev=15/azim=−105 for 3D panels; `v.png`/`dv.png` (from `00_openloop/vdp`,
   which follows the external paper's figure code) use a different view than the
   `surface_*.png` family. Acceptable if intentional (data-only vs learned-surface
@@ -684,12 +684,12 @@ A=(0.71,0.68), B=(0.23,0.53), T=10 ✓; 3,900 = 3,000 + 900 ✓; oversampling ta
   look internally consistent; regenerate `v.png` at the house angle if you want
   uniformity (fix goes through `experiments/00_openloop/vdp/generate.py`).
 
-- [ ] **PLOT-4 (minor). Five-across subfigure row** (l. 2008–2049, 0.19\textwidth
+- [x] **PLOT-4 — RESOLVED (Batch P): fig:rs_surfaces reflowed 5-across → 3+2 at 0.32\textwidth.** Five-across subfigure row** (l. 2008–2049, 0.19\textwidth
   panels): at the 11pt re-layout with standard margins these panels shrink
   further; check legibility after TEX-1 and consider a 3+2 arrangement (the
   results.md layout) if tick labels become unreadable.
 
-- [ ] **PLOT-5 (minor). Caption practice:** captions correctly carry the
+- [x] **PLOT-5 — RESOLVED (Batches N/P/W): rs_surfaces caption rewritten (sentence start, φ_{log,γ} with per-model α, γ note); weights caption grammar fixed; penalty symbols in subcaptions unified.** Caption practice:** captions correctly carry the
   identifying info (house rule ✓). Two repairs: Fig. `fig:rs_surfaces` caption
   (l. 2045–2047) — "the $\mathrm{ReLU}^{k}$ functions are trained with the $\psi_k$ penalty,
   while the others with $\phi_1$" — lowercase sentence start, and $\phi_1$ here
@@ -746,7 +746,7 @@ A=(0.71,0.68), B=(0.23,0.53), T=10 ✓; 3,900 = 3,000 + 900 ✓; oversampling ta
   `\renewcommand{\thedefinition}` lines; `remark` should get the shared counter
   too; the unnumbered `example` env is unused — remove.
 
-- [ ] **TEX-6 (minor). Display-math mechanics:** blank lines around displays
+- [x] **TEX-6 — RESOLVED (Batches M–W): \quad\\ proof openers removed, \dots → \vdots in the gradient display, * multiplications fixed, double-period l.s.c. fixed; remaining display punctuation accepted as-is.** Display-math mechanics:** blank lines around displays
   create stray paragraph breaks (multiple sites, e.g. after l. 374, 1035);
   punctuation at display ends is inconsistent (commas/periods missing or doubled
   — sweep once); `\bigg(...\bigg)` used where `\Big` or `\left...\right` is
@@ -902,3 +902,13 @@ Alternatives:
   full display-punctuation sweep (wording batch) / TEX-8 print-link colors
   (submission time). Layout now 11pt / 1.08 / 25mm: 47 pp — cap satisfied,
   ~3 pp headroom for front matter.
+- Batch W+P (this commit): wording and plot batches applied. Figure-side note:
+  the ψ_γ→φ_γ legend fix is committed in src/plots.py (symbol override) and
+  both baseline analysis.py call sites, but the PNGs could NOT be regenerated —
+  the VDP activationsearch finite_step run records behind the committed figure
+  are no longer in rawdata/logs/multirun (rerun found 0 runs and produced a
+  broken single-series figure; reverted). The Fig-1 caption bridges the symbol
+  mismatch. Also observed: 02_pendulum/baseline/analysis.py writes its figure
+  as neuron_h1_frontier_vdp.png (pre-existing script bug, out of scope here).
+  Remaining open review items: STR-1 front matter (title/abstract ON HOLD),
+  TEX-8 (print link colors at submission).
