@@ -210,7 +210,7 @@ We conducted experiments for different problems. By choosing the right activatio
 \caption{Pendulum swing-up.}
 \label{fig:frontier_pendulum}
 \end{subfigure}
-\caption{Comparison of Number of neurones vs $H^1$ relative error for different optimization problems. The penalty enters as $\alpha \sum$ penalty(|outer weights|). We choose $\alpha = 10^{-5}$, and define the fractional-exponent penalty $\psi(t) = t^{k}$ with $q = \tfrac{2}{k+1} < 1$ (we choose $k = 2$) and the log nonconvex penalty $\phi(t) = \tfrac{1}{\gamma}\log(1 + \gamma t)$(we choose $\gamma = 10$).}
+\caption{Number of neurons against the best relative $H^1$ validation error on the two benchmark problems, at fixed $\alpha = 10^{-5}$; each curve is the running best error as neurons are inserted. Four series per panel: the convex baseline ReLU $+\, \ell^1$; $\relu^k$ with the fractional-exponent penalty $\psi_k(t) = |t|^{2/(k+1)}$, here at $k = 3$; and softplus and Gaussian with the nonconvex log penalty $\phi_{\log,\gamma}(t) = \tfrac{1}{\gamma}\log(1 + \gamma t)$ at $\gamma = 10$.}
 \label{fig:neuron_h1_frontier}
 \end{figure}
 
@@ -1825,13 +1825,9 @@ The two-point boundary value problem \eqref{TPBVP} becomes
 \end{aligned}
 \right.
 \end{equation}
-The HJB equation at $t = 0$ is:
-\begin{align*}
-	\partial_t V(0, x)  -\frac{1}{4\beta} \nabla V^T(0, x) g(x)g^T(x) \nabla V(0,x) + \nabla V(0, x)^T f(x) +  l(x) = 0
-\end{align*}
 For each initial condition $x = (x_1, x_2)$ sampled on the grid $[-3, 3]^2$, we solve \eqref{TPBVP_VDP} using a Barzilai--Borwein gradient method with backtracking line search.
-The control is represented in a Legendre polynomial basis $u(t) = \sum_{i=0}^{N_b - 1} c_i P_i(t)$.
-The optimization yields the dataset $\{x^m, V(x^m), \nabla V(x^m)\}_{m=1}^M$, where $V(x^m) = J(u^*; 0, x^m)$ and $\nabla V(0, x^m) = p^*(0)$.
+The control is represented in a Legendre polynomial basis $u(t) = \sum_{i=0}^{N_b - 1} c_i P_i(t)$ with $N_b = 30$ coefficients.
+The optimization yields the dataset $\{x^m, V(x^m), \nabla V(x^m)\}_{m=1}^M$, where $V(x^m) = J(u^*; 0, x^m)$ and $\nabla V(x^m) = p^*(0)$.
 
 \begin{figure}[htbp]
 \centering
@@ -1843,7 +1839,7 @@ The optimization yields the dataset $\{x^m, V(x^m), \nabla V(x^m)\}_{m=1}^M$, wh
 \end{figure}
 
 We solve the open-loop problem on a $30 \times 30$ grid over $[-3,3]^2$ ($K = 900$ data points).
-All experiments run 10 outer iterations, inserting up to 50 neurons per iteration and pruning neurons with $|c| < 10^{-5}$.
+All experiments run 10 outer iterations; each iteration samples $N_{\mathrm{trial}} = 50$ candidate nodes, accepts at most 15 of them, and prunes neurons with $|c| \le 10^{-8}$ after the local solve.
 
 %% ---------------------------------------------------------------
 \subsubsection{Algorithm~\ref{alg:log}: $\phi_{\log,\gamma}$-penalty with different activation functions}
@@ -2297,6 +2293,8 @@ subject to
 The target equilibrium is $x_U=(2j\pi,0)$, $j\in\mathbb{Z}$.
 
 In this setting the state dimension is $d=2$ and the control is scalar.
+The physical and cost parameters are $m = l = 1$, $b = 0.1$, $g = 9.8$,
+$q_1 = q_2 = 1$, and $r = 1$.
 To initialize the backward integration, we use the local linear-quadratic regulator (LQR) approximation near $x_U$.
 Let $\xi=x-x_U$ be the local coordinate around the upright equilibrium.
 Linearizing the dynamics at $(x_U,0)$ gives
@@ -2340,20 +2338,21 @@ In the experiment we use $\varepsilon=2\times 10^{-4}$, and on $\partial L_\vare
 \begin{equation*}
 	p^*(T_x)=\nabla V^\infty(\xi^*(T_x))=2P\xi^*(T_x).
 \end{equation*}
-For the data generation, we solve the open-loop PMP system by integrating backward from the local LQR boundary $\partial L_\varepsilon$.
+For the data generation, we solve the open-loop PMP system by integrating $2000$ characteristics backward from the local LQR boundary $\partial L_\varepsilon$.
 Along each PMP trajectory, the accumulated running cost gives the value sample $V(x)$, and the costate gives the gradient sample $\nabla V(x)=p$.
-The backward integration stops when $V$ hits a predefined ceiling. 
+The backward integration of each raw trajectory stops when the accumulated value reaches the cap $V \le 100$; the in-basin training samples are additionally restricted to values below $50$ (the resolved part of the basin).
 This yields the dataset
 \begin{equation*}
-\{x^m,V(x^m),\nabla V(x^m)\}_{m=1}^M
+\{x^m,V(x^m),\nabla V(x^m)\}_{m=1}^M .
 \end{equation*}
 
 This construction records the nonsmooth geometry of the pendulum value function.
 Because the clockwise and counter-clockwise swing-up branches have equal cost at the bottom position $((2k+1)\pi,0)$, the optimal value function is not globally $C^1$.
 The generator detects the switching curve by intersecting equal-value contours with their $2\pi$-shifted copies and restricts the PMP trajectories to a consistent smooth branch.
 Restriction alone, however, produces one-sided data --- every sample stops at the switching curve, so the gradient jump itself would never appear in the training set.
-The generator therefore does the following: the raw trajectories are tiled by $\pm 2\pi$ in $\theta$, and a tiled point within the band is kept only if its branch value beats the competing branch's locally extrapolated value, certifying that it carries the true $(V,\nabla V)$ on its side of the curve.
-The final $(x,V,dV)$ dataset (3{,}900 samples: a 3{,}000-sample in-basin body plus a 900-sample two-sided band) thus contains the gradient discontinuity as an interior feature.
+The generator therefore harvests a two-sided band: the raw trajectories are tiled by $\pm 2\pi$ in $\theta$ and gated to within $0.5$ of the (tiled) switching arms, and a tiled point is kept only if its branch value beats the competing branch's locally extrapolated value \emph{and} matches its own branch's local lower envelope, certifying that it carries the true $(V,\nabla V)$ on its side of the curve.
+The band splits into a near-side pad ($300$ samples: the central branch between the basin's conservative trim and the true arm) and a far-side collar ($600$ samples: the neighbouring upright's branch across the arm).
+The final $(x,V,dV)$ dataset (3{,}900 samples: a 3{,}000-sample in-basin body plus the 900-sample two-sided band) thus contains the gradient discontinuity as an interior feature.
 This makes the pendulum benchmark a stress test for the gradient-augmented sparse neural approximation: the value is continuous while its gradient jumps across a switching set that the models see from both sides.
 Figure \ref{fig:pendulum_data} shows the dataset generated. 
 \begin{figure}[htbp]
@@ -2438,17 +2437,22 @@ the $\reluk$ functions are trained with the $\psi_k$ penalty, while the others w
 \label{fig:rs_surfaces}
 \end{figure}
 
-In Figure~\ref{fig:rs_transect}, a normal cross-section of the
+Figure~\ref{fig:rs_transect} shows a normal cross-section of the
 switching curve through the densest data region. The true value (left) is the
 continuous lower envelope of the two PMP branches, with a concave kink at the
 crossing; the true normal gradient $n\cdot\nabla V$ (right) therefore
 jumps at the switching set $s=0$.
 The training data here carry samples on both sides of the curve, so the jump is in-sample.
-As we observe, no model reproduces the jump: all of them undershoot the steep pre-jump gradient.
-$\mathrm{ReLU}^{2}$ comes closest: it is the only model that develops a visible
-kink at $s\approx 0$ --- its piecewise-quadratic atoms can break the derivative
-across a line --- while the smooth activations necessarily interpolate a gentle
-slope through the discontinuity. The discontinuous gradient is thus a genuine
+No model reproduces the magnitude of the jump: all undershoot the steep
+pre-jump gradient. The two kink-capable atoms come closest, each in the shape
+its atom geometry dictates. $\mathrm{ReLU}^{2}$ develops a visible kink at
+$s\approx 0$ --- its piecewise-quadratic atoms can break the derivative across
+a line --- and tracks the true value level best. The leaky-ReLU fit is a
+staircase: a piecewise-linear network has zero curvature between its atom
+lines, so its normal gradient is piecewise \emph{constant}, jumping where an
+atom line crosses the section and holding a plateau of $\approx -30$ to $-42$
+in between. The smooth activations necessarily interpolate a gentle slope
+through the discontinuity. The discontinuous gradient is thus a genuine
 representation cost.
 
 \begin{figure}[htbp]
@@ -2470,9 +2474,11 @@ representation cost.
 \caption{Normal cross-section of the switching curve, parametrized by the normal
 distance $s$. Left: the true value (dashed)
 is a continuous lower envelope with a kink at $s=0$. Right: the true normal
-gradient jumps at $s=0$; $\mathrm{ReLU}^{2}$ alone
-develops a kink near $s=0$, while the smooth models interpolate through the
-discontinuity.}
+gradient jumps at $s=0$; $\mathrm{ReLU}^{2}$
+develops a kink near $s=0$ and leaky ReLU a piecewise-constant staircase,
+while the smooth models interpolate through the discontinuity. The rectangular
+excursion of the reference curve near $s\approx-0.3$ is a nearest-neighbour
+artifact of the envelope reference, not a feature of $V$.}
 \label{fig:rs_transect}
 \end{figure}
 
@@ -2538,19 +2544,21 @@ fraction improves neither region for either model.}
 \label{fig:rs_oversampling}
 \end{figure}
 
-\subsubsection{The $ReLU^2$ fits the discontinuous gradient}
-Despite the limitation of fitting the discontinuous gradient in general, ReLU$^2$ demonstrate better performance in fitting the swtiching profile than other activation function. 
+\subsubsection{ReLU$^2$ fits the discontinuous gradient best}
+Despite the limitation in representing the discontinuous gradient, $\mathrm{ReLU}^2$ fits the switching profile markedly better than the other activation functions.
 
- 
 Figure~\ref{fig:rs_frontier}
 tracks the best relative $H^{1}$ validation error reached as neurons are
 inserted, for each activation paired with its penalty. $\mathrm{ReLU}^{2}$
 (fractional penalty $\psi_{2}$) separates from the field almost immediately and
-reaches the lowest error of all ($\approx 3.6\times10^{-1}$ at 113 neurons);
-softplus plateaus near $5.4\times10^{-1}$, and $\mathrm{ReLU}^{5}$ ($\psi_{5}$)
-and the Gaussian stall around $5.5$--$5.9\times10^{-1}$. The per-neuron accuracy
+reaches the lowest error of all ($\approx 3.1\times10^{-1}$ at 131 neurons);
+leaky ReLU --- the other kink-capable atom --- is the runner-up
+($\approx 4.4\times10^{-1}$); softplus plateaus near $5.2\times10^{-1}$, and
+the Gaussian and $\mathrm{ReLU}^{5}$ ($\psi_{5}$) stall around
+$6.1\times10^{-1}$. The per-neuron accuracy
 advantage of the $\mathrm{ReLU}^{2}$ atom is unambiguous; raising the
-power to $5$ forfeits it.
+power to $5$ forfeits it, and even the piecewise-linear leaky ReLU trails
+$\mathrm{ReLU}^{2}$ by roughly $40\%$.
 
 \begin{figure}[htbp]
 \centering
@@ -2558,9 +2566,9 @@ power to $5$ forfeits it.
 \caption{Best relative $H^{1}$ validation error against
 neuron count, one curve per activation--penalty pair
 ($\phi_{\gamma}$ the log penalty, $\psi_{k}$ the fractional-exponent penalty).
-$\mathrm{ReLU}^{2}$ reaches the lowest error overall by a wide margin;
-softplus, the Gaussian, and $\mathrm{ReLU}^{5}$ plateau at $1.5$--$1.6\times$
-its error.}
+$\mathrm{ReLU}^{2}$ reaches the lowest error overall; leaky ReLU follows at
+$\approx 1.4\times$ its error, softplus at $\approx 1.7\times$, and the
+Gaussian and $\mathrm{ReLU}^{5}$ plateau at $\approx 2\times$.}
 \label{fig:rs_frontier}
 \end{figure}
 
@@ -2652,7 +2660,11 @@ $\mathrm{ReLU}^{2}$ reproduces both behaviours.}
 \label{fig:rs_feedback}
 \end{figure}
 
-Only $\mathrm{ReLU}^{2}$ stabalizes. Every
+Only $\mathrm{ReLU}^{2}$ stabilizes (Table~\ref{tab:rs_feedback_cost}). From
+$B$ it brakes to the upright at essentially the true optimal cost ($10.3$ vs
+$10.2$); from $A$ it takes the correct branch --- swinging over to the upright
+at $2\pi$ --- though with an over-energetic arc that roughly doubles the cost
+($57.9$ vs $26.2$). Every
 other law fails from both starts: softplus and leaky ReLU over-accelerate,
 pass the uprights and never brake; the Gaussian settles into a periodic orbit
 around the wells without reaching an upright; $\mathrm{ReLU}^{5}$ swings over
@@ -2662,6 +2674,30 @@ signal from $B$: the $\mathrm{ReLU}^{2}$ law tracks the reference almost
 exactly, while the others oscillate or saturate. The failures track the global
 fit quality of the value approximation: a
 feedback law is only as good as the gradient field.
+
+\begin{table}[htbp]
+\centering
+\setlength{\tabcolsep}{12pt}
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{lcccc}
+\toprule
+ & \multicolumn{2}{c}{start $A = (0.71, 0.68)$} & \multicolumn{2}{c}{start $B = (0.23, 0.53)$} \\
+\cmidrule(lr){2-3} \cmidrule(lr){4-5}
+Feedback law & cost & reaches upright & cost & reaches upright \\
+\midrule
+reference (PMP) & $26.2$ & yes & $10.2$ & yes \\
+Gaussian $+\, \phi_{1}$ & $298.5$ & no & $278.9$ & no \\
+softplus $+\, \phi_{1}$ & $73013.3$ & no & $66996.7$ & no \\
+leaky ReLU $+\, \phi_{1}$ & $869.1$ & no & $776.9$ & no \\
+$\mathrm{ReLU}^{2} + \psi_{2}$ & $57.9$ & yes & $10.3$ & yes \\
+$\mathrm{ReLU}^{5} + \psi_{5}$ & $235.9$ & no & $232.4$ & no \\
+\bottomrule
+\end{tabular}
+\caption{Closed-loop cost over the horizon $T = 10$ and stabilization outcome
+for each feedback law, from the two starts on either side of the switching
+curve.}
+\label{tab:rs_feedback_cost}
+\end{table}
 
 \begin{figure}[htbp]
 \centering
@@ -2693,8 +2729,9 @@ $\mathrm{ReLU}^{2}$ --- whose derivative can break across a hyperplane ---
 partially seats the jump (Figure~\ref{fig:rs_transect}).
 In closed loop the branch decision at the curve
 becomes learnable, and $\mathrm{ReLU}^{2}$ alone makes it correctly from both
-sides of the switching set, matching the optimal cost;
-the smooth models fail from both starts. The bottleneck has moved from data
+sides of the switching set --- at the true optimal cost from $B$, and along
+the correct branch at roughly twice the optimal cost from $A$;
+every other law fails from both starts. The bottleneck has moved from data
 coverage across the curve to the atoms' ability to represent the kink ---
 which is the regime the sparse rectified atoms are built for.
 

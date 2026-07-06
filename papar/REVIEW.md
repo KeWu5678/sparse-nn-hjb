@@ -422,7 +422,7 @@ same sweep); `tab:alg2_gradient` both panels ✓ (all 10 rows); VDP feedback cos
 A=(0.71,0.68), B=(0.23,0.53), T=10 ✓; 3,900 = 3,000 + 900 ✓; oversampling table
 ✓ (all 8 rows); ≈9.4×10⁵ common eval set ✓; tube d ≤ 0.3 ✓.
 
-- [ ] **NUM-1 (major). §6.2.2 insertion-frontier prose and caption are stale
+- [x] **NUM-1 — RESOLVED (Batch N): frontier prose/caption rewritten to the current figure (ReLU² ≈3.1e-1 @131; leaky ReLU runner-up ≈4.4e-1; softplus ≈5.2e-1; Gaussian/ReLU⁵ ≈6.1e-1; ratios 1.4×/1.7×/≈2×).** §6.2.2 insertion-frontier prose and caption are stale
   relative to the current figure/run** (l. 2155–2174 vs
   `plot/pendulum_insertion_frontier.png` = `region_split/figures/frontier.png`):
   the figure shows ReLU² reaching ≈3.1×10⁻¹ at ~131 neurons (≈3.15×10⁻¹ at ~116),
@@ -433,7 +433,7 @@ A=(0.71,0.68), B=(0.23,0.53), T=10 ✓; 3,900 = 3,000 + 900 ✓; oversampling ta
   re-read the numbers off the current run records and rewrite the paragraph +
   caption, including leaky ReLU.
 
-- [ ] **NUM-2 (major). Fig. 1 caption (l. 213) misdescribes the frontier
+- [x] **NUM-2 — RESOLVED (Batch N): Fig 1 caption — k=3, ψ_k(t)=|t|^{2/(k+1)}, all four series incl. the ReLU+ℓ¹ baseline. NOTE for plot batch: the figure legends label the log penalty ψ_γ; thesis symbol is φ_γ — unify in analysis.py.** Fig. 1 caption (l. 213) misdescribes the frontier
   series.** Per `experiments/01_vdp/baseline/results.md` and
   `02_pendulum/baseline/results.md`, the ReLU^k series in both frontier panels is
   **k = 3** (finite-step, γ=0), not "we choose k = 2"; and the fractional penalty
@@ -443,13 +443,13 @@ A=(0.71,0.68), B=(0.23,0.53), T=10 ✓; 3,900 = 3,000 + 900 ✓; oversampling ta
   curves in each panel include a "ReLU + L1" baseline the caption doesn't
   mention — describe all series.
 
-- [ ] **NUM-3 (medium). Experimental setup misstatements (l. 1455–1456):** the
+- [x] **NUM-3 — RESOLVED (Batch N): 50 = candidates sampled, ≤15 accepted, prune |c| ≤ 1e-8 (verified in run-record configs).** Experimental setup misstatements (l. 1455–1456):** the
   runs use up to **15** insertions per outer iteration (`max_insert = 15`,
   `src/config/schema.py:66`; no experiment overrides it), not "up to 50"; pruning
   drops atoms with $|c| \le 10^{-8}$ (`amp_tol = 1e-8`, `src/PDAP/pdap.py`), not
   "$|c| < 10^{-5}$". "10 outer iterations" ✓ is correct.
 
-- [ ] **NUM-4 (medium). §6.2.3 "matching the optimal cost" (l. 2300–2307)
+- [x] **NUM-4 — RESOLVED (Batch N): cost table tab:rs_feedback_cost added; prose and summary qualified (10.3 vs 10.2 from B; correct branch at 57.9 vs 26.2 from A).** §6.2.3 "matching the optimal cost" (l. 2300–2307)
   overclaims.** Ground truth (`region_split/results.md` §5): from B, ReLU² costs
   10.3 vs true 10.2 (match ✓); from A it takes the correct branch but costs
   **57.9 vs 26.2** — right decision, over-energetic execution. The thesis body
@@ -459,7 +459,7 @@ A=(0.71,0.68), B=(0.23,0.53), T=10 ✓; 3,900 = 3,000 + 900 ✓; oversampling ta
   sentence ("matches the optimal cost from B; from A it takes the correct branch
   at roughly twice the optimal cost").
 
-- [ ] **NUM-5 (medium). Transect prose ignores leaky ReLU** (l. 2057–2061 and
+- [x] **NUM-5 — RESOLVED (Batch N): leaky-ReLU staircase described in transect prose and caption; spike-artifact note added to the caption (also closes PLOT-6).** Transect prose ignores leaky ReLU** (l. 2057–2061 and
   caption l. 2080–2086): the figure includes leaky ReLU, whose fitted
   $n\cdot\nabla V$ is a visible *staircase* (piecewise-constant — its derivative
   breaks too); "ReLU² … is the only model that develops a visible kink … while
@@ -468,7 +468,7 @@ A=(0.71,0.68), B=(0.23,0.53), T=10 ✓; 3,900 = 3,000 + 900 ✓; oversampling ta
   function, plateau ≈ −30…−42). Rewrite the two sentences to cover all five
   curves.
 
-- [ ] **NUM-6 (medium). Two table columns are not backed by the curated results
+- [x] **NUM-6 — VERIFIED (Batch N): all L²-trained cells match local run records exactly (rawdata/logs/multirun/vdp/log_penalty, signed profile α=1e-5 γ=1 L² runs: softplus .0861/.5631/58, tanh .0359/.4677/75, gaussian .0305/.4639/105 = best_neurons). No table change needed. Follow-up for repo hygiene (outside paper): add these cells to experiments/01_vdp/log_penalty/results.md.** Two table columns are not backed by the curated results
   docs:** `tab:alg1_gradient` L²-trained column (8.61e-2 / 3.59e-2 / 3.05e-2 and
   5.63e-1 / 4.68e-1 / 4.64e-1) and `tab:alg1_sparsity` L²-trained neuron counts
   (58 / 75 / 105). They are plausibly from the same MLflow sweep, but nothing in
@@ -477,7 +477,7 @@ A=(0.71,0.68), B=(0.23,0.53), T=10 ✓; 3,900 = 3,000 + 900 ✓; oversampling ta
   regenerate via `analysis.py` before submission; add them to results.md so the
   paper cites curated numbers only (per repo convention).
 
-- [ ] **NUM-7 (medium). Pendulum problem parameters are never stated** — the
+- [x] **NUM-7 — RESOLVED (Batch N): parameter sentence (m=l=1, b=0.1, g=9.8, q₁=q₂=1, r=1); 2000 characteristics; integration cap 100 vs basin cap 50 disentangled; VDP N_b = 30.** Pendulum problem parameters are never stated** — the
   reader cannot reproduce §6.2: $m = l = 1$, $b = 0.1$, $g = 9.8$,
   $q_1 = q_2 = 1$, $r = 1$ (from `src/OpenLoop/pendulum/problem.py`), 2000
   backward-PMP characteristics, integration cap $V \le 100$, basin restriction cap
@@ -486,7 +486,7 @@ A=(0.71,0.68), B=(0.23,0.53), T=10 ✓; 3,900 = 3,000 + 900 ✓; oversampling ta
   (100) with the basin cap (50). Add one parameter sentence/table and the two caps.
   Similarly the VDP horizon/grid are given ✓ but add the Legendre basis size $N_b$.
 
-- [ ] **NUM-8 (minor). Dataset-description nuance (l. 1963–1966):** the band
+- [x] **NUM-8 — RESOLVED (Batch N): envelope-match condition + 0.5 gate + pad(300)/collar(600) split described.** Dataset-description nuance (l. 1963–1966):** the band
   construction is described as "tiled by ±2π … kept only if its branch value beats
   the competing branch's locally extrapolated value" — per the generator README,
   survivors are additionally required to match their own branch's lower envelope,
@@ -495,7 +495,7 @@ A=(0.71,0.68), B=(0.23,0.53), T=10 ✓; 3,900 = 3,000 + 900 ✓; oversampling ta
   §6.2's region metrics quote it. Also "3{,}900 samples: a 3{,}000-sample
   in-basin body plus a 900-sample two-sided band" ✓ correct.
 
-- [ ] **NUM-9 (minor). §6.1 unverifiable/odd items:** (i) l. 1443 "Legendre
+- [x] **NUM-9 — RESOLVED (Batch N): N_b=30 stated; redundant HJB-at-t=0 display deleted; ∇V(x^m)=p*(0) index fixed.** §6.1 unverifiable/odd items:** (i) l. 1443 "Legendre
   polynomial basis" — state the degree; (ii) l. 1444: $\nabla V(x^m) = p^*(0)$ —
   also state $V(x^m) = J(u^*;0,x^m)$ is the *computed* cost ✓ (fine); (iii)
   l. 1438–1441 "The HJB equation at t = 0 is:" — the display is just (HJB)
@@ -699,7 +699,7 @@ A=(0.71,0.68), B=(0.23,0.53), T=10 ✓; 3,900 = 3,000 + 900 ✓; oversampling ta
   sub-captions use `$e^{-x^2} + \alpha\,\phi_1$" style formulas as panel labels —
   fine, but make the penalty symbols match WORD-4(iii).
 
-- [ ] **PLOT-6 (minor). Transect true-PMP spike:** the true-PMP curve in
+- [x] **PLOT-6 — RESOLVED via NUM-5's caption note.** Transect true-PMP spike:** the true-PMP curve in
   `transect_normal_gradient.png` has a rectangular excursion near s ≈ −0.28
   (envelope nearest-neighbor artifact). Either mention it in the caption
   ("the spike at s ≈ −0.3 is a nearest-neighbour artifact of the envelope
@@ -892,3 +892,8 @@ Alternatives:
   Build: 50 pp, zero warnings. NOTE: at the 50-page regulation cap in the
   CURRENT (12pt/1.3) layout — TEX-1 relayout to 11pt will bring it back down;
   re-check after Batch S adds front matter.
+- Batch N (this commit): NUM-1..9 resolved; NUM-6 verified against local run
+  records (no MLflow needed). Build: 52 pp (12pt layout; cap applies to the
+  11pt relayout, TEX-1). New follow-ups filed: figure legends use ψ_γ for the
+  log penalty (unify to φ_γ in analysis.py, plot batch); curate the L²
+  fixed-point cells into 01_vdp/log_penalty/results.md.
