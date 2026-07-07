@@ -1133,28 +1133,29 @@ $\|\sigma(\cdot,\omega)\|_{L^2(\partial D)} \le \|\rho\|_\infty
 $\omega \mapsto \sigma(\cdot, \omega)$ into $L^2(D)$ and $L^2(\partial D)$
 (dominated convergence).
 
-(2) Green's formula with $u = \mathcal{N}\mu' \in H^1(D)$ gives
+(2) Note first that the direct interchange
+$\langle \nabla r, \nabla(\mathcal{N}\mu') \rangle_{L^2(D)} = \int_\Omega
+\langle \nabla r, \nabla_x \sigma(\cdot,\omega)\rangle_{L^2(D)} \, d\mu'$ has no
+justification: $\|\nabla_x \sigma(\cdot,\omega)\|_{L^2(D)}$ grows like
+$|a|^{1/2}$, so the gradient kernel need not be $|\mu'|$-integrable. Green's
+formula replaces it by the bounded kernel $\sigma$ before any interchange:
+with $u = \mathcal{N}\mu' \in H^1(D)$,
 \begin{equation*}
 	\langle r, \mathcal{N}\mu' \rangle_{L^2(D)} + \langle \nabla r, \nabla (\mathcal{N}\mu') \rangle_{L^2(D)}
 	= \langle r - \Delta r, \, \mathcal{N}\mu' \rangle_{L^2(D)}
 	+ \langle \partial_n r, \, \operatorname{tr}(\mathcal{N}\mu') \rangle_{L^2(\partial D)}.
 \end{equation*}
-Since $|\sigma(x, \omega)| \le \|\rho\|_\infty$ and $|\mu'|$ is finite, Fubini's
-theorem applies to the interior term:
-$\langle r - \Delta r, \mathcal{N}\mu' \rangle_{L^2(D)} = \int_\Omega \langle r - \Delta r,
-\sigma(\cdot,\omega)\rangle_{L^2(D)} \, d\mu'(\omega)$. For the boundary term we identify
-the trace: the trace of a function in $H^1(D)$ coincides
-$\mathcal{H}^{d-1}$-almost everywhere on $\partial D$ with the limit of its
-solid averages over $B_t(x) \cap D$ as $t \rightarrow 0$
-\cite{evans2015measure}. By Fubini, the solid average of $\mathcal{N}\mu'$
-over $B_t(x) \cap D$ equals
-$\int_\Omega \big( |B_t(x) \cap D|^{-1} \int_{B_t(x) \cap D}
-\sigma(x', \omega)\,dx' \big) \, d\mu'(\omega)$, and since each
-$\sigma(\cdot, \omega)$ is continuous on $\overline{D}$ and uniformly bounded
-by $\|\rho\|_\infty$, dominated convergence gives
-$\operatorname{tr}(\mathcal{N}\mu')(x) = \int_\Omega \sigma(x, \omega)\,
-d\mu'(\omega)$ for $\mathcal{H}^{d-1}$-a.e.\ $x \in \partial D$. One more
-application of Fubini's theorem to the boundary term completes the identity.
+Since $|\sigma(x, \omega)| \le \|\rho\|_\infty$, $\sigma(\cdot, \omega)$ is
+continuous, and $|\mu'|$ is finite, dominated convergence shows
+$\mathcal{N}\mu' \in C(\overline{D})$; the trace of an $H^1(D)$ function that
+is continuous up to the boundary is its restriction \cite{evans2015measure},
+so $\operatorname{tr}(\mathcal{N}\mu')(x) = \int_\Omega \sigma(x, \omega)\,
+d\mu'(\omega)$ on $\partial D$. Both kernels --- $\sigma(\cdot,\omega)$ on $D$
+and its restriction to $\partial D$ --- are bounded by $\|\rho\|_\infty$, so
+Fubini's theorem applies to both terms on the right and yields
+$\int_\Omega \langle r - \Delta r, \sigma(\cdot,\omega)\rangle_{L^2(D)} d\mu'
++ \int_\Omega \langle \partial_n r, \sigma(\cdot,\omega)\rangle_{L^2(\partial D)}
+d\mu'$, which is $\int_\Omega p_r \, d\mu'$ by (1).
 
 (3) The interior term of the representation vanishes as
 $|\omega| \rightarrow \infty$ since
