@@ -927,7 +927,7 @@ Combining the two parts we get
 Choosing $\delta^2 < \frac{\alpha \gamma_2}{(d + 1)\Lambda_1^2(D, \Lambda_{\hat{\omega}})}$
 gives $J(\mu_\delta) < J(\bar{\mu})$, contradicting local minimality. Hence
 $\bar{\mu}_{\cont} = 0$.
-
+ 
 \quad\\
 2. $|\atom \bar{\mu}|$ is finite:
 First, the atoms cannot escape to infinity: if there were atoms $\omega_n$ with
@@ -1021,26 +1021,46 @@ boundary representation of Lemma~\ref{lem:dual_pairing}(1) below,
 	\qquad r := \mathcal{N}\bar{\mu} - V.
 \end{equation*}
 The interior term vanishes as $|\omega| \rightarrow \infty$ by Lemma
-\ref{lem:value_decay}. The boundary term vanishes as well provided $\partial D$
-meets every hyperplane in an $\mathcal{H}^{d-1}$-null set
-(Lemma~\ref{lem:dual_pairing}(3)) --- for instance when $D$ is smooth and
-strictly convex; in that case
+\ref{lem:value_decay}. The boundary term pairs the \emph{normal derivative of
+the residual} against the trace of the atom on the boundary,
+\begin{equation*}
+	\langle \partial_n r, \, \sigma(\cdot, \omega) \rangle_{L^2(\partial D)}
+	= \int_{\partial D} \partial_n r(x) \, \rho(a \cdot x + b) \, d\mathcal{H}^{d-1}(x),
+\end{equation*}
+so everything depends on whether the trace $\rho(a \cdot x + b)|_{\partial D}$
+becomes small. If $\partial D$ meets every hyperplane in an
+$\mathcal{H}^{d-1}$-null set --- no flat boundary pieces, e.g.\ $D$ smooth and
+strictly convex --- then every sharpening ridge crosses the boundary
+transversally, its trace is supported on a band of vanishing surface measure,
+and the term vanishes (Lemma~\ref{lem:dual_pairing}(3)); in that case
 $\limsup_{|\omega| \rightarrow \infty} |\bar{p}(\omega)| = 0 < \alpha$ and
-\eqref{no_escape} holds unconditionally. On domains with flat faces (e.g.\
-boxes) the boundary term can persist along ridges aligned with a face
-$F \subset \partial D$ with unit normal $n_F$, $F \subset \{n_F \cdot x = c_F\}$:
-along $a_j = t_j\, n_F$, $b_j = -t_j c_F + s_0$ with $t_j \rightarrow \infty$
-one finds
-$\bar{p}(\omega_j) \rightarrow \rho(s_0) \int_F \partial_n r \, d\mathcal{H}^{d-1}$,
-so \eqref{no_escape} becomes a genuine smallness condition on the boundary flux
-of the residual across the faces, relative to $\alpha$. The residual lies in
+\eqref{no_escape} holds unconditionally.\par
+If instead $\partial D$ contains a flat face
+$F \subset \{n_F \cdot x = c_F\}$ (as for the boxes of Section~6), a ridge can
+align with it: along $a_j = t_j\, n_F$, $b_j = -t_j c_F + s_0$ with
+$t_j \rightarrow \infty$, the argument $a_j \cdot x + b_j \equiv s_0$ is
+\emph{constant on the face}, so the trace does not shrink --- it converges to
+the constant $\rho(s_0)$ on $F$ and to $0$ on the rest of the boundary. In the
+limit only the flux of the residual through the face survives:
+\begin{equation*}
+	\bar{p}(\omega_j) \;\rightarrow\; \rho(s_0) \int_F \partial_n r \, d\mathcal{H}^{d-1}.
+\end{equation*}
+Geometrically, these atoms are ever-thinner ridges pressed against the face:
+they occupy vanishing volume, but their gradients keep correcting the normal
+derivative of the fit in a boundary layer along $F$, which remains profitable
+exactly as long as the residual has nonzero flux through the face. On such
+domains \eqref{no_escape} therefore reduces to a smallness condition on the
+boundary flux: $\|\rho\|_\infty \, \big| \int_F \partial_n r \,
+d\mathcal{H}^{d-1} \big| < \alpha$ for every face $F$.\par
+The residual lies in
 $H^2(D)$ for instance when
 $V \in H^2(D)$, $\rho \in C^2(\mathbb{R})$ with $\rho'' \in L^2(\mathbb{R})$,
 and $\bar{\mu}$ carries the moment
 $\int_\Omega (1 + |a|)^{3/2} \, d|\bar{\mu}|(\omega) < \infty$. Finally, note
 that \eqref{no_escape} is exactly the quantity whose failure drives the
-counterexamples of Remark~\ref{rem:sharpness}: there the escaping atoms
-satisfy $|\bar{p}(\omega_n)| \rightarrow \alpha$.
+counterexamples of Remark~\ref{rem:sharpness}: there, as here, a parameter
+sequence escapes to infinity while its pairing with the fit survives, and the
+escaping atoms satisfy $|\bar{p}(\omega_n)| \rightarrow \alpha$.
 \end{remark}
 
 Now we have a necessary optimality condition. But it is not sufficient. More importantly, we cannot formulate an algorithm to determine the optimal value of $N$. To overcome this difficulty, we apply a heuristic approach: for fixed inner weights $\bar{\omega} = (\bar{\omega}_n)_{n = 1}^N$, the finite-dimensional problem
