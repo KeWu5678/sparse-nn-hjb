@@ -176,7 +176,7 @@ Although the number of neurons does not act as the inductive bias of the model i
 Furthermore, sparsity is necessary for certain applications, such as deconvolution of point-like objects. 
 A sparse learning procedure usually adopts convex reformulation of the problem and employ a sparse promoting convex penalty term on the outer weights, a popular choice is the $l^1$ function (LASSO). 
 However, Pieper and Petrosyan \cite{pieper2022nonconvex} showed that convex penalties cannot effectively eliminate the redundancy of a shallow network when neurons cluster in a small neighborhood, and proposed a nonconvex sparse learning method as the remedy. Their analysis is limited to the ReLU activation. 
-The ReLU enjoys many useful properties, such as Lipschitz continuity and positive homogeneity, but but the second derivatives of the model exist only as distributions and can't be used for training\cite{li2024twolayer}.
+The ReLU enjoys many useful properties, such as Lipschitz continuity and positive homogeneity, but the second derivatives of the model exist only as distributions and can not be used for training\cite{li2024twolayer}.
 We need a new class of activation functions to adopt the sparse learning framework. \par
 
 In this thesis, we combine gradient-augmented training with nonconvex sparse regularization for a class of activation functions that extends well beyond ReLU, and we analyze the resulting variational problem over measures. The contributions are the following.
@@ -682,10 +682,11 @@ If instead $|a|$ stays bounded and $|b| \to \infty$, then
 $\inf_{x \in D} |a \cdot x + b| \ge |b| - |a|\,R_D\sqrt{d} \to \infty$ and
 $\rho(z) \to 0$ as $|z| \to \infty$; hence $\kappa(\omega) \to 0$ as
 $|\omega| \to \infty$ in either regime. Continuity of $\kappa$ follows from
-dominated convergence. The second claim follows from
+dominated convergence. \par
+The second claim follows from
 $|\langle \sigma(\cdot,\omega), \varphi\rangle_{L^2(D)}| \le \kappa(\omega)\, \|\varphi\|_{L^2(D)}$ together with the
-continuity of $\omega \mapsto \sigma(\cdot, \omega) \in L^2(D)$; the third from
-$\langle \mathcal{N}\mu_n, \varphi\rangle_{L^2(D)} = \int_\Omega \langle \sigma(\cdot,\omega), \varphi\rangle_{L^2(D)} \, d\mu_n(\omega)$,
+continuity of $\omega \mapsto \sigma(\cdot, \omega) \in L^2(D)$. \par 
+The third from $\langle \mathcal{N}\mu_n, \varphi\rangle_{L^2(D)} = \int_\Omega \langle \sigma(\cdot,\omega), \varphi\rangle_{L^2(D)} \, d\mu_n(\omega)$,
 the definition of weak-* convergence, and the uniform bound
 $\|\mathcal{N}\mu_n\|_{L^2(D)} \le \|\rho\|_\infty \sup_n \|\mu_n\|_{\mathcal{M}(\Omega)}$.
 \end{proof}
@@ -701,15 +702,15 @@ minimizing sequence with $J(\mu_n) \le C$. By Lemma~\ref{lem:coercivity},
 $\phi(\|\mu_n\|_{\mathcal{M}(\Omega)}) \le \Phi_1(\mu_n) \le C/\alpha$, and the
 coercivity of $\phi$ yields $\sup_n \|\mu_n\|_{\mathcal{M}(\Omega)} < \infty$.
 As $C_0(\Omega)$ is separable, bounded sets of $\mathcal{M}(\Omega)$ are
-sequentially weak-* compact; after extraction,
+sequentially weak-* compact; passing to a subsequence we have
 $\mu_n \overset{*}{\rightharpoonup} \bar{\mu}$.
 
 By Lemma~\ref{lem:value_decay}, $\mathcal{N}\mu_n \rightharpoonup
 \mathcal{N}\bar{\mu}$ weakly in $L^2(D)$. Moreover $J(\mu_n) \le C$ implies
 $\mathcal{N}\mu_n \in H^1(D)$ with
 $\|\nabla(\mathcal{N}\mu_n)\|_{L^2(D)} \le \|\nabla V\|_{L^2(D)} + \sqrt{2C}$,
-so after a further extraction $\nabla(\mathcal{N}\mu_n) \rightharpoonup g$
-weakly in $L^2(D)^d$. For every $\psi \in C_c^\infty(D)^d$,
+passing to a subsequence again we have $\nabla(\mathcal{N}\mu_n) \rightharpoonup g$
+weakly for some $g$ in $L^2(D)^d$. For every $\psi \in C_c^\infty(D)^d$,
 \begin{equation*}
 	\int_D g \cdot \psi\, dx
 	= \lim_n \int_D \nabla(\mathcal{N}\mu_n) \cdot \psi\, dx
@@ -725,8 +726,8 @@ compactness of $\Omega$. Therefore
 $J(\bar{\mu}) \le \liminf_n J(\mu_n) = \inf J$.
 \end{proof}
 
-\begin{remark}[sharpness of the localization]\label{rem:sharpness}
-The localization in Assumption~\ref{ass:ridge} cannot be dropped, and its
+\begin{remark}\label{rem:sharpness}
+Assumption~\ref{ass:ridge} cannot be dropped, and its
 failure is not a technical artifact.\par 
 (i) For the profile $\rho = \tanh$ take $V \equiv 1$ and $\mu_n = \delta_{(a, b_n)}$ with
 $b_n \to \infty$: then $\mu_n \overset{*}{\rightharpoonup} 0$, yet
@@ -739,7 +740,7 @@ $\mu_n = \rho(b_n)^{-1}\delta_{(0, b_n)}$ fit $V \equiv 1$ exactly for every
 $n$ at penalty $\alpha\,\phi(1/\rho(b_n)) \to 0$, so $\inf J = 0$ is not
 attained; moreover $n^{-1}\rho(n(e \cdot x - t)) \to (e \cdot x - t)_+$ in
 $H^1(D)$, so every ReLU network is reached at vanishing penalty and the
-regularization degenerates entirely.
+regularization degenerates entirely.\par 
 For such saturating or growing activations we therefore restrict the parameter
 domain to a compact set $\Omega_R \subset \mathbb{R}^{d+1}$, on which all
 results of this section hold with simpler proofs ($\mathcal{N}$ is then
@@ -813,7 +814,7 @@ Since $\phi'(0) = 1$ and $\phi'$ is nonincreasing and nonnegative, we have $\phi
 \begin{align*}
 	-\bar{p}(\omega) =  - \langle \bar{p}, u \rangle \le \alpha \lim_{\tau \rightarrow 0^+ } \frac{1}{\tau} \big( \phi(\tau) - \phi(0) \big) = \alpha \phi'(0) = \alpha.
 \end{align*}
-Taking $u = - \delta_\omega$ we get $|\bar{p}(\omega)| \le \alpha$ for all $\omega \notin \atom \bar{\mu}$, which together with case 1) proves claim (1).
+Taking $u = - \delta_\omega$, by inserting the sign is not flipped and we get $|\bar{p}(\omega)| \le \alpha$ for all $\omega \notin \atom \bar{\mu}$, which together with case 1) proves claim (1).\par 
 Next we take $u = \bar{\mu}_{\cont}$; since the perturbation only rescales the continuous part, $\Phi_1(\bar{\mu} + \tau \bar{\mu}_{\cont}) - \Phi_1(\bar{\mu}) = \tau \|\bar{\mu}_{\cont}\|_{\mathcal{M}(\Omega)}$, and
 \begin{align*}
 	-\langle \bar{p}, \bar{\mu}_{\cont} \rangle \le  \alpha \|\bar{\mu}_{\cont}\|_{\mathcal{M}(\Omega)}.
@@ -1089,8 +1090,8 @@ Then:
 		+ \langle \nabla r, \, \nabla(\mathcal{N}\mu') \rangle_{L^2(D)}
 		= \int_\Omega p_r(\omega)\, d\mu'(\omega).
 	\end{equation*}
-	\item If in addition $\mathcal{H}^{d-1}(\partial D \cap P) = 0$ for every
-	hyperplane $P \subset \mathbb{R}^d$ --- e.g.\ if $D$ is smooth and strictly
+	\item If in addition $\mathcal{H}^{d-1}(\partial D \cap \Pi) = 0$ for every
+	hyperplane $\Pi \subset \mathbb{R}^d$ --- e.g.\ if $D$ is smooth and strictly
 	convex --- then $p_r \in C_0(\Omega)$.
 \end{enumerate}
 \end{lemma}
