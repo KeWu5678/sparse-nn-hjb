@@ -1172,11 +1172,14 @@ its complement, on which $|\rho(a_j \cdot x + b_j)| \le \eta(\tau) :=
 	\le \|\rho\|_\infty^2 \, \mathcal{H}^{d-1}(B_j(\tau))
 	+ \eta(\tau)^2 \, \mathcal{H}^{d-1}(\partial D).
 \end{equation*}
-If $|a_j|$ stays bounded, then $|b_j| \rightarrow \infty$ and
-$B_j(\tau) = \emptyset$ eventually, while
-$\inf_{x \in \partial D} |a_j \cdot x + b_j| \rightarrow \infty$ makes the
-second term vanish for every fixed $\tau$ as well; hence
-$\kappa_\partial(\omega_j) \rightarrow 0$. If $|a_j| \rightarrow \infty$, pass
+If $|a_j|$ stays bounded, no splitting is needed: then
+$|b_j| \rightarrow \infty$, so
+$m_j := \inf_{x \in \partial D} |a_j \cdot x + b_j|
+\ge |b_j| - \sup_j |a_j| \, R_D \sqrt{d} \rightarrow \infty$,
+the whole boundary samples only the far tail of the profile,
+$|\rho(a_j \cdot x + b_j)| \le \eta(m_j)$ uniformly on $\partial D$, and
+$\kappa_\partial(\omega_j)^2 \le \eta(m_j)^2 \, \mathcal{H}^{d-1}(\partial D)
+\rightarrow 0$. If $|a_j| \rightarrow \infty$, pass
 to a subsequence with $a_j / |a_j| \rightarrow e$ and
 $b_j / |a_j| \rightarrow -c \in [-\infty, +\infty]$. If $|c| = \infty$, then
 $B_j(\tau) = \emptyset$ eventually. Otherwise every $x \in B_j(\tau)$
