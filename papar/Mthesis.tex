@@ -248,7 +248,7 @@ By the Riesz representation theorem, $\mathcal{M}(\Omega; \mathbb{R}^m)$ is isom
 \qquad \mu \in \mathcal{M}(\Omega; \mathbb{R}^m), \; u \in C_0(\Omega; \mathbb{R}^m);
 \end{equation*}
 in particular, $\mathcal{M}(\Omega; \mathbb{R}^m)$ equipped with the total variation norm is a Banach space.
-Without further specification, we denote by $\langle \cdot, \cdot\rangle$ the dual bracket $\langle \cdot, \cdot \rangle_{\mathcal{M}(\Omega), C_0(\Omega)}$.
+Without further specification, we denote by $\langle \cdot, \cdot\rangle$ the dual bracket $\langle \cdot, \cdot \rangle_{\mathcal{M}(\Omega), C_0(\Omega)}$, with the two arguments in either order; all other pairings carry a subscript naming their space.
 
 The following space of measures will also be considered:
 \begin{itemize}
@@ -1135,14 +1135,14 @@ $\omega \mapsto \sigma(\cdot, \omega)$ into $L^2(D)$ and $L^2(\partial D)$
 
 (2) Green's formula with $u = \mathcal{N}\mu' \in H^1(D)$ gives
 \begin{equation*}
-	\langle r, \mathcal{N}\mu' \rangle + \langle \nabla r, \nabla (\mathcal{N}\mu') \rangle
+	\langle r, \mathcal{N}\mu' \rangle_{L^2(D)} + \langle \nabla r, \nabla (\mathcal{N}\mu') \rangle_{L^2(D)}
 	= \langle r - \Delta r, \, \mathcal{N}\mu' \rangle_{L^2(D)}
 	+ \langle \partial_n r, \, \operatorname{tr}(\mathcal{N}\mu') \rangle_{L^2(\partial D)}.
 \end{equation*}
 Since $|\sigma(x, \omega)| \le \|\rho\|_\infty$ and $|\mu'|$ is finite, Fubini's
 theorem applies to the interior term:
-$\langle r - \Delta r, \mathcal{N}\mu' \rangle = \int_\Omega \langle r - \Delta r,
-\sigma(\cdot,\omega)\rangle \, d\mu'(\omega)$. For the boundary term we identify
+$\langle r - \Delta r, \mathcal{N}\mu' \rangle_{L^2(D)} = \int_\Omega \langle r - \Delta r,
+\sigma(\cdot,\omega)\rangle_{L^2(D)} \, d\mu'(\omega)$. For the boundary term we identify
 the trace: the trace of a function in $H^1(D)$ coincides
 $\mathcal{H}^{d-1}$-almost everywhere on $\partial D$ with the limit of its
 solid averages over $B_t(x) \cap D$ as $t \rightarrow 0$
@@ -2075,7 +2075,7 @@ $N$ = support size after SSN and pruning;\;
 $\Delta J / n$ = decrease of the objective $J = L(\mu) + \alpha\,\Phi(\mu)$ per neuron added, relative to the previous iterate (iteration~1 has no predecessor).\par}
 \end{table}
 
-The difference reflects how many descent directions the dictionary offers at each step, governed by the dual variable $p_t(\omega) = \langle \sigma(\cdot, \omega),\, g_t \rangle$, where $g_t$ is the current residual.
+The difference reflects how many descent directions the dictionary offers at each step, governed by the dual variable $p_t(\omega) = \langle \sigma(\cdot, \omega),\, g_t \rangle_{L^2(D,\nu)}$, where $g_t$ is the current residual.
 The Gaussian activation is localized: $\sigma(x, \omega)$ is a bump concentrated near the hyperplane $\{x : a \cdot x + b \approx 0\}$, so $p_t(\omega)$ is sensitive to local residual structure, and even small residual pockets push $|p_t(\omega)| > \alpha$ for many~$\omega$.
 The insertion step therefore finds a fresh batch of admissible atoms every iteration, each correcting only a small local portion of the residual.
 Softplus has global support, so $p_t(\omega)$ averages the residual over the entire domain---positive and negative contributions cancel, fewer~$\omega$ exceed the threshold~$\alpha$, but each admitted atom removes a global component of the residual.
