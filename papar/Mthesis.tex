@@ -244,11 +244,11 @@ The following spaces will be considered
 
 By the Riesz representation theorem, $\mathcal{M}(\Omega; \mathbb{R}^m)$ is isometrically the dual space of $C_0(\Omega; \mathbb{R}^m)$ under the pairing
 \begin{equation*}
-\langle \mu,\, u \rangle = \sum_{i=1}^{m} \int_\Omega u_i \, \mathrm{d}\mu_i,
+\langle u,\, \mu \rangle = \sum_{i=1}^{m} \int_\Omega u_i \, \mathrm{d}\mu_i,
 \qquad \mu \in \mathcal{M}(\Omega; \mathbb{R}^m), \; u \in C_0(\Omega; \mathbb{R}^m);
 \end{equation*}
 in particular, $\mathcal{M}(\Omega; \mathbb{R}^m)$ equipped with the total variation norm is a Banach space.
-Without further specification, we denote by $\langle \cdot, \cdot\rangle$ the dual bracket $\langle \cdot, \cdot \rangle_{\mathcal{M}(\Omega), C_0(\Omega)}$, with the two arguments in either order; all other pairings carry a subscript naming their space.
+Without further specification, we denote by $\langle \cdot, \cdot\rangle$ the dual bracket $\langle \cdot, \cdot \rangle_{C_0(\Omega),\mathcal{M}(\Omega)}$, with the two arguments in either order; all other pairings carry a subscript naming their space.
 
 The following space of measures will also be considered:
 \begin{itemize}
@@ -358,10 +358,12 @@ This holds in each of the three settings considered in this thesis:
 (i) localized ridge activations on the unbounded domain $\Omega = \mathbb{R}^{d+1}$
 (Assumption~\ref{ass:ridge} below), (ii) arbitrary continuous activations on a
 compact parameter set $\Omega_R \subset \mathbb{R}^{d+1}$, and (iii)
-$k$-homogeneous activations on the sphere (Section~4).
+$k$-homogeneous activations on the sphere (Section~4).\par 
 The gradient of the model is understood distributionally; whenever
-$\int_\Omega \|\nabla_x \sigma(\cdot, \omega)\|_{L^2(D)} \, d|\mu|(\omega) < \infty$
-— in particular for every finitely supported $\mu$ — it is given by the
+\begin{equation}
+	\int_\Omega \|\nabla_x \sigma(\cdot, \omega)\|_{L^2(D)} \, d|\mu|(\omega) < \infty
+\end{equation}
+it is given by the
 classical formula
 \begin{align*}
 	\nabla (\mathcal{N}\mu)(x) = \int_\Omega \nabla_x \sigma(x, \omega) \, d\mu(\omega),
@@ -378,23 +380,7 @@ which is the representation of the neural network, and the gradient of the model
 	[\partial_{x_i} \mathcal{N}](x) = \sum_{n = 1}^N c_n \partial_{x_i} \sigma(a_n \cdot x + b_n).
 \end{align*}
 
-
-Next we incorporate the nonconvex penalty in the integral representation.
-For the atom parts it is defined in the discrete setting. 
-For the continuous part on $\Omega$ the measure is penalized with the weight $\phi'(0)$. 
-Under Assumption~\ref{pen1} it is the $L^1$ norm of measure. 
-Concretely, observe $\Omega = \atom \mu \cup \cont\mu $, we define the penalty term
-\begin{equation}
-	\Phi_1(\mu) = \|\mu_{\cont}\|_{\mathcal{M}(\Omega)} + \sum_{\omega \in \atom \mu} \phi(|\mu|(\omega)).
-\end{equation}
-
-We formulate the optimization problem as
-\begin{equation}
-	\label{int_noncon}
-	\tag{$P_{\Phi_1}$}
-	\min_{\mu \in \mathcal{M}(\Omega)} J (\mu):= L(\mu) + \alpha \Phi_1(\mu),
-\end{equation}
-where the fidelity term is the gradient-augmented loss with the distributional
+The fidelity term is the gradient-augmented loss with the distributional
 gradient convention,
 \begin{equation*}
 	L(\mu) :=
@@ -406,11 +392,471 @@ gradient convention,
 	\end{cases}
 \end{equation*}
 On measures with
-$\int_\Omega \|\nabla_x \sigma(\cdot,\omega)\|_{L^2(D)} d|\mu|(\omega) < \infty$
-this coincides with the loss
+\begin{equation*}
+	\int_\Omega \|\nabla_x \sigma(\cdot,\omega)\|_{L^2(D)} \, d|\mu|(\omega) < \infty
+\end{equation*}
+the map $\omega \mapsto \partial_{x_i}\sigma(\cdot,\omega)$ is
+Bochner integrable into $L^2(D)$, this coincides with the loss
 $L(\mu) = \frac{1}{2} \big( \|\mathcal{N}\mu - V \|^2_{L^2(D, \nu)}
 + \sum_{i = 1}^d \| \partial_{x_i}\mathcal{N}\mu - \partial_{x_i} V \|_{L^2(D, \nu)}^2 \big)$,
 which is the form used in the local analysis of Section~3.4.
+In general this condition does not hold, we will discuss it further in the subsequent section.
+
+
+\subsection{Predual representation of the value operator \texorpdfstring{$\mathcal{N}$}{N}}
+For the existence of the minimizer we need the the weak*-l.s.c. of the loss function, which includes the solution operator $\mathcal{N}$. 
+It is not obvious once we extend the dictionary to the unbounded real space. 
+In particular, the operator $\mathcal{N}$ is not weak*-to-weak continuous in general. \par
+
+For exmaple, for $\rho = \tanh$ take $V \equiv 1$ and $\mu_n = \delta_{(a, b_n)}$ with
+$b_n \to \infty$: then $\mu_n \overset{*}{\rightharpoonup} 0$, yet
+$\mathcal{N}\mu_n = \tanh(a \cdot x + b_n) \to 1$ strongly in $H^1(D)$, so
+$\liminf_n L(\mu_n) = 0 < L(0)$: the fidelity term is not weak-* lower
+semicontinuous. The reason is that: with mass escaping to infinity the value operator is not continuous anymore.
+We need the decay condition to prevent that and make the limit attained. 
+
+For the unbounded-parameter ridge analysis in this section we use the following
+standing value-dictionary assumption.
+\begin{assumption}[localized ridge profile]\label{ass:ridge_c0}
+The parameter domain is $\Omega = \mathbb{R}^{d+1}$ and the activation has the
+ridge form
+\begin{equation*}
+	\sigma(x,\omega) = \rho(a \cdot x + b),
+	\qquad \omega = (a,b) \in \Omega,
+\end{equation*}
+where $\rho \in C_0(\mathbb{R})$, i.e. $\rho$ is continuous and
+$\rho(z) \rightarrow 0$ as $|z| \rightarrow \infty$.
+\end{assumption}
+
+\begin{lemma}[weak-*-to-weak continuity of $\mathcal{N}$]\label{lem:value_decay}
+Under Assumption~\ref{ass:ridge_c0}, set
+$\kappa(\omega) := \|\sigma(\cdot, \omega)\|_{L^2(D)}$, then
+$\kappa \in C_0(\Omega)$.
+Moreover, for every sequence
+$\mu_n \overset{*}{\rightharpoonup} \mu$ in $\mathcal{M}(\Omega)$ it holds
+$\mathcal{N}\mu_n \rightharpoonup \mathcal{N}\mu$ weakly in $L^2(D)$.
+\end{lemma}
+\begin{proof}
+(1) $\kappa \in C_0(\Omega)$: 
+To prove the statement we separate 2 cases: 
+
+(i) $|a|\to\infty$: Split domain D such that $D = B_\tau(\omega) \cup B_\tau(\omega)^c$, where
+\begin{equation*}
+	B_\tau(\omega) := \{x\in D: |a\cdot x+b|\le \tau\},
+\end{equation*}
+is the slab defined by the contraint on the ridge. Since $D$ is bounded, the slab $B_\tau(\omega)$ is a
+strip of width $2\tau/|a|$ through $D$ and hence has measure at most
+$C_D\,\tau/|a|$, with $C_D$ depending only on $D$. We have 
+\begin{equation*}
+	\kappa(\omega)^2 = \int_{B_\tau(\omega)} \sigma (x, \omega)^2 dx + \int_{B_\tau(\omega)^c} \sigma (x, \omega)^2 dx
+\end{equation*}
+On $B_\tau(\omega)$ we have $\sigma(x,\omega)^2 \le \|\rho\|_\infty^2$, while on
+its complement $|a\cdot x + b| > \tau$, so
+$|\sigma(x,\omega)| \le \eta(\tau) := \sup_{|z|\ge\tau}|\rho(z)|$, which tends to
+$0$ as $\tau\to\infty$.  Hence
+\begin{equation*}
+	\kappa(\omega)^2
+	\le \|\rho\|_\infty^2\, C_D\frac{\tau}{|a|}
+	+ \eta(\tau)^2 |D|,
+\end{equation*}
+and $\limsup_{|a|\to\infty}\kappa(\omega)^2
+\le \eta(\tau)^2 |D|$ for every $\tau$. Letting $\tau\to\infty$ gives
+$\kappa(\omega)\to0$.  \par
+(ii) $|a|$ is bounded and $|b| \to \infty$: Then
+$\inf_{x \in D} |a \cdot x + b| \ge |b| - |a|\,R_D \to \infty$ and
+$\rho(z) \to 0$ as $|z| \to \infty$; hence $\kappa(\omega) \to 0$. Thus
+$\kappa(\omega)\to0$ as $|\omega|\to\infty$. \par
+Continuity of $\kappa$ follows from dominated convergence.
+
+(2) Given $\mu_n \overset{*}{\rightharpoonup} \mu$ in $\mathcal{M}(\Omega)$, observe for every $\varphi \in L^2(D)$ the function
+\begin{equation*}
+	\langle \mathcal{N}\mu_n, \varphi\rangle_{L^2(D)} = \int_\Omega \langle \sigma(\cdot,\omega), \varphi\rangle_{L^2(D)} \, d\mu_n(\omega)
+\end{equation*}
+The function  $g: \omega \mapsto \langle \sigma(\cdot, \omega), \varphi\rangle_{L^2(D)}$ is continuous from dominated convergence. 
+By Cauchy-Schwarz we have
+\begin{equation*}
+	|\langle \sigma(\cdot,\omega), \varphi\rangle_{L^2(D)}| \le \kappa(\omega)\, \|\varphi\|_{L^2(D)},
+\end{equation*}
+which goes to 0 as $|\omega|$ goes to infinity by the last statment.
+Consequently, $\omega \mapsto \langle \sigma(\cdot, \omega), \varphi\rangle_{L^2(D)}$ belongs to $C_0(\Omega)$, we have by the weak-* convergence: 
+\begin{equation*}
+	\lim_{n \rightarrow \infty}  \langle \mathcal{N}\mu_n, \varphi\rangle_{L^2(D)} 
+	= \lim_{n \rightarrow \infty} \langle g, \mu_n \rangle 
+	= \langle g, \mu \rangle 
+	= \langle \mathcal{N}\mu, \varphi\rangle_{L^2(D)}
+\end{equation*}
+\end{proof}
+
+\begin{remark}[The gradient map is not needed as a weak-*-to-weak continuous operator]
+Lemma~\ref{lem:value_decay} gives weak-*-to-weak continuity of the value
+operator
+\begin{equation*}
+\mathcal{N} : \mathcal{M}(\Omega) \to L^2(D).
+\end{equation*}
+One should not expect the same statement for the gradient map on the unbounded
+parameter domain.  
+However, for ridge atoms
+\begin{equation*}
+\sigma_{a,b}(x) = \rho(a\cdot x+b),
+\end{equation*}
+we have
+\begin{equation*}
+\nabla_x \sigma_{a,b}(x) = a\,\rho'(a\cdot x+b).
+\end{equation*}
+When the ridge intersects $D$, the $L^2(D)$-norm of this gradient may grow like
+$|a|^{1/2}$ as $|a|\to\infty$. Hence
+\begin{equation*}
+\sup_{\omega\in\Omega}
+\|\nabla_x\sigma(\cdot,\omega)\|_{L^2(D)} = \infty,
+\end{equation*}
+so $\mu \mapsto \nabla(\mathcal{N}\mu)$ is not a bounded operator from
+$\mathcal{M}(\Omega)$ into $L^2(D)^d$, and therefore cannot be weak-*-to-weak
+continuous on all of $\mathcal{M}(\Omega)$.
+
+This does not obstruct the direct method.  Along a minimizing sequence
+$(\mu_n)$, the loss itself gives a bound on
+$\|\nabla(\mathcal{N}\mu_n)\|_{L^2(D)}$.  Therefore, after passing to a
+subsequence,
+\begin{equation*}
+\nabla(\mathcal{N}\mu_n) \rightharpoonup g
+\qquad \text{weakly in } L^2(D)^d .
+\end{equation*}
+The limit is identified distributionally using only the weak convergence of the
+value functions.  Indeed, for every $\psi \in C_c^\infty(D)^d$,
+\begin{equation*}
+\int_D g \cdot \psi \, dx
+= \lim_{n\to\infty} \int_D \nabla(\mathcal{N}\mu_n)\cdot \psi \, dx
+= -\lim_{n\to\infty} \int_D \mathcal{N}\mu_n\,\operatorname{div}\psi \, dx
+= -\int_D \mathcal{N}\mu\,\operatorname{div}\psi \, dx .
+\end{equation*}
+Thus $g = \nabla(\mathcal{N}\mu)$ in the sense of distributions, and
+$\mathcal{N}\mu \in H^1(D)$.  In this way the existence proof uses weak
+compactness of bounded-energy sequences and distributional identification,
+rather than weak-*-to-weak continuity of the gradient map.
+\end{remark}
+
+
+
+\subsection{Predual representation of the gradient of the loss function \texorpdfstring{$L$}{L}}
+Since the optimization problem is nonconvex, the global minimizer is difficult to find in general. 
+Instead, we define the local minimum: 
+\begin{definition}[local minimizer]
+$\bar{\mu} \in \mathcal{M}(\Omega)$ is a local minimizer if there exists $\epsilon > 0$ such that 
+\begin{align*}
+	J(\bar{\mu}) \le J(\mu) \quad \text{for all } \mu \text{ with }  \|\mu - \bar{\mu}\|_{\mathcal{M}(\Omega)} \le \epsilon. 
+\end{align*}
+\end{definition}
+
+To investigate the optimization we need the derivative. 
+In this section we discuss how to describe the derivative properly. 
+As we have already seen in the last remark, in the case of gradient training we do not have a canonical operator that maps the measure to the $L^2$ space if we assume the unbounded dictionary. 
+
+Let $\bar{\mu}$ be such that $\mathcal{N}\bar{\mu}\in H^1(D)$, and set $r := \mathcal{N}\bar{\mu}-V$. 
+Denote by $\partial L (\mu)[u]$ the G\^ateaux derivative at $\mu$ for an admissible perturbation $u$ one has
+\begin{equation*}
+\partial L(\bar{\mu})[u]
+=
+\langle r,\mathcal{N}u\rangle_{L^2(D,\nu)}
++
+\langle \nabla r,\nabla(\mathcal{N}u)\rangle_{L^2(D,\nu)} .
+\end{equation*}
+
+If the differentiation under the parameter integral
+is justified, for instance if
+\begin{equation*}
+\int_\Omega
+\|\nabla_x\sigma(\cdot,\omega)\|_{L^2(D,\nu)}
+\,d|u|(\omega)
+<\infty ,
+\end{equation*}
+then the derivative can be written as
+\begin{equation*}
+\partial L(\bar{\mu})[u]
+=
+\int_\Omega \bar{p}(\omega)\,du(\omega),
+\end{equation*}
+where
+\begin{equation*}
+\bar{p}(\omega)
+=
+\langle r,\sigma(\cdot,\omega)\rangle_{L^2(D,\nu)}
++
+\langle \nabla r,\nabla_x\sigma(\cdot,\omega)\rangle_{L^2(D,\nu)} .
+\end{equation*}
+On compact parameter sets, or whenever the atom gradients are uniformly bounded
+in $L^2(D,\nu)$, which defines a bounded continuous dual variable on $\Omega$. 
+On the unbounded ridge parameter domain, however, this conclusion need not
+hold.  For ridge atoms
+\begin{equation*}
+\sigma_{a,b}(x)=\rho(a\cdot x+b),
+\end{equation*}
+one has
+\begin{equation*}
+\nabla_x\sigma_{a,b}(x)=a\,\rho'(a\cdot x+b),
+\end{equation*}
+and the norms $\|\nabla_x\sigma_{a,b}\|_{L^2(D)}$ may grow like
+$|a|^{1/2}$.  Hence the map
+\begin{equation*}
+\omega\mapsto
+\langle \nabla r,\nabla_x\sigma(\cdot,\omega)\rangle_{L^2(D,\nu)}
+\end{equation*}
+need not be bounded or vanish at infinity.
+Hence it is not the predual of $\mathcal{M}(\Omega)$ without additional assumptions. 
+
+We circumvents this barrier with the integration by parts. 
+If $r\in H^2(D)$ with the boundary of $D$ regular enough, the $\bar{p}$ can instead be represented by Green's formula:
+\begin{equation*}
+\bar{p}(\omega)
+=
+\langle r-\Delta r,\sigma(\cdot,\omega)\rangle_{L^2(D)}
++
+\langle \partial_n r,\sigma(\cdot,\omega)\rangle_{L^2(\partial D)} .
+\end{equation*}
+
+This representation avoids the unbounded gradient kernel and will be the one used
+for the measure-level analysis on the unbounded parameter domain.
+
+\begin{lemma}[boundary representation of the dual pairing]\label{lem:dual_pairing}
+Let $D \subset \mathbb{R}^d$ be a bounded Lipschitz domain. Assume that
+\[
+\sigma(x,\omega) = \rho(a\cdot x+b), \qquad \omega=(a,b)\in\Omega,
+\]
+with $\rho \in C^1(\mathbb{R}) \cap L^\infty(\mathbb{R})$. Let
+$r \in H^2(D)$ and define
+\begin{equation*}
+p_r(\omega)
+:= \langle r, \sigma(\cdot,\omega)\rangle_{L^2(D)}
++ \langle \nabla r, \nabla_x\sigma(\cdot,\omega)\rangle_{L^2(D)},
+\qquad \omega\in\Omega.
+\end{equation*}
+Then:
+\begin{enumerate}
+\item For every $\omega\in\Omega$,
+\begin{equation*}
+	p_r(\omega)
+	= \langle r-\Delta r, \sigma(\cdot,\omega)\rangle_{L^2(D)}
+	+ \langle \partial_n r, \sigma(\cdot,\omega)\rangle_{L^2(\partial D)}.
+\end{equation*}
+In particular, $p_r$ is continuous and bounded, with
+\begin{equation*}
+	\sup_{\omega\in\Omega} |p_r(\omega)|
+	\le C_D \|\rho\|_{L^\infty(\mathbb{R})}\|r\|_{H^2(D)}.
+\end{equation*}
+
+\item For every $\mu' \in \mathcal{M}(\Omega)$ such that
+$\mathcal{N}\mu' \in H^1(D)$,
+\begin{equation*}
+	\langle r, \mathcal{N}\mu' \rangle_{L^2(D)}
+	+ \langle \nabla r, \nabla(\mathcal{N}\mu') \rangle_{L^2(D)}
+	= \int_\Omega p_r(\omega)\,d\mu'(\omega).
+\end{equation*}
+\end{enumerate}
+\end{lemma}
+\begin{proof}
+(1) For fixed $\omega=(a,b)$, the function
+$\sigma(\cdot,\omega)=\rho(a\cdot x+b)$ belongs to
+$C^1(\overline D)\subset H^1(D)$. Moreover
+$|\sigma(x,\omega)|\le \|\rho\|_{L^\infty(\mathbb{R})}$ on both $D$ and
+$\partial D$. Let $u=\sigma(\cdot,\omega)$. Since $r\in H^2(D)$ and $u\in H^1(D)$, Green's
+formula gives
+\begin{equation*}
+\langle \nabla r,\nabla u\rangle_{L^2(D)}
+=
+-\langle \Delta r,u\rangle_{L^2(D)}
++
+\langle \partial_n r,u\rangle_{L^2(\partial D)} .
+\end{equation*}
+Adding $\langle r,u\rangle_{L^2(D)}$ yields
+\begin{equation*}
+p_r(\omega)
+=
+\langle r-\Delta r,\sigma(\cdot,\omega)\rangle_{L^2(D)}
++
+\langle \partial_n r,\sigma(\cdot,\omega)\rangle_{L^2(\partial D)} .
+\end{equation*}
+This proves the representation in part (1). 
+The bound follows from Cauchy--Schwarz and the trace estimate for the normal derivative:
+\begin{equation*}
+\begin{aligned}
+|p_r(\omega)|
+&\le
+\|r-\Delta r\|_{L^2(D)}
+\|\sigma(\cdot,\omega)\|_{L^2(D)}
++
+\|\partial_n r\|_{L^2(\partial D)}
+\|\sigma(\cdot,\omega)\|_{L^2(\partial D)} \\
+&\le
+C_D \|\rho\|_{L^\infty(\mathbb{R})}\|r\|_{H^2(D)},
+\end{aligned}
+\end{equation*}
+with constant depending on the domain $D$. 
+The right-hand side is independent of $\omega$. Continuity of $p_r$ follows
+from the representation above: if $\omega_j\to\omega$, then
+$\sigma(\cdot,\omega_j)\to\sigma(\cdot,\omega)$ in both $L^2(D)$ and
+$L^2(\partial D)$. Continuity follows by dominated convergence.
+
+(2) Now let $\mu'\in\mathcal{M}(\Omega)$ with $\mathcal{N}\mu'\in H^1(D)$ and set
+$u=\mathcal{N}\mu'$. Applying Green's formula again gives
+\begin{equation*}
+\langle r,u\rangle_{L^2(D)}
++
+\langle \nabla r,\nabla u\rangle_{L^2(D)}
+=
+\langle r-\Delta r,u\rangle_{L^2(D)}
++
+\langle \partial_n r,u\rangle_{L^2(\partial D)} .
+\end{equation*}
+Since $\rho$ is bounded and $\mu'$ is finite, Fubini's theorem gives
+\begin{equation*}
+\langle r-\Delta r,\mathcal{N}\mu'\rangle_{L^2(D)}
+=
+\int_\Omega
+\langle r-\Delta r,\sigma(\cdot,\omega)\rangle_{L^2(D)}
+\,d\mu'(\omega).
+\end{equation*}
+Also, $\mathcal{N}\mu'$ is continuous on $\overline D$ by dominated convergence;
+as it is assumed to belong to $H^1(D)$, its trace is its boundary restriction.
+Therefore
+\begin{equation*}
+\langle \partial_n r,\mathcal{N}\mu'\rangle_{L^2(\partial D)}
+=
+\int_\Omega
+\langle \partial_n r,\sigma(\cdot,\omega)\rangle_{L^2(\partial D)}
+\,d\mu'(\omega).
+\end{equation*}
+Combining the last three identities and using the representation from part
+(1), we obtain
+\begin{equation*}
+\langle r,\mathcal{N}\mu'\rangle_{L^2(D)}
++
+\langle \nabla r,\nabla(\mathcal{N}\mu')\rangle_{L^2(D)}
+=
+\int_\Omega p_r(\omega)\,d\mu'(\omega).
+\end{equation*}
+This proves part (2).
+\end{proof}
+
+If the residual $r := \mathcal{N}\bar{\mu} - V$ belongs to $H^2(D)$, then
+$\bar{p} = p_r$ in the notation of Lemma~\ref{lem:dual_pairing}, and the
+representation of Lemma~\ref{lem:dual_pairing}(1) splits it into an interior
+term and a boundary term. The interior term vanishes as
+$|\omega| \rightarrow \infty$ by Lemma~\ref{lem:value_decay}. The boundary
+term pairs the \emph{normal derivative of the residual} against the trace of
+the atom on the boundary,
+\begin{equation*}
+	\langle \partial_n r, \, \sigma(\cdot, \omega) \rangle_{L^2(\partial D)}
+	= \int_{\partial D} \partial_n r(x) \, \rho(a \cdot x + b) \, d\mathcal{H}^{d-1}(x),
+\end{equation*}
+so everything depends on whether the trace $\rho(a \cdot x + b)|_{\partial D}$
+becomes small. If $\partial D$ meets every hyperplane in an
+$\mathcal{H}^{d-1}$-null set --- no flat boundary pieces, e.g.\ $D$ smooth and 
+strictly convex --- then every sharpening ridge crosses the boundary
+transversally, its trace is supported on a band of vanishing surface measure,
+and the term vanishes (Lemma~\ref{lem:dual_decay}); in that case
+$\limsup_{|\omega| \rightarrow \infty} |\bar{p}(\omega)| = 0$.
+
+
+\begin{lemma}[decay of the dual variable]\label{lem:dual_decay}
+In the setting of Lemma~\ref{lem:dual_pairing}, assume in addition that
+Assumption~\ref{ass:ridge_c0} holds and that
+$\mathcal{H}^{d-1}(\partial D \cap \Pi) = 0$ for every hyperplane
+$\Pi \subset \mathbb{R}^d$ --- e.g.\ if $D$ is smooth and strictly convex. Then
+$p_r \in C_0(\Omega)$.
+\end{lemma}
+\begin{proof}
+Let $R_D > 0$ satisfy $\overline{D} \subset B_{R_D}(0)$, and for $\tau > 0$ set
+$\eta(\tau) := \sup_{|z| \ge \tau} |\rho(z)|$; since $\rho \in C_0(\mathbb{R})$,
+$\eta(\tau) \to 0$ as $\tau \to \infty$. By the representation in part~(1),
+\begin{equation*}
+	|p_r(\omega)|
+	\le \big(\|r\|_{L^2(D)} + \|\Delta r\|_{L^2(D)}\big)\,\kappa(\omega)
+	+ \|\partial_n r\|_{L^2(\partial D)}\,\kappa_\partial(\omega),
+\end{equation*}
+with $\kappa(\omega) := \|\sigma(\cdot,\omega)\|_{L^2(D)}$ and
+$\kappa_\partial(\omega) := \|\sigma(\cdot,\omega)\|_{L^2(\partial D)}$, so it
+suffices to show $\kappa, \kappa_\partial \in C_0(\Omega)$.
+
+\emph{Interior term.} Splitting $D$ into the band
+$\{x \in D : |a \cdot x + b| \le \tau\}$, on which $|\rho| \le \|\rho\|_\infty$,
+and its complement, on which $|\rho| \le \eta(\tau)$,
+\begin{equation*}
+	\kappa(\omega)^2
+	\le \|\rho\|_\infty^2\,\mathcal{L}^d\big(\{x \in D : |a \cdot x + b| \le \tau\}\big)
+	+ \eta(\tau)^2\,\mathcal{L}^d(D).
+\end{equation*}
+The band is a slab of thickness $2\tau/|a|$, so
+$\mathcal{L}^d(\{x \in D : |a \cdot x + b| \le \tau\}) \le C_D\,\tau/|a| \to 0$
+as $|a| \to \infty$, with $C_D$ depending only on $D$; if instead $|a|$ stays
+bounded then $|b| \to \infty$ and the band is empty for $|\omega|$ large. Hence
+$\limsup_{|\omega| \to \infty} \kappa(\omega)^2 \le \eta(\tau)^2\,\mathcal{L}^d(D)$
+for every $\tau$, and $\eta(\tau) \to 0$ gives $\kappa \in C_0(\Omega)$. The
+interior term needs no condition on $\partial D$: a slab meets the
+full-dimensional set $D$ in vanishing volume regardless of its orientation.
+
+\emph{Boundary term.} Let $|\omega_j| \rightarrow \infty$. Split $\partial D$
+into the band $B_j(\tau) := \{x \in \partial D : |a_j \cdot x + b_j| \le \tau\}$
+and its complement, on which $|\rho(a_j \cdot x + b_j)| \le \eta(\tau)$:
+\begin{equation*}
+	\kappa_\partial(\omega_j)^2
+	\le \|\rho\|_\infty^2 \, \mathcal{H}^{d-1}(B_j(\tau))
+	+ \eta(\tau)^2 \, \mathcal{H}^{d-1}(\partial D).
+\end{equation*}
+If $|a_j|$ stays bounded, no splitting is needed: then
+$|b_j| \rightarrow \infty$, so
+$m_j := \inf_{x \in \partial D} |a_j \cdot x + b_j|
+\ge |b_j| - \sup_j |a_j| \, R_D \rightarrow \infty$,
+the whole boundary samples only the far tail of the profile,
+$|\rho(a_j \cdot x + b_j)| \le \eta(m_j)$ uniformly on $\partial D$, and
+$\kappa_\partial(\omega_j)^2 \le \eta(m_j)^2 \, \mathcal{H}^{d-1}(\partial D)
+\rightarrow 0$. If $|a_j| \rightarrow \infty$, pass
+to a subsequence with $a_j / |a_j| \rightarrow e$ and
+$b_j / |a_j| \rightarrow -c \in [-\infty, +\infty]$. If $|c| = \infty$, then
+$B_j(\tau) = \emptyset$ eventually. Otherwise every $x \in B_j(\tau)$
+satisfies $|(a_j/|a_j|) \cdot x - (-b_j/|a_j|)| \le \tau / |a_j|$, so
+$B_j(\tau) \subset \{x \in \partial D : |e \cdot x - c| \le \epsilon_j\}$ with
+$\epsilon_j \rightarrow 0$, and by continuity from above of the finite measure
+$\mathcal{H}^{d-1}\llcorner\partial D$,
+\begin{equation*}
+	\limsup_j \mathcal{H}^{d-1}(B_j(\tau))
+	\le \mathcal{H}^{d-1}\big(\partial D \cap \{e \cdot x = c\}\big) = 0
+\end{equation*}
+by hypothesis. Hence $\limsup_j \kappa_\partial(\omega_j)^2 \le \eta(\tau)^2\,
+\mathcal{H}^{d-1}(\partial D)$ for every $\tau$, and $\eta(\tau) \rightarrow 0$
+as $\tau \rightarrow \infty$ gives $\kappa_\partial(\omega_j) \rightarrow 0$.
+Both terms of the representation therefore vanish at infinity, and $p_r \in
+C_0(\Omega)$.
+\end{proof}
+   
+\begin{remark}[sufficient conditions for \eqref{no_escape}]\label{rem:no_escape}
+ and
+\eqref{no_escape} holds unconditionally.\par
+If instead $\partial D$ contains a flat face
+$F \subset \{n_F \cdot x = c_F\}$ (as for the boxes of Section~6), a ridge can
+align with it: along $a_j = t_j\, n_F$, $b_j = -t_j c_F + s_0$ with
+$t_j \rightarrow \infty$, the argument $a_j \cdot x + b_j \equiv s_0$ is
+\emph{constant on the face}, so the trace does not shrink --- it converges to
+the constant $\rho(s_0)$ on $F$ and to $0$ on the rest of the boundary. In the
+limit only the flux of the residual through the face survives:
+\begin{equation*}
+	\bar{p}(\omega_j) \;\rightarrow\; \rho(s_0) \int_F \partial_n r \, d\mathcal{H}^{d-1}.
+\end{equation*}
+Geometrically, these atoms are ever-thinner ridges pressed against the face:
+they occupy vanishing volume, but their gradients keep correcting the normal
+derivative of the fit in a boundary layer along $F$, which remains profitable
+exactly as long as the residual has nonzero flux through the face. On such
+domains \eqref{no_escape} therefore reduces to a smallness condition on the
+boundary flux: $\|\rho\|_\infty \, \big| \int_F \partial_n r \,
+d\mathcal{H}^{d-1} \big| < \alpha$ for every face $F$.\par
+The $H^2$-regularity of the residual, on which this whole discussion rests
+(it is the hypothesis of Lemma~\ref{lem:dual_pairing}), holds for instance when
+$V \in H^2(D)$, $\rho \in C^2(\mathbb{R})$ with $\rho'' \in L^2(\mathbb{R})$,
+and $\bar{\mu}$ carries the moment
+$\int_\Omega (1 + |a|)^{3/2} \, d|\bar{\mu}|(\omega) < \infty$. Finally, note
+that \eqref{no_escape} is exactly the quantity whose failure drives the
+counterexamples of Remark~\ref{rem:sharpness}: there, as here, a parameter
+sequence escapes to infinity while its pairing with the fit survives, and the
+escaping atoms satisfy $|\bar{p}(\omega_n)| \rightarrow \alpha$.
+\end{remark}
 
 \subsection{Activation functions}
 First we discuss the choice of activation functions. 
@@ -455,6 +901,7 @@ parameter set is used instead. Throughout, $\sigma$ denotes the activation
 atom as a function on $D$, $\rho$ its scalar ridge profile, and the letter
 $\omega = (a, b)$ is reserved for the parameter.
 
+
 Which activation suits which target is a question about the derivative
 $\partial_x \sigma$: under the gradient-augmented loss each neuron contributes
 $\sigma$ to the reconstruction of $V$ and $\partial_x \sigma$ to that of
@@ -462,6 +909,7 @@ $\nabla V$, so the shape of $\partial_x\sigma$ governs the approximation
 economy. This discussion is deferred to Section~6, where it accompanies the
 numerical studies: smooth targets in Section~6.1, targets with a gradient
 discontinuity in Section~6.2.
+
 
 \subsection{The nonconvex penalty}
 We implement an explicit sparsity-promoting penalty term. 
@@ -546,6 +994,21 @@ The function
 \end{equation}
 for $\gamma > 0$ and its convex combination with the $l1$ norm will be the main function of choice for our numerical analysis. 
 
+Next we incorporate the nonconvex penalty in the integral representation.
+For the atom parts it is defined in the discrete setting. 
+For the continuous part on $\Omega$ the measure is penalized with the weight $\phi'(0)$. 
+Under Assumption~\ref{pen1} it is the $L^1$ norm of measure. 
+Concretely, observe $\Omega = \atom \mu \cup \cont\mu $, we define the penalty term
+\begin{equation}
+	\Phi_1(\mu) = \|\mu_{\cont}\|_{\mathcal{M}(\Omega)} + \sum_{\omega \in \atom \mu} \phi(|\mu|(\omega)).
+\end{equation}
+
+We formulate the optimization problem as
+\begin{equation}
+	\label{int_noncon}
+	\tag{$P_{\Phi_1}$}
+	\min_{\mu \in \mathcal{M}(\Omega)} J (\mu):= L(\mu) + \alpha \Phi_1(\mu).
+\end{equation}
 
 
 \subsection{Existence of the global minimizer}
@@ -660,39 +1123,6 @@ escaping to infinity. Under Assumption~\ref{ass:ridge} the atoms of the dictiona
 $L^2(D)$ as the parameter tends to infinity; this is the content of the next
 lemma, and it is exactly what rules the escape out.
 
-\begin{lemma}[continuity of $\mathcal{N}$]\label{lem:value_decay}
-Let Assumption~\ref{ass:ridge} hold and set
-$\kappa(\omega) := \|\sigma(\cdot, \omega)\|_{L^2(D)}$. Then
-$\kappa \in C_0(\Omega)$.
-Consequently, for every $\varphi \in L^2(D)$ the function
-$\omega \mapsto \langle \sigma(\cdot, \omega), \varphi\rangle_{L^2(D)}$
-belongs to $C_0(\Omega)$, and for every bounded sequence
-$\mu_n \overset{*}{\rightharpoonup} \mu$ in $\mathcal{M}(\Omega)$ it holds
-$\mathcal{N}\mu_n \rightharpoonup \mathcal{N}\mu$ weakly in $L^2(D)$.
-\end{lemma}
-\begin{proof}
-By the ridge form, $\kappa(\omega) = \|\rho(a \cdot x + b)\|_{L^2(D)}$, and
-boundedness is clear from $\kappa \le \|\rho\|_\infty |D|^{1/2}$. Let $R_D > 0$ be such
-that $D \subset [-R_D, R_D]^d$. For $|a| \ge 1$ choose coordinates with
-$a/|a| = e_1$; then
-\begin{equation*}
-	\int_D |\rho(a \cdot x + b)|^2\, dx
-	\le (2R_D)^{d-1} \int_{\mathbb{R}} |\rho(|a| t + b)|^2\, dt
-	= (2R_D)^{d-1}\, |a|^{-1}\, \|\rho\|_{L^2(\mathbb{R})}^2 .
-\end{equation*}
-If instead $|a|$ stays bounded and $|b| \to \infty$, then
-$\inf_{x \in D} |a \cdot x + b| \ge |b| - |a|\,R_D\sqrt{d} \to \infty$ and
-$\rho(z) \to 0$ as $|z| \to \infty$; hence $\kappa(\omega) \to 0$ as
-$|\omega| \to \infty$ in either regime. Continuity of $\kappa$ follows from
-dominated convergence. \par
-The second claim follows from
-$|\langle \sigma(\cdot,\omega), \varphi\rangle_{L^2(D)}| \le \kappa(\omega)\, \|\varphi\|_{L^2(D)}$ together with the
-continuity of $\omega \mapsto \sigma(\cdot, \omega) \in L^2(D)$. \par 
-The third from $\langle \mathcal{N}\mu_n, \varphi\rangle_{L^2(D)} = \int_\Omega \langle \sigma(\cdot,\omega), \varphi\rangle_{L^2(D)} \, d\mu_n(\omega)$,
-the definition of weak-* convergence, and the uniform bound
-$\|\mathcal{N}\mu_n\|_{L^2(D)} \le \|\rho\|_\infty |D|^{1/2} \sup_n \|\mu_n\|_{\mathcal{M}(\Omega)}$.
-\end{proof}
-
 \begin{theorem}[Existence on the unbounded parameter domain]\label{thm:existence}
 Let Assumption~\ref{ass:ridge} and Assumptions \ref{pen1}, \ref{pen2} hold.
 Then problem \eqref{int_noncon} admits at least one global
@@ -731,13 +1161,7 @@ $J(\bar{\mu}) \le \liminf_n J(\mu_n) = \inf J$.
 \begin{remark}\label{rem:sharpness}
 Assumption~\ref{ass:ridge} cannot be dropped, and its
 failure is not a technical artifact.\par 
-(i) For the profile $\rho = \tanh$ take $V \equiv 1$ and $\mu_n = \delta_{(a, b_n)}$ with
-$b_n \to \infty$: then $\mu_n \overset{*}{\rightharpoonup} 0$, yet
-$\mathcal{N}\mu_n = \tanh(a \cdot x + b_n) \to 1$ strongly in $H^1(D)$, so
-$\liminf_n L(\mu_n) = 0 < L(0)$: the fidelity term is not weak-* lower
-semicontinuous, and mass escapes to infinity together with its fit
-contribution.\par 
-(ii) For the profile $\rho(z) = \log(1 + e^z)$ (softplus) the measures
+For the profile $\rho(z) = \log(1 + e^z)$ (softplus) the measures
 $\mu_n = \rho(b_n)^{-1}\delta_{(0, b_n)}$ fit $V \equiv 1$ exactly for every
 $n$ at penalty $\alpha\,\phi(1/\rho(b_n)) \to 0$, so $\inf J = 0$ is not
 attained; moreover $n^{-1}\rho(n(e \cdot x - t)) \to (e \cdot x - t)_+$ in
@@ -753,33 +1177,7 @@ the restriction altogether via the sphere reformulation.
 \end{remark}
  
 \subsection{Optimality conditions and finite support}
-Since the optimization problem is nonconvex, the global minimizer is difficult to find in general. 
-Instead, we define the local minimum: 
-\begin{definition}[local minimizer]
-$\bar{\mu} \in \mathcal{M}(\Omega)$ is a local minimizer if there exists $\epsilon > 0$ such that 
-\begin{align*}
-	J(\bar{\mu}) \le J(\mu) \quad \text{for all } \mu \text{ with }  \|\mu - \bar{\mu}\|_{\mathcal{M}(\Omega)} \le \epsilon. 
-\end{align*}
-\end{definition}
 
-\begin{remark}[The gradient of $L$]
-To investigate the optimality conditions of \eqref{int_noncon} and derive the corresponding algorithm, we calculate the first variation of $L(\mu)$.
-We calculate the gradient $\bar{p}(\omega) \in C(\Omega)$:
- \begin{equation}
- \begin{aligned}
- 	\bar{p}(\omega) &:= \nabla L(\bar{\mu}) \\
- 	& =  \mathcal{N}^*(\mathcal{N}[\bar{\mu}] - V) + \sum_{i = 1}^d (\partial_{x_i} \mathcal{N})^*( \partial_{x_i} \mathcal{N}[\bar{\mu}] - \partial_{x_i} V ) \\
- 	& = \int_D \sigma(x, \omega) (\mathcal{N}[\bar{\mu}](x) - V) d\nu(x) + \sum_{i = 1}^d \int_D \partial_{x_i} \sigma(x, \omega) ( \partial_{x_i} \mathcal{N}[\bar{\mu}](x) - \partial_{x_i}V ) d\nu(x) .
- 	 \end{aligned}
- \end{equation}
- For the finite sample and $\sigma(x, \omega) = \relu(\omega \cdot x)^k$, the gradient admits the form:
- \begin{equation*}
- \begin{aligned}
- 	\bar{p}(\omega) ={}& \frac{1}{M} \sum_{m = 1}^M  \relu(\omega \cdot x_m)^k \big( (\mathcal{N}\bar{\mu})(x_m) - V(x_m) \big) \\
- 	&+ \frac{1}{M} \sum_{m = 1}^M \sum_{i = 1}^d k \cdot \relu( \omega \cdot x_m )^{ k -1}  \omega_i \big(\partial_{x_i} (\mathcal{N}\bar{\mu})(x_m) - \partial_{x_i}V(x_m)\big).
- \end{aligned}
- \end{equation*}
-\end{remark} 
  
 
 \begin{theorem}[the optimality condition]
@@ -817,7 +1215,7 @@ Since $\phi'(0) = 1$ and $\phi'$ is nonincreasing and nonnegative, we have $\phi
 	-\bar{p}(\omega) =  - \langle \bar{p}, u \rangle \le \alpha \lim_{\tau \rightarrow 0^+ } \frac{1}{\tau} \big( \phi(\tau) - \phi(0) \big) = \alpha \phi'(0) = \alpha.
 \end{align*}
 Taking $u = - \delta_\omega$, by inserting the sign is not flipped and we get $|\bar{p}(\omega)| \le \alpha$ for all $\omega \notin \atom \bar{\mu}$, which together with case 1) proves claim (1).\par 
-Next we take $u = \bar{\mu}_{\cont}$; since the perturbation only rescales the continuous part, $\Phi_1(\bar{\mu} + \tau \bar{\mu}_{\cont}) - \Phi_1(\bar{\mu}) = \tau \|\bar{\mu}_{\cont}\|_{\mathcal{M}(\Omega)}$, and
+Next we take $u = \bar{\mu}_{\cont}$, assuming it satisfies the gradient-integrability condition; since the perturbation only rescales the continuous part, $\Phi_1(\bar{\mu} + \tau \bar{\mu}_{\cont}) - \Phi_1(\bar{\mu}) = \tau \|\bar{\mu}_{\cont}\|_{\mathcal{M}(\Omega)}$, and
 \begin{align*}
 	-\langle \bar{p}, \bar{\mu}_{\cont} \rangle \le  \alpha \|\bar{\mu}_{\cont}\|_{\mathcal{M}(\Omega)}.
 \end{align*}
@@ -1011,164 +1409,6 @@ $\omega$, justifies exchanging it with integration against a measure of
 merely bounded variation, and isolates the geometric condition under which it
 vanishes at infinity.
 
-\begin{lemma}[boundary representation of the dual pairing]\label{lem:dual_pairing}
-Let Assumption~\ref{ass:ridge} hold and let $r \in H^2(D)$. Define
-\begin{equation*}
-	p_r(\omega) := \langle r, \, \sigma(\cdot, \omega)\rangle_{L^2(D)}
-	+ \langle \nabla r, \, \nabla_x \sigma(\cdot, \omega)\rangle_{L^2(D)},
-	\qquad \omega \in \Omega.
-\end{equation*}
-Then:
-\begin{enumerate}
-	\item For every $\omega \in \Omega$,
-	\begin{equation*}
-		p_r(\omega) = \langle r - \Delta r, \, \sigma(\cdot, \omega)\rangle_{L^2(D)}
-		+ \langle \partial_n r, \, \sigma(\cdot, \omega)\rangle_{L^2(\partial D)},
-	\end{equation*}
-	and consequently $p_r$ is continuous and bounded, with
-	$\sup_{\omega \in \Omega} |p_r(\omega)| \le C_{D, \rho}\, \|r\|_{H^2(D)}$
-	for a constant $C_{D, \rho}$ depending only on $D$ and $\|\rho\|_\infty$.
-	\item For every $\mu' \in \mathcal{M}(\Omega)$ with $\mathcal{N}\mu' \in H^1(D)$,
-	\begin{equation*}
-		\langle r, \, \mathcal{N}\mu' \rangle_{L^2(D)}
-		+ \langle \nabla r, \, \nabla(\mathcal{N}\mu') \rangle_{L^2(D)}
-		= \int_\Omega p_r(\omega)\, d\mu'(\omega).
-	\end{equation*}
-	\item If in addition $\mathcal{H}^{d-1}(\partial D \cap \Pi) = 0$ for every
-	hyperplane $\Pi \subset \mathbb{R}^d$ --- e.g.\ if $D$ is smooth and strictly
-	convex --- then $p_r \in C_0(\Omega)$.
-\end{enumerate}
-\end{lemma}
-\begin{proof}
-(1) By Assumption~\ref{ass:ridge}, each atom satisfies
-$\sigma(\cdot, \omega) \in C^1(\overline{D}) \subset H^1(D)$. Green's formula on
-the bounded Lipschitz domain $D$, valid for $r \in H^2(D)$ and $u \in H^1(D)$
-(see, e.g., \cite{grisvard1985elliptic}), gives
-$\langle \nabla r, \nabla u \rangle_{L^2(D)} = -\langle \Delta r, u\rangle_{L^2(D)}
-+ \langle \partial_n r, u \rangle_{L^2(\partial D)}$, where
-$\partial_n r \in L^2(\partial D)$ is defined through the trace of
-$\nabla r \in H^1(D)^d$, with
-$\|\partial_n r\|_{L^2(\partial D)} \le C_D \|r\|_{H^2(D)}$. Applying this with
-$u = \sigma(\cdot, \omega)$ and adding the value term yields the
-representation. The bound follows from Cauchy--Schwarz,
-$\kappa(\omega) \le \|\rho\|_\infty |D|^{1/2}$ and
-$\|\sigma(\cdot,\omega)\|_{L^2(\partial D)} \le \|\rho\|_\infty
-\mathcal{H}^{d-1}(\partial D)^{1/2}$; continuity from the continuity of
-$\omega \mapsto \sigma(\cdot, \omega)$ into $L^2(D)$ and $L^2(\partial D)$
-(dominated convergence).
-
-(2) Note first that the direct interchange
-$\langle \nabla r, \nabla(\mathcal{N}\mu') \rangle_{L^2(D)} = \int_\Omega
-\langle \nabla r, \nabla_x \sigma(\cdot,\omega)\rangle_{L^2(D)} \, d\mu'$ has no
-justification: $\|\nabla_x \sigma(\cdot,\omega)\|_{L^2(D)}$ grows like
-$|a|^{1/2}$, so the gradient kernel need not be $|\mu'|$-integrable. Green's
-formula replaces it by the bounded kernel $\sigma$ before any interchange:
-with $u = \mathcal{N}\mu' \in H^1(D)$,
-\begin{equation*}
-	\langle r, \mathcal{N}\mu' \rangle_{L^2(D)} + \langle \nabla r, \nabla (\mathcal{N}\mu') \rangle_{L^2(D)}
-	= \langle r - \Delta r, \, \mathcal{N}\mu' \rangle_{L^2(D)}
-	+ \langle \partial_n r, \, \operatorname{tr}(\mathcal{N}\mu') \rangle_{L^2(\partial D)}.
-\end{equation*}
-Since $|\sigma(x, \omega)| \le \|\rho\|_\infty$, $\sigma(\cdot, \omega)$ is
-continuous, and $|\mu'|$ is finite, dominated convergence shows
-$\mathcal{N}\mu' \in C(\overline{D})$; the trace of an $H^1(D)$ function that
-is continuous up to the boundary is its restriction \cite{evans2015measure},
-so $\operatorname{tr}(\mathcal{N}\mu')(x) = \int_\Omega \sigma(x, \omega)\,
-d\mu'(\omega)$ on $\partial D$. Both kernels --- $\sigma(\cdot,\omega)$ on $D$
-and its restriction to $\partial D$ --- are bounded by $\|\rho\|_\infty$, so
-Fubini's theorem applies to both terms on the right and yields
-$\int_\Omega \langle r - \Delta r, \sigma(\cdot,\omega)\rangle_{L^2(D)} d\mu'
-+ \int_\Omega \langle \partial_n r, \sigma(\cdot,\omega)\rangle_{L^2(\partial D)}
-d\mu'$, which is $\int_\Omega p_r \, d\mu'$ by (1).
-
-(3) The interior term of the representation vanishes as
-$|\omega| \rightarrow \infty$ since
-$|\langle r - \Delta r, \sigma(\cdot,\omega)\rangle| \le
-(\|r\|_{L^2} + \|\Delta r\|_{L^2})\, \kappa(\omega)$ and
-$\kappa \in C_0(\Omega)$ (Lemma~\ref{lem:value_decay}). For the boundary term
-set $\kappa_\partial(\omega) := \|\sigma(\cdot, \omega)\|_{L^2(\partial D)}$
-and let $|\omega_j| \rightarrow \infty$. For $\tau > 0$ split $\partial D$ into
-the band $B_j(\tau) := \{x \in \partial D : |a_j \cdot x + b_j| \le \tau\}$ and
-its complement, on which $|\rho(a_j \cdot x + b_j)| \le \eta(\tau) :=
-\sup_{|z| \ge \tau} |\rho(z)|$:
-\begin{equation*}
-	\kappa_\partial(\omega_j)^2
-	\le \|\rho\|_\infty^2 \, \mathcal{H}^{d-1}(B_j(\tau))
-	+ \eta(\tau)^2 \, \mathcal{H}^{d-1}(\partial D).
-\end{equation*}
-If $|a_j|$ stays bounded, no splitting is needed: then
-$|b_j| \rightarrow \infty$, so
-$m_j := \inf_{x \in \partial D} |a_j \cdot x + b_j|
-\ge |b_j| - \sup_j |a_j| \, R_D \sqrt{d} \rightarrow \infty$,
-the whole boundary samples only the far tail of the profile,
-$|\rho(a_j \cdot x + b_j)| \le \eta(m_j)$ uniformly on $\partial D$, and
-$\kappa_\partial(\omega_j)^2 \le \eta(m_j)^2 \, \mathcal{H}^{d-1}(\partial D)
-\rightarrow 0$. If $|a_j| \rightarrow \infty$, pass
-to a subsequence with $a_j / |a_j| \rightarrow e$ and
-$b_j / |a_j| \rightarrow -c \in [-\infty, +\infty]$. If $|c| = \infty$, then
-$B_j(\tau) = \emptyset$ eventually. Otherwise every $x \in B_j(\tau)$
-satisfies $|(a_j/|a_j|) \cdot x - (-b_j/|a_j|)| \le \tau / |a_j|$, so
-$B_j(\tau) \subset \{x \in \partial D : |e \cdot x - c| \le \epsilon_j\}$ with
-$\epsilon_j \rightarrow 0$, and by continuity from above of the finite measure
-$\mathcal{H}^{d-1}\llcorner\partial D$,
-\begin{equation*}
-	\limsup_j \mathcal{H}^{d-1}(B_j(\tau))
-	\le \mathcal{H}^{d-1}\big(\partial D \cap \{e \cdot x = c\}\big) = 0
-\end{equation*}
-by hypothesis. Hence $\limsup_j \kappa_\partial(\omega_j)^2 \le \eta(\tau)^2\,
-\mathcal{H}^{d-1}(\partial D)$ for every $\tau$, and $\eta(\tau) \rightarrow 0$
-as $\tau \rightarrow \infty$ gives $\kappa_\partial(\omega_j) \rightarrow 0$.
-Both terms of the representation therefore vanish at infinity, and $p_r \in
-C_0(\Omega)$.
-\end{proof}
-
-\begin{remark}[sufficient conditions for \eqref{no_escape}]\label{rem:no_escape}
-If the residual $r := \mathcal{N}\bar{\mu} - V$ belongs to $H^2(D)$, then
-$\bar{p} = p_r$ in the notation of Lemma~\ref{lem:dual_pairing}, and the
-representation of Lemma~\ref{lem:dual_pairing}(1) splits it into an interior
-term and a boundary term. The interior term vanishes as
-$|\omega| \rightarrow \infty$ by Lemma~\ref{lem:value_decay}. The boundary
-term pairs the \emph{normal derivative of the residual} against the trace of
-the atom on the boundary,
-\begin{equation*}
-	\langle \partial_n r, \, \sigma(\cdot, \omega) \rangle_{L^2(\partial D)}
-	= \int_{\partial D} \partial_n r(x) \, \rho(a \cdot x + b) \, d\mathcal{H}^{d-1}(x),
-\end{equation*}
-so everything depends on whether the trace $\rho(a \cdot x + b)|_{\partial D}$
-becomes small. If $\partial D$ meets every hyperplane in an
-$\mathcal{H}^{d-1}$-null set --- no flat boundary pieces, e.g.\ $D$ smooth and
-strictly convex --- then every sharpening ridge crosses the boundary
-transversally, its trace is supported on a band of vanishing surface measure,
-and the term vanishes (Lemma~\ref{lem:dual_pairing}(3)); in that case
-$\limsup_{|\omega| \rightarrow \infty} |\bar{p}(\omega)| = 0 < \alpha$ and
-\eqref{no_escape} holds unconditionally.\par
-If instead $\partial D$ contains a flat face
-$F \subset \{n_F \cdot x = c_F\}$ (as for the boxes of Section~6), a ridge can
-align with it: along $a_j = t_j\, n_F$, $b_j = -t_j c_F + s_0$ with
-$t_j \rightarrow \infty$, the argument $a_j \cdot x + b_j \equiv s_0$ is
-\emph{constant on the face}, so the trace does not shrink --- it converges to
-the constant $\rho(s_0)$ on $F$ and to $0$ on the rest of the boundary. In the
-limit only the flux of the residual through the face survives:
-\begin{equation*}
-	\bar{p}(\omega_j) \;\rightarrow\; \rho(s_0) \int_F \partial_n r \, d\mathcal{H}^{d-1}.
-\end{equation*}
-Geometrically, these atoms are ever-thinner ridges pressed against the face:
-they occupy vanishing volume, but their gradients keep correcting the normal
-derivative of the fit in a boundary layer along $F$, which remains profitable
-exactly as long as the residual has nonzero flux through the face. On such
-domains \eqref{no_escape} therefore reduces to a smallness condition on the
-boundary flux: $\|\rho\|_\infty \, \big| \int_F \partial_n r \,
-d\mathcal{H}^{d-1} \big| < \alpha$ for every face $F$.\par
-The $H^2$-regularity of the residual, on which this whole discussion rests
-(it is the hypothesis of Lemma~\ref{lem:dual_pairing}), holds for instance when
-$V \in H^2(D)$, $\rho \in C^2(\mathbb{R})$ with $\rho'' \in L^2(\mathbb{R})$,
-and $\bar{\mu}$ carries the moment
-$\int_\Omega (1 + |a|)^{3/2} \, d|\bar{\mu}|(\omega) < \infty$. Finally, note
-that \eqref{no_escape} is exactly the quantity whose failure drives the
-counterexamples of Remark~\ref{rem:sharpness}: there, as here, a parameter
-sequence escapes to infinity while its pairing with the fit survives, and the
-escaping atoms satisfy $|\bar{p}(\omega_n)| \rightarrow \alpha$.
-\end{remark}
 
 Now we have a necessary optimality condition. But it is not sufficient. More importantly, we cannot formulate an algorithm to determine the optimal value of $N$. To overcome this difficulty, we apply a heuristic approach: for fixed inner weights $\bar{\omega} = (\bar{\omega}_n)_{n = 1}^N$, the finite-dimensional problem
 \begin{equation}\label{opt_fixN}
@@ -1176,8 +1416,7 @@ Now we have a necessary optimality condition. But it is not sufficient. More imp
 \end{equation}
 is amenable to gradient-based optimization. Now we need to find a way to heuristically determine the optimal $\bar{\omega}$ and the optimal number $N$. To this end, we introduce the following theorem as a sufficient condition.
 
-For the analysis it is convenient to collect the two components of the
-fidelity term in the product space
+For the analysis it is convenient to collect the two components of the fidelity term in the product space
 \begin{equation*}
 	\mathcal{Y} := L^2(D, \nu) \times L^2(D, \nu)^d, \qquad
 	\mathcal{T}\mu := \big(\mathcal{N}\mu, \, \nabla(\mathcal{N}\mu)\big), \qquad
@@ -1187,7 +1426,6 @@ so that $L(\mu) = \frac{1}{2}\|\mathcal{T}\mu - \mathcal{V}\|_{\mathcal{Y}}^2$
 whenever $\mathcal{N}\mu \in H^1(D)$, and the dual variable reads
 $\bar{p}(\omega) = \langle \mathcal{T}\bar{\mu} - \mathcal{V}, \,
 (\sigma(\cdot,\omega), \nabla_x \sigma(\cdot,\omega)) \rangle_{\mathcal{Y}}$.
-
 
 \begin{theorem}[sufficient condition for local optimality]
 \label{sc_opt}
@@ -1199,7 +1437,7 @@ with distinct $\bar{\omega}_n$ and $\bar{c}_n \neq 0$ be such that
 	\item $\bar{c} \in (\mathbb{R} \setminus \{0\})^N$ is a local minimum of $J_{\bar{\omega}}$,
 	\item $|\bar{p}(\omega)| < \alpha$ for all $\omega \in \Omega \setminus \{\bar{\omega}_n \}_{n = 1, \dots, N}$,
 	\item the no-escape condition \eqref{no_escape} holds. (By Remark
-	\ref{rem:no_escape} and Lemma~\ref{lem:dual_pairing}(3), this is automatic
+	\ref{rem:no_escape} and Lemma~\ref{lem:dual_decay}, this is automatic
 	when $\partial D$ meets every hyperplane in an $\mathcal{H}^{d-1}$-null
 	set, and void on a compact parameter set $\Omega_R$.)
 \end{enumerate}
