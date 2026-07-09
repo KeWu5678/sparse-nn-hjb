@@ -66,3 +66,7 @@ autoresearch/**/*.log
 
 # ---- Private research notes (theory program) ----
 docs/research/
+
+# ---- Untracked locally: analysis scripts and thesis source ----
+experiments/**/analysis.py
+papar/Mthesis.tex
