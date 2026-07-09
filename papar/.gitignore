@@ -1,13 +1,5 @@
-# LaTeX build artifacts — only sources (.tex, .bib), figures, and notes are tracked.
-*.aux
-*.bbl
-*.blg
-*.fls
-*.fdb_latexmk
-*.log
-*.out
-*.toc
-*.synctex.gz
-*.bak
-Mthesis.pdf
-.DS_Store
+# Only the compiled thesis PDF is tracked; sources, notes, figures, and
+# build junk stay local.
+*
+!.gitignore
+!Mthesis.pdf
