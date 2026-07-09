@@ -4,6 +4,8 @@ status: accepted
 
 # MLflow is an optional dashboard projection of local Run Records
 
+See [mlflow.md](mlflow.md) for day-to-day usage (deploy, backfill, live logging).
+
 `ExperimentRun` is the central runtime API for experiment recording. Every run
 writes a local JSON **Run Record** and local **Run Artifacts** in the Hydra
 output directory. When `MLFLOW_TRACKING_URI` is set, the completed Run Record is

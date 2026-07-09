@@ -4,6 +4,8 @@ status: proposed
 
 # Self-hosted MLflow on EC2 with SQLite on EBS, reached over an SSM tunnel
 
+See [mlflow.md](mlflow.md) for day-to-day usage (deploy, backfill, live logging).
+
 We will run the MLflow tracking server on a single small, stoppable EC2 instance
 with a SQLite backend store on the instance's EBS root volume. The server is not
 publicly exposed; it is reached through an SSM port-forwarding tunnel to

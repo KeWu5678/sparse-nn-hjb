@@ -149,7 +149,7 @@ make region-split            # analysis-only: reads the two pendulum sweeps
 - **Runs are records**: each training run writes a JSON run record under
   `rawdata/logs/multirun/`; `make mlflow-backfill` publishes them to an MLflow
   tracking server whose full stack is defined as Terraform in
-  [`deploy/`](deploy) — see [docs/mlflow.md](docs/mlflow.md).
+  [`deploy/`](deploy) — see [docs/adr/mlflow.md](docs/adr/mlflow.md).
 - **Results are code**: each study's `results.md` and every figure in this
   README are emitted by that study's `analysis.py`, so findings stay in sync
   with the runs that produced them.
