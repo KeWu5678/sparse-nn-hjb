@@ -6,11 +6,11 @@
 (6.49 vs 6.48 true optimum) — where conventional regularization needs ~113
 neurons for the same gradient accuracy.**
 
-| closed-loop state ‖y(t)‖ | control u(t) |
+| closed-loop state $\|y(t)\|$ | control $u(t)$ |
 | --- | --- |
 | ![closed-loop state](experiments/01_vdp/summary/figures/feedback_state.png) | ![control](experiments/01_vdp/summary/figures/feedback_control.png) |
 
-*Closed-loop rollout of the Van der Pol oscillator from y₀ = (2, 1): feedback
+*Closed-loop rollout of the Van der Pol oscillator from $y_0 = (2, 1)$: feedback
 laws synthesized from learned value functions (21–113 neurons) beside the true
 optimal control. All variants stabilize; they differ in how few neurons they
 need to get there.*
@@ -18,20 +18,20 @@ need to get there.*
 ## The problem
 
 Optimal feedback control has a classical answer: solve the
-Hamilton–Jacobi–Bellman (HJB) equation for the value function V(x), and the
+Hamilton–Jacobi–Bellman (HJB) equation for the value function $V(x)$, and the
 optimal controller falls out as a function of its gradient, e.g.
-û(x) = −∂ₓ₂V̂(x)/(2β). The catch is that V is expensive to compute globally —
+$\hat u(x) = -\partial_{x_2}\hat V(x)/(2\beta)$. The catch is that $V$ is expensive to compute globally —
 and if you learn it from data instead, the *controller quality depends on
-∇V̂, not on V̂*. A model with excellent mean-squared fit and a mediocre
+$\nabla \hat V$, not on $\hat V$*. A model with excellent mean-squared fit and a mediocre
 gradient field produces a controller that oscillates, saturates, or diverges.
 
-This repository learns V from open-loop trajectory data (value + gradient
+This repository learns $V$ from open-loop trajectory data (value + gradient
 samples along optimal trajectories, generated via Pontryagin's principle) with
-shallow networks ∑ cₖ σ(aₖ·x + bₖ), fitted in Sobolev (H¹) loss so the
+shallow networks $\sum_k c_k \sigma(a_k \cdot x + b_k)$, fitted in Sobolev ($H^1$) loss so the
 gradient is a first-class training target. Sparsity is not post-hoc pruning:
 neurons are inserted greedily (a Primal-Dual Active Point method, PDAP, over
 the measure-space relaxation of the network) and selected by **non-convex
-penalties** — log penalty φ_γ and fractional powers |c|^q — that, unlike ℓ¹,
+penalties** — log penalty $\varphi_\gamma$ and fractional powers $|c|^q$ — that, unlike $\ell^1$,
 detect and merge redundant neurons clustering in the same direction. The
 resulting outer-weight problem is nonsmooth and non-convex — outside the
 assumptions of Adam *and* of quasi-Newton methods like L-BFGS, whose updates
@@ -43,35 +43,35 @@ exact zeros rather than weights that are merely small.
 
 ## Main result: accuracy per neuron
 
-Champion runs on the Van der Pol benchmark (lowest relative H¹ validation
-error at the shared operating point α = 1e-5):
+Champion runs on the Van der Pol benchmark (lowest relative $H^1$ validation
+error at the shared operating point $\alpha = 10^{-5}$):
 
-| activation | penalty | neurons | rel. H¹ error | stabilizes | closed-loop cost |
+| activation | penalty | neurons | rel. $H^1$ error | stabilizes | closed-loop cost |
 | --- | --- | --- | --- | --- | --- |
-| ReLU⁵ | \|c\|^q, q = 1/3 | **21** | 0.104 | yes | **6.49** |
-| ReLU² | \|c\|^q, q = 2/3 | 41 | 0.098 | — | — |
-| gaussian | φ_log, γ = 1 | 113 | 0.099 | yes | 6.51 |
-| softplus | φ_log, γ = 1 | 27 | 0.292 | yes | 6.68 |
-| tanh | φ_log, γ = 1 | 66 | 0.314 | — | — |
+| ReLU$^5$ | $\|c\|^q$, $q = 1/3$ | **21** | 0.104 | yes | **6.49** |
+| ReLU$^2$ | $\|c\|^q$, $q = 2/3$ | 41 | 0.098 | — | — |
+| gaussian | $\varphi_{\log}$, $\gamma = 1$ | 113 | 0.099 | yes | 6.51 |
+| softplus | $\varphi_{\log}$, $\gamma = 1$ | 27 | 0.292 | yes | 6.68 |
+| tanh | $\varphi_{\log}$, $\gamma = 1$ | 66 | 0.314 | — | — |
 
 (true optimal cost: 6.48)
 
 ![sparsity frontier](experiments/01_vdp/summary/figures/frontier.png)
 
-*Insertion trajectories — running-best H¹ error vs neuron count. The
-fractional-power penalty with ReLU^k atoms reaches rel. H¹ ≈ 0.10 with ~20
+*Insertion trajectories — running-best $H^1$ error vs neuron count. The
+fractional-power penalty with ReLU$^k$ atoms reaches rel. $H^1 \approx 0.10$ with ~20
 neurons; the best log-penalty activation (gaussian) needs ~113 for the same
 accuracy. Equal accuracy, a fraction of the atoms.*
 
 The two algorithm families also leave a visible structural signature on the
-learned weights — the |c|^q formulation constrains atoms to the unit sphere,
+learned weights — the $|c|^q$ formulation constrains atoms to the unit sphere,
 the log-penalty family does not:
 
-| gaussian (φ_log) | ReLU⁵ (\|c\|^q) |
+| gaussian ($\varphi_{\log}$) | ReLU$^5$ ($\|c\|^q$) |
 | --- | --- |
 | ![gaussian atoms](experiments/01_vdp/summary/figures/weights_raw3d_gaussian.png) | ![relu5 atoms](experiments/01_vdp/summary/figures/weights_raw3d_relu5.png) |
 
-*Learned inner weights (a₁, a₂, b), dot size ∝ outer weight, color = sign.*
+*Learned inner weights $(a_1, a_2, b)$, dot size $\propto$ outer weight, color = sign.*
 
 Every number and figure above is regenerated by
 [`experiments/01_vdp/summary/analysis.py`](experiments/01_vdp/summary) from
@@ -84,8 +84,8 @@ The Van der Pol value function is smooth. Real HJB value functions usually are
 not — they are only semiconcave, with **gradient jumps across switching sets**
 (states where the optimal strategy changes branch discontinuously). The
 pendulum swing-up benchmark was built to hit this regime deliberately: its
-switching curve separates "brake to the upright at θ = 0" from "swing over the
-top to θ = 2π", and the training data is constructed two-sided so the gradient
+switching curve separates "brake to the upright at $\theta = 0$" from "swing over the
+top to $\theta = 2\pi$", and the training data is constructed two-sided so the gradient
 jump is *in-sample*, not an extrapolation artifact
 ([`experiments/02_pendulum/region_split`](experiments/02_pendulum/region_split)).
 
@@ -95,19 +95,19 @@ The findings are sharp:
   4–7× the error elsewhere, for every activation and penalty tested — and
   oversampling the switching band does not pay it down. The limit is
   representational, not a sampling deficit.
-- **No model reproduces the gradient jump's magnitude** (≈ 80–100 units on a
+- **No model reproduces the gradient jump's magnitude** ($\approx$ 80–100 units on a
   normal cross-section). Rectified atoms come closest, because their
   derivatives can break across a hyperplane; smooth activations must
   interpolate through the discontinuity:
 
 ![gradient along the switching cross-section](experiments/02_pendulum/region_split/figures/transect_normal_gradient.png)
 
-*Normal gradient n·∇V along a cross-section of the switching curve: the true
-lower-envelope gradient (black) jumps at s = 0; ReLU² develops a genuine kink,
+*Normal gradient $n \cdot \nabla V$ along a cross-section of the switching curve: the true
+lower-envelope gradient (black) jumps at $s = 0$; ReLU$^2$ develops a genuine kink,
 leaky ReLU is exactly piecewise constant (its atom geometry made visible), and
-the C^∞ activations smooth the jump away — as they must.*
+the $C^\infty$ activations smooth the jump away — as they must.*
 
-- **Closed-loop, the fit gap becomes a control gap**: only ReLU² makes the
+- **Closed-loop, the fit gap becomes a control gap**: only ReLU$^2$ makes the
   correct branch decision from both sides of the switching curve, matching
   the true optimal cost on the braking side (10.3 vs 10.2); every smooth
   activation fails to reach an upright equilibrium at all.
