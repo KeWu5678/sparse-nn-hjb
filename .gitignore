@@ -69,4 +69,15 @@ docs/research/
 
 # ---- Untracked locally: analysis scripts and thesis source ----
 experiments/**/analysis.py
-papar/Mthesis.tex
+
+# ---- Terraform (deploy/terraform/) — .terraform.lock.hcl stays tracked ----
+deploy/terraform/.terraform/
+deploy/terraform/*.tfstate
+deploy/terraform/*.tfstate.*
+deploy/terraform/*.tfvars
+deploy/terraform/*.tfvars.json
+!deploy/terraform/example.tfvars
+
+# ---- papar/ (LaTeX thesis): only the compiled PDF is tracked ----
+papar/*
+!papar/Mthesis.pdf

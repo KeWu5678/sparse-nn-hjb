@@ -1,5 +1,0 @@
-# Only the compiled thesis PDF is tracked; sources, notes, figures, and
-# build junk stay local.
-*
-!.gitignore
-!Mthesis.pdf
