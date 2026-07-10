@@ -78,6 +78,7 @@ deploy/terraform/*.tfvars
 deploy/terraform/*.tfvars.json
 !deploy/terraform/example.tfvars
 
-# ---- papar/ (LaTeX thesis): only the compiled PDF is tracked ----
+# ---- papar/ (LaTeX thesis): only the compiled PDF + main source are tracked ----
 papar/*
 !papar/Mthesis.pdf
+!papar/Mthesis.tex

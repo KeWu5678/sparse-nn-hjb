@@ -1,0 +1,3235 @@
+ \documentclass[11pt]{amsart}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{graphicx}
+\usepackage{subcaption}
+\usepackage{float}
+\usepackage{placeins}
+\usepackage{etoolbox}
+% keep floats inside their own (sub)section so figures stay with the text
+% that references them
+\pretocmd{\section}{\FloatBarrier}{}{}
+\pretocmd{\subsection}{\FloatBarrier}{}{}
+\pretocmd{\subsubsection}{\FloatBarrier}{}{}
+% loosen float-placement thresholds so tall figures share pages with text
+\renewcommand{\topfraction}{0.9}
+\renewcommand{\bottomfraction}{0.6}
+\renewcommand{\textfraction}{0.07}
+\renewcommand{\floatpagefraction}{0.8}
+\usepackage{xcolor}
+\usepackage{amsmath,amssymb,amsthm,textcomp}
+\usepackage{booktabs}
+\usepackage{bbm} % characteristic functions
+\usepackage{microtype}
+
+\usepackage{geometry}
+\geometry{left=25mm,right=25mm,%
+bindingoffset=0mm, top=25mm,bottom=25mm}
+\linespread{1.08}
+\raggedbottom
+
+\usepackage[colorlinks = true, linkcolor = blue]{hyperref}
+\usepackage[open,openlevel=1]{bookmark}
+
+% One shared counter for all theorem-like environments, numbered by section.
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{corollary}[theorem]{Corollary}
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem{assumption}[theorem]{Assumption}
+\theoremstyle{remark}
+\newtheorem{remark}[theorem]{Remark}
+\newtheorem{example}[theorem]{Example}
+\allowdisplaybreaks
+
+%algorithm
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+
+
+%% SYMBOLS
+%divergence
+\AtBeginDocument{
+  \let\div\relax
+  \DeclareMathOperator{\div}{div}
+}
+%range
+\AtBeginDocument{
+  \let\ran\relax
+  \DeclareMathOperator{\ran}{ran}
+}
+%ess span dist
+\DeclareMathOperator*{\esssup}{ess\, sup}
+\DeclareMathOperator{\spa}{span}
+\DeclareMathOperator{\dist}{dist}
+\DeclareMathOperator{\atom}{atom}
+\DeclareMathOperator{\cont}{cont}
+\DeclareMathOperator{\sign}{sign}
+\DeclareMathOperator{\supp}{supp}
+\DeclareMathOperator{\dom}{dom}
+\DeclareMathOperator{\cl}{cl}
+\DeclareMathOperator{\relu}{ReLU}
+\newcommand{\reluk}{\relu^{k}}
+
+\title[Review]{Review}
+% TODO(front matter): final title, author, abstract, and declaration pending;
+% see papar/REVIEW.md section 7.
+\begin{document}
+\tableofcontents
+
+\section{Introduction}
+The problem under consideration is the dynamic optimal control problem in the space-time domain
+\begin{equation*}
+\tag{$P$}\label{opt}
+\begin{aligned}
+	&\inf_{u \in L^2(t_0, T, \mathbb{R}^k)} J(u; t_0, y):= \int_{t_0}^T l(y(t)) + \beta |u(t)|^2 dt, \quad \beta >0\\
+	&\text{s.t.}\\
+	& \dot{y} = f(y) + g(y) u,\\
+	& y(t_0) = x,
+\end{aligned}
+\end{equation*}
+where we assume $y(t) \in \mathbb{R}^d, u(t) \in \mathbb{R}^k$, $l \in C^1(\mathbb{R}^d, \mathbb{R}), f \in C^1(\mathbb{R}^d, \mathbb{R}^d), g \in C^1(\mathbb{R}^d, \mathbb{R}^{d \times k})$. 
+We assume throughout that a minimizer of \eqref{opt} exists.\par
+
+The first method to solve the optimization problem involves computing a state-adjoint-control triple originating from the initial condition $x$, known as the open-loop control. The Pontryagin Maximum Principle (PMP) yields the first-order optimality condition in the form of a coupled forward--backward two-point boundary value problem:
+\begin{equation*}
+\tag{TPBVP}\label{TPBVP}
+\left\{
+\begin{aligned}
+	&\frac{d}{dt}y^* = f(y^*) + g(y^*)u^*,\\
+	& y^*(t_0) = x, \\
+	& -\frac{d}{dt} p^* = \partial_y \bigg( f(y^*) +  g(y^*) u^* \bigg)^Tp^* + \partial_y l(y^*),\\
+	& p^*(T) = 0.
+\end{aligned}
+\right.
+\end{equation*}
+By the maximality condition of the Hamiltonian at the optimal control we get the optimality condition
+\begin{equation}
+	u^* = - \frac{1}{2\beta} g(y^*)^T p^* \quad \forall t \in (t_0, T). 
+\end{equation}
+
+The open-loop control is not robust with respect to disturbances of the state \cite{azmi2021optimal}: it is computed for a single initial condition, and deviations from the optimal trajectory are not corrected. In addition, numerical methods for the two-point boundary value problem are sensitive to the initial guess and may fail to converge.
+An alternative is based on the Dynamic Programming principle,  we introduce the value function
+\begin{align*}
+	 V(t, y):= \inf_u J(u; t, y) \quad \text{ subject to the dynamic system},
+\end{align*}
+which satisfies a nonlinear hyperbolic differential equation, the Hamilton-Jacobi-Bellman (HJB) equation:
+\begin{equation*} 
+\tag{HJB}\label{HJB}
+\left\{
+\begin{aligned}
+	& \partial_t V - \frac{1}{4\beta} \nabla V(t, x)^T  g(x) g^T(x) \nabla V (t, x) + \nabla V(t, x)^T f(x) + l(x)  = 0 \\
+	& V(T, x) = 0.
+\end{aligned}
+\right.
+\end{equation*}
+The value function encodes the optimal cost from every state at once; the feedback law synthesized from it corrects deviations along the trajectory, which is the robustness the open-loop control lacks.
+
+For most of the nonlinear dynamic control problems, one desires a feedback control law, which involves solving the optimal value function of 
+the HJB equation. 
+However, solving the HJB function is notoriously difficult since it suffers from the curse-of-dimensionality.
+There is an extensive literature on finding the numerical solutions. 
+In addition to the classical methods, the data-driven methods have become increasingly popular. 
+One line of works is introduced in \cite{nakamura2021adaptive}, where the training data is generated with \eqref{TPBVP}, and the optimal value function is approximated with the training data.
+The optimal feedback laws is later synthesized after validation.
+The method effectively overcomes the curse-of-dimensionality, since the data generated is causality-free (not depending on the nearby grid).
+Moreover, Azmi, Kalise and Kunisch \cite{azmi2021optimal} enrich the dataset with the gradient of the value function: a state-adjoint-control triple is generated by solving the open-loop problem, and the adjoint supplies the gradient. 
+The optimal value function is in turn approximated by hyperbolic cross basis functions with $l^1$ penalty to enhance the sparsity.
+By the gradient training we get better approximation in the $H^1$ space. 
+In terms of different approximation methods besides the hyperbolic basis functions, there is a growing literature on solving the nonlinear optimal control problem using neural networks \cite{lutter2020hjb, shilova2023revisiting}.\par   
+
+In this study the approximating function is a two-layer network,
+\begin{equation}
+	\mathcal{N}_{\omega, c}(x) := \sum_{n = 1}^N c_n \rho (a_n \cdot x + b_n) \in \mathbb{R},
+\end{equation}
+where $\rho$ is a sufficiently smooth activation function and $N$ the width of the network. 
+And the gradient is given by: 
+\begin{equation*}
+	\nabla_x  \mathcal{N}_{\omega, c}(x) =  \sum_{ n = 1}^N c_n \nabla_x \rho(a_n \cdot x + b_n) \in \mathbb{R}^d .
+\end{equation*}
+
+The trainig data is generated by solving the \eqref{TPBVP}. 
+The adjoint state $p^*$ is obtained as a byproduct. 
+The adjoint state provides the gradient information of the optimal value function: $p^*(t) = \nabla V(t, y^*(t))$ (\cite{cristiani2010initialization} \cite{cannarsa1991some} \cite{clarke1987relationship}). 
+Instead of state-value pair we get the dataset of the triple $\{x^i, V(x^i), \nabla V(x^i)\}_{i = 1}^M$ that is enriched with gradient information.
+We have the minimization problem
+\begin{equation}
+\label{lost_dis}
+\begin{aligned}
+	&\min_{N \in \mathbb{N}, (a_n, b_n, c_n) \in \mathbb{R}^d \times \mathbb{R} \times \mathbb{R}, } l_M (\mathcal{N}_{\omega, c}; V),\\
+	& \text{with}\\
+	& l_M (\mathcal{N}_{\omega, c}; V) := \frac{1}{2M} \bigg( \sum_{m = 1}^M  |V(x^m) - \mathcal{N}_{\omega, c} (x^m)|^2 +  \sum_{m = 1}^M \sum_{i = 1}^d | \partial_{x_i} V(x^m) - \partial_{x_i} \mathcal{N}_{\omega, c} (x^m) |^2 \bigg),
+\end{aligned}
+\end{equation}
+where the $x^m$ are independent samples of a random variable on domain $D$ with distribution $\nu$.
+The loss function can be understood as the empirical estimation of the $H^1$ loss
+\begin{align*}
+	l_\nu (\mathcal{N}_{\omega, c}; V) = \frac{1}{2} \int_D |V(x) - \mathcal{N}_{\omega, c} (x)|^2 + \sum_{i = 1}^d | \partial_{x_i} V(x) - \partial_{x_i} \mathcal{N}_{\omega, c} (x) |^2 d\nu .
+\end{align*}
+
+\paragraph{\emph{Enhace the Sparsity with Nonconvex Penalty}}
+Notice that $N$, the number of neurons, is also an optimization parameter. 
+Although the number of neurons does not act as the inductive bias of the model in general \cite{neyshabur2014search}, sparsity is crucial for computational efficiency in many problems. 
+Furthermore, sparsity is necessary for certain applications, such as deconvolution of point-like objects. 
+A sparse learning procedure usually adopts convex reformulation of the problem and employ a sparse promoting convex penalty term on the outer weights, a popular choice is the $l^1$ function (LASSO). 
+However, Pieper and Petrosyan \cite{pieper2022nonconvex} showed that convex penalties cannot effectively eliminate the redundancy of a shallow network when neurons cluster in a small neighborhood, and proposed a nonconvex sparse learning method as the remedy. Their analysis is limited to the ReLU activation. 
+The ReLU enjoys many useful properties but the second derivatives of the model exist only as distributions and can not be used for training\cite{li2024twolayer}.
+We need a new class of activation functions to adopt the sparse learning framework. In this thesis, we combine gradient-augmented training with nonconvex sparse regularization for a class of activation functions that extends well beyond ReLU, and we analyze the resulting variational problem over measures. The contributions are the following.
+\begin{enumerate}
+	\item \emph{Existence theory on the unbounded parameter domain.} For
+	localized ridge activations (Assumption~\ref{ass:ridge_c0}) we prove
+	existence of global minimizers of the gradient-augmented,
+	nonconvex-penalized problem over measures on $\Omega = \mathbb{R}^{d+1}$
+	(Theorem~\ref{thm:existence}). The proof combines weak-*-to-weak continuity
+	of the value operator (Lemma~\ref{lem:value_decay}) with weak compactness
+	and distributional identification of the gradients --- the gradient map
+	itself is not weak-*-to-weak continuous. Counterexamples show the
+	localization cannot be dropped: for saturating or growing activations
+	the problem degenerates at infinity, and a compact
+	parameter set becomes necessary (Example~\ref{ex:tanh_escape}).
+	\item \emph{The dual variable at infinity.} On the unbounded parameter
+	domain the gradient kernel grows without bound, so the dual variable
+	$\bar{p}$ is defined only pointwise. For $H^2$-regular residuals, Green's
+	identity yields a boundary representation through the bounded kernel
+	$\sigma$ (Lemma~\ref{lem:dual_pairing}), which makes $\bar{p}$ bounded and
+	continuous; if moreover no positive-$\mathcal{H}^{d-1}$-measure piece of
+	$\partial D$ lies in a hyperplane, $\bar{p}$ vanishes at infinity
+	(Lemma~\ref{lem:dual_decay}). The failure mode is characterized completely:
+	a non-vanishing escaping sequence must align with the normal of a flat
+	boundary face (Corollary~\ref{cor:flat_face_escape}), a mechanism realized
+	by an explicit example on the cube
+	(Remark~\ref{rem:flat_face_counterexample}) and quantified as a smallness
+	condition on the boundary flux of the residual (Remark~\ref{rem:no_escape}).
+	\item \emph{Optimality conditions and finite support.} We derive the
+	necessary first-order conditions by directional derivatives and truncated
+	perturbations, without predual structure or moment assumptions on the
+	minimizer (Theorem~\ref{opt_cdt}); prove that local minimizers are finitely
+	supported under an explicit no-escape condition on the dual variable at
+	infinity --- automatic, by the previous item, on domains without flat faces
+	(Theorem~\ref{thm:finite_support}); and give a sufficient condition for
+	local optimality of finitely supported candidates (Theorem~\ref{sc_opt}).
+	\item \emph{The $k$-homogeneous formulation.} For positively $k$-homogeneous activations, an equivalent sphere-constrained problem with the fractional-exponent penalty $|c|^{2/(k+1)}$ is derived (Propositions~\ref{prop:homogeneous_penalty}, \ref{prop:homogeneous_reformulation}), and the optimality and existence theory is extended to this singular penalty class (Corollaries~\ref{cor:singular_penalty}, \ref{cor:discrete_existence}).
+\end{enumerate}
+
+Two node-insertion algorithms with a semismooth Newton inner solver implement the two penalty classes. 
+On a smooth benchmark (Van der Pol) the nonconvex penalties reach the same gradient accuracy as convex $\ell^1$ training with a fraction of the neurons (Figure~\ref{fig:neuron_h1_frontier}, left). 
+On the pendulum swing-up, whose value function has a gradient discontinuity along a switching set, Only the $\mathrm{ReLU}^2$ atom yields a stable feedback law that works across it. (Figure~\ref{fig:neuron_h1_frontier}, right).
+
+\begin{figure}[htbp]
+\centering
+\begin{subfigure}[t]{0.48\textwidth} 
+\centering
+\includegraphics[width=\textwidth]{plot/neuron_h1_frontier_vdp.png}
+\caption{Van der Pol oscillator.}
+\label{fig:frontier_vdp}
+\end{subfigure}
+\hfill
+\begin{subfigure}[t]{0.48\textwidth}
+\centering
+\includegraphics[width=\textwidth]{plot/neuron_h1_frontier_pendulum.png}
+\caption{Pendulum swing-up.}
+\label{fig:frontier_pendulum}
+\end{subfigure}
+\caption{Number of neurons against the best relative $H^1$ validation error on the two benchmark problems, at fixed $\alpha = 10^{-5}$; each curve is the running best error as neurons are inserted. Four series per panel: the convex baseline ReLU $+\, \ell^1$; $\relu^k$ with the fractional-exponent penalty $\psi_k(t) = |t|^{2/(k+1)}$, here at $k = 2$; and softplus and Gaussian with the nonconvex log penalty $\phi_{\gamma}(t) = \tfrac{1}{\gamma}\log(1 + \gamma t)$ at $\gamma = 10$.}
+\label{fig:neuron_h1_frontier}
+\end{figure}
+
+The thesis is organized as follows. Section~2 reviews the space of finite Radon measures and the Barron spaces attached to the activation classes. Section~3 introduces the sparse learning problem over measures and develops the existence, optimality, and finite-support theory. Section~4 treats the $k$-homogeneous reformulation and the fractional-exponent penalty. Section~5 describes the data generation and the two insertion algorithms, and Section~6 reports the numerical studies. \par
+
+The overall pipeline has four steps: 
+\begin{enumerate}
+	\item \textbf{data generation}: initially, a dataset consisting of causality-free state-value-gradient triple must be generated. 
+	Many methods are discussed in the literature \cite{kang2021algorithms, han2024nonsmooth}.
+	The process is highly parallelizable and adaptive: dense samples can be placed in regions of interest. 
+	\item \textbf{model selection:} depending on the underlying system, different activation function and penalty can be chosen. 
+	The choice of activation function and regularization impacts the model performance significantly. 
+	We can also incorporate other prior information such as semiconcavity of the value function or the physics-informed loss \cite{doya2000reinforcement, munos1999gradient, raissi2019physics, tassa2007least, liu2014neural}.
+	\item \textbf{training and validation}: this step follows the standard machine-learning pipeline. 
+	A neural network is trained to approximate the optimal value function, and the performance of the model is subsequently evaluated on a separate validation set. 
+	The validation set can be chosen to probe specific regions, such as the switching set. 
+	\item \textbf{feedback control}: once the value function is trained, the feedback law follows from the Hamiltonian minimization. Sparsity keeps the evaluation of the law cheap. 
+\end{enumerate}
+
+\section{Preliminaries}
+This section reviews the two function space ingredients of the framework: the
+space of finite Radon measures, over which the learning problem is posed and
+whose duality furnishes the optimality conditions;
+and the Barron spaces, which quantify what the corresponding networks can approximate.
+
+\subsection{The space of finite Radon measures}
+Throughout the paper we denote $\Omega$ as $\mathbb{R}^{d + 1}$. 
+A finite Radon measure $\mu$ is a $\sigma$-additive $\mathbb{R}^m$-valued set function defined on the Borel sets of $\Omega$ with $\mu(\emptyset) = 0$.                                                                              
+The \emph{total-variation measure} of a finite Radon measure $\mu$ is the positive measure defined by                                                                                                                                       
+\begin{equation*}                                                                                                                                                                                                                                          
+|\mu|(E) = \sup \left\{ \sum_{n=1}^{\infty} |\mu(E_n)| \;:\; \bigcup_{n=1}^{\infty} E_n = E,\; \{E_n\} \text{ disjoint and measurable} \right\}.
+\end{equation*}
+We denote the space of finite Radon measures by $\mathcal{M}(\Omega, \mathbb{R}^m)$ (and $\mathcal{M}(\Omega)$ if $m = 1$). 
+The following spaces will be considered
+\begin{itemize}
+  \item $C_0(\Omega; \mathbb{R}^m)$, the space of all continuous functions $u : \Omega \to \mathbb{R}^m$ \emph{vanishing at infinity}, that is, for every $\varepsilon > 0$ there exists a compact set $K_\varepsilon \subset \Omega$ such that $|u(x)| < \varepsilon$ for all $x \in \Omega \setminus K_\varepsilon$;
+  \item $\mathcal{M}(\Omega; \mathbb{R}^m)$, the space of all vector-valued measures $\mu : \mathcal{B} \to \mathbb{R}^m$ with finite variation on $\Omega$.
+\end{itemize}
+
+By the Riesz representation theorem, $\mathcal{M}(\Omega; \mathbb{R}^m)$ is isometrically the dual space of $C_0(\Omega; \mathbb{R}^m)$ under the pairing
+\begin{equation*}
+\langle u,\, \mu \rangle = \sum_{i=1}^{m} \int_\Omega u_i \, \mathrm{d}\mu_i,
+\qquad \mu \in \mathcal{M}(\Omega; \mathbb{R}^m), \; u \in C_0(\Omega; \mathbb{R}^m);
+\end{equation*}
+in particular, $\mathcal{M}(\Omega; \mathbb{R}^m)$ equipped with the total variation norm is a Banach space.
+Without further specification, we denote by $\langle \cdot, \cdot\rangle$ the dual bracket $\langle \cdot, \cdot \rangle_{C_0(\Omega),\mathcal{M}(\Omega)}$.
+
+The following space of measures will also be considered:
+\begin{itemize}
+	\item $\mathcal{M}^0(\Omega)$: the space of all nonatomic measures on $(\Omega)$. 
+	\item $\mathcal{M}^\sharp(\Omega)$: the space of all purely atomic measures on $\Omega$. 
+\end{itemize}
+
+We decompose $\mu \in \mathcal{M}(\Omega)$ by $\mu = \mu_{\cont} + \mu_{\atom}$, where $\mu_{\cont} \in \mathcal{M}^0(\Omega)$ has support $\cont \mu$ and $\mu_{\atom} \in \mathcal{M}^\sharp(\Omega)$ has support $\atom \mu$ \cite{bouchitte1990new}. Therefore we have
+\begin{align*}
+	\mathcal{M}(\Omega) = \mathcal{M}^0(\Omega) \oplus \mathcal{M}^\sharp(\Omega). 
+\end{align*}
+
+\subsection{Barron spaces}
+In view of the approximation by neural networks, the seminal paper \cite{barron1993universal} develops a universal approximation theorem on function approximation by feedforward neural networks with sigmoidal activation functions.
+Later, due to the popularity of ReLU, the approximation properties of networks with ReLU activation are investigated in the subsequent studies \cite{ongie2019function, savarese2019infinite, bengio2005convex, petrosyan2020neural}.
+In particular, it is argued that generalization is achieved not by limiting the size of the network but by controlling the magnitude of the weights.
+Let $\mathcal{W}(D)$ be the space of functions $f$ on $D$ that can be represented by $f(x) = \int_{\mathbb{S}^{d}} (a \cdot x + b)_+ \, d\mu(a, b)$ for every $x \in D$ and some $\mu \in \mathcal{M}(\mathbb{S}^d)$.
+For $f \in \mathcal{W}(D)$, we define the norm
+\begin{equation}
+\label{W_norm}
+	\|f\|_{\mathcal{W}(D)} = \inf \bigg\{ \|\mu\|_{\mathcal{M}(\mathbb{S}^d)} : \; f(x) = \int_{\mathbb{S}^{d}} (a \cdot x + b)_+ \, d\mu(a, b) \text{ for every } x \in D \bigg\}.
+\end{equation}
+It is shown that this norm is closely related to a fractional Laplacian of $f$ \cite{ongie2019function, savarese2019infinite}.
+
+For the gradient-augmented training, higher regularity of the activation is required, and it is natural to consider $\reluk$ with $k \ge 2$. We follow the extended Barron spaces of \cite{li2024twolayer}. There, a function of the form
+\begin{align*}
+	f(x) &= \int c \, (a \cdot x + b)_+^k \, d\varrho(a, b, c),
+\end{align*}
+with $\varrho$ a \emph{probability} measure over the parameters $(a, b) \in \mathbb{R}^{d+1}$ and the outer weight $c \in \mathbb{R}$, is assigned the representation cost
+\begin{equation*}
+	\| f \|_{B^k_{1,\varrho}} := \int |c| \, \big( \|a\|_1 + |b| \big)^{k} \, d\varrho(a, b, c),
+\end{equation*}
+and the Barron norm is the infimum over all representing probabilities,
+\begin{equation*}
+	\| f \|_{B^{k}_{1}} := \inf_{\varrho} \| f \|_{B^{k}_{1,\varrho}} .
+\end{equation*}
+The space $B_1^k(D)$ of functions on $D$ with finite Barron norm is a normed vector space \cite[Theorem~6]{li2024twolayer}.
+The two pictures are compatible: a finite signed measure $\mu \in \mathcal{M}(\mathbb{S}^d)$ representing $f$ through $\reluk$ atoms on the sphere induces, after normalization, a representing probability whose cost is bounded by a dimensional constant times $\|\mu\|_{\mathcal{M}(\mathbb{S}^d)}$, so that $\|f\|_{B^k_1} \le C(d, k)\, \|\mu\|_{\mathcal{M}(\mathbb{S}^d)}$.
+The following result links the Barron space to the standard Sobolev space.
+\begin{proposition}[Barron--Sobolev embedding, {\cite[Theorem~7]{li2024twolayer}}]
+	Given any fixed integer $k$, there holds $B_1^k (D) \subset H^k(D)$; moreover there is a constant $C(D, d, k)$ such that
+	\begin{equation*}
+		\|f\|_{H^m(D)} \le C(D, d, k)\, \|f\|_{B_1^k}, \qquad 0 \le m \le k,
+	\end{equation*}
+	for all $f \in B_1^k(D)$.
+\end{proposition}
+
+The proposition shows both the power and the limitation of the Barron space: every function that the $\reluk$ dictionary represents with finite total weight is automatically $H^k$-regular.
+For smooth value functions this yields good approximation together with control of the derivatives.
+Conversely, a value function whose gradient jumps across a switching set does not belong to $H^k$ near the jump, so its Barron norm cannot be finite --- the approximation error at the switching set is structural (see Figure~\ref{fig:neuron_h1_frontier}); choosing an activation whose derivative can break reduces the constant but not the phenomenon.
+
+Moreover, the approximation properties of other sufficiently smooth activation functions are covered by embedding them into the $\reluk$ Barron scale. For a Lipschitz activation $\sigma$, let $B_\sigma$ denote the Barron space defined as above with atoms $\sigma(a \cdot x + b)$.
+
+\begin{proposition}[Embeddings into $\reluk$ Barron spaces, {\cite[Theorem~1]{heeringa2024embeddings}}]
+	Let $\sigma$ be a Lipschitz activation function and let $D$ be bounded.
+	\begin{enumerate}
+		\item If $\sigma \in C^1(\mathbb{R})$ and $\partial^2 \sigma \in L^1(\mathbb{R})$, then $B_\sigma \hookrightarrow B_{\relu}$.
+		\item If $k \ge 1$, $\sigma \in C^{k}(\mathbb{R})$, and the one-sided (Caputo) derivatives of order $k+1$ satisfy $\partial_+^{k+1}\sigma \in L^1((0, \infty))$ and $\partial_-^{k+1}\sigma \in L^1((-\infty, 0))$ --- for which it suffices that the $(k+1)$-st distributional derivative of $\sigma$ exists as a finite measure --- then
+		\begin{equation*}
+			B_\sigma \hookrightarrow B_{\relu^{k}}.
+		\end{equation*}
+	\end{enumerate}
+\end{proposition}
+
+\subsubsection*{Notation}
+Throughout the thesis: $D \subset \mathbb{R}^d$ is the bounded Lipschitz domain
+and $\nu$ the data distribution on $D$; $M$ denotes the number of samples.
+In the analysis of Sections~3--4, $\nu$ is taken to be the Lebesgue measure on
+$D$ and all norms are the unweighted ones, $L^2(D)$ and $H^1(D)$; the sampling
+distribution reappears in the empirical losses of Sections~5--6.
+$\mathcal{H}^{d-1}$ denotes $(d-1)$-dimensional Hausdorff measure, which
+coincides with surface measure on Lipschitz hypersurfaces such as $\partial D$.
+$\Omega = \mathbb{R}^{d+1}$ is the parameter domain with generic element
+$\omega = (a, b)$ (inner weight and bias).
+
+
+
+\section{The learning problem}
+We define the \emph{value operator} of a measure $\mu \in \mathcal{M}(\Omega)$ by
+\begin{align*}
+	[\mathcal{N}\mu] (x) = \int_\Omega \sigma (x, \omega) \, d\mu(\omega).
+\end{align*}
+The integral converges absolutely for every $\mu \in \mathcal{M}(\Omega)$
+whenever the value dictionary is bounded, i.e.
+$S_\infty := \sup_{\omega \in \Omega} \|\sigma(\cdot, \omega)\|_{L^\infty(D)} < \infty$,
+with $\|\mathcal{N}\mu\|_{L^\infty(D)} \le S_\infty \|\mu\|_{\mathcal{M}(\Omega)}$.
+This holds in each of the three settings considered in this thesis:
+(i) localized ridge activations on the unbounded domain $\Omega = \mathbb{R}^{d+1}$
+(Assumption~\ref{ass:ridge_c0} below), (ii) arbitrary continuous activations on a
+compact parameter set $\Omega_R \subset \mathbb{R}^{d+1}$, and (iii)
+$k$-homogeneous activations on the sphere (Section~4).\par 
+The gradient of the operator is understood distributionally; whenever
+\begin{equation*}
+	\tag{B}\label{bochner}
+	\int_\Omega \|\nabla_x \sigma(\cdot, \omega)\|_{L^2(D)} \, d|\mu|(\omega) < \infty,
+\end{equation*}
+the map $\omega \mapsto \partial_{x_i}\sigma(\cdot,\omega)$ is Bochner integrable into $L^2(D)$.
+The gradient operator is given by the classical formula
+\begin{align*}
+	\nabla (\mathcal{N}\mu)(x) = \int_\Omega \nabla_x \sigma(x, \omega) \, d\mu(\omega),
+\end{align*}
+by Fubini's theorem against test functions, and we write
+$\nabla \mathcal{N} \mu := \nabla(\mathcal{N}\mu)$ in this case.
+
+The fidelity term is the gradient-augmented loss with the distributional
+gradient convention,
+\begin{equation*}
+	L(\mu) :=
+	\begin{cases}
+	\dfrac{1}{2} \|\mathcal{N}\mu - V \|^2_{L^2(D)}
+	+ \dfrac{1}{2} \|\nabla(\mathcal{N}\mu) - \nabla V \|_{L^2(D)}^2,
+	& \mathcal{N}\mu \in H^1(D),\\[4pt]
+	+\infty, & \text{otherwise.}
+	\end{cases}
+\end{equation*}
+
+  
+
+\subsection{Predual representation of the value operator \texorpdfstring{$\mathcal{N}$}{N}}
+For the existence of the minimizer we need the weak-* l.s.c. of the loss function, which includes the value operator $\mathcal{N}$.
+It is not obvious once we extend the dictionary to the unbounded parameter space. 
+In particular, the operator $\mathcal{N}$ is not weak-*-to-weak continuous in general. \par
+
+\begin{example}[loss of weak-* lower semicontinuity without localization]
+\label{ex:tanh_escape}
+Let $\rho = \tanh$, $V \equiv 1$, and
+$\mu_n = \delta_{(a, b_n)}$ with $b_n \to \infty$. Then
+$\mu_n \overset{*}{\rightharpoonup} 0$, yet
+\begin{equation*}
+	\mathcal{N}\mu_n = \tanh(a \cdot x + b_n) \to 1
+\end{equation*}
+strongly in $H^1(D)$. Hence
+\begin{equation*}
+	\liminf_{n\to\infty} L(\mu_n) = 0 < L(0),
+\end{equation*}
+so the fidelity term is not weak-* lower semicontinuous. The issue is that
+mass escaping to infinity can carry a non-vanishing value contribution unless
+the dictionary atoms decay at infinity. \par 
+
+For the profile $\rho(z) = \log(1 + e^z)$ (softplus) the measures
+$\mu_n = \rho(b_n)^{-1}\delta_{(0, b_n)}$ fit $V \equiv 1$ exactly for every
+$n$ at penalty $\alpha\,\phi(1/\rho(b_n)) \to 0$, so $\inf J = 0$ is not
+attained; moreover $n^{-1}\rho(n(e \cdot x - t)) \to (e \cdot x - t)_+$ in
+$H^1(D)$, so every ReLU network is reached at vanishing penalty and the
+regularization degenerates entirely 
+(It might be possible to leverage the homogeneity to control the domain like the $\reluk$ case). 
+\end{example}
+
+We need the decay condition to prevent this escape and make the limit attained.
+For the unbounded-parameter ridge analysis in this section we use the following
+standing value-dictionary assumption.
+\begin{assumption}[localized ridge profile]\label{ass:ridge_c0}
+The parameter domain is $\Omega = \mathbb{R}^{d+1}$ and the activation has the
+ridge form
+\begin{equation*}
+	\sigma(x,\omega) = \rho(a \cdot x + b),
+	\qquad \omega = (a,b) \in \Omega,
+\end{equation*}
+where $\rho \in C_0(\mathbb{R})$, i.e. $\rho$ is continuous and
+$\rho(z) \rightarrow 0$ as $|z| \rightarrow \infty$.
+\end{assumption}
+
+\begin{lemma}[weak-*-to-weak continuity of $\mathcal{N}$]\label{lem:value_decay}
+Under Assumption~\ref{ass:ridge_c0}, set
+$\kappa(\omega) := \|\sigma(\cdot, \omega)\|_{L^2(D)}$, then
+$\kappa \in C_0(\Omega)$.
+Moreover, for every sequence
+$\mu_n \overset{*}{\rightharpoonup} \mu$ in $\mathcal{M}(\Omega)$ it holds
+$\mathcal{N}\mu_n \rightharpoonup \mathcal{N}\mu$ weakly in $L^2(D)$.
+\end{lemma}
+\begin{proof}
+(1) We first show that $\kappa \in C_0(\Omega)$. Continuity follows from
+dominated convergence, since $\rho \in C_0(\mathbb{R})$ is bounded. It remains
+to prove decay at infinity.
+
+Let $R_D>0$ satisfy $|x|\le R_D$ on $D$, and let $|\omega_j| \to \infty$, where
+$\omega_j=(a_j,b_j)$. It is enough to show that every subsequence has a further
+subsequence along which $\kappa(\omega_j)\to0$. Passing to such a further
+subsequence, either $|a_j|$ is bounded or $|a_j|\to\infty$.
+
+If $|a_j|$ is bounded, then $|b_j|\to\infty$, and
+\begin{equation*}
+	\inf_{x\in D}|a_j\cdot x+b_j|
+	\ge |b_j|-|a_j|R_D \to \infty.
+\end{equation*}
+Thus $\rho(a_j\cdot x+b_j)\to0$ uniformly in $x\in D$, and hence
+$\kappa(\omega_j)\to0$.
+
+It remains to consider the case $|a_j|\to\infty$. For $\tau>0$ set
+\begin{equation*}
+	B_\tau(\omega_j) := \{x\in D: |a_j\cdot x+b_j|\le \tau\}, 
+	\qquad
+	\eta(\tau) := \sup_{|z|\ge\tau}|\rho(z)|.
+\end{equation*}
+Since $\rho\in C_0(\mathbb{R})$, $\eta(\tau)\to0$ as $\tau\to\infty$. The set
+$B_\tau(\omega_j)$ is the intersection of $D$ with a slab of width
+$2\tau/|a_j|$, and therefore
+\begin{equation*}
+	|B_\tau(\omega_j)| \le c_D\frac{\tau}{|a_j|}
+\end{equation*}
+with $c_D$ depending only on $D$. Splitting $D$ into $B_\tau(\omega_j)$ and its
+complement gives
+\begin{equation*}
+\begin{aligned}
+	\kappa(\omega_j)^2
+	&\le \|\rho\|_\infty^2 \, |B_\tau(\omega_j)|
+	+ \eta(\tau)^2 |D| \\
+	&\le \|\rho\|_\infty^2 c_D\frac{\tau}{|a_j|}
+	+ \eta(\tau)^2 |D|.
+\end{aligned}
+\end{equation*}
+Hence $\limsup_j \kappa(\omega_j)^2 \le \eta(\tau)^2 |D|$ for every $\tau>0$.
+Letting $\tau\to\infty$ gives $\kappa(\omega_j)\to0$. Therefore
+$\kappa(\omega)\to0$ as $|\omega|\to\infty$.
+
+(2) Given $\mu_n \overset{*}{\rightharpoonup} \mu$ in $\mathcal{M}(\Omega)$, for every $\varphi \in L^2(D)$ we have
+\begin{equation*}
+	\langle \mathcal{N}\mu_n, \varphi\rangle_{L^2(D)} = \int_\Omega \langle \sigma(\cdot,\omega), \varphi\rangle_{L^2(D)} \, d\mu_n(\omega)
+\end{equation*}
+by Fubini's theorem, since
+$|\langle \sigma(\cdot,\omega),\varphi\rangle_{L^2(D)}|
+\le \|\rho\|_\infty |D|^{1/2}\|\varphi\|_{L^2(D)}$ and $\mu_n$ is finite.
+The function $f: \omega \mapsto \langle \sigma(\cdot, \omega), \varphi\rangle_{L^2(D)}$ is continuous by dominated convergence.
+By Cauchy-Schwarz we have
+\begin{equation*} 
+	|\langle \sigma(\cdot,\omega), \varphi\rangle_{L^2(D)}| \le \kappa(\omega)\, \|\varphi\|_{L^2(D)},
+\end{equation*}
+which goes to 0 as $|\omega|$ goes to infinity by the previous step.
+Consequently, $f \in C_0(\Omega)$, and by weak-* convergence,
+\begin{equation*}
+	\lim_{n \rightarrow \infty}  \langle \mathcal{N}\mu_n, \varphi\rangle_{L^2(D)}
+	= \lim_{n \rightarrow \infty} \langle f, \mu_n \rangle
+	= \langle f, \mu \rangle
+	= \langle \mathcal{N}\mu, \varphi\rangle_{L^2(D)}.
+\end{equation*}
+\end{proof}
+
+\begin{remark}[The gradient map is not needed as a weak-*-to-weak continuous operator]
+Lemma~\ref{lem:value_decay} gives weak-*-to-weak continuity of the value
+operator
+\begin{equation*}
+\mathcal{N} : \mathcal{M}(\Omega) \to L^2(D).
+\end{equation*}
+
+Since we are doing the gradient training, we need to have a similar result for the gradient operator. 
+However on the unbounded parameter domain, for ridge atoms
+\begin{equation*}
+\sigma_{a,b}(x) = \rho(a\cdot x+b),
+\end{equation*}
+we have
+\begin{equation*}
+\nabla_x \sigma_{a,b}(x) = a\,\rho'(a\cdot x+b).
+\end{equation*}
+When the ridge intersects $D$, the $L^2(D)$-norm of this gradient can grow
+without bound as $|a|\to\infty$ and 
+\begin{equation*}
+\sup_{\omega\in\Omega}
+\|\nabla_x\sigma(\cdot,\omega)\|_{L^2(D)} = \infty.
+\end{equation*}
+Hence, $\mu \mapsto \nabla(\mathcal{N}\mu)$ is not a bounded operator from
+$\mathcal{M}(\Omega)$ into $L^2(D)^d$ and cannot be weak-*-to-weak
+continuous on all of $\mathcal{M}(\Omega)$.
+
+Fortunately, it does not obstruct the direct method of calculus variation.  
+Along a minimizing sequence $(\mu_n)$, the loss itself gives a bound on
+$\|\nabla(\mathcal{N}\mu_n)\|_{L^2(D)}$.  
+Therefore, after passing to a subsequence,
+\begin{equation*}
+\nabla(\mathcal{N}\mu_n) \rightharpoonup g
+\qquad \text{weakly in } L^2(D)^d .
+\end{equation*}
+The limit is identified distributionally using only the weak convergence of the
+value functions.  Indeed, for every $\psi \in C_c^\infty(D)^d$,
+\begin{equation*}
+\int_D g \cdot \psi \, dx
+= \lim_{n\to\infty} \int_D \nabla(\mathcal{N}\mu_n)\cdot \psi \, dx
+= -\lim_{n\to\infty} \int_D \mathcal{N}\mu_n\,\operatorname{div}\psi \, dx
+= -\int_D \mathcal{N}\mu\,\operatorname{div}\psi \, dx .
+\end{equation*}
+Thus $g = \nabla(\mathcal{N}\mu)$ in the sense of distributions, and
+$\mathcal{N}\mu \in H^1(D)$.  In this way the existence proof uses weak
+compactness of bounded sequences in the Hilbert space and distributional identification,
+rather than weak-*-to-weak continuity of the gradient map.
+\end{remark}
+
+
+
+\subsection{Predual representation of the gradient of the loss function \texorpdfstring{$L$}{L}}
+Since the optimization problem is nonconvex, the global minimizer is difficult to find in general. 
+Instead, we define the local minimum: 
+\begin{definition}[local minimizer]
+$\bar{\mu} \in \mathcal{M}(\Omega)$ is a local minimizer if there exists $\epsilon > 0$ such that 
+\begin{align*}
+	J(\bar{\mu}) \le J(\mu) \quad \text{for all } \mu \text{ with }  \|\mu - \bar{\mu}\|_{\mathcal{M}(\Omega)} \le \epsilon. 
+\end{align*}
+\end{definition}
+
+To investigate the optimization we need the derivative. 
+In this section we discuss how to describe the derivative properly. 
+As we have already seen in the last remark, in the case of gradient training we do not have a canonical bounded operator that maps the measure to the gradient if we assume the unbounded dictionary. 
+Let $\bar{\mu}$ be such that $\mathcal{N}\bar{\mu}\in H^1(D)$, and set $r := \mathcal{N}\bar{\mu}-V$. 
+Denote by $\partial L (\mu)[u]$ the G\^ateaux derivative at $\mu$ for an admissible perturbation $u$ one has
+\begin{equation}
+\partial L(\bar{\mu})[u]
+=
+\langle r,\mathcal{N}u\rangle_{L^2(D)}
++
+\langle \nabla r,\nabla(\mathcal{N}u)\rangle_{L^2(D)} .
+\end{equation}
+ 
+If the differentiation under the parameter integral
+is justified, for instance if \eqref{bochner} holds here, then the derivative can be written as
+\begin{equation*}
+\partial L(\bar{\mu})[u]
+=
+\int_\Omega p_r(\omega)\,du(\omega),
+\end{equation*}
+where
+\begin{equation}
+p_r(\omega)
+:=
+\langle r,\sigma(\cdot,\omega)\rangle_{L^2(D)}
++
+\langle \nabla r,\nabla_x\sigma(\cdot,\omega)\rangle_{L^2(D)} .
+\end{equation}
+On compact parameter sets, or whenever the atom gradients are uniformly bounded
+in $L^2(D)$, which defines a bounded continuous dual variable on $\Omega$.
+On the unbounded ridge parameter domain, it is in general false as we discussed in the last section.  
+Hence, it is not the predual of $\mathcal{M}(\Omega)$ without additional assumptions. 
+
+We circumvent this barrier with integration by parts. The price to pay is higher regularity of the residual.
+If $r\in H^2(D)$ with the boundary of $D$ regular enough, the $\bar{p}$ can instead be represented by Green's formula:
+\begin{equation*}
+\langle r,\sigma(\cdot,\omega)\rangle_{L^2(D)}
++
+\langle \nabla r,\nabla_x\sigma(\cdot,\omega)\rangle_{L^2(D)}
+=
+\langle r-\Delta r,\sigma(\cdot,\omega)\rangle_{L^2(D)}
++
+\langle \partial_n r,\sigma(\cdot,\omega)\rangle_{L^2(\partial D)} .
+\end{equation*}
+
+This representation avoids the unbounded gradient kernel and will be the one used
+for the analysis on the unbounded parameter domain.
+
+\begin{lemma}[boundary representation of the dual pairing]\label{lem:dual_pairing}
+Let $D \subset \mathbb{R}^d$ be a bounded Lipschitz domain. Assume that
+\[
+\sigma(x,\omega) = \rho(a\cdot x+b), \qquad \omega=(a,b)\in\Omega,
+\]
+with $\rho \in C^1(\mathbb{R}) \cap L^\infty(\mathbb{R})$. Let
+$r \in H^2(D)$ and $p_r$ defined as above, then:
+\begin{enumerate}
+\item For every $\omega\in\Omega$,
+\begin{equation*}
+	p_r(\omega)
+	= \langle r-\Delta r, \sigma(\cdot,\omega)\rangle_{L^2(D)}
+	+ \langle \partial_n r, \sigma(\cdot,\omega)\rangle_{L^2(\partial D)}.
+\end{equation*}
+In particular, $p_r$ is continuous and bounded, with
+\begin{equation*}
+	\sup_{\omega\in\Omega} |p_r(\omega)|
+	\le C_D \|\rho\|_{L^\infty(\mathbb{R})}\|r\|_{H^2(D)}.
+\end{equation*}
+
+\item For every $\mu' \in \mathcal{M}(\Omega)$ such that
+$\mathcal{N}\mu' \in H^1(D)$,
+\begin{equation*}
+	\langle r, \mathcal{N}\mu' \rangle_{L^2(D)}
+	+ \langle \nabla r, \nabla(\mathcal{N}\mu') \rangle_{L^2(D)}
+	= \int_\Omega p_r(\omega)\,d\mu'(\omega).
+\end{equation*}
+\end{enumerate}
+\end{lemma}
+\begin{proof}
+(1) For fixed $\omega=(a,b)$, the function
+$\sigma(\cdot,\omega)=\rho(a\cdot x+b)$ belongs to
+$C^1(\overline D)\subset H^1(D)$. Moreover
+$|\sigma(x,\omega)|\le \|\rho\|_{L^\infty(\mathbb{R})}$ on both $D$ and
+$\partial D$. Let $u=\sigma(\cdot,\omega)$. Since $r\in H^2(D)$ and $u\in H^1(D)$, Green's
+formula gives
+\begin{equation*}
+\langle \nabla r,\nabla u\rangle_{L^2(D)}
+=
+-\langle \Delta r,u\rangle_{L^2(D)}
++
+\langle \partial_n r,u\rangle_{L^2(\partial D)} .
+\end{equation*}
+Adding $\langle r,u\rangle_{L^2(D)}$ yields
+\begin{equation*}
+p_r(\omega)
+=
+\langle r-\Delta r,\sigma(\cdot,\omega)\rangle_{L^2(D)}
++
+\langle \partial_n r,\sigma(\cdot,\omega)\rangle_{L^2(\partial D)} .
+\end{equation*}
+This proves the representation in part (1). 
+The bound follows from Cauchy--Schwarz and the trace estimate for the normal derivative:
+\begin{equation*}
+\begin{aligned}
+|p_r(\omega)|
+&\le
+\|r-\Delta r\|_{L^2(D)}
+\|\sigma(\cdot,\omega)\|_{L^2(D)}
++
+\|\partial_n r\|_{L^2(\partial D)}
+\|\sigma(\cdot,\omega)\|_{L^2(\partial D)} \\
+&\le
+C_D \|\rho\|_{L^\infty(\mathbb{R})}\|r\|_{H^2(D)},
+\end{aligned}
+\end{equation*}
+with constant depending on the domain $D$. 
+The right-hand side is independent of $\omega$. Continuity of $p_r$ follows
+from the representation above: if $\omega_j\to\omega$, then
+$\sigma(\cdot,\omega_j)\to\sigma(\cdot,\omega)$ in both $L^2(D)$ and
+$L^2(\partial D)$. Continuity follows by dominated convergence.
+
+(2) Now let $\mu'\in\mathcal{M}(\Omega)$ with $\mathcal{N}\mu'\in H^1(D)$ and set
+$u=\mathcal{N}\mu'$. We use the trace theorem on bounded Lipschitz domains:
+there is a bounded linear trace operator
+\begin{equation*}
+	\operatorname{Tr}: H^1(D) \to H^{1/2}(\partial D) \hookrightarrow L^2(\partial D),
+\end{equation*}
+and, since $r\in H^2(D)$, the normal trace 
+$\partial_n r := \operatorname{Tr}(\nabla r)\cdot n$ belongs to
+$L^2(\partial D)$. Green's formula gives
+\begin{equation*}
+\langle r,u\rangle_{L^2(D)}
++
+\langle \nabla r,\nabla u\rangle_{L^2(D)}
+=
+\langle r-\Delta r,u\rangle_{L^2(D)}
++
+\langle \partial_n r,\operatorname{Tr}u\rangle_{L^2(\partial D)} .
+\end{equation*}
+Since $\rho$ is bounded and $\mu'$ is finite, Fubini's theorem gives
+\begin{equation*}
+\langle r-\Delta r,\mathcal{N}\mu'\rangle_{L^2(D)}
+=
+\int_\Omega
+\langle r-\Delta r,\sigma(\cdot,\omega)\rangle_{L^2(D)}
+\,d\mu'(\omega).
+\end{equation*}
+Moreover, the boundedness and continuity of $\sigma(\cdot,\omega)$ imply by
+dominated convergence that $\mathcal{N}\mu'$ has a continuous representative on
+$\overline D$,
+\begin{equation*}
+	(\mathcal{N}\mu')(x)=\int_\Omega \sigma(x,\omega)\,d\mu'(\omega).
+\end{equation*}
+For functions in $H^1(D)\cap C(\overline D)$, the Sobolev trace coincides with
+the classical boundary restriction. Hence, for
+$\mathcal{H}^{d-1}$-almost every $x\in\partial D$,
+\begin{equation*}
+	\operatorname{Tr}(\mathcal{N}\mu')(x)
+	= (\mathcal{N}\mu')(x)
+	= \int_\Omega \sigma(x,\omega)\,d\mu'(\omega).
+\end{equation*}
+Using this identity and applying Fubini on $\partial D$ gives
+\begin{equation*}
+\langle \partial_n r,\operatorname{Tr}(\mathcal{N}\mu')\rangle_{L^2(\partial D)}
+=
+\int_\Omega
+\langle \partial_n r,\sigma(\cdot,\omega)\rangle_{L^2(\partial D)}
+\,d\mu'(\omega).
+\end{equation*}
+Combining the last three identities and using the representation from part
+(1), we obtain
+\begin{equation*}
+\langle r,\mathcal{N}\mu'\rangle_{L^2(D)}
++
+\langle \nabla r,\nabla(\mathcal{N}\mu')\rangle_{L^2(D)}
+=
+\int_\Omega p_r(\omega)\,d\mu'(\omega).
+\end{equation*}
+This proves part (2).
+\end{proof}
+
+If the residual $r := \mathcal{N}\bar{\mu} - V$ belongs to $H^2(D)$, then
+$\bar{p} = p_r$ in the notation of Lemma~\ref{lem:dual_pairing}, and the
+representation of Lemma~\ref{lem:dual_pairing}(1) splits the G\^ateaux derivative into an interior
+term and a boundary term. The interior term vanishes as
+$|\omega| \rightarrow \infty$ by Lemma~\ref{lem:value_decay}. The boundary
+term pairs the normal derivative of the residual against the trace of
+the atom on the boundary,
+\begin{equation*}
+	\langle \partial_n r, \, \sigma(\cdot, \omega) \rangle_{L^2(\partial D)}
+	= \int_{\partial D} \partial_n r(x) \, \rho(a \cdot x + b) \, d\mathcal{H}^{d-1}(x),
+\end{equation*}
+so everything depends on whether the trace $\rho(a \cdot x + b)|_{\partial D}$
+becomes small. If $\partial D$ meets every hyperplane in an
+$\mathcal{H}^{d-1}$-null set --- no flat boundary pieces, e.g.\ $D$ smooth and 
+strictly convex --- then every sharpening ridge crosses the boundary
+transversally, its trace is supported on a band of vanishing surface measure,
+and the term vanishes (Lemma~\ref{lem:dual_decay}). In that case
+$\limsup_{|\omega| \rightarrow \infty} |p_r(\omega)| = 0$.
+
+
+\begin{lemma}[decay of the dual variable]\label{lem:dual_decay}
+In the setting of Lemma~\ref{lem:dual_pairing}, assume in addition that
+Assumption~\ref{ass:ridge_c0} holds and that
+$\mathcal{H}^{d-1}(\partial D \cap \Pi) = 0$ for every hyperplane
+$\Pi \subset \mathbb{R}^d$. Then $p_r \in C_0(\Omega)$.
+\end{lemma}
+\begin{proof}
+By Lemma~\ref{lem:dual_pairing}(1), $p_r$ is continuous, so $p_r \in C_0(\Omega)$
+follows once $|p_r(\omega)| \to 0$ as $|\omega| \to \infty$. The representation
+there gives 
+\begin{equation*}
+	|p_r(\omega)|
+	\le \big(\|r\|_{L^2(D)} + \|\Delta r\|_{L^2(D)}\big)\,\kappa(\omega)
+	+ \|\partial_n r\|_{L^2(\partial D)}\,\kappa_\partial(\omega),
+\end{equation*}
+with $\kappa(\omega) := \|\sigma(\cdot,\omega)\|_{L^2(D)}$ and
+$\kappa_\partial(\omega) := \|\sigma(\cdot,\omega)\|_{L^2(\partial D)}$. By
+Lemma~\ref{lem:value_decay}, $\kappa(\omega) \to 0$ as $|\omega| \to \infty$; it
+remains to show $\kappa_\partial(\omega) \to 0$.
+
+Let $R_D > 0$ satisfy $|x| \le R_D$ on $\overline{D}$, and set
+$\eta(\tau) := \sup_{|z| \ge \tau} |\rho(z)|$, so $\eta(\tau) \to 0$ as
+$\tau \to \infty$. Fix $\tau > 0$; as in Lemma~\ref{lem:value_decay}, splitting
+$\partial D$ into the band $B_\tau(\omega) := \{x \in \partial D : |a \cdot x + b|
+\le \tau\}$, where $|\sigma| \le \|\rho\|_\infty$, and its complement, where
+$|\sigma| \le \eta(\tau)$,
+\begin{equation*}
+	\kappa_\partial(\omega)^2
+	\le \|\rho\|_\infty^2 \, \mathcal{H}^{d-1}(B_\tau(\omega))
+	+ \eta(\tau)^2 \, \mathcal{H}^{d-1}(\partial D).
+\end{equation*}
+We claim $\mathcal{H}^{d-1}(B_\tau(\omega)) \to 0$ as $|\omega| \to \infty$.
+Let $|\omega_j| \to \infty$. It is enough to show that every subsequence has a
+further subsequence along which
+$\mathcal{H}^{d-1}(B_\tau(\omega_j)) \to 0$. Passing to such a further
+subsequence, either $|a_j|$ is bounded or $|a_j| \to \infty$.
+
+If $|a_j|$ is bounded, then $|b_j| \to \infty$, and
+\begin{equation*}
+	\inf_{x\in\partial D}|a_j\cdot x+b_j|
+	\ge |b_j|-|a_j|R_D \to \infty.
+\end{equation*}
+Hence $B_\tau(\omega_j)=\emptyset$ eventually.
+
+It remains to consider the case $|a_j| \to \infty$. If
+$B_\tau(\omega_j)=\emptyset$ along a further subsequence, there is nothing to
+prove. Otherwise choose $x_j\in B_\tau(\omega_j)$. After passing to a further
+subsequence, $a_j/|a_j|\to e$ with $|e|=1$ and
+$x_j\to x_*\in\partial D$. Since $|a_j\cdot x_j+b_j|\le\tau$,
+\begin{equation*}
+	\frac{b_j}{|a_j|}\to \beta := -e\cdot x_*.
+\end{equation*}
+For $x\in B_\tau(\omega_j)$,
+\begin{equation*}
+	|e \cdot x + \beta|
+	\le \frac{|a_j \cdot x + b_j|}{|a_j|}
+	+ \Big| e - \frac{a_j}{|a_j|} \Big|\, R_D
+	+ \Big| \beta - \frac{b_j}{|a_j|} \Big|
+	\to 0
+\end{equation*}
+uniformly in $x$. Thus for every $\varepsilon>0$, eventually
+\begin{equation*}
+	B_\tau(\omega_j)
+	\subset \{x\in\partial D: |e\cdot x+\beta|\le \varepsilon\}.
+\end{equation*}
+Therefore
+\begin{equation*}
+	\limsup_j \mathcal{H}^{d-1}(B_\tau(\omega_j))
+	\le
+	\mathcal{H}^{d-1}\big(\{x\in\partial D: |e\cdot x+\beta|\le \varepsilon\}\big).
+\end{equation*}
+Letting $\varepsilon\downarrow0$ and using continuity from above gives
+\begin{equation*}
+	\limsup_j \mathcal{H}^{d-1}(B_\tau(\omega_j))
+	\le
+	\mathcal{H}^{d-1}\big(\partial D\cap\Pi\big)=0,
+	\qquad
+	\Pi:=\{x:e\cdot x=-\beta\},
+\end{equation*}
+by the no-flat-face hypothesis. Hence
+$\mathcal{H}^{d-1}(B_\tau(\omega)) \to 0$, so
+$\limsup_{|\omega| \to \infty} \kappa_\partial(\omega)^2 \le
+\eta(\tau)^2 \, \mathcal{H}^{d-1}(\partial D)$ for every $\tau$; letting
+$\tau \to \infty$ gives $\kappa_\partial(\omega) \to 0$. With
+$\kappa(\omega) \to 0$ this yields $|p_r(\omega)| \to 0$, hence
+$p_r \in C_0(\Omega)$.
+\end{proof}
+   
+\begin{remark}\label{rem:no_escape} 
+If instead $\partial D$ contains a flat face
+$F \subset \{n_F \cdot x = c_F\}$ (as for the boxes of Section~6), a ridge can
+align with it: along $a_j = t_j\, n_F$, $b_j = -t_j c_F + s_0$ with
+$t_j \rightarrow \infty$, the argument $a_j \cdot x + b_j \equiv s_0$ is
+\emph{constant on the face}, so the trace does not shrink --- it converges to
+the constant $\rho(s_0)$ on $F$ and to $0$ on the rest of the boundary. In the
+limit only the flux of the residual through the face survives:
+\begin{equation*}
+	p_r(\omega_j) \;\rightarrow\; \rho(s_0) \int_F \partial_n r \, d\mathcal{H}^{d-1}.
+\end{equation*}
+Geometrically, these atoms are ever-thinner ridges pressed against the face:
+they occupy vanishing volume, but their gradients keep correcting the normal
+derivative of the fit in a boundary layer along $F$, which remains profitable
+exactly as long as the residual has nonzero flux through the face. 
+\end{remark}
+
+
+\subsection{Activation functions}
+For the local analysis of Section~3.6 --- the optimality conditions and the finite-support theorem, whose
+arguments are local in $\omega$ --- we use the following differentiability of
+the ridge profile.
+
+\begin{assumption}\label{ass:diff_lipschitz}
+The activation has the ridge form $\sigma(x,\omega) = \rho(a \cdot x + b)$,
+$\omega = (a,b) \in \Omega = \mathbb{R}^{d+1}$, with $\rho \in C^1(\mathbb{R})$
+and $\rho, \rho'$ Lipschitz continuous.
+\end{assumption}
+
+In particular, on every compact set $K \subset \Omega$ there is a constant
+$\Lambda_K$ such that, for all $x \in D$ and $\omega_1, \omega_2 \in K$,
+\begin{align*}
+	&|\sigma(x, \omega_1) - \sigma(x, \omega_2)| \le \Lambda_K (1 + \|x\|)|\omega_1 - \omega_2|,\\
+	&|\partial_{x_i}\sigma(x, \omega_1) - \partial_{x_i}\sigma(x, \omega_2)| \le \Lambda_K (1 + \|x\|)|\omega_1 - \omega_2|, \quad i = 1, \dots, d,
+\end{align*}
+the Lipschitz-in-$\omega$ regularity the local analysis relies on; the constant
+is local in $\omega$ because $\partial_{x_i}\sigma = a_i \rho'$ carries the
+factor $a_i$.
+
+Which activation suits which target is a question about the derivative
+$\partial_x \sigma$: under the gradient-augmented loss each neuron contributes
+$\sigma$ to the reconstruction of $V$ and $\partial_x \sigma$ to that of
+$\nabla V$, so the shape of $\partial_x\sigma$ governs the approximation
+economy. This discussion is deferred to Section~6, where it accompanies the
+numerical studies: smooth targets in Section~6.1, targets with a gradient
+discontinuity in Section~6.2.
+
+
+\subsection{The nonconvex penalty}
+We implement an explicit sparsity-promoting penalty term. 
+The penalization does not enhance the generalization performance for large neural networks \cite{zhang2021understanding}. 
+Nevertheless, the explicit regularization still plays a central role in the sparse learning. 
+As introduced in the introduction, the $l^1$ penalty fails to detect the redundancy of the neurons clustering in a small neighborhood, which motivates the nonconvex penalty term. First we introduce the following assumption:
+\begin{assumption} \label{pen1}
+	The penalty term $\phi: \mathbb{R}_+ \rightarrow \mathbb{R}_+$ satisfies: $\phi$ is differentiable at 0 with $\phi'(0) = 1$. 
+\end{assumption}
+
+\begin{assumption} \label{pen2}
+The penalty term $\phi: \mathbb{R}_+ \rightarrow \mathbb{R}_+$ is differentiable, concave, nondecreasing and coercive($\phi(z) \rightarrow \infty$ as $z \rightarrow \infty$) with $\phi(0) = 0$.
+\end{assumption}
+ 
+The Assumption~\ref{pen2} describe the global property of the penalty functions. 
+By introducing the nonconvexity the coercivity of the quadratic cost is compromised. 
+With Assumption~\ref{pen1}, \ref{pen2} the optimization problem stays coercive such that we can apply the direct method of calculus of variations. 
+The following lemma follows from the assumption. 
+ 
+\begin{lemma} \label{firstorderestimate} Let Assumption~\ref{pen2} be satisfied. Then:
+\begin{enumerate}
+	\item (subadditivity) $\phi(z_1 + z_2) \le \phi(z_1) + \phi(z_2)$ for all $z_1, z_2 \ge 0$;
+	\item if in addition Assumption~\ref{pen1} is satisfied, then $\phi(z) \le z$ for all $z \ge 0$.
+\end{enumerate}
+\end{lemma}
+\begin{proof}
+	\textbf{1.}  Using $\phi(0) = 0$ and the fundamental theorem of calculus,
+	\begin{align*}
+		\phi(z_1 + z_2) &= \int_0^{z_1} \phi'(s)\, ds + \int_0^{z_2} \phi'(z_1 + s)\, ds \\
+(\phi' \text{ nonincreasing by concavity})\quad		&\le  \int_0^{z_1} \phi'(s)\, ds + \int_0^{z_2} \phi'(s)\, ds \\
+		& = \phi(z_1) + \phi(z_2).
+	\end{align*}
+	\textbf{2.} For $z \ge 0$,
+	\begin{align*}
+		\phi(z) &= \int_0^{z} \phi'(s)\, ds
+		 \le \int_0^{z} \phi'(0)\, ds
+		 = z,
+	\end{align*}
+	using again that $\phi'$ is nonincreasing and $\phi'(0) = 1$.
+\end{proof}
+ 
+ 
+Assumption~\ref{pen1}, \ref{pen2} ensures that the nonconvex problem admits a global minimizer. 
+To enhance the sparsity, we need to exert strong penalizing effect on the weight on 2 neighboring neurons such that merging them would in fact reduce the cost. 
+We are mainly interested in the behavior of $\phi'$ in a neighborhood of $0$: 
+ 
+\begin{assumption}[Local concavity]
+ \label{pen3}
+ The penalty term $\phi: \mathbb{R}_+ \rightarrow \mathbb{R}$ satisfies:
+ \begin{enumerate}
+  	\item There exists $\gamma_1 \ge 0, \hat{z}_1 > 0$, such that $  -\gamma_1(z_2 - z_1) \le \phi'(z_2) - \phi'(z_1) \le 0$ for all $0\le z_1 \le z_2 \le \hat{z}_1. $ ($\gamma$-convex)
+ 	\item There exists $\gamma_2 > 0$, $\hat{z}_2 > 0$, such that $\phi'(z_2) - \phi'(z_1) \le -\gamma_2(z_2 - z_1) \le 0 $ for all  $0 \le z_1 \le z_2 \le \hat{z}_2. $ (strongly concave)
+ \end{enumerate}
+ \end{assumption}
+ \begin{remark}
+ The Assumption~\ref{pen3} can be interpreted as the concave function being strongly concave but exhibits also certain convexity locally at 0. It is worth noticing that it is entirely a local property that only needs to take effect at 0. Assumption~\ref{pen3}(2) induces  strict subadditivity that takes effect at small weights. \par
+ In general the global concavity in Assumption~\ref{pen2} does not imply the $\gamma$-convexity in Assumption~\ref{pen3}(1): the curvature of a concave $\phi$ may be unbounded from below near $0$.
+ Observe, for example, $\phi(x) = x - \frac{2}{3}x^{\frac{3}{2}}$ on a neighborhood of $0$ (modified outside, e.g.\ extended nondecreasing and coercive beyond $x = \frac{1}{4}$, so that Assumption~\ref{pen2} holds on all of $\mathbb{R}_+$): here $\phi''(x) = -\frac{1}{2}x^{-1/2} \rightarrow -\infty$ as $x \rightarrow 0^+$, so no constant $\gamma_1$ satisfies Assumption~\ref{pen3}(1), while the strong concavity of Assumption~\ref{pen3}(2) does hold near $0$. Since Assumption~\ref{pen3} is a local property, such penalties can be constructed piecewise, prescribing the behavior in a neighborhood of $0$ first. 
+  
+ \end{remark}
+
+\begin{proposition}[second-order envelopes]
+\label{secondorderestimate}
+	Given $\phi$ that satisfies the Assumption~\ref{pen1}, \ref{pen2}, if $\phi$ satisfies further Assumption~\ref{pen3}, then it holds
+	\begin{enumerate}
+		\item for all $ z \in [0, \hat{z}_1]: \phi(z) \ge z - \frac{\gamma_1}{2} z^2$,
+		\item for all $z \in [0, \hat{z}_2]: \phi(z) \le z - \frac{\gamma_2}{2}z^2$.
+	\end{enumerate}
+\end{proposition}
+\begin{proof}
+	By $\phi(0) = 0$ and $\phi'(0) = 1$ (Assumptions \ref{pen2}, \ref{pen1}),
+	\begin{align*}
+		\phi(z) - z = \int_0^{z} \big( \phi'(s) - \phi'(0) \big)\, ds .
+	\end{align*}
+	On $[0, \hat{z}_1]$, Assumption~\ref{pen3}(1) gives $-\gamma_1 s \le \phi'(s) - \phi'(0) \le 0$, and integrating yields (1). On $[0, \hat{z}_2]$, Assumption~\ref{pen3}(2) gives $\phi'(s) - \phi'(0) \le -\gamma_2 s$, and integrating yields (2).
+\end{proof}
+
+By the proposition above we know any penalty satisfies Assumption~\ref{pen1} and \ref{pen3} admits such upper and lower bound. 
+The function
+\begin{equation}
+	\phi_{\gamma}(z) = \frac{1}{\gamma} \log ( 1 + \gamma z)
+\end{equation}
+for $\gamma > 0$ and its convex combination with the $l1$ norm will be the main function of choice for our numerical analysis. 
+
+Next we incorporate the nonconvex penalty in the integral representation.
+For the atom parts it is defined in the discrete setting. 
+For the continuous part on $\Omega$ the measure is penalized with the weight $\phi'(0)$. 
+Under Assumption~\ref{pen1} it is the $L^1$ norm of measure. 
+Concretely, observe $\Omega = \atom \mu \cup \cont\mu $, we define the penalty term
+\begin{equation}
+	\Phi_1(\mu) = \|\mu_{\cont}\|_{\mathcal{M}(\Omega)} + \sum_{\omega \in \atom \mu} \phi(|\mu|(\omega)).
+\end{equation}
+
+We formulate the optimization problem as
+\begin{equation*}
+	\tag{$P_{\Phi_1}$}\label{int_noncon}
+	\min_{\mu \in \mathcal{M}(\Omega)} J (\mu):= L(\mu) + \alpha \Phi_1(\mu).
+\end{equation*}
+
+
+\subsection{Existence of the global minimizer}
+In this section we prove the existence of the global minimizer. 
+We leverage the direct method of the calculus of variations. 
+Since we are working on the space of measure $\mathcal{M}(\Omega)$ we consider the weak-* convergence. 
+As usual, the difficulty is to prove the weak-* lower semicontinuity (l.s.c.). 
+Furthermore, the coercivity is compromised by introducing the nonconvex penalty term $\Phi$. 
+The next lemma address this problem.
+It proves that the coercivity of $\Phi_1$ is preserved by the Assumption~\ref{pen1}, \ref{pen2} of $\phi$.
+
+\begin{lemma}[On the coercivity of $\Phi_1$] \label{lem:coercivity}
+Under the Assumption~\ref{pen1}, \ref{pen2}, for any $\mu \in \mathcal{M}(\Omega)$, it holds
+\begin{align*}
+	\phi(\|\mu\|_{\mathcal{M}(\Omega)}) \le \Phi_1(\mu) \le \|\mu\|_{\mathcal{M}(\Omega)}.
+\end{align*}
+In particular, the functional $\Phi_1$ is coercive.
+\end{lemma}
+\begin{proof}
+The proof relies on the subadditivity and $\phi(z) \le z$ from Lemma
+\ref{firstorderestimate}; note that the subadditivity extends from two summands
+to countably many by induction and the continuity of $\phi$.
+\begin{align*}
+	\phi(\|\mu\|_{\mathcal{M}(\Omega)}) &= \phi \bigg(|\mu|(\Omega \backslash \atom \mu) + \sum_{\omega \in \atom \mu } |\mu|(\{\omega\}) \bigg),\\
+	(\text{subadditivity) }
+	& \le \phi\big(|\mu|(\Omega\backslash \atom \mu)\big) + \sum_{\omega \in \atom \mu } \phi(|\mu|(\{\omega\})), \\
+	\big(\phi(z) \le z\big)\quad
+	& \le |\mu|(\Omega\backslash \atom \mu) + \sum_{\omega \in  \atom \mu} \phi(|\mu|(\{\omega\})),\\
+	& = \Phi_1(\mu).
+\end{align*}
+In particular, by the coercivity of $\phi$ it holds that $\Phi_1$ is also coercive. \\
+For the second inequality, we apply $\phi(z) \le z$ to every atom and use that the continuous part enters $\Phi_1$ with weight one; this gives $\Phi_1(\mu) \le \|\mu\|_{\mathcal{M}(\Omega)}$.
+\end{proof}
+
+The next lemma proves the weak-* l.s.c. of $\Phi_1$. It is a special case of
+the lower-semicontinuity theory of \cite{bouchitte1990new} for nonconvex
+functionals on measures, which is developed on locally compact domains and so
+applies to $\Omega = \mathbb{R}^{d+1}$. Since $\Phi_1$ only depends on the
+atomic and continuous parts of the measure, no activation assumption enters.
+Only Assumptions \ref{pen1} and \ref{pen2} are needed --- in particular not
+the local concavity of Assumption~\ref{pen3}.
+\begin{lemma}[weak-* lower semicontinuity of $\Phi_1$] \label{lem:lsc}
+Under Assumptions \ref{pen1} and \ref{pen2}, the functional
+\begin{align*}
+	\Phi_1(\mu) = \|\mu_{\cont}\|_{\mathcal{M}(\Omega)} + \sum_{ \omega \in \atom \mu } \phi(|\mu|(\{\omega\}))
+\end{align*} 
+is sequentially weak-* l.s.c. on $\mathcal{M}(\Omega)$.
+\end{lemma}
+\begin{proof}
+	Let $\mu_h \overset{*}{\rightharpoonup} \mu$; then $M := \sup_h \|\mu_h\|_{\mathcal{M}(\Omega)} < \infty$ by the uniform boundedness principle. Passing to a subsequence we may assume $\lim_h \Phi_1(\mu_h) = \liminf_h \Phi_1(\mu_h) =: \ell < \infty$ (otherwise there is nothing to prove). Fix $\epsilon > 0$. We decompose each element of the \emph{sequence} --- not the limit --- into its $\epsilon$-heavy atomic part $\zeta_h$ and the rest $\eta_h$:
+	\begin{align*}
+		\mu_h = \zeta_h + \eta_h, \qquad
+		\zeta_h := \mu_h|_{A_h}, \qquad
+		A_h:= \{ \omega \in \Omega: |\mu_h|(\{\omega\}) \ge \epsilon \},
+	\end{align*}
+	so that $\eta_h$ collects the atoms of mass below $\epsilon$ together with the continuous part, and, the two parts living on disjoint atom sets,
+	\begin{align*}
+		\Phi_1(\mu_h) = \Phi_1(\zeta_h) + \Phi_1(\eta_h).
+	\end{align*}
+	Since $\|\mu_h\|_{\mathcal{M}(\Omega)} \le M$, the set $A_h$ contains at most $k := \lfloor M/\epsilon \rfloor$ points. Both parts are bounded by $M$ in variation, and $C_0(\Omega)$ is separable for $\Omega = \mathbb{R}^{d+1}$; hence, after a further extraction,
+	\begin{equation*}
+		\zeta_h \overset{*}{\rightharpoonup} \zeta, \qquad
+		\eta_h \overset{*}{\rightharpoonup} \eta, \qquad
+		\zeta + \eta = \mu .
+	\end{equation*}
+	We estimate the two parts separately. \\
+	\textbf{Heavy part:} \par
+	Each $\zeta_h$ is purely atomic with at most $k$ atoms. By lemma 3.6 in \cite{bouchitte1990new}, the set of measures with at most $k$ atoms is sequentially weak-* closed --- hence $\zeta$ is purely atomic with at most $k$ atoms --- and on this set the functional $\mu' \mapsto \sum_{\omega} \phi(|\mu'|(\{\omega\}))$ is sequentially weak-* l.s.c., since $\phi$ is continuous and subadditive (Lemma~\ref{firstorderestimate}). Therefore
+	\begin{align*}
+		\liminf_{h} \Phi_1(\zeta_h)
+		= \liminf_h  \sum_{ \omega \in \atom \zeta_h } \phi(|\zeta_{h}|(\{\omega\}))
+		\ge \sum_{ \omega \in \atom \zeta } \phi(|\zeta|(\{\omega\})) = \Phi_1 ( \zeta).
+	\end{align*}
+
+	\quad\\
+	\textbf{Light part:} \par
+	Since $\phi$ is concave with $\phi(0) = 0$, it holds for all $z \in [0, \epsilon]$,
+	\begin{equation*}
+			\phi(z) \ge \frac{\phi(\epsilon)}{\epsilon}\, z =: (1 - \delta_\epsilon)\, z,
+			\qquad \text{where } \delta_\epsilon = 1 - \frac{\phi(\epsilon)}{\epsilon} \rightarrow 1 - \phi'(0) = 0 \text{ as } \epsilon \rightarrow 0
+	\end{equation*}
+	by Assumption~\ref{pen1}.
+	Every atom of $\eta_h$ has mass below $\epsilon$, and the continuous part enters $\Phi_1$ with weight one, so
+	\begin{equation*}
+	\begin{aligned}
+		\Phi_1(\eta_h)
+		&= \|\eta_{h, \cont}\|_{\mathcal{M}(\Omega)} + \sum_{\omega \in \atom \eta_h} \phi(|\eta_{h}|(\{\omega\}))\\
+		&\ge (1 - \delta_\epsilon) \bigg( \|\eta_{h, \cont}\|_{\mathcal{M}(\Omega)} + \sum_{\omega \in \atom \eta_h} |\eta_{h}|(\{\omega\}) \bigg)
+		= (1 - \delta_\epsilon)\, \|\eta_h\|_{\mathcal{M}(\Omega)}.
+	\end{aligned}
+	\end{equation*}
+	By the weak-* l.s.c. of the norm $\|\cdot\|_{\mathcal{M}(\Omega)}$ and by $\Phi_1 \le \|\cdot\|_{\mathcal{M}(\Omega)}$ (Lemma~\ref{lem:coercivity}),
+	\begin{equation*}
+		\liminf_h \Phi_1(\eta_h) \ge (1 - \delta_\epsilon)\, \|\eta\|_{\mathcal{M}(\Omega)} \ge (1 - \delta_\epsilon)\, \Phi_1(\eta).
+	\end{equation*}
+
+	The functional $\Phi_1$ is subadditive: for $\mu = \zeta + \eta$ with $\zeta$ purely atomic we have $\mu_{\cont} = \eta_{\cont}$, every atom of $\mu$ is an atom of $\zeta$ or of $\eta$, and $\phi(|\zeta + \eta|(\{\omega\})) \le \phi(|\zeta|(\{\omega\})) + \phi(|\eta|(\{\omega\}))$ by the monotonicity and subadditivity of $\phi$; hence $\Phi_1(\mu) \le \Phi_1(\zeta) + \Phi_1(\eta)$. Combining the two parts,
+	\begin{align*}
+		\ell = \lim_h \Phi_1(\mu_h)
+		\ge \liminf_h \Phi_1(\zeta_h) + \liminf_h \Phi_1(\eta_h)
+		\ge \Phi_1(\zeta) + (1 - \delta_\epsilon)\, \Phi_1(\eta)
+		\ge (1 - \delta_\epsilon)\, \Phi_1(\mu).
+	\end{align*}
+	Since $\epsilon > 0$ was arbitrary and $\delta_\epsilon \rightarrow 0$ as $\epsilon \rightarrow 0$ --- the selections above may depend on $\epsilon$, but the conclusion does not --- we obtain $\ell \ge \Phi_1(\mu)$.
+\end{proof}
+
+On the unbounded parameter domain the difficulty beyond the lower
+semicontinuity of $\Phi_1$ is the behavior of the fidelity term under mass
+escaping to infinity. Under Assumption~\ref{ass:ridge_c0} the value atoms of
+the dictionary vanish in $L^2(D)$ as the parameter tends to infinity
+(Lemma~\ref{lem:value_decay}), and this is exactly what rules the escape out.
+
+\begin{theorem}[Existence on the unbounded parameter domain]\label{thm:existence}
+Let Assumption~\ref{ass:ridge_c0} and Assumptions \ref{pen1}, \ref{pen2} hold.
+Then problem \eqref{int_noncon} admits at least one global
+minimizer in $\mathcal{M}(\Omega)$.
+\end{theorem}
+\begin{proof}
+Since $V \in H^1(D)$ we have $\inf J \le J(0) < \infty$. Let $(\mu_n)$ be a
+minimizing sequence with $J(\mu_n) \le C$. By Lemma~\ref{lem:coercivity},
+$\phi(\|\mu_n\|_{\mathcal{M}(\Omega)}) \le \Phi_1(\mu_n) \le C/\alpha$, and the
+coercivity of $\phi$ yields $\sup_n \|\mu_n\|_{\mathcal{M}(\Omega)} < \infty$.
+As $C_0(\Omega)$ is separable, bounded sets of $\mathcal{M}(\Omega)$ are
+sequentially weak-* compact; passing to a subsequence we have
+$\mu_n \overset{*}{\rightharpoonup} \bar{\mu}$.
+
+By Lemma~\ref{lem:value_decay}, $\mathcal{N}\mu_n \rightharpoonup
+\mathcal{N}\bar{\mu}$ weakly in $L^2(D)$. Moreover $J(\mu_n) \le C$ implies
+$\mathcal{N}\mu_n \in H^1(D)$ with
+$\|\nabla(\mathcal{N}\mu_n)\|_{L^2(D)} \le \|\nabla V\|_{L^2(D)} + \sqrt{2C}$,
+passing to a subsequence again we have $\nabla(\mathcal{N}\mu_n) \rightharpoonup g$
+weakly for some $g$ in $L^2(D)^d$. For every $\psi \in C_c^\infty(D)^d$,
+\begin{equation*}
+	\int_D g \cdot \psi\, dx
+	= \lim_n \int_D \nabla(\mathcal{N}\mu_n) \cdot \psi\, dx
+	= -\lim_n \int_D \mathcal{N}\mu_n\, \div \psi\, dx
+	= -\int_D \mathcal{N}\bar{\mu}\, \div \psi\, dx,
+\end{equation*}
+hence $g = \nabla(\mathcal{N}\bar{\mu})$ in the sense of distributions, and
+$\mathcal{N}\bar{\mu} \in H^1(D)$. The two fidelity terms are weakly lower
+semicontinuous norms evaluated at the weak limits $\mathcal{N}\bar{\mu} - V$
+and $\nabla(\mathcal{N}\bar{\mu}) - \nabla V$, and $\Phi_1$ is weak-* lower
+semicontinuous by Lemma~\ref{lem:lsc}, whose proof requires only local
+compactness of $\Omega$. Therefore
+$J(\bar{\mu}) \le \liminf_n J(\mu_n) = \inf J$.
+\end{proof}
+
+
+
+\subsection{Optimality conditions and finite support}
+\begin{theorem}[the optimality condition]
+\label{opt_cdt}
+	Under Assumptions~\ref{ass:diff_lipschitz}, \ref{pen1}, \ref{pen2}, if $\bar{\mu}$ is a local minimum of $J$ with $L(\bar{\mu}) < \infty$, then, writing $\bar{p}(\omega) := \partial L(\bar{\mu})[\delta_\omega] = \langle r, \sigma(\cdot,\omega)\rangle_{L^2(D)} + \langle \nabla r, \nabla_x\sigma(\cdot,\omega)\rangle_{L^2(D)}$ with $r := \mathcal{N}\bar{\mu} - V$, it holds
+	\begin{enumerate}
+		\item $|\bar{p}(\omega)| \le \alpha \qquad \text{for all } \omega \in \Omega$,
+		\item $\bar{p}(\omega) = -\alpha \phi'(|\bar{\mu}|(\{\omega\})) \sign(\bar{\mu})(\omega), \qquad \text{for } |\bar{\mu}|\text{-almost all } \omega \in \Omega,$
+	\end{enumerate}
+	where the sign density $\sign(\bar{\mu}): \Omega \rightarrow \{-1, 1\}$ is defined $|\bar{\mu}|$-almost everywhere by the Hahn decomposition of $\bar{\mu}$.
+\end{theorem}
+\begin{proof}
+We use the directional derivative $\partial L(\bar{\mu})[u]$, not a duality pairing --- $\bar{p}$ need not lie in the predual $C_0(\Omega)$. For a single atom, $\partial L(\bar{\mu})[\delta_\omega] = \bar{p}(\omega)$ since $\mathcal{N}\delta_\omega = \sigma(\cdot, \omega)$.
+Since $\bar{\mu}$ is a local minimizer, for every fixed $u \in \mathcal{M}(\Omega)$ and all sufficiently small $\tau > 0$ (depending on $u$):
+\begin{align*}
+	J(\bar{\mu} + \tau u) - J(\bar{\mu}) = L(\bar{\mu} + \tau u) - L(\bar{\mu}) + \alpha \Phi_1(\bar{\mu} + \tau u) - \alpha \Phi_1(\bar{\mu}) \ge 0.
+\end{align*}
+Dividing by $\tau$ and letting $\tau \rightarrow 0^+$ along any direction $u$ with $\mathcal{N}u \in H^1(D)$ (in particular the directions $u = \pm\delta_\omega$ and $u = \pm\bar{\mu}_{\cont}^R$ used below), the fidelity difference converges to $\partial L(\bar{\mu})[u]$, so
+\begin{align*}
+	-\partial L(\bar{\mu})[u] \le \alpha \lim_{ \tau \rightarrow 0^+} \frac{1}{\tau} \big(\Phi_1(\bar{\mu} + \tau u) - \Phi_1(\bar{\mu}) \big),
+\end{align*}
+whenever the right-hand side limit exists.
+Now we separate two cases.
+\quad\\
+\textbf{1)} For the atom part: let $\omega \in \atom \bar{\mu} $ with $c := \bar{\mu}(\{\omega\}) \neq 0$. Taking $u = \delta_\omega$ and using that $\phi$ is differentiable at $|c| > 0$,
+\begin{align*}
+	- \bar{p}(\omega) =  -\partial L(\bar{\mu})[\delta_\omega] \le \alpha \lim_{\tau \rightarrow 0^+} \frac{1}{\tau} \big(\phi (|c + \tau|) - \phi(|c|)\big) = \alpha \phi'(|c|) \sign(c).
+\end{align*}
+Repeating the argument with $u = - \delta_\omega$ yields the reverse inequality, hence $\bar{p}(\omega) = -\alpha \phi'(|c|) \sign(c)$.
+Since $\phi'(0) = 1$ and $\phi'$ is nonincreasing and nonnegative, we have $\phi'(|c|) \in [0, 1]$, hence $|\bar{p}(\omega)| \le \alpha$ at every atom.
+
+\quad\\
+\textbf{2)} For the remaining points: let $\omega \notin \atom \bar{\mu}$ and perturb with $ u = \delta_\omega$; then
+\begin{align*}
+	-\bar{p}(\omega) =  - \partial L(\bar{\mu})[\delta_\omega] \le \alpha \lim_{\tau \rightarrow 0^+ } \frac{1}{\tau} \big( \phi(\tau) - \phi(0) \big) = \alpha \phi'(0) = \alpha.
+\end{align*}
+Taking $u = - \delta_\omega$, the mass at $\omega$ is again $\tau$, so the penalty still contributes $\phi(\tau)$; this gives $\bar{p}(\omega) \le \alpha$, and with the above $|\bar{p}(\omega)| \le \alpha$ for all $\omega \notin \atom \bar{\mu}$, which together with case 1) proves claim (1).\par
+The continuous part cannot be inserted directly: $\int_\Omega \|\nabla_x \sigma(\cdot, \omega)\|_{L^2(D)} \, d|\bar{\mu}_{\cont}|$ may be infinite, in which case $\mathcal{N}\bar{\mu}_{\cont} \notin H^1(D)$, and this cannot be excluded a priori --- the atomic part may carry infinitely many atoms, and $\mathcal{N}\bar{\mu} \in H^1(D)$ does not split over the summands. We therefore truncate. For $R > 0$ set $\bar{\mu}_{\cont}^R := \bar{\mu}_{\cont}|_{\{|\omega| \le R\}}$. On the bounded set $\{|\omega| \le R\}$ the gradient kernel is uniformly bounded, $\|\nabla_x \sigma(\cdot, \omega)\|_{L^2(D)} \le C_R$, so $\int_\Omega \|\nabla_x \sigma(\cdot, \omega)\|_{L^2(D)} \, d|\bar{\mu}_{\cont}^R| \le C_R \|\bar{\mu}_{\cont}^R\|_{\mathcal{M}(\Omega)} < \infty$. Hence $\omega \mapsto \nabla_x \sigma(\cdot, \omega)$ is Bochner integrable against $\bar{\mu}_{\cont}^R$, so $\mathcal{N}\bar{\mu}_{\cont}^R \in H^1(D)$ by itself; consequently $\mathcal{N}(\bar{\mu} \pm \tau \bar{\mu}_{\cont}^R) \in H^1(D)$, the directions $\pm\bar{\mu}_{\cont}^R$ are admissible, and $\partial L(\bar{\mu})[\bar{\mu}_{\cont}^R] = \int_{\{|\omega| \le R\}} \bar{p} \, d\bar{\mu}_{\cont}$. Since perturbing by $\pm \bar{\mu}_{\cont}^R$ only rescales the continuous part on $\{|\omega| \le R\}$, we have $\Phi_1(\bar{\mu} \pm \tau \bar{\mu}_{\cont}^R) - \Phi_1(\bar{\mu}) = \pm \tau \|\bar{\mu}_{\cont}^R\|_{\mathcal{M}(\Omega)}$, and the variational inequality in both signs gives
+\begin{align*}
+	\int_{\{|\omega| \le R\}} \bigg( - \bar{p}(\omega) \, \sign( \bar{\mu}_{\cont}) (\omega)  - \alpha \bigg) \, d|\bar{\mu}_{\cont}|(\omega) = 0.
+\end{align*}
+The integrand is nonpositive by claim (1), hence it vanishes $|\bar{\mu}_{\cont}|$-almost everywhere on $\{|\omega| \le R\}$; letting $R \to \infty$ gives $\bar{p} =  - \alpha \, \sign (\bar{\mu}_{\cont})$ for $|\bar{\mu}_{\cont}|$-almost all $\omega$. Together with case 1) this proves claim (2).
+\end{proof}
+
+The theorem gives a necessary optimality condition for the local minimizer. 
+But on the other hand, it lays the ground to prove that the local optimizer admits finite support. 
+If the sample size is finite, then the optimal solution admits finite support by the Carath\'eodory's theorem. 
+The following theorem proves that the optimal solution admits the finite support even though the dataset is infinitely large. 
+In contrast to \cite{pieper2022nonconvex} the parameter domain is not assumed
+compact; the price is the explicit no-escape condition \eqref{no_escape} on the
+dual variable at infinity, for which Remark~\ref{rem:no_escape} provides
+checkable sufficient conditions under the localization of
+Assumption~\ref{ass:ridge_c0}.
+
+\begin{theorem}[finite support]\label{thm:finite_support}
+	Let Assumptions \ref{pen1}, \ref{pen2}, \ref{pen3} and
+	Assumption~\ref{ass:diff_lipschitz} hold. Let $\bar{\mu}$ be a local
+	minimizer of \eqref{int_noncon} with $L(\bar{\mu}) < \infty$ satisfying the
+	\emph{no-escape condition}
+	\begin{equation*}
+		\tag{$H$}\label{no_escape}
+		\limsup_{|\omega| \rightarrow \infty} |\bar{p}(\omega)| < \alpha.
+	\end{equation*}
+	Then $\bar{\mu}$ is supported on finitely many points,
+	$\bar{\mu} = \sum_{n = 1}^N \bar{c}_n \delta_{\bar{\omega}_n}$. On a compact
+	parameter set $\Omega_R$ the condition \eqref{no_escape} is void and the
+	conclusion holds unconditionally.
+\end{theorem}
+\begin{proof}
+1. $\cont\bar{\mu} = \emptyset$: Argue by contradiction and assume
+$\bar{\mu}_{\cont} \neq 0$; without loss of generality the positive part of the
+Hahn decomposition $\bar{\mu} = \bar{\mu}^+ - \bar{\mu}^-$ has a nontrivial
+continuous part $\bar{\mu}^+_{\cont} \neq 0$ (otherwise argue with
+$\bar{\mu}^-$ and reversed signs). By Theorem~\ref{opt_cdt},
+$\bar{p} = -\alpha$ holds $\bar{\mu}^+_{\cont}$-almost everywhere, and the
+atoms of $\bar{\mu}$ form a $\bar{\mu}^+_{\cont}$-null set; we may therefore
+choose
+\begin{align*}
+	\hat{\omega} \in \supp \bar{\mu}^+_{\cont}
+	\quad \text{with} \quad
+	\bar{p}(\hat{\omega}) = -\alpha, \qquad \bar{\mu}(\{\hat{\omega}\}) = 0.
+\end{align*}
+For $\delta \in (0, 1]$ set $D_\delta := B_\delta(\hat{\omega})$ and
+$m_\delta := \bar{\mu}^+_{\cont}(D_\delta)$; then $m_\delta > 0$ for every
+$\delta$ since $\hat{\omega} \in \supp \bar{\mu}^+_{\cont}$, and
+$m_\delta \rightarrow \bar{\mu}^+_{\cont}(\{\hat{\omega}\}) = 0$ as
+$\delta \rightarrow 0$. We merge \emph{only the continuous positive mass} of
+the ball onto its center:
+\begin{align*}
+	\mu_\delta = \bar{\mu} - \bar{\mu}^+_{\cont}|_{D_\delta} + m_\delta \, \delta_{\hat{\omega}}.
+\end{align*}
+Note $\|\mu_\delta - \bar{\mu}\|_{\mathcal{M}(\Omega)} \le 2 m_\delta \rightarrow 0$,
+so $\mu_\delta$ is an admissible competitor for the local minimizer once
+$\delta$ is small. We prove that it decreases the cost. \par
+The perturbation $\mu_\delta - \bar{\mu}$ is supported in a compact subset of
+$\Omega$, on which $\bar{p}$ is continuous and hence bounded, so every
+$\int_\Omega \bar{p}\, d(\mu_\delta - \bar{\mu})$ below is an ordinary integral,
+not the $\mathcal{M}$--$C_0$ duality pairing (which is unavailable, as
+$\bar{p}$ need not lie in $C_0(\Omega)$).
+The fidelity term is quadratic, therefore the second order Taylor expansion is exact:
+\begin{align*}
+	L(\mu_\delta)  &= L(\bar{\mu}) + \int_\Omega \bar{p}\, d(\mu_\delta - \bar{\mu}) + \frac{1}{2} \|\mathcal{N}[\mu_\delta - \bar{\mu}]\|_{L^2(D)}^2 + \frac{1}{2}\sum_{i = 1}^d \|\partial_{x_i} \mathcal{N}[\mu_\delta - \bar{\mu}]\|_{L^2(D)}^2 .
+\end{align*}
+The moved measure $\bar{\mu}^+_{\cont}|_{D_\delta}$ is nonnegative with total
+mass $m_\delta$, and $\sigma(x, \cdot)$, $\partial_{x_i}\sigma(x, \cdot)$ are
+Lipschitz on the compact ball $\overline{B_1(\hat{\omega})}$ with a constant of
+the form $\Lambda_{\hat{\omega}} (1 + \|x\|)$ (the compact-$\omega$ Lipschitz
+bounds of Assumption~\ref{ass:diff_lipschitz}). Hence
+\begin{align*}
+	 |\mathcal{N}[\mu_\delta - \bar{\mu}](x)| &= \bigg|\int_{D_\delta} \big( \sigma(x, \hat{\omega}) - \sigma(x, \omega) \big) \, d\bar{\mu}^+_{\cont}(\omega) \bigg|
+	 \le \delta \Lambda_{\hat{\omega}} (1 + \|x\|)\, m_\delta,
+\end{align*}
+and analogously
+$|\partial_{x_i} \mathcal{N}[\mu_\delta - \bar{\mu}](x)| \le \delta \Lambda_{\hat{\omega}} (1 + \|x\|)\, m_\delta$.
+Define
+\begin{align*}
+	\Lambda_1^2(D, \Lambda_{\hat{\omega}}) =  \Lambda_{\hat{\omega}}^2 \int_D(1 + \|x\|)^2 dx .
+\end{align*}
+Hence
+\begin{align*}
+	L(\mu_\delta) \le L(\bar{\mu}) + \int_\Omega \bar{p}\, d(\mu_\delta - \bar{\mu}) + \frac{d + 1}{2}\delta^2 \Lambda_1^2 m_\delta^2.
+\end{align*}
+For the first order term, $\bar{p} = -\alpha$ holds
+$\bar{\mu}^+_{\cont}$-almost everywhere on $D_\delta$ and
+$\bar{p}(\hat{\omega}) = -\alpha$, so it vanishes exactly:
+\begin{align*}
+	\int_\Omega \bar{p}\, d(\mu_\delta - \bar{\mu})
+	= m_\delta \, \bar{p}(\hat{\omega}) - \int_{D_\delta} \bar{p} \, d\bar{\mu}^+_{\cont}
+	= -\alpha m_\delta + \alpha m_\delta = 0.
+\end{align*}
+Concerning the penalty term, the moved mass is continuous --- it enters
+$\Phi_1$ with weight one --- and creates the single new atom
+$m_\delta \delta_{\hat{\omega}}$ (recall $\bar{\mu}(\{\hat{\omega}\}) = 0$).
+For $\delta$ small enough that $m_\delta \le \hat{z}_2$,
+\begin{align*}
+	\Phi_1(\mu_\delta) &= \Phi_1(\bar{\mu}) - m_\delta + \phi(m_\delta),\\
+	&= \Phi_1(\bar{\mu}) + \int_0^{m_\delta} \phi'(\xi) - \phi'(0) \, d\xi,\\
+	\text{(Assumption~\ref{pen1}, \ref{pen3}(2)) }
+	& \le \Phi_1(\bar{\mu}) - \frac{ \gamma_2 }{2} m_\delta^2.
+\end{align*}
+Combining the two parts we get
+\begin{align*}
+	J(\mu_\delta) \le J(\bar{\mu}) - \bigg(\frac{ \alpha \gamma_2 - (d + 1) \delta^2 \Lambda_1^2}{2} \bigg) m_\delta^2.
+\end{align*}
+Choosing $\delta^2 < \frac{\alpha \gamma_2}{(d + 1)\Lambda_1^2(D, \Lambda_{\hat{\omega}})}$
+gives $J(\mu_\delta) < J(\bar{\mu})$, contradicting local minimality. Hence
+$\bar{\mu}_{\cont} = 0$.
+ 
+\quad\\
+2. $|\atom \bar{\mu}|$ is finite:
+First, the atoms cannot escape to infinity: if there were atoms $\omega_n$ with
+$|\omega_n| \rightarrow \infty$, then $|\bar{\mu}|(\{\omega_n\}) \rightarrow 0$
+by the boundedness of the total variation, and Theorem~\ref{opt_cdt} together
+with $\phi'(0) = 1$ would give
+\begin{equation*}
+	|\bar{p}(\omega_n)|
+	= \alpha \, \phi'(|\bar{\mu}|(\{\omega_n\}))
+	\rightarrow \alpha,
+\end{equation*}
+contradicting the no-escape condition \eqref{no_escape}. Hence
+$\atom \bar{\mu}$ is contained in a compact subset of $\Omega$.
+
+Now assume by contradiction that $\atom \bar{\mu}$ is infinite. Then there
+exists a sequence of distinct atoms with $\omega_n \rightarrow \hat{\omega}$
+for some $\hat{\omega} \in \Omega$; after passing to a subsequence, infinitely
+many of the weights share one sign, w.l.o.g.\ 
+$c_n := \bar{\mu}(\{\omega_n\}) > 0$. By the boundedness of the total
+variation it holds $\lim_{n \rightarrow \infty} c_n = 0$, and by Theorem
+\ref{opt_cdt} and the continuity of $\bar{p}$,
+\begin{align*}
+	\bar{p}(\hat{\omega}) = \lim_{n \rightarrow \infty} \bar{p}(\omega_n) = -\alpha \lim_{n\rightarrow \infty} \phi'(c_n) = -\alpha.
+\end{align*}
+Concentrate the tail of the sequence at the limit $\hat{\omega}$: for
+$N \in \mathbb{N}$ define
+\begin{align*}
+	\mu_N := \bar{\mu} - \sum_{i = N}^\infty c_i \, \delta_{\omega_i} + C_N \delta_{\hat{\omega}}, \qquad C_N := \sum_{i = N}^\infty c_i > 0,
+	\qquad \delta_N:= \sup_{i \ge N} |\omega_i - \hat{\omega}| \rightarrow 0,
+\end{align*}
+so that $\|\mu_N - \bar{\mu}\|_{\mathcal{M}(\Omega)} \le 2 C_N \rightarrow 0$.
+As in step 1 (with the local Lipschitz constant $\Lambda_{\hat{\omega}}$; again
+$\mu_N - \bar{\mu}$ is compactly supported, since $\atom \bar{\mu}$ lies in a
+compact set, so $\int_\Omega \bar{p}\, d(\mu_N - \bar{\mu})$ is an ordinary integral),
+\begin{align*}
+	L(\mu_N) \le L(\bar{\mu}) + \int_\Omega \bar{p}\, d(\mu_N - \bar{\mu}) +\frac{d +1}{2} \Lambda_1^2(D, \Lambda_{\hat{\omega}}) \delta_N^2  C_N^2 .
+\end{align*}
+For the first order term we have by the optimality condition and the value
+$\bar{p}(\hat{\omega}) = -\alpha$:
+\begin{align*}
+	\int_\Omega \bar{p}\, d(\mu_N - \bar{\mu}) = -\sum_{i = N}^\infty \bar{p}(\omega_i) c_i + C_N \bar{p}(\hat{\omega}) = \alpha \sum_{i = N}^\infty c_i \phi'(c_i) - \alpha C_N.
+\end{align*}
+For the penalty term, by the monotonicity and subadditivity of $\phi$
+(Lemma~\ref{firstorderestimate}) --- which also covers the case that
+$\hat{\omega}$ is itself an atom of $\bar{\mu}$, since
+$\phi(|\bar{\mu}(\{\hat{\omega}\})| + C_N) - \phi(|\bar{\mu}(\{\hat{\omega}\})|) \le \phi(C_N)$ ---
+\begin{align*}
+	\Phi_1(\mu_N) \le \Phi_1(\bar{\mu}) - \sum_{i = N}^\infty \phi(c_i) + \phi(C_N).
+\end{align*}
+Combining the estimates, it holds
+\begin{align*}
+	J(\mu_N) \le J(\bar{\mu}) - \alpha \sum_{i = N}^\infty \bigg(\phi(c_i) - c_i \phi'(c_i) \bigg) - \alpha\bigg(C_N  - \phi(C_N) \bigg) + \frac{d + 1}{2} \Lambda_1^2(D, \Lambda_{\hat{\omega}}) \delta_N^2 C_N^2.
+\end{align*}
+By concavity of $\phi$ it holds
+\begin{align*}
+	\phi(c_i) - c_i \phi'(c_i) \ge \phi(0) = 0.
+\end{align*}
+For $N$ large enough that $C_N \le \hat{z}_2$, by Assumption~\ref{pen1} and \ref{pen3}(2) it holds
+\begin{align*}
+	C_N - \phi(C_N) &= C_N \phi'(0) - \bigg(\phi(0) + \int_0^{C_N} \phi'(\xi) d\xi \bigg)
+	= -\int_0^{C_N}\phi'(\xi) - \phi'(0) d\xi
+	\ge \frac{\gamma_2}{2}C_N^2.
+\end{align*}
+Thus
+\begin{align*}
+	J(\mu_N) \le J(\bar{\mu}) - \frac{1}{2}\bigg(\alpha \gamma_2 -(d + 1) \Lambda_1^2(D, \Lambda_{\hat{\omega}})\delta_N^2 \bigg)C_N^2.
+\end{align*}
+Since $\delta_N \rightarrow 0$, choosing $N$ large enough that additionally
+\begin{align*}
+	\delta_N^2 < \frac{\alpha \gamma_2}{\Lambda_1^2(D, \Lambda_{\hat{\omega}})(d + 1)}
+\end{align*}
+gives $J(\mu_N) < J(\bar{\mu})$ with $\|\mu_N - \bar{\mu}\|_{\mathcal{M}(\Omega)}$
+arbitrarily small, contradicting local minimality. Hence $\atom \bar{\mu}$ is
+finite, and together with step 1 the claim follows.
+\end{proof}
+
+\begin{remark}[failure of no escape on a flat face]\label{rem:flat_face_counterexample}
+Condition \eqref{no_escape} can fail because an escaping ridge remains visible
+on a flat boundary face. Let $D=(0,1)^d$ with $d\ge2$, let
+$F=\{x\in\partial D:x_1=0\}$, and take the localized profile
+$\rho(z)=e^{-z^2}$. Set
+\begin{equation*}
+	r(x)=\cosh(1-x_1).
+\end{equation*}
+Then $r\in H^2(D)$ and $\Delta r=r$, so the interior term
+$\langle r-\Delta r,\sigma(\cdot,\omega)\rangle_{L^2(D)}$ vanishes. The
+boundary representation of Lemma~\ref{lem:dual_pairing} gives
+\begin{equation*}
+	p_r(a,b)
+	=
+	\int_{\partial D}\partial_n r(x)\,\rho(a\cdot x+b)\,
+	d\mathcal{H}^{d-1}(x).
+\end{equation*}
+On $F$ the outward normal is $-e_1$, so $\partial_n r=\sinh(1)$; on the other
+faces $\partial_n r=0$. Along the escaping sequence
+\begin{equation*}
+	a_j=t_j e_1,\qquad b_j=0,\qquad t_j\to\infty,
+\end{equation*}
+one has $a_j\cdot x+b_j=0$ on $F$, and therefore
+\begin{equation*}
+	p_r(a_j,b_j)
+	=
+	\sinh(1)\rho(0)\,\mathcal{H}^{d-1}(F)
+	=
+	\sinh(1).
+\end{equation*}
+Thus the dual variable does not decay along this escaping sequence, and the
+quantity controlled by \eqref{no_escape} equals $\sinh(1)$ for this dual field.
+This example does not assert that the displayed $r$ is the residual of a local
+minimizer; it isolates the boundary-flux mechanism that \eqref{no_escape} rules
+out. Corollary~\ref{cor:flat_face_escape} shows that, in the $H^2$ regime, this
+normal-to-a-flat-face escape is the only way an escaping sequence can keep the
+dual variable from vanishing.
+\end{remark}
+
+\begin{corollary}[escaping directions in the $H^2$ regime]\label{cor:flat_face_escape}
+Assume the hypotheses of Lemma~\ref{lem:dual_pairing} and
+Assumption~\ref{ass:ridge_c0}. Let $\omega_j=(a_j,b_j)$ satisfy
+$|\omega_j|\to\infty$ and
+\begin{equation*}
+	\limsup_{j\to\infty}|p_r(\omega_j)|>0.
+\end{equation*}
+Then, after passing to a subsequence,
+\begin{equation*}
+	|a_j|\to\infty,\qquad \frac{a_j}{|a_j|}\to e,\qquad
+	\frac{b_j}{|a_j|}\to -c
+\end{equation*}
+for some $|e|=1$ and $c\in\mathbb{R}$ such that
+\begin{equation*}
+	\mathcal{H}^{d-1}\big(\partial D\cap\{x:e\cdot x=c\}\big)>0.
+\end{equation*}
+In particular, if the positive-measure section above is a flat face
+$F\subset\{x:n_F\cdot x=c_F\}$, then the escaping sequence is asymptotically
+normal to that face: up to changing the sign of the normal,
+\begin{equation*}
+	\frac{a_j}{|a_j|}\to n_F,\qquad
+	\frac{b_j}{|a_j|}\to -c_F.
+\end{equation*}
+\end{corollary}
+\begin{proof}
+Choose a subsequence, not relabeled, and $\epsilon>0$ such that
+$|p_r(\omega_j)|\ge\epsilon$. By Lemma~\ref{lem:dual_pairing}(1),
+\begin{equation*}
+	|p_r(\omega_j)|
+	\le
+	\big(\|r\|_{L^2(D)}+\|\Delta r\|_{L^2(D)}\big)\kappa(\omega_j)
+	+
+	\|\partial_n r\|_{L^2(\partial D)}\kappa_\partial(\omega_j),
+\end{equation*}
+where
+\begin{equation*}
+	\kappa(\omega):=\|\sigma(\cdot,\omega)\|_{L^2(D)},\qquad
+	\kappa_\partial(\omega):=\|\sigma(\cdot,\omega)\|_{L^2(\partial D)}.
+\end{equation*}
+Lemma~\ref{lem:value_decay} gives $\kappa(\omega_j)\to0$.
+
+If $|a_j|$ stayed bounded along a further subsequence, then
+$|b_j|\to\infty$, and since $\partial D$ is bounded,
+$|a_j\cdot x+b_j|\to\infty$ uniformly on $\partial D$. Hence
+$\kappa_\partial(\omega_j)\to0$, contradicting
+$|p_r(\omega_j)|\ge\epsilon$. Therefore $|a_j|\to\infty$ along the
+non-vanishing subsequence. Passing to a further subsequence,
+$a_j/|a_j|\to e$ with $|e|=1$.
+
+If $|b_j|/|a_j|$ were unbounded, then again
+$|a_j\cdot x+b_j|\to\infty$ uniformly on $\partial D$, so
+$\kappa_\partial(\omega_j)\to0$, a contradiction. Thus, after passing to a
+further subsequence, $b_j/|a_j|\to -c$ for some $c\in\mathbb{R}$.
+Let $\Pi:=\{x:e\cdot x=c\}$.
+
+If $\mathcal{H}^{d-1}(\partial D\cap\Pi)=0$, we show directly that
+$\kappa_\partial(\omega_j)\to0$. For $\tau>0$ set
+\begin{equation*}
+	B_j(\tau):=\{x\in\partial D:|a_j\cdot x+b_j|\le\tau\},
+	\qquad
+	\eta(\tau):=\sup_{|z|\ge\tau}|\rho(z)|.
+\end{equation*}
+Then
+\begin{equation*}
+	\kappa_\partial(\omega_j)^2
+	\le
+	\|\rho\|_\infty^2\,\mathcal{H}^{d-1}(B_j(\tau))
+	+
+	\eta(\tau)^2\,\mathcal{H}^{d-1}(\partial D).
+\end{equation*}
+For $x\in B_j(\tau)$,
+\begin{equation*}
+	|e\cdot x-c|
+	\le
+	\frac{|a_j\cdot x+b_j|}{|a_j|}
+	+
+	\Big|e-\frac{a_j}{|a_j|}\Big|R_D
+	+
+	\Big|c+\frac{b_j}{|a_j|}\Big|
+	\to0
+\end{equation*}
+uniformly in $x$, where $R_D>0$ satisfies $|x|\le R_D$ on $\partial D$.
+Hence, for every $\varepsilon>0$, eventually
+\begin{equation*}
+	B_j(\tau)\subset\{x\in\partial D:|e\cdot x-c|\le\varepsilon\}.
+\end{equation*}
+By continuity from above of
+$\mathcal{H}^{d-1}\llcorner\partial D$,
+\begin{equation*}
+	\limsup_j\mathcal{H}^{d-1}(B_j(\tau))
+	\le
+	\mathcal{H}^{d-1}(\partial D\cap\Pi)=0.
+\end{equation*}
+Therefore
+\begin{equation*}
+	\limsup_j\kappa_\partial(\omega_j)^2
+	\le
+	\eta(\tau)^2\,\mathcal{H}^{d-1}(\partial D)
+\end{equation*}
+for every $\tau>0$, and letting $\tau\to\infty$ gives
+$\kappa_\partial(\omega_j)\to0$. Together with $\kappa(\omega_j)\to0$, this
+would imply $p_r(\omega_j)\to0$, contradicting the choice of the subsequence.
+Hence $\mathcal{H}^{d-1}(\partial D\cap\Pi)>0$.
+
+The last assertion follows because a hyperplane containing a flat face has
+normal $\pm n_F$ and offset $\pm c_F$, with the signs linked as above.
+\end{proof}
+
+
+Now we have a necessary optimality condition. But it is not sufficient. More importantly, we cannot formulate an algorithm to determine the optimal value of $N$. To overcome this difficulty, we apply a heuristic approach: for fixed inner weights $\bar{\omega} = (\bar{\omega}_n)_{n = 1}^N$, the finite-dimensional problem
+\begin{equation}\label{opt_fixN}
+	J_{\bar{\omega}}(c):= L\bigg( \sum_{n = 1}^N c_n \delta_{\bar{\omega}_n} \bigg) + \alpha \sum_{n = 1}^N \phi(|c_n|), \qquad c \in \mathbb{R}^N,
+\end{equation}
+is amenable to gradient-based optimization. Now we need to find a way to heuristically determine the optimal $\bar{\omega}$ and the optimal number $N$. To this end, we introduce the following theorem as a sufficient condition.
+
+For the analysis it is convenient to collect the two components of the fidelity term in the product space
+\begin{equation*}
+	\mathcal{Y} := L^2(D) \times L^2(D)^d, \qquad
+	\mathcal{T}\mu := \big(\mathcal{N}\mu, \, \nabla(\mathcal{N}\mu)\big), \qquad
+	\mathcal{V} := (V, \nabla V),
+\end{equation*}
+so that $L(\mu) = \frac{1}{2}\|\mathcal{T}\mu - \mathcal{V}\|_{\mathcal{Y}}^2$
+whenever $\mathcal{N}\mu \in H^1(D)$, and the dual variable reads
+$\bar{p}(\omega) = \langle \mathcal{T}\bar{\mu} - \mathcal{V}, \,
+(\sigma(\cdot,\omega), \nabla_x \sigma(\cdot,\omega)) \rangle_{\mathcal{Y}}$.
+
+\begin{theorem}[sufficient condition for local optimality]
+\label{sc_opt}
+Let $\phi$ satisfy Assumptions \ref{pen1}, \ref{pen2}, \ref{pen3}, let $\sigma$
+satisfy Assumptions~\ref{ass:ridge_c0} and \ref{ass:diff_lipschitz} with
+$\rho \in C^2(\mathbb{R})$, and let $V \in H^2(D)$. Let $\bar{\mu} := \sum_{n = 1}^N \bar{c}_n \delta_{\bar{\omega}_n}$
+with distinct $\bar{\omega}_n$ and $\bar{c}_n \neq 0$ be such that
+\begin{enumerate}
+	\item $\bar{c} \in (\mathbb{R} \setminus \{0\})^N$ is a local minimum of $J_{\bar{\omega}}$,
+	\item $|\bar{p}(\omega)| < \alpha$ for all $\omega \in \Omega \setminus \{\bar{\omega}_n \}_{n = 1, \dots, N}$,
+	\item the no-escape condition \eqref{no_escape} holds. (By Remark
+	\ref{rem:no_escape} and Lemma~\ref{lem:dual_decay}, this is automatic
+	when $\partial D$ meets every hyperplane in an $\mathcal{H}^{d-1}$-null
+	set, and void on a compact parameter set $\Omega_R$.)
+\end{enumerate}
+Then $\bar{\mu}$ is a local minimizer of $J$: there exists $\epsilon > 0$ such
+that $J(\bar{\mu}) \le J(\mu)$ for all $\mu \in \mathcal{M}(\Omega)$ with
+$\|\mu - \bar{\mu}\|_{\mathcal{M}(\Omega)} \le \epsilon$.
+\end{theorem}
+\begin{proof}
+Throughout, $\bar{r} := \mathcal{N}\bar{\mu} - V \in H^2(D)$ (a finite sum of
+$C^2(\overline{D})$ atoms plus $V \in H^2(D)$), and $\bar{p} = p_{\bar{r}}$ in
+the notation of Lemma~\ref{lem:dual_pairing}.
+
+\emph{Step 1 (stationarity at the atoms).} Since $\bar{c}_n \neq 0$ and $\phi$
+is differentiable, $J_{\bar{\omega}}$ is differentiable at $\bar{c}$, and
+hypothesis (1) gives $\partial_{c_n} J_{\bar{\omega}}(\bar{c}) = 0$, i.e.
+$\bar{p}(\bar{\omega}_n) = -\alpha \phi'(|\bar{c}_n|) \sign(\bar{c}_n)$. By
+Assumption~\ref{pen3}(2) and the monotonicity of $\phi'$ it holds
+$\phi'(|\bar{c}_n|) < \phi'(0) = 1$, hence $|\bar{p}(\bar{\omega}_n)| < \alpha$.
+
+\emph{Step 2 (uniform dual gap).} By Step 1 and hypothesis (2),
+$|\bar{p}(\omega)| < \alpha$ for every $\omega \in \Omega$; $\bar{p}$ is
+continuous (Lemma~\ref{lem:dual_pairing}(1)); and by \eqref{no_escape} there is
+$R > 0$ with $\sup_{|\omega| > R} |\bar{p}(\omega)| < \alpha$. On the compact
+ball $\{|\omega| \le R\}$ the continuous function $|\bar{p}|$ attains its
+maximum, which is $< \alpha$. Hence there exists $\delta \in (0, 1)$ with
+\begin{equation*}
+	\sup_{\omega \in \Omega} |\bar{p}(\omega)| \le (1 - \delta)\, \alpha .
+\end{equation*}
+
+\emph{Step 3 (decomposition of a competitor).} By hypothesis (1) there is
+$\epsilon_1 > 0$ with $J_{\bar{\omega}}(c) \ge J_{\bar{\omega}}(\bar{c})$ for
+all $\|c - \bar{c}\|_{\ell^1} \le \epsilon_1$. Fix
+\begin{equation*}
+	\epsilon := \min\bigg\{ \epsilon_1, \; \hat{z}_1, \;
+	\frac{\alpha \delta}{C_{\bar{\omega}} + \alpha \gamma_1 / 2} \bigg\},
+	\qquad
+	C_{\bar{\omega}} := C_{D, \rho} \max_{n = 1, \dots, N}
+	\|\sigma(\cdot, \bar{\omega}_n)\|_{H^2(D)},
+\end{equation*}
+with $C_{D,\rho}$ from Lemma~\ref{lem:dual_pairing}(1). Let $\mu \in
+\mathcal{M}(\Omega)$ with $\|\mu - \bar{\mu}\|_{\mathcal{M}(\Omega)} \le
+\epsilon$. If $\mathcal{N}\mu \notin H^1(D)$ then $J(\mu) = +\infty$ and there
+is nothing to prove; so assume $\mathcal{N}\mu \in H^1(D)$ and decompose
+\begin{equation*}
+	\mu = \mu_0 + \tilde{\mu}, \qquad
+	\mu_0 := \sum_{n = 1}^N c_n \delta_{\bar{\omega}_n}, \quad
+	c_n := \mu(\{\bar{\omega}_n\}),
+\end{equation*}
+so that $\tilde{\mu} := \mu - \mu_0$ carries no mass at the support points, and
+\begin{equation*}
+	\|c - \bar{c}\|_{\ell^1} + \|\tilde{\mu}\|_{\mathcal{M}(\Omega)}
+	= \|\mu - \bar{\mu}\|_{\mathcal{M}(\Omega)} \le \epsilon .
+\end{equation*}
+Note $\mathcal{N}\mu_0 \in C^2(\overline{D})$ and hence
+$\mathcal{N}\tilde{\mu} = \mathcal{N}\mu - \mathcal{N}\mu_0 \in H^1(D)$.
+
+\emph{Step 4 (expansion of the fidelity term).} Expanding the square in
+$\mathcal{Y}$ and discarding $\frac{1}{2}\|\mathcal{T}\tilde{\mu}\|_{\mathcal{Y}}^2 \ge 0$,
+\begin{equation*}
+	L(\mu)
+	= L(\mu_0) + \langle \mathcal{T}\mu_0 - \mathcal{V}, \mathcal{T}\tilde{\mu} \rangle_{\mathcal{Y}}
+	+ \frac{1}{2}\|\mathcal{T}\tilde{\mu}\|_{\mathcal{Y}}^2
+	\ge L(\mu_0)
+	+ \langle \mathcal{T}\bar{\mu} - \mathcal{V}, \mathcal{T}\tilde{\mu} \rangle_{\mathcal{Y}}
+	+ \langle \mathcal{T}(\mu_0 - \bar{\mu}), \mathcal{T}\tilde{\mu} \rangle_{\mathcal{Y}} .
+\end{equation*}
+By Lemma~\ref{lem:dual_pairing}(2) with $r = \bar{r}$ and $\mu' = \tilde{\mu}$,
+\begin{equation*}.  
+	\langle \mathcal{T}\bar{\mu} - \mathcal{V}, \mathcal{T}\tilde{\mu} \rangle_{\mathcal{Y}}
+	= \int_\Omega \bar{p} \, d\tilde{\mu} .
+\end{equation*}
+For the second pairing, $r' := \mathcal{N}(\mu_0 - \bar{\mu})
+= \sum_n (c_n - \bar{c}_n) \sigma(\cdot, \bar{\omega}_n) \in H^2(D)$ with
+$\|r'\|_{H^2(D)} \le \max_n \|\sigma(\cdot,\bar{\omega}_n)\|_{H^2(D)}
+\|c - \bar{c}\|_{\ell^1}$, so Lemma~\ref{lem:dual_pairing}(1)--(2) give
+\begin{equation*}
+	\big| \langle \mathcal{T}(\mu_0 - \bar{\mu}), \mathcal{T}\tilde{\mu} \rangle_{\mathcal{Y}} \big|
+	= \bigg| \int_\Omega p_{r'} \, d\tilde{\mu} \bigg|
+	\le C_{D, \rho} \|r'\|_{H^2(D)} \, \|\tilde{\mu}\|_{\mathcal{M}(\Omega)}
+	\le C_{\bar{\omega}} \, \epsilon \, \|\tilde{\mu}\|_{\mathcal{M}(\Omega)} .
+\end{equation*}
+
+\emph{Step 5 (penalty split and lower bound).} The atoms of $\mu_0$ and
+$\tilde{\mu}$ are disjoint, so
+$\Phi_1(\mu) = \sum_{n = 1}^N \phi(|c_n|) + \Phi_1(\tilde{\mu})$. Every atom of
+$\tilde{\mu}$ has mass at most $\|\tilde{\mu}\|_{\mathcal{M}(\Omega)} \le
+\epsilon \le \hat{z}_1$, so by Proposition~\ref{secondorderestimate}(1),
+\begin{equation*}
+	\Phi_1(\tilde{\mu}) \ge \Big(1 - \frac{\gamma_1 \epsilon}{2}\Big)
+	\|\tilde{\mu}\|_{\mathcal{M}(\Omega)} ,
+\end{equation*}
+while Step 2 gives $\int_\Omega \bar{p}\, d\tilde{\mu} \ge -(1 - \delta)\,
+\alpha \, \|\tilde{\mu}\|_{\mathcal{M}(\Omega)}$.
+
+\emph{Step 6 (assembly).} Combining Steps 4--5 and
+$L(\mu_0) + \alpha \sum_n \phi(|c_n|) = J_{\bar{\omega}}(c)$,
+\begin{align*}
+	J(\mu)
+	&\ge J_{\bar{\omega}}(c)
+	+ \int_\Omega \bar{p}\, d\tilde{\mu}
+	+ \alpha \Phi_1(\tilde{\mu})
+	- C_{\bar{\omega}} \epsilon \|\tilde{\mu}\|_{\mathcal{M}(\Omega)} \\
+	&\ge J_{\bar{\omega}}(c)
+	+ \Big( \alpha \delta - \frac{\alpha \gamma_1 \epsilon}{2}
+	- C_{\bar{\omega}} \epsilon \Big) \|\tilde{\mu}\|_{\mathcal{M}(\Omega)}
+	\ \ge \ J_{\bar{\omega}}(c),
+\end{align*}
+by the choice of $\epsilon$. Since $\|c - \bar{c}\|_{\ell^1} \le \epsilon \le
+\epsilon_1$, hypothesis (1) gives $J_{\bar{\omega}}(c) \ge
+J_{\bar{\omega}}(\bar{c}) = J(\bar{\mu})$, which completes the proof.
+\end{proof}
+
+
+
+\section{The \texorpdfstring{$k$}{k}-homogeneous formulation}
+In this section, we discuss a specific class of activation function: the $k$-homogeneous activation function. 
+
+\begin{assumption}[k-homogeneity]
+	$\sigma$ is positively $k$-homogeneous with respect to $\omega$ for some $k \ge 1$, i.e., for all $x \in D$, $\lambda > 0$ it holds
+\begin{align*}
+	\sigma(x, \lambda \omega) = \lambda^k \sigma (x, \omega)\quad \text{ for all } \omega \in \mathbb{R}^{d + 1}.
+\end{align*}
+\end{assumption}
+\begin{remark}
+For the gradient training we use $k \ge 2$: the $\reluk$ atom is then $C^1$ in $x$, so the gradient-augmented loss is well defined, and for $k > 2$ the inner optimization is even twice continuously differentiable. The derivative of a $\reluk$ ridge is, up to the factor $k$, a $\relu^{k-1}$ ridge: the value term of the loss sees atoms of order $k$ while the gradient term sees atoms of order $k - 1$. In the borderline case $k = 2$ the problem is still well defined, but $\partial_{x_i} \sigma$ has a non-differentiable kink, as in the ReLU case. For $k < 2$ the Lipschitz continuity of the gradient of the activation fails. The algebraic results of this section (Propositions \ref{prop:homogeneous_penalty} and \ref{prop:homogeneous_reformulation}) hold for every $k \ge 1$.
+\end{remark}
+
+\begin{proposition}[Generalization of {\cite[Proposition~3]{pieper2022nonconvex}} to $k$-homogeneous activations]
+\label{prop:homogeneous_penalty}
+	Let $p \geq 1$, $q \geq 1$, and let $r \colon \mathbb{R}^{d+1} \to \mathbb{R}_+$ be a positively $1$-homogeneous functional:
+	\begin{equation*}
+	  r(\tau\,\omega) = |\tau|\, r(\omega) \quad \text{for all } \omega \in \mathbb{R}^{d+1},\; \tau \in \mathbb{R}.
+	\end{equation*}
+	Suppose the activation function $\sigma(x, \omega)$ is positively $k$-homogeneous in $\omega$, i.e.,
+	\begin{equation*}
+	  \sigma(x, \tau\,\omega) = \tau^k\, \sigma(x, \omega) \quad \text{for all } \tau > 0,\; \omega \in \mathbb{R}^{d+1},\; x \in D.
+	\end{equation*}
+	Then the unconstrained problem
+	\begin{equation*}
+	  \min_{N \in \mathbb{N},\; (c_n, \omega_n) \in \mathbb{R} \times \mathbb{R}^{d+1}}
+	  \; l(\mathcal{N}_{\omega,c};\, V)
+	  + \alpha \sum_{n=1}^{N} \left[ \frac{1}{p}\,|c_n|^p + \frac{1}{q}\,r(\omega_n)^q \right],
+	\end{equation*}
+	and the sphere-constrained problem
+	\begin{equation*}
+	  \min_{N \in \mathbb{N},\; \{c_n\} \in \mathbb{R},\; \{\tilde\omega_n:\, r(\tilde\omega_n) \leq 1\}}
+	  \; l(\mathcal{N}_{\tilde\omega,c};\, V)
+	  + \frac{2\alpha}{s}\, k^{-kp/(kp+q)} \sum_{n=1}^{N} |c_n|^{s/2},
+	\end{equation*}
+	where
+	\begin{equation*}
+	  s \;=\; \frac{2pq}{kp + q},
+	\end{equation*}
+	are equivalent.
+\end{proposition}
+\begin{remark}\leavevmode
+	For $p = q = 2$ we get $s = 4/(k+1)$, so the exponent is $s/2 = 2/(k+1)$ and the constant is $2/s \cdot k^{-k/(k+1)} = \frac{k+1}{2}\,k^{-k/(k+1)}$: the sphere penalty is
+	\begin{equation*}
+	\alpha\,\frac{k+1}{2}\,k^{-k/(k+1)} \sum_{n=1}^N |c_n|^{2/(k+1)}.
+	\end{equation*}
+	For $k = 1$ this gives $\alpha \sum|c_n|$, recovering \cite[Proposition~3]{pieper2022nonconvex}; for $k = 2$ it gives $\frac{3}{2} \cdot 2^{-2/3}\, \alpha \sum|c_n|^{2/3}$.
+\end{remark}
+\begin{proof}
+	Since $\sigma$ is positively $k$-homogeneous, for any $\tau > 0$ we have
+	\begin{equation*}
+		c_n\,\sigma(x, \omega_n)
+		= c_n\,\sigma(x, \tau_n\,\tilde\omega_n)
+		= c_n\,\tau_n^k\,\sigma(x, \tilde\omega_n),
+	\end{equation*}
+	so $\mathcal{N}_{\omega,c} = \mathcal{N}_{\tilde\omega,\tilde c}$ where $\tilde\omega_n = \omega_n / \tau_n$, $\tilde c_n = c_n\,\tau_n^k$, for any choice of $\tau_n > 0$. In particular, the loss term $l(\mathcal{N}_{\omega,c};\,V)$ is
+	invariant under this reparametrization.
+	For each $\omega_n \neq 0$, write $\omega_n = \tau_n\,\tilde\omega_n$ with $\tau_n = r(\omega_n) > 0$ and $r(\tilde\omega_n) = 1$ (using the $1$-homogeneity of $r$).
+	Then unconstrained problem is equivalent to
+	\begin{equation*}
+	\min_{\substack{N \in \mathbb{N},\; \{c_n\} \in \mathbb{R}^N \\
+	\{\tilde\omega_n:\, r(\tilde\omega_n) \leq 1\},\; \tau_n \geq 0}}
+	\; l(\mathcal{N}_{\tilde\omega,\tilde c};\, V)
+	+ \alpha \sum_{n=1}^{N}
+	\left[ \frac{1}{p}\,\frac{|\tilde c_n|^p}{\tau_n^{kp}} + \frac{1}{q}\,\tau_n^q \right],
+\end{equation*}
+\quad\\
+For fixed $\tilde c_n \neq 0$, define
+\begin{equation*}
+	g(\tau) \;=\; \frac{1}{p}\,|\tilde c_n|^p\,\tau^{-kp} + \frac{1}{q}\,\tau^q.
+\end{equation*}
+Since $g(\tau) \to +\infty$ as $\tau \to 0^+$ and $\tau \to +\infty$, the minimum exists and is unique. Differentiating:
+\begin{equation*}
+	g'(\tau) = -\,k\,|\tilde c_n|^p\,\tau^{-kp-1} + \tau^{q-1} = 0
+	\quad\Longleftrightarrow\quad
+	\tau^{kp+q} = k\,|\tilde c_n|^p.
+\end{equation*}
+Hence
+\begin{equation*}
+	\tau_n^* = \bigl(k\,|\tilde c_n|^p\bigr)^{1/(kp+q)}.
+\end{equation*}
+
+\quad\\
+Substituting $\tau_n^*$ into $g$:
+
+\emph{First term:}
+\begin{equation*}
+	\frac{1}{p}\,|\tilde c_n|^p \cdot \bigl(k\,|\tilde c_n|^p\bigr)^{-kp/(kp+q)}
+	= \frac{k^{-kp/(kp+q)}}{p}\;|\tilde c_n|^{p\,-\,kp^2/(kp+q)}
+	= \frac{k^{-kp/(kp+q)}}{p}\;|\tilde c_n|^{pq/(kp+q)}.
+\end{equation*}
+Here we used $p - kp^2/(kp+q) = p(kp+q-kp)/(kp+q) = pq/(kp+q)$.
+
+\emph{Second term:}
+\begin{equation*}
+	\frac{1}{q}\,\bigl(k\,|\tilde c_n|^p\bigr)^{q/(kp+q)}
+	= \frac{k^{q/(kp+q)}}{q}\;|\tilde c_n|^{pq/(kp+q)}.
+\end{equation*}
+Adding the two terms and noting that $pq/(kp+q) = s/2$:
+\begin{equation*}
+	g(\tau_n^*)
+	= \left(\frac{k^{-kp/(kp+q)}}{p} + \frac{k^{q/(kp+q)}}{q}\right) |\tilde c_n|^{s/2}.
+\end{equation*}
+We simplify the coefficient. Factor out $k^{q/(kp+q)}$:
+\begin{equation*}
+	\frac{k^{-kp/(kp+q)}}{p} + \frac{k^{q/(kp+q)}}{q}
+	= k^{q/(kp+q)}\!\left(\frac{k^{-1}}{p} + \frac{1}{q}\right)
+	= k^{q/(kp+q)}\,\frac{q + kp}{kpq}.
+\end{equation*}
+Since $s = 2pq/(kp+q)$, we have $(kp+q)/(kpq) = 2/(ks)$, so
+\begin{equation*}
+	g(\tau_n^*) = \frac{2}{s}\,k^{q/(kp+q)}\,k^{-1}\;|\tilde c_n|^{s/2}
+	= \frac{2}{s}\,k^{q/(kp+q) - 1}\;|\tilde c_n|^{s/2}
+	= \frac{2}{s}\,k^{-kp/(kp+q)}\;|\tilde c_n|^{s/2}.
+\end{equation*}
+(using $q/(kp+q) - 1 = -kp/(kp+q)$).
+\end{proof}
+
+For the $\reluk$ activation function with $k \ge 2$, the penalty term induces the power $2/(k + 1) < 1$. 
+The penalty term fails to satisfy the Assumption~\ref{pen1}, in particular, $\phi_k'(0) = \infty$. 
+In this section we no longer use the measure functional $\Phi_1$ from
+Section~3. The fractional-exponent penalty is used only in the discrete,
+finitely atomic formulation
+\begin{equation*}
+	\mu = \sum_{n=1}^N c_n \delta_{\omega_n}, \qquad N < \infty,
+\end{equation*}
+with penalty
+\begin{equation*}
+	\Phi_k(\mu) = \sum_{n=1}^N \phi_k(|c_n|).
+\end{equation*}
+Continuous measure components are therefore not part of the admissible class.
+The optimization problem becomes:
+\begin{equation}
+\label{opt_dis_k}
+\begin{aligned}
+		\min_{N \in \mathbb{N}, \|a_n\|^2 + |b_n|^2 \le  1 , c_n\in \mathbb{R} , n = 1, \dots, N.} l_M(\mathcal{N}_{\omega, c}(x) ;V) + \alpha \sum_{n = 1}^N \phi_k(|c_n|).
+\end{aligned}
+\end{equation}
+
+
+The following proposition states that any optimal solution of \eqref{opt_dis_k} can be projected onto the unit sphere without increasing the cost. 
+Hence we may constrain the optimization problem to the unit sphere. 
+\begin{proposition}[homogeneous reformulation]
+\label{prop:homogeneous_reformulation}
+Assume $\phi_k$ is nondecreasing with $\phi_k(0) = 0$ (in particular, Assumption~\ref{pen2} without the differentiability at zero suffices), assume \eqref{opt_dis_k} admits at least one global minimizer, and let $\sigma$ be $k$-homogeneous with $k \ge 1$. Then \eqref{opt_dis_k} is equivalent to
+\begin{equation*}
+\tag{$P_{\phi_k}$}\label{discrete nonconvex problem}
+		\min_{N \in \mathbb{N}, \|a_n\|^2 + |b_n|^2 =  1 , c_n\in \mathbb{R} , n = 1, \dots, N.} l_M(\mathcal{N}_{\omega, c}(x) ;V) + \alpha \sum_{n = 1}^N \phi_k(|c_n|).
+\end{equation*}
+\end{proposition}
+\begin{proof}
+    By assumption the optimal solution exists; denote $(\hat{N}, (\hat{a}_n, \hat{b}_n, \hat{c}_n)_{n = 1}^{\hat{N}})$ one of the global minimizers. The optimal value of the first part in the fidelity term is
+	\begin{align*}
+		 \frac{1}{2M} \sum_{m = 1}^M \bigg|\bigg( \sum_{n = 1}^{\hat{N}} \hat{c}_n \sigma(\hat{a}_n \cdot x_m + \hat{b}_n) \bigg) - V(x_m) \bigg|^2.
+	\end{align*}
+    Neurons with $(\hat{a}_n, \hat{b}_n) = 0$ satisfy $\sigma(x, 0) = 0$ by $k$-homogeneity and can be discarded without changing the network or increasing the penalty. For the remaining $(\hat{a}_n, \hat{b}_n)$ in the interior of the unit ball with $0 < \|\hat{a}_n\|^2 + |\hat{b}_n|^2 <  1$, denote $\lambda_n =\frac{1}{ \sqrt{ \|\hat{a}_n\|^2 + |\hat{b}_n|^2} } >  1$. We project $(\hat{a}_n, \hat{b}_n)$ onto the sphere by defining
+        \begin{align*}
+            (\tilde{a}_n,\tilde{b}_n) = \lambda_n (\hat{a}_n, \hat{b}_n).
+        \end{align*}
+    Rescaling the outer weights by defining $\tilde{c}_n = \frac{1}{\lambda_n^k} \hat{c}_n$, by $k$-homogeneity of the activation the function value stays the same:
+	\begin{align*}
+		&\frac{1}{2M} \sum_{m = 1}^M \bigg|\bigg( \sum_{n = 1}^{\hat{N}} \tilde{c}_n \sigma(\tilde{a}_n \cdot x_m + \tilde{b}_n) \bigg) - V(x_m) \bigg|^2 \\
+		&\qquad= \frac{1}{2M} \sum_{m = 1}^M \bigg|\bigg(\sum_{n = 1}^{\hat{N}} \hat{c}_n \frac{1}{\lambda_n^k}  \lambda_n^k \sigma(\hat{a}_n \cdot x_m + \hat{b}_n) \bigg) - V(x_m) \bigg|^2 \\
+		&\qquad= \frac{1}{2M} \sum_{m = 1}^M \bigg|\bigg( \sum_{n = 1}^{\hat{N}} \hat{c}_n \sigma(\hat{a}_n \cdot x_m + \hat{b}_n) \bigg) - V(x_m) \bigg|^2.
+	\end{align*}
+    The fidelity is invariant with respect to the scaling. A similar result holds for the second part of the fidelity term by linearity
+	\begin{align*}
+		\tilde{c}_n \nabla_x \sigma (\tilde{a}_n \cdot x + \tilde{b}_n) = \hat{c}_n \frac{1}{\lambda_n^k} \nabla_x \bigg(\lambda_n^k \sigma(\hat{a}_n \cdot x+ \hat{b}_n) \bigg) = \hat{c}_n \nabla_x \sigma(\hat{a}_n \cdot x + \hat{b}_n).
+	\end{align*}
+
+    On the other hand, the penalty term is nondecreasing by Assumption~\ref{pen2}. Since $\lambda_n > 1$ and $k \ge 1$, it holds $|\tilde{c}_n| = |\hat{c}_n|/\lambda_n^k \le |\hat{c}_n|$, hence
+	\begin{align*}
+		\phi_k(|\tilde{c}_n|) \le \phi_k(|\hat{c}_n|).
+	\end{align*}
+	The pair $\bigg(\tilde{N}, (\tilde{a}_n, \tilde{b}_n, \tilde{c}_n)_{n = 1}^{\tilde{N}} \bigg)$ with
+	\begin{align*}
+		\tilde{N} = \hat{N} \in \mathbb{N},\quad (\tilde{a}_n,\tilde{b}_n) \in \mathbb{S}^d, \quad \tilde{c}_n \in \mathbb{R}, \quad n = 1, \dots, \tilde{N},
+	\end{align*}
+	is feasible for the sphere-constrained problem and yields a value no larger than the optimum of \eqref{opt_dis_k}. Conversely, every sphere-feasible point is feasible for \eqref{opt_dis_k}, so the two optimal values coincide; in particular the projected point is a global minimizer of \eqref{discrete nonconvex problem}, and the rescaling maps minimizers of one problem to minimizers of the other, which is the meaning of equivalence here.
+\end{proof}
+
+\subsubsection*{The $\reluk$ function}
+First we consider the ReLU function with the power $k$:
+\begin{align*}
+	\sigma(x, \omega) = \max\{0, \omega \cdot x\}^{k}, \text{ with } k \in [2, \infty).
+\end{align*}
+Since these activations are not polynomials, the corresponding networks are dense in $C(K)$ on compact sets $K$ \cite{leshno1993multilayer}.
+In this case the gradient is
+\begin{align*}
+	\nabla_x \sigma(x, \omega) =
+	\begin{bmatrix}
+		k \max\{0, \omega \cdot x \}^{k - 1} \omega_1\\
+		k \max\{0, \omega \cdot x \}^{k - 1} \omega_2 \\
+		\vdots \\
+		k \max\{0, \omega \cdot x \}^{k - 1} \omega_d
+	\end{bmatrix} \in \mathbb{R}^d.
+\end{align*}
+
+The activation function is non-decreasing and positive homogeneous of degree $k$.
+For the standard ReLU activation ($k = 1$), the second-order weak derivative of an approximant $f_n$ fails to exist as a function (it is only a distribution), so $f_n$ cannot be used to mimic higher-order derivatives.
+Choosing $\sigma$ as a $\mathrm{ReLU}^k$ activation with $k > 1$ remedies this and enables simultaneous approximation of a function together with its derivatives.
+
+For $k > 1$, the activation function not only preserves the homogeneity of ReLU but also smooths the kink. The differentiability buys two things: it removes the non-differentiable corners of the ReLU function, and it makes the gradient of the activation available for the gradient-augmented loss.
+
+In the absence of Assumption~\ref{pen1}, it is difficult to prove the existence of a global minimizer with the direct method of the calculus of variations.
+For example for the penalty $ \phi(c) = |c|^q$ with $q < 1$, we have $\phi'(0) = \infty$, the weak-* l.s.c. of the cost functional breaks.
+However, assuming the local optimizer exists, we can still derive the necessary optimality condition. 
+
+\begin{corollary}[Optimality conditions for $\phi'(0^+) = +\infty$]                     
+\label{cor:singular_penalty}                                                                                                                                                                                                                
+Let $\Omega$ be compact and suppose $\phi$ satisfies Assumption~\ref{pen2} but with $\phi'(0^+) = +\infty$ in place of Assumption~\ref{pen1}                                                                                                
+(e.g., $\phi(z) = \frac{1}{q}z^q$ for $0 < q < 1$).                                                                                                                                                                                         
+If $\bar{\mu}$ is a local minimizer of \eqref{int_noncon} with atomic part                                                                                                                                                                  
+$\bar{\mu}_{\atom} = \sum_{n=1}^N \bar{c}_n\,\delta_{\bar{\omega}_n}$, $\bar{c}_n \neq 0$, then:
+\begin{enumerate}
+	\item Stationarity at each atom:
+	\begin{equation*}
+		\bar{p}(\bar{\omega}_n) = -\alpha\,\phi'(|\bar{c}_n|)\,\sign(\bar{c}_n),
+		\qquad n = 1, \dots, N.
+	\end{equation*}
+
+	\item Lower bound on atom weights:
+	Since $\bar{p} \in C(\Omega)$ and $\Omega$ is compact,
+	$\|\bar{p}\|_{C(\Omega)} < \infty$.
+	Combined with (1), this gives
+	$\phi'(|\bar{c}_n|) = |\bar{p}(\bar{\omega}_n)|/\alpha \le \|\bar{p}\|_{C(\Omega)}/\alpha$
+	for every $n$. Since $\phi'$ is decreasing with $\phi'(0^+) = +\infty$,
+	inverting yields a uniform lower bound:
+	\begin{equation*}
+		|\bar{c}_n| \;\ge\; (\phi')^{-1}\!\Big(\frac{\|\bar{p}\|_{C(\Omega)}}{\alpha}\Big)
+		\;>\; 0,
+		\qquad n = 1, \dots, N.
+	\end{equation*}
+	In particular, $\bar{\mu}$ has at most finitely many atoms:
+	$N \le \|\bar{\mu}\|_{\mathcal{M}(\Omega)} \big/ \min_n |\bar{c}_n| < \infty$.
+\end{enumerate}
+\end{corollary}
+\begin{proof}
+(1) follows by the same directional derivative argument as in Theorem~\ref{opt_cdt}.
+For $\omega_n \in \atom\bar{\mu}$ with $\bar{\mu}(\{\omega_n\}) = \bar{c}_n \neq 0$,
+perturbing with $u = \pm\delta_{\omega_n}$ gives
+\begin{equation*}
+	\mp\,\bar{p}(\omega_n)
+	\;\le\; \alpha\,\lim_{\tau \to 0}\frac{1}{\tau}
+	\bigl[\phi(|\bar{c}_n \pm \tau|) - \phi(|\bar{c}_n|)\bigr]
+	\;=\; \pm\,\alpha\,\phi'(|\bar{c}_n|)\,\sign(\bar{c}_n),
+\end{equation*}
+which yields equality. Note that $\phi'(|\bar{c}_n|) < \infty$ for $\bar{c}_n \neq 0$,
+so this step does not require $\phi'(0) < \infty$.
+
+\medskip\noindent
+(2): The dual variable $\bar{p} = \nabla L(\bar{\mu}) \in C(\Omega)$
+is continuous on the compact set $\Omega$, hence bounded:
+$\|\bar{p}\|_{C(\Omega)} < \infty$.
+By (1), $\phi'(|\bar{c}_n|) = |\bar{p}(\bar{\omega}_n)|/\alpha
+\le \|\bar{p}\|_{C(\Omega)}/\alpha$.
+Since $\phi'$ is strictly decreasing (by concavity of $\phi$) and
+$\phi'(0^+) = +\infty$, the function $\phi'$ restricted to $(0,\infty)$
+has a well-defined decreasing inverse, and
+\begin{equation*}
+	|\bar{c}_n| \;\ge\; (\phi')^{-1}\!\Big(\frac{\|\bar{p}\|_{C(\Omega)}}{\alpha}\Big)
+	\;=:\; c_{\min} \;>\; 0.
+\end{equation*}
+The finiteness of the support then follows from the bounded total variation:
+$N \cdot c_{\min} \le \sum_{n=1}^N |\bar{c}_n| \le \|\bar{\mu}\|_{\mathcal{M}(\Omega)} < \infty$.
+\end{proof}
+
+\begin{remark}
+Compared with Theorem~\ref{opt_cdt}:
+\begin{enumerate}
+	\item The global dual bound $|\bar{p}(\omega)| \le \alpha$ for all $\omega \in \Omega$
+	is \emph{lost}: for $\omega \notin \atom\bar{\mu}$, perturbing with
+	$u = \delta_\omega$ yields
+	$-\bar{p}(\omega) \le \alpha\,\phi'(0^+) = +\infty$, which is vacuous.
+	No constraint on $\bar{p}$ is obtained away from the support.
+	\item In exchange, the singularity $\phi'(0^+) = +\infty$ provides an
+	\emph{automatic minimum atom size} via (2), and finite support
+	follows without the merging argument of Theorem~\ref{thm:finite_support} or
+	the local strong concavity in Assumption~\ref{pen3}.
+	\item The zero measure $\mu = 0$ is always a local minimizer,
+	since adding any atom with small weight $|c| \ll 1$ incurs a
+	marginal penalty $\phi(|c|)/|c| \to +\infty$ that dominates the
+	potential decrease in the loss.
+	This means the node insertion criterion $|\bar{p}(\omega)| > \alpha$
+	of the greedy algorithm no longer applies.
+\end{enumerate}
+\end{remark}
+
+\begin{corollary}[Existence of minimizer for $\eqref{discrete nonconvex problem}$ with $\phi_k'(0^+) = +\infty$]
+\label{cor:discrete_existence}
+Suppose $\phi_k$ satisfies Assumption~\ref{pen2} on $(0, \infty)$ with $\phi_k'(0^+) = +\infty$;
+suppose $\sigma(\cdot, \omega) \in C^1(\overline{D})$ for every $\omega$ with $(x, \omega) \mapsto (\sigma, \nabla_x \sigma)$ continuous on $\overline{D} \times \mathbb{S}^d$ (satisfied by $\reluk$ with $k \ge 2$); and let $D$ be bounded and $V \in H^1(D)$.
+Then the discrete problem $\eqref{discrete nonconvex problem}$ admits a global minimizer with at most $N_{\max}$ neurons, where
+\begin{equation*}
+	N_{\max} = \frac{\|V\|_{H^1(D)}^2}{2\,\alpha\,\phi_k(c_{\min})}, \qquad
+	c_{\min} = (\phi_k')^{-1}\!\bigg(\frac{\|V\|_{H^1(D)}\;\sup_{\omega \in \mathbb{S}^d}\|\sigma(\cdot, \omega)\|_{H^1(D)}}{\alpha}\bigg),
+\end{equation*}
+and $(\phi_k')^{-1}$ denotes the generalized inverse $t \mapsto \inf\{z > 0: \phi_k'(z) \le t\}$.
+\end{corollary}
+\begin{proof}
+1. (Fixed $N$, existence by Weierstrass).
+For fixed $N$, the objective is a real-valued function on $(\mathbb{S}^d)^N \times \mathbb{R}^N$:
+\begin{equation*}
+\begin{aligned}
+	J(\omega, c) ={}& \frac{1}{2} \int_D \bigg| V(x) - \sum_{n=1}^N c_n \sigma(a_n \cdot x + b_n) \bigg|^2 \\
+	&+ \sum_{i=1}^d \bigg| \partial_{x_i} V(x) - \sum_{n=1}^N c_n \partial_{x_i} \sigma(a_n \cdot x + b_n) \bigg|^2 dx + \alpha \sum_{n=1}^N \phi_k(|c_n|).
+\end{aligned}
+\end{equation*}
+
+We verify $J$ is continuous in $(\omega, c)$.
+By assumption both $\sigma(a \cdot x + b)$ and $\nabla_x \sigma(a \cdot x + b)$ are uniformly bounded on the compact set $\overline{D} \times \mathbb{S}^d$ ($D$ bounded).
+For any convergent sequence $(\omega^{(j)}, c^{(j)}) \to (\omega, c)$, the integrand converges pointwise in $x$ and is dominated by $C(|V(x)|^2 + |\nabla V(x)|^2 + 1) \in L^1(D)$ with some constant $C$.
+By dominated convergence, the integral is continuous in $(\omega, c)$. Combined with the continuity of $\phi_k$, $J$ is continuous.
+
+Since $\phi_k(z) \to \infty$ as $z \to \infty$ (Assumption~\ref{pen2}) and $J \ge 0$, any minimizing sequence is bounded.
+Furthermore, since taking $c = 0$ is feasible and the penalty is non-negative, the optimal value is bounded by
+\begin{equation*}
+	J(\omega, 0) = \frac{1}{2}\|V\|_{H^1(D)}^2 \quad \text{for any } \omega,
+\end{equation*}
+so along a minimizing sequence eventually
+\begin{equation*}
+	\sum_{n = 1}^N \phi_k(|c_n|) \le \frac{1}{2\alpha}\|V\|_{H^1(D)}^2 + 1.
+\end{equation*}
+By the coercivity of $\phi_k$, the minimizing sequence lies in $(\mathbb{S}^d)^N \times [-R, R]^N$ for some $R > 0$, which is compact. By Weierstrass, $J$ attains its minimum for each $N$.
+
+\medskip\noindent
+2. (Uniform bound on $N$).
+Let $(\omega^*, c^*)$ be a minimizer for $N$ neurons with all $c_n^* \neq 0$. The stationarity condition in $c_n$ gives $|p(\omega_n^*)| = \alpha\,\phi_k'(|c_n^*|)$, where
+\begin{equation*}
+	p(\omega) = \langle \mathcal{N}_{\omega^*, c^*} - V,\, \sigma(\cdot, \omega)\rangle_{H^1(D)}
+\end{equation*}
+is the dual variable of Section~3 restricted to the sphere, with the $H^1(D)$ inner product collecting the value term and the gradient term.
+By Cauchy--Schwarz and $\|\mathcal{N}_{\omega^*, c^*} - V\|_{H^1(D)}^2 \le 2 J(\omega^*, c^*) \le \|V\|_{H^1(D)}^2$:
+\begin{equation*}
+	\alpha\,\phi_k'(|c_n^*|) = |p(\omega_n^*)| \le \|\mathcal{N}_{\omega^*, c^*} - V\|_{H^1(D)} \;\|\sigma(\cdot, \omega_n^*)\|_{H^1(D)} \le \|V\|_{H^1(D)}\;\sup_{\omega \in \mathbb{S}^d}\|\sigma(\cdot, \omega)\|_{H^1(D)}.
+\end{equation*}
+Since $\phi_k'$ is nonincreasing with $\phi_k'(0^+) = +\infty$, the generalized inverse gives $|c_n^*| \ge c_{\min} > 0$ with $c_{\min}$ as in the statement.
+Hence $N\,\phi_k(c_{\min}) \le \sum_n \phi_k(|c_n^*|) \le \frac{1}{2\alpha}\|V\|_{H^1(D)}^2$, giving $N \le N_{\max}$.
+
+For $N > N_{\max}$, any $N$-neuron minimizer must have some $c_n = 0$, reducing to an $N'$-neuron solution with $N' \le N_{\max}$.
+Therefore $\inf_N J_N^* = J_{N_{\max}}^*$, which is attained by Step~1.
+\end{proof}
+
+
+
+\section{Algorithms}
+This section describes the computational pipeline: the training data are generated via the open-loop problem, candidate neurons are inserted greedily, and the network is trained with the nonconvex penalty; insertion and training alternate for a fixed number of outer iterations. 
+
+\subsection{Data generation via the open-loop problem}
+We come back to the original problem \eqref{opt}, the problem can be written as 
+\begin{align*}
+	&  \inf_{u, y} J(y, u)\\
+	& \text{s.t.}\\
+	& E(y, u) = 0,
+\end{align*} 
+with 
+\begin{align*}
+	E(y, u) = 
+	\begin{bmatrix}
+		\frac{d}{dt} y - \bigg(f(y) + g(y) u \bigg)\\
+		y(0) - x 
+	\end{bmatrix}.
+\end{align*}
+Assume that for every control the state equation admits a unique solution $y(u)$; setting $U:= L^2(t_0, T; \mathbb{R}^k)$, we obtain the unconstrained reduced problem
+\begin{align*}
+	& \inf_{u \in U} \hat{J}(u) := J(y(u), u).
+\end{align*}
+The reduced gradient is computed by the standard adjoint (Lagrangian) approach --- see, e.g., \cite{hinze2009optimization} --- which avoids forming the implicit derivative of $u \mapsto y(u)$: it yields
+\begin{align*}
+	\nabla \hat{J}(u) = 2 \beta u - g(y)^T p \quad \text{in } U,
+\end{align*}
+where the costate $p$ solves the adjoint equation backward in time,
+\begin{equation*}
+\left\{
+\begin{aligned}
+	& \dot{p} + \partial_y\big(f(y) + g(y) u\big)^T p = -\partial_y l(y),\\
+	& p(T) = 0,
+\end{aligned}
+\right.
+\end{equation*}
+which is exactly the costate system of \eqref{TPBVP}. Each gradient evaluation therefore costs one forward solve of the state equation and one backward solve of the adjoint equation.
+For the data-driven approach it is essential that the initial dataset $\{x^j, V(0, x^j), \nabla V(0, x^j)\}_{j = 1}^M$ is \emph{causality-free}: the samples are generated without approximate values at neighboring points. \cite{kang2021algorithms} provides a comprehensive survey of generation methods. As in \cite{azmi2021optimal}, we minimize the reduced objective with Barzilai--Borwein step sizes, using the reduced gradient above; the converged costate supplies the gradient sample $\nabla V$.
+
+
+\subsection{Greedy insertion}
+In \cite{bach2017breaking}, a conditional gradient algorithm for finitely many samples is presented. 
+To handle the sphere constraint, like in \cite{pieper2022nonconvex} we parametrize $\mathbb{S}^d$ by the inverse stereographic map
+\begin{align*}
+	\Psi: \mathbb{R}^d \rightarrow \mathbb{S}^d \subset \mathbb{R}^{d+1}, \quad z \mapsto \bigg(\frac{2z}{1 + \|z\|^2}, \frac{1- \|z\|^2}{1 + \|z\|^2} \bigg),
+\end{align*}
+which turns the constrained candidate search into an unconstrained one.
+For $M$ data points, the optimal neural network representation of the target is supported on at most $M$ atoms.
+
+The conditional gradient method minimizes, at the current iterate $\mu_t$ with network $f_t := \mathcal{N}\mu_t$, the linearization of the fidelity term over the total-variation ball $\{\|\mu\|_{\mathcal{M}(\Omega)} \le M_0\}$; since the extreme points of the ball are the signed Dirac measures $\pm M_0 \delta_\omega$, this ``Frank--Wolfe step'' reduces to maximizing the absolute dual variable over the dictionary:
+\begin{equation}
+	\Omega \ni \omega \mapsto |p_t(\omega)|= \bigg|\frac{1}{M} \sum_{m = 1}^M \sigma(x_m, \omega)\, g_t(x_m) \bigg|,
+	\qquad g_t := -J'(f_t) \in L^2(D, \nu).
+\end{equation}
+Finding the global maximum of this landscape is in general intractable (for ReLU-type dictionaries even NP-hard \cite{bach2017breaking}); heuristic multi-start approaches are used for the greedy insertion instead.
+
+
+\subsection{The nonconvex penalized algorithms}
+We present two variants of the iterative node insertion and optimization algorithm, adapted from \cite{pieper2022nonconvex}.
+The first handles penalties $\phi$ satisfying Assumption~\ref{pen1}, in particular the log penalty $\phi_{\gamma}(z) = \frac{1}{\gamma}\log(1 + \gamma z)$,
+where the insertion criterion is the necessary optimality condition from Theorem~\ref{opt_cdt}:
+a candidate $\omega$ is accepted if $|p_t(\omega)| > \alpha$.
+The second handles the fractional-exponent penalty $\psi_k(z) = \frac{1}{q}|z|^q$ with $q = 2/(k+1) < 1$ induced by the $k$-homogeneous reformulation,
+where $\phi_k'(0^+) = +\infty$ renders the classical criterion vacuous (cf.\ the Remark after Corollary~\ref{cor:singular_penalty}).
+Instead, a finite-step decrease criterion is used.
+
+Both algorithms minimize the regularized loss
+\begin{equation*}
+	\mathcal{L}(\omega, c) = w_1 \cdot \frac{1}{2N_x} \sum_{m=1}^M \big| V(x^m) - \mathcal{N}_{\omega,c}(x^m) \big|^2
+	+ w_2 \cdot \frac{1}{2N_x} \sum_{m=1}^M \big| \nabla V(x^m) - \nabla \mathcal{N}_{\omega,c}(x^m) \big|^2
+	+ \alpha \sum_{n=1}^N \phi(|c_n|),
+\end{equation*}
+where $N_x = M \cdot d$. We consider two choices of the weights $(w_1, w_2)$:
+\begin{itemize}
+	\item $L^2$ loss: $(w_1, w_2) = (1, 0)$, fitting only the value function;
+	\item $H^1$ loss: $(w_1, w_2) = (1, 1)$, fitting both the value function and its gradient.
+\end{itemize}
+The relative errors used to evaluate the approximation quality are
+\begin{align*}
+	\mathrm{Err}_{L^2} &= \frac{\| \mathcal{N} - V \|_{L^2}}{\| V \|_{L^2}}, \qquad
+	|\mathcal{N} - V|_{H^1} = \frac{\| \nabla \mathcal{N} - \nabla V \|_{L^2}}{\| \nabla V \|_{L^2}}, \\
+	\mathrm{Err}_{H^1} &= \frac{\big(\| \mathcal{N} - V \|_{L^2}^2 + \| \nabla \mathcal{N} - \nabla V \|_{L^2}^2\big)^{1/2}}{\big(\| V \|_{L^2}^2 + \| \nabla V \|_{L^2}^2\big)^{1/2}},
+\end{align*}
+where $|\cdot|_{H^1}$ denotes the $H^1$ semi-norm (gradient error only) and the norms are computed empirically over the data set.
+
+\begin{algorithm}[htbp]
+\caption{Iterative node insertion and optimization with $\phi_{\gamma}$-penalty}
+\label{alg:log}
+\begin{algorithmic}[1]
+\State Initial network $\omega^{(0)}, c^{(0)}$ of width $N(0)$.
+\While{$t < T_{\mathrm{out}}$}
+\State Sample $N_{\mathrm{trial}}$ random nodes $\omega \in \mathbb{S}^d$.
+\State Optimize (in parallel) the dual variable $|p_t(\omega)|$ by L-BFGS starting from the initial nodes; merge near-duplicate candidates.
+\State Select nodes with $|p_t(\omega)| > \alpha$ and add them to the network (of width $N(t + 1/2)$). Initialize their outer weights by coordinate descent.
+\State Perform local training based on \eqref{opt_fixN} by semismooth Newton method.
+\State Remove nodes with outer weight zero (resulting in width $N(t+1)$).
+\State $t = t + 1$.
+\EndWhile
+\end{algorithmic}
+\end{algorithm}
+
+For the $q$-penalty with $q < 1$, the zero measure is always a local minimizer
+(since $\phi_k'(0^+) = +\infty$ implies that adding any neuron with small outer weight $|c| \ll 1$
+incurs an infinite marginal penalty cost).
+Consequently, the classical insertion criterion $|p_t(\omega)| > \alpha$ is never violated at $\bar{\mu} = 0$,
+and more generally provides no useful information away from the support (see Remark after Corollary~\ref{cor:singular_penalty}).
+We replace it with a \emph{finite-step decrease criterion}:
+given a candidate $\omega$, we evaluate the objective decrease
+\begin{equation*}
+	\Delta J(c; \omega) = c \, p_t(\omega) + \tfrac{1}{2} c^2 S_t(\omega)^2 + \tfrac{\alpha}{q} |c|^q,
+\end{equation*}
+where $S_t(\omega)^2 = \|\sigma(\cdot, \omega)\|_{H^1(D,\nu)}^2$ is the curvature term (the squared atom norm in the gradient-augmented inner product),
+and accept $\omega$ if $\min_c \Delta J(c; \omega) < 0$.
+The minimizer $c^*$ is computed by Newton's method on the stationarity equation
+$S_t(\omega)^2 c + \alpha |c|^{q-1} = |p_t(\omega)|$,
+and is used directly as the initial outer weight.
+
+\begin{algorithm}[htbp]
+\caption{Iterative node insertion and optimization with $|c|^q$-penalty}
+\label{alg:q}
+\begin{algorithmic}[1]
+\State Initial network $\omega^{(0)}, c^{(0)}$ of width $N(0)$.
+\While{$t < T_{\mathrm{out}}$}
+\State Sample $N_{\mathrm{trial}}$ random nodes $\omega \in \mathbb{S}^d$.
+\State Optimize (in parallel) the dual variable $|p_t(\omega)|$ by L-BFGS starting from the initial nodes; merge near-duplicate candidates.
+\State For each candidate $\omega$, solve $\min_c \Delta J(c; \omega)$ to obtain $c^*(\omega)$. Select nodes with $\Delta J(c^*; \omega) < 0$ and add them to the network with outer weight $c^*$ (of width $N(t + 1/2)$).
+\State Perform local training based on \eqref{opt_fixN} with $\phi_k(z) = \frac{1}{q}|z|^q$ by semismooth Newton method.
+\State Remove nodes with outer weight zero (resulting in width $N(t+1)$).
+\State $t = t + 1$.
+\EndWhile
+\end{algorithmic}
+\end{algorithm}
+
+
+\section{Numerical examples}
+Both benchmark problems are two-dimensional by design: the aim is to isolate
+the effect of the activation class and the penalty on the representation of
+smooth and nonsmooth value structure, with a reference solution available for
+every quantity we report. The curse-of-dimensionality motivation of
+Section~1 concerns the framework --- causality-free data generation and
+sparse networks are built to scale --- but scalability itself is not tested
+here.
+
+\subsection{Van der Pol Oscillator}
+In this example we consider the Van der Pol equation.
+We consider the optimal control of the Van der Pol oscillator expressed as
+\begin{equation*}
+\min_{u \in L^2(0, T; \mathbb{R})} J(u, y) = \int_0^T \big( y_1^2(t) + y_2^2(t) + \beta u^2(t) \big) \, dt
+\end{equation*}
+subject to
+\begin{equation*}
+\begin{cases}
+\frac{dy_1}{dt} = y_2, \\
+\frac{dy_2}{dt} = -y_1 + y_2(1 - y_1^2) + u, \\
+(y_1(0), y_2(0)) = (x_1, x_2),
+\end{cases}
+\end{equation*}
+
+In this setting, $d = 2, k = 1$, $\beta = 0.1$, $T = 3$, and
+\begin{equation*}
+	f(y) = \begin{pmatrix} y_2 \\ -y_1 + y_2(1 - y_1^2) \end{pmatrix}, \quad
+	g(y) = \begin{pmatrix} 0 \\ 1 \end{pmatrix}, \quad
+	l(y) = y_1^2 + y_2^2.
+\end{equation*}
+By the optimality condition, $u^* = -\frac{1}{2\beta} g(y^*)^T p^* = -\frac{1}{2\beta} p_2^*$.
+The two-point boundary value problem \eqref{TPBVP} becomes
+\begin{equation}
+\label{TPBVP_VDP}
+\left\{
+\begin{aligned}
+	& \dot{y}_1^* = y_2^*, \\
+	& \dot{y}_2^* = -y_1^* + y_2^*(1 - {y_1^*}^2) + u^*, \\
+	& -\dot{p}_1^* = 2y_1^* - p_2^*(1 + 2y_1^* y_2^*), \\
+	& -\dot{p}_2^* = 2y_2^* + p_1^* + p_2^*(1 - {y_1^*}^2), \\
+	& y^*(0) = x, \quad p^*(T) = 0.
+\end{aligned}
+\right.
+\end{equation}
+For each initial condition $x = (x_1, x_2)$ sampled on the grid $[-3, 3]^2$, we solve \eqref{TPBVP_VDP} using a Barzilai--Borwein gradient method with backtracking line search.
+The control is represented in a Legendre polynomial basis $u(t) = \sum_{i=0}^{N_b - 1} c_i P_i(t)$ with $N_b = 30$ coefficients.
+The optimization yields the dataset $\{x^m, V(x^m), \nabla V(x^m)\}_{m=1}^M$, where $V(x^m) = J(u^*; 0, x^m)$ and $\nabla V(x^m) = p^*(0)$.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.48\textwidth]{plot/v.png}
+\hfill
+\includegraphics[width=0.48\textwidth]{plot/dv.png}
+\caption{Left: value function $V(x)$ over $[-3,3]^2$. Right: $V(x)$ (dot color) and $\nabla V(x)$ (arrows); arrow color indicates $\|\nabla V(x)\|$.}
+\label{fig:vdp_data}
+\end{figure}
+
+We solve the open-loop problem on a $30 \times 30$ grid over $[-3,3]^2$ ($M = 900$ data points).
+All experiments run 10 outer iterations; each iteration samples $N_{\mathrm{trial}} = 50$ candidate nodes, accepts at most 15 of them, and prunes neurons with $|c| \le 10^{-8}$ after the local solve.
+
+%% ---------------------------------------------------------------
+\subsubsection{Algorithm~\ref{alg:log}: $\phi_{\gamma}$-penalty with different activation functions}
+%% ---------------------------------------------------------------
+
+First we train the model with Algorithm~\ref{alg:log}, sweeping over activation functions and hyperparameter groups and reporting the effect on the validation error. 
+
+Table~\ref{tab:alg1_gradient} isolates the effect of gradient augmentation ($L^2$ loss, value only, vs.\ $H^1$ loss, value + gradient) on the validation error. 
+
+\begin{table}[htbp]
+\centering
+\caption{Effect of gradient training on validation error ($\alpha = 10^{-5}$, $\gamma = 1$).}
+\label{tab:alg1_gradient}
+\begin{subtable}{0.48\textwidth}
+\centering
+\setlength{\tabcolsep}{12pt}
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{lcc}
+\toprule
+Activation & $L^2$ trained & $H^1$ trained \\
+\midrule
+softplus & $8.61 \times 10^{-2}$ & $5.19 \times 10^{-1}$ \\
+tanh & $3.59 \times 10^{-2}$ & $4.76 \times 10^{-1}$ \\
+Gaussian & $3.05 \times 10^{-2}$ & $4.16 \times 10^{-1}$ \\
+\bottomrule
+\end{tabular}
+\caption{Effect of gradient training on $\mathrm{Err}_{L^2}$ }
+\label{tab:alg1_gradient_errl2}
+\end{subtable}
+\hfill
+\begin{subtable}{0.48\textwidth}
+\centering
+\setlength{\tabcolsep}{12pt}
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{lcc}
+\toprule
+Activation & $L^2$ trained & $H^1$ trained \\
+\midrule
+softplus & $5.63 \times 10^{-1}$ & $2.92 \times 10^{-1}$ \\
+tanh & $4.68 \times 10^{-1}$ & $3.14 \times 10^{-1}$ \\
+Gaussian & $4.64 \times 10^{-1}$ & $9.94 \times 10^{-2}$ \\
+\bottomrule
+\end{tabular}
+\caption{Effect of gradient training on $\mathrm{Err}_{H^1}$}
+\label{tab:alg1_gradient_errh1}
+\end{subtable}
+\end{table}
+
+\paragraph{\textbf{Choice of Activation Function in Gradient Training.}}
+We choose 3 classes of activation functions: ReLU-like (softplus), sigmoidal (tanh-form), and the Gaussian.
+Which shape suits the smooth target is a question about the derivative:
+because the gradient-augmented loss combines the value error with the gradient
+error, each neuron $\sigma(\cdot,\omega)$ contributes $\sigma$ to the
+reconstruction of $V$ and $\partial_{x}\sigma$ to that of $\nabla V$, so the
+approximation efficiency is governed by the shape of $\partial_{x}\sigma$
+rather than by that of $\sigma$ itself.
+Figure~\ref{fig:activation_shapes} contrasts the three activations through
+their value, first derivative, and second derivative.
+A monotone, single-signed derivative that stays active over the whole axis
+(softplus) endows every neuron with a coherent gradient contribution of broad,
+bounded curvature, so that few atoms suffice to represent a smooth $\nabla V$;
+a derivative that saturates on both tails (tanh) contributes only on a narrow,
+localized range;
+and a localized bump ($e^{-x^2}$) concentrates its curvature near the origin
+and reverses the sign of its derivative, fitting a smooth field accurately
+only when densely tiled.
+The regularity of $\partial_{x}\sigma$ should therefore match that of the
+target gradient field: a smooth, broadly curved derivative suits a smooth
+value function.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{plot/activation_shapes_smooth.png}
+\caption{Three activations admissible under Assumption~\ref{ass:diff_lipschitz} --- softplus, tanh, and the Gaussian bump $e^{-x^2}$ --- shown, from left to right, as the value $\sigma$, its first derivative $\sigma'$, and its second derivative (curvature) $\sigma''$ with respect to the pre-activation argument. Under the gradient-augmented loss the first derivative is the basis that reconstructs $\nabla V$.}
+\label{fig:activation_shapes}
+\end{figure}
+
+As observed in Table~\ref{tab:alg1_gradient}, the Gaussian activation achieves in general the best precision among the 3.
+All three capture the smooth bowl; they differ in how many neurons it takes. 
+
+\begin{figure}[htbp]
+\centering
+\captionsetup[subfigure]{justification=centering}
+\begin{subfigure}[t]{0.32\textwidth}
+\centering
+\includegraphics[width=\textwidth]{plot/value_surface_softplus.png}
+\caption{softplus\\ ($N=27$, $\mathrm{Err}_{H^1} = 0.29$).}
+\label{fig:h1_activation_softplus}
+\end{subfigure}
+\hfill
+\begin{subfigure}[t]{0.32\textwidth}
+\centering
+\includegraphics[width=\textwidth]{plot/value_surface_tanh.png}
+\caption{tanh\\ ($N=66$, $\mathrm{Err}_{H^1} = 0.31$).}
+\label{fig:h1_activation_tanh}
+\end{subfigure}
+\hfill
+\begin{subfigure}[t]{0.32\textwidth}
+\centering
+\includegraphics[width=\textwidth]{plot/value_surface_gaussian.png}
+\caption{Gaussian\\ ($N=113$, $\mathrm{Err}_{H^1} = 0.10$).}
+\label{fig:h1_activation_gaussian}
+\end{subfigure}
+\caption{Learned value function under the $H^1$ loss for the signed model at the fixed operating point $\gamma = 1$, $\alpha = 10^{-5}$ . All three capture the smooth bowl; they differ in how many neurons it takes.}
+\label{fig:h1_activation}
+\end{figure}
+
+Tanh saturates for large $|z|$, causing vanishing gradients.
+Softplus grows linearly and avoids saturation.
+The Gaussian is localized with exponential decay and has a sign-changing derivative $\sigma'(z) = -2z\,e^{-z^2}$ (a bump that is accurate where it sits but must be tiled densely to cover a smooth field).
+
+\begin{table}[htbp]
+\centering
+\caption{Network size (sparsity) for each activation, paired with the validation error natural to each loss ($\mathrm{Err}_{L^2}$ for the $L^2$ loss, $\mathrm{Err}_{H^1}$ for the $H^1$ loss; $\alpha = 10^{-5}$, $\gamma = 1$).}
+\label{tab:alg1_sparsity}
+\begin{subtable}{0.48\textwidth}
+\centering
+\setlength{\tabcolsep}{12pt}
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{lcc}
+\toprule
+Activation & $N$ & $\mathrm{Err}_{L^2}$ \\
+\midrule
+softplus & 58 & $8.61 \times 10^{-2}$ \\
+tanh & 75 & $3.59 \times 10^{-2}$ \\
+Gaussian & 105 & $3.05 \times 10^{-2}$ \\
+\bottomrule
+\end{tabular}
+\caption{$L^2$ trained}
+\label{tab:alg1_sparsity_l2}
+\end{subtable}
+\hfill
+\begin{subtable}{0.48\textwidth}
+\centering
+\setlength{\tabcolsep}{12pt}
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{lcc}
+\toprule
+Activation & $N$ & $\mathrm{Err}_{H^1}$ \\
+\midrule
+softplus & 27 & $2.92 \times 10^{-1}$ \\
+tanh & 66 & $3.14 \times 10^{-1}$ \\
+Gaussian & 113 & $9.94 \times 10^{-2}$ \\
+\bottomrule
+\end{tabular}
+\caption{$H^1$ trained}
+\label{tab:alg1_sparsity_h1}
+\end{subtable}
+\end{table}
+
+With the $H^1$ loss, $\mathrm{Err}_{H^1}$ drops dramatically for the Gaussian ($9.94 \times 10^{-2}$), whose localized sign-changing derivative reconstructs the smooth gradient field most accurately, while tanh ($3.14 \times 10^{-1}$) and softplus ($2.92 \times 10^{-1}$) improve more modestly. 
+This accuracy comes at the largest neuron count ($N = 113$), whereas softplus matches tanh's $\mathrm{Err}_{H^1}$ ($2.92 \times 10^{-1}$ vs.\ $3.14 \times 10^{-1}$) with far fewer neurons ($27$ vs.\ $66$). On this smooth target the choice of smooth activation trades sparsity against gradient accuracy rather than fit viability.
+
+The performance differences across activations can be understood from two angles: approximation capability and sparsity.
+
+\paragraph{\textbf{Saturation of the derivative degrades the gradient fit.}}
+The gradient kernel column for neuron~$n$ at data point~$x_m$ is $\sigma'(a_n \cdot x_m + b_n) \cdot a_n$; the diversity of these columns determines how well the network can fit the gradient field.
+The distribution of $\sigma'(z)$ across all (neuron, data point) pairs indicates the mass saturation near zero:
+
+\begin{figure}[htbp]
+\centering
+\captionsetup[subfigure]{justification=centering}
+\begin{subfigure}[t]{0.32\textwidth}
+\centering
+\includegraphics[width=\textwidth]{plot/derivative_distribution_tanh.png}
+\caption{tanh, $N=66$ \\ ($65\%$ with $|\sigma'| < 0.05$).}
+\label{fig:deriv_tanh}
+\end{subfigure}
+\hfill
+\begin{subfigure}[t]{0.32\textwidth}
+\centering
+\includegraphics[width=\textwidth]{plot/derivative_distribution_softplus.png}
+\caption{softplus, $N=27$ \\ ($30\%$ with $|\sigma'| < 0.05$).}
+\label{fig:deriv_softplus}
+\end{subfigure}
+\hfill
+\begin{subfigure}[t]{0.32\textwidth}
+\centering
+\includegraphics[width=\textwidth]{plot/derivative_distribution_gaussian.png}
+\caption{Gaussian, $N=113$ \\ ($27\%$ with $|\sigma'| < 0.05$).}
+\label{fig:deriv_gaussian}
+\end{subfigure}
+\caption{Distribution of $\sigma'(z)$ across all (neuron, data point) pairs for the signed $H^1$ model at the fixed operating point ($\gamma = 1$, $\alpha = 10^{-5}$). The percentage is the fraction of derivative values with $|\sigma'| < 0.05$.}
+\label{fig:derivative_distribution}
+\end{figure}
+
+The bottleneck for tanh is that two-sided saturation makes many gradient kernel columns redundant, so a given gradient accuracy costs more neurons rather than being unattainable; the Gaussian's sign-changing derivative is the most expressive per neuron but the least sparse.
+
+\paragraph{\textbf{Many local maxima of the dual variable reduce sparsity.}}
+The Gaussian and softplus fits differ sharply in size: 113 neurons versus 27, a factor of~$4.2$, even though the Gaussian is the more accurate of the two ($\mathrm{Err}_{H^1} = 9.9 \times 10^{-2}$ vs.\ $2.9 \times 10^{-1}$).
+Table~\ref{tab:insertion_diag} tracks the two fits neuron-by-neuron.
+The full objective $J = L(\mu) + \alpha\,\Phi(\mu)$ decreases at every iteration for both, confirming that the inserted neurons are genuine descent directions.
+But the Gaussian adds them in large batches (7--15 per iteration) whereas softplus adds only 1--5, and the descent per neuron differs accordingly: each Gaussian neuron lowers~$J$ by $\sim 10^{-4}$ (down to $2 \times 10^{-5}$ by the final iteration), while a softplus neuron typically lowers it by $10^{-3}$--$10^{-2}$.
+
+\begin{table}[htbp]
+\centering
+\setlength{\tabcolsep}{10pt}
+\renewcommand{\arraystretch}{1.2}
+\caption{Per-iteration insertion diagnostics for the Gaussian and softplus $H^1$ fits ($\alpha = 10^{-5}$, $\gamma = 1$).}
+\label{tab:insertion_diag}
+\begin{tabular}{ccccccc}
+\toprule
+ & \multicolumn{3}{c}{Gaussian} & \multicolumn{3}{c}{Softplus} \\
+\cmidrule(lr){2-4} \cmidrule(lr){5-7}
+Iter & $N$ & Ins & $\Delta J / n$ & $N$ & Ins & $\Delta J / n$ \\
+\midrule
+1  & 7   & 7  & ---                & 2  & 2 & ---                \\
+2  & 14  & 7  & $2.8 \times 10^{-3}$ & 3  & 1 & $1.7 \times 10^{-1}$ \\
+3  & 24  & 10 & $5.6 \times 10^{-4}$ & 6  & 3 & $5.2 \times 10^{-3}$ \\
+4  & 34  & 10 & $1.0 \times 10^{-4}$ & 8  & 2 & $3.6 \times 10^{-3}$ \\
+5  & 42  & 8  & $1.8 \times 10^{-4}$ & 11 & 3 & $1.9 \times 10^{-2}$ \\
+6  & 57  & 15 & $5.9 \times 10^{-5}$ & 13 & 2 & $1.1 \times 10^{-3}$ \\
+7  & 72  & 15 & $1.6 \times 10^{-4}$ & 15 & 2 & $1.2 \times 10^{-3}$ \\
+8  & 86  & 14 & $2.2 \times 10^{-4}$ & 18 & 3 & $1.4 \times 10^{-3}$ \\
+9  & 99  & 13 & $6.6 \times 10^{-5}$ & 22 & 4 & $2.8 \times 10^{-4}$ \\
+10 & 113 & 14 & $2.0 \times 10^{-5}$ & 27 & 5 & $9.3 \times 10^{-4}$ \\
+\midrule
+Total & 113 & & & 27 & & \\
+\bottomrule
+\end{tabular}
+\\[6pt]
+{\small
+\raggedright
+$N$ = support size after SSN and pruning;\;
+\textit{Ins} = neurons added that iteration;\;
+$\Delta J / n$ = decrease of the objective $J = L(\mu) + \alpha\,\Phi(\mu)$ per neuron added, relative to the previous iterate (iteration~1 has no predecessor).\par}
+\end{table}
+
+The difference reflects how many descent directions the dictionary offers at each step, governed by the dual variable $p_t(\omega) = \langle \sigma(\cdot, \omega),\, g_t \rangle_{L^2(D,\nu)}$, where $g_t$ is the current residual.
+The Gaussian activation is localized: $\sigma(x, \omega)$ is a bump concentrated near the hyperplane $\{x : a \cdot x + b \approx 0\}$, so $p_t(\omega)$ is sensitive to local residual structure, and even small residual pockets push $|p_t(\omega)| > \alpha$ for many~$\omega$.
+The insertion step therefore finds a fresh batch of admissible atoms every iteration, each correcting only a small local portion of the residual.
+Softplus has global support, so $p_t(\omega)$ averages the residual over the entire domain---positive and negative contributions cancel, fewer~$\omega$ exceed the threshold~$\alpha$, but each admitted atom removes a global component of the residual.
+
+In conclusion:
+\begin{itemize}
+	\item Gaussian yields the best gradient accuracy ($\mathrm{Err}_{H^1} = 9.9 \times 10^{-2}$) but uses 113~neurons. Its localized activation offers many shallow descent directions, so the algorithm keeps inserting neurons with diminishing per-neuron returns.
+	\item Softplus reaches moderate gradient accuracy ($\mathrm{Err}_{H^1} = 2.9 \times 10^{-1}$) with only 27~neurons---the sparsest fit. Each neuron removes a global component of the residual, so the dual variable drops below~$\alpha$ after few insertions.
+	\item Tanh is dominated: 66~neurons for $\mathrm{Err}_{H^1} = 3.1 \times 10^{-1}$---essentially softplus's accuracy at more than twice the neuron count---because its two-sided saturation yields a narrow, mostly-dead derivative that wastes atoms without improving the gradient fit.
+\end{itemize}
+
+
+
+\paragraph{\textbf{Effect of $\alpha$ and $\gamma$.}}
+Table~\ref{tab:alg1_alpha} shows the effect of the nonconvex correction $\gamma$ at $\alpha = 10^{-5}$, $H^1$ loss.
+The nonconvex penalty helps the two activations differently.
+For softplus, raising $\gamma$ to $10$ cuts the $H^1$ error nearly in half (from $3.35 \times 10^{-1}$ at $\gamma = 0$ to $1.76 \times 10^{-1}$) at a comparable neuron count.
+For the Gaussian, the same sweep barely moves the already-low error (${\approx}\,1.0 \times 10^{-1}$) while the neuron count grows ($91 \to 119$): the localized activation is insensitive to the penalty's nonconvexity, whereas the broad softplus ridge benefits from the sharper thresholding.
+
+Table~\ref{tab:alg1_alpha} sweeps $\alpha$ for $\gamma = 0$ (pure $\ell^1$) and $\gamma = 10$ (strong nonconvex correction) across the two activations.
+Smaller $\alpha$ increases accuracy at the cost of more neurons for both.
+The nonconvex correction sharpens this frontier most for softplus---at $\alpha = 10^{-4}$ it halves the $H^1$ error ($3.24 \times 10^{-1} \to 1.68 \times 10^{-1}$) at a similar neuron count---while for the Gaussian it yields only a modest gain.
+
+\begin{table}[htbp]
+\centering
+\caption{Algorithm~1: effect of $\alpha$ with $\gamma = 0$ vs.\ $\gamma = 10$ ($H^1$ loss).}
+\label{tab:alg1_alpha}
+\begin{subtable}{0.48\textwidth}
+\centering
+\setlength{\tabcolsep}{8pt}
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{ccccc}
+\toprule
+ & \multicolumn{2}{c}{$\gamma = 0$} & \multicolumn{2}{c}{$\gamma = 10$} \\
+\cmidrule(lr){2-3} \cmidrule(lr){4-5}
+$\alpha$ & $N$ & $\mathrm{Err}_{H^1}$ & $N$ & $\mathrm{Err}_{H^1}$ \\
+\midrule
+$10^{-2}$ & 14 & $3.57 \times 10^{-1}$ & 10 & $3.78 \times 10^{-1}$ \\
+$10^{-3}$ & 15 & $3.43 \times 10^{-1}$ & 14 & $2.79 \times 10^{-1}$ \\
+$10^{-4}$ & 20 & $3.24 \times 10^{-1}$ & 25 & $1.68 \times 10^{-1}$ \\
+$10^{-5}$ & 21 & $3.35 \times 10^{-1}$ & 23 & $1.76 \times 10^{-1}$ \\
+\bottomrule
+\end{tabular}
+\caption{Softplus}
+\label{tab:alg1_alpha_softplus}
+\end{subtable}
+\hfill
+\begin{subtable}{0.48\textwidth}
+\centering
+\setlength{\tabcolsep}{8pt}
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{ccccc}
+\toprule
+ & \multicolumn{2}{c}{$\gamma = 0$} & \multicolumn{2}{c}{$\gamma = 10$} \\
+\cmidrule(lr){2-3} \cmidrule(lr){4-5}
+$\alpha$ & $N$ & $\mathrm{Err}_{H^1}$ & $N$ & $\mathrm{Err}_{H^1}$ \\
+\midrule
+$10^{-2}$ & 12 & $2.31 \times 10^{-1}$ & 19 & $2.06 \times 10^{-1}$ \\
+$10^{-3}$ & 26 & $1.64 \times 10^{-1}$ & 33 & $1.28 \times 10^{-1}$ \\
+$10^{-4}$ & 81 & $1.08 \times 10^{-1}$ & 80 & $1.02 \times 10^{-1}$ \\
+$10^{-5}$ & 91 & $1.03 \times 10^{-1}$ & 119 & $9.88 \times 10^{-2}$ \\
+\bottomrule
+\end{tabular}
+\caption{Gaussian}
+\label{tab:alg1_alpha_gaussian}
+\end{subtable}
+\end{table}
+
+
+%% ---------------------------------------------------------------
+\subsubsection{Algorithm~\ref{alg:q}: $|c|^q$-penalty with $\reluk$ activation}
+%% ---------------------------------------------------------------
+
+Algorithm~2 uses the $\reluk$ atom $\sigma(z) = \mathrm{ReLU}(z)^k$ with the pure power penalty $\alpha \sum_i |c_i|^q$, $q = 2/(k+1)$ (i.e., $\gamma = 0$).
+The swept parameter is the power $k$; all fits below are at the fixed operating point $\alpha = 10^{-5}$.
+
+
+\begin{figure}[htbp]
+\centering
+\captionsetup[subfigure]{justification=centering}
+\begin{subfigure}[t]{0.32\textwidth}
+\centering
+\includegraphics[width=\textwidth]{plot/value_surface_p2.png}
+\caption{$k=2$\\ ($N=41$, $\mathrm{Err}_{H^1} = 0.10$).}
+\label{fig:H1_power_p2}
+\end{subfigure}
+\hfill
+\begin{subfigure}[t]{0.32\textwidth}
+\centering
+\includegraphics[width=\textwidth]{plot/value_surface_p3.png}
+\caption{$k=3$\\ ($N=20$, $\mathrm{Err}_{H^1} = 0.10$).}
+\label{fig:H1_power_p3}
+\end{subfigure}
+\hfill
+\begin{subfigure}[t]{0.32\textwidth}
+\centering
+\includegraphics[width=\textwidth]{plot/value_surface_p5.png}
+\caption{$k=5$\\ ($N=21$, $\mathrm{Err}_{H^1} = 0.10$).}
+\label{fig:H1_power_p5}
+\end{subfigure}
+\caption{$H^1$-trained model with $\alpha = 10^{-5}$, for the representative powers $k \in \{2, 3, 5\}$. All reconstruct the smooth bowl; they differ only in neuron count.}
+\label{fig:H1_power}
+\end{figure}
+
+Under the $L^2$ loss the gradient error stays large for every power ($\mathrm{Err}_{H^1} \approx 4$--$5 \times 10^{-1}$): the value-only fit ignores $\nabla V$, so the atoms are placed without regard to the gradient field.
+The $H^1$ loss drives the gradient error down to $\approx 1.0 \times 10^{-1}$ for \emph{all} powers (Table~\ref{tab:alg2_gradient}).
+The effect of gradient augmentation is uniform in $k$: the fit becomes gradient-accurate regardless of the atom power.
+
+\begin{table}[htbp]
+\centering
+\caption{Algorithm~2: network size and validation error vs.\ the atom power $k$ ($\alpha = 10^{-5}$).}
+\label{tab:alg2_gradient}
+\begin{subtable}{0.48\textwidth}
+\centering
+\setlength{\tabcolsep}{6pt}
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{lccc}
+\toprule
+Power & $N$ & $\mathrm{Err}_{L^2}$ & $\mathrm{Err}_{H^1}$ \\
+\midrule
+$k = 2$ & 14 & $5.05 \times 10^{-2}$ & $4.83 \times 10^{-1}$ \\
+$k = 2.01$ & 14 & $4.83 \times 10^{-2}$ & $4.81 \times 10^{-1}$ \\
+$k = 3$ & 12 & $5.98 \times 10^{-2}$ & $4.94 \times 10^{-1}$ \\
+$k = 4$ & 12 & $5.48 \times 10^{-2}$ & $4.61 \times 10^{-1}$ \\
+$k = 5$ & 10 & $4.77 \times 10^{-2}$ & $4.04 \times 10^{-1}$ \\
+\bottomrule
+\end{tabular}
+\caption{$L^2$ trained}
+\label{tab:alg2_gradient_l2}
+\end{subtable}
+\hfill
+\begin{subtable}{0.48\textwidth}
+\centering
+\setlength{\tabcolsep}{6pt}
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{lccc}
+\toprule
+Power & $N$ & $\mathrm{Err}_{L^2}$ & $\mathrm{Err}_{H^1}$ \\
+\midrule
+$k = 2$ & 41 & $4.16 \times 10^{-1}$ & $9.84 \times 10^{-2}$ \\
+$k = 2.01$ & 42 & $4.17 \times 10^{-1}$ & $9.93 \times 10^{-2}$ \\
+$k = 3$ & 20 & $4.17 \times 10^{-1}$ & $1.00 \times 10^{-1}$ \\
+$k = 4$ & 22 & $4.16 \times 10^{-1}$ & $9.97 \times 10^{-2}$ \\
+$k = 5$ & 21 & $4.14 \times 10^{-1}$ & $1.04 \times 10^{-1}$ \\
+\bottomrule
+\end{tabular}
+\caption{$H^1$ trained}
+\label{tab:alg2_gradient_h1}
+\end{subtable}
+\end{table}
+
+Under the $H^1$ loss the gradient accuracy is essentially flat in $k$ ($\mathrm{Err}_{H^1} \approx 1.0 \times 10^{-1}$ for every power), while the neuron count falls sharply as the power grows: $k = 2$ needs $41$ atoms, whereas $k = 3$, $k = 4$ and $k = 5$ need only about $20$ (Table~\ref{tab:alg2_gradient}\,(b)).
+Raising the power increases sparsity at no cost in accuracy: the exponent $q = 2/(k+1)$ shrinks, the coefficient penalty $|c|^q$ becomes more concave, and the more aggressive selection keeps the same accuracy with fewer atoms---a smooth value function lies in the span of a few high-power atoms.
+The trend is monotone in $k$: there is no intermediate optimum and no high-power breakdown.
+Under the $L^2$ loss the fits are uniformly sparse ($10$--$14$ atoms) but gradient-blind ($\mathrm{Err}_{H^1} \approx 4$--$5 \times 10^{-1}$, Table~\ref{tab:alg2_gradient}\,(a)).
+
+
+
+%% ---------------------------------------------------------------
+\subsubsection{Summary}
+%% ---------------------------------------------------------------
+
+Figure~\ref{fig:summary_frontier} plots insertion growth trajectory --- the best relative $H^1$ error reached with a given number of neurons. 
+Algorithm~2 dominates: $\reluk$ at $k = 5$ and $k = 2$ reach the best gradient accuracy ($\mathrm{Err}_{H^1} \approx 1.0 \times 10^{-1}$) with only $\approx 20$--$40$ neurons, whereas the most accurate Algorithm-1 activation, the Gaussian, needs $113$ neurons for the same accuracy, and softplus/tanh plateau at a coarser error. 
+At equal gradient accuracy Algorithm~2 uses a fraction of the atoms.
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.8\textwidth]{plot/frontier.png}
+\caption{Running best relative $H^1$ validation error vs.\ network size ($\alpha = 10^{-5}$).}
+\label{fig:summary_frontier}
+\end{figure}
+
+We synthesize the optimal feedback law from $y_0 = (2, 1)$. 
+Figure~\ref{fig:summary_feedback} shows $\|y(t)\|$ and $|u(t)|$ for softplus, the Gaussian, and $\reluk$ ($k = 5$), beside the true optimal control. 
+All three drive the state to the origin and track the true control, at essentially the true optimal closed-loop cost ($6.68$, $6.51$, $6.49$ vs.\ $6.48$). 
+\begin{figure}[htbp]
+\centering
+\captionsetup[subfigure]{justification=centering}
+\begin{subfigure}[t]{0.48\textwidth}
+\centering
+\includegraphics[width=\textwidth]{plot/feedback_state.png}
+\caption{State norm $\|y(t)\|$.}
+\label{fig:summary_feedback_state}
+\end{subfigure}
+\hfill
+\begin{subfigure}[t]{0.48\textwidth}
+\centering
+\includegraphics[width=\textwidth]{plot/feedback_control.png}
+\caption{Control $|u(t)|$.}
+\label{fig:summary_feedback_control}
+\end{subfigure}
+\caption{Evolution of the state and control from $y_0 = (2, 1)$ under the feedback synthesized from each fitted value function, beside the true optimal control.}
+\label{fig:summary_feedback}
+\end{figure}
+
+Figure~\ref{fig:summary_weights_raw} shows where the inner weights sit for the Gaussian, softplus, and $\reluk$ ($k = 5$).
+The two algorithms produce structurally different representations: Algorithm~2 constrains its atoms to the unit sphere $\mathbb{S}^2$, while Algorithm~1 leaves them free --- the Gaussian atoms in particular span a wide range of norms. 
+\begin{figure}[htbp]
+\centering
+\captionsetup[subfigure]{justification=centering}
+\begin{subfigure}[t]{0.32\textwidth}
+\centering
+\includegraphics[width=\textwidth]{plot/weights_raw3d_gaussian.png}
+\caption{$e^{-x^2} + \alpha\,\phi_{\gamma}$ ($\gamma = 1$).}
+\end{subfigure}
+\hfill
+\begin{subfigure}[t]{0.32\textwidth}
+\centering
+\includegraphics[width=\textwidth]{plot/weights_raw3d_softplus.png}
+\caption{$\mathrm{softplus} + \alpha\,\phi_{\gamma}$ ($\gamma = 1$).}
+\end{subfigure}
+\hfill
+\begin{subfigure}[t]{0.32\textwidth}
+\centering
+\includegraphics[width=\textwidth]{plot/weights_raw3d_relu5.png}
+\caption{$\mathrm{ReLU}^5 + \alpha\,\psi_5$.}
+\end{subfigure}
+\caption{Inner-weight portrait: raw $(a_1, a_2, b)$ with the unit equator circle (light green, at $b = 0$) for reference ($\alpha = 10^{-5}$). Dot color indicates the sign of the outer weight, dot size its magnitude.}
+\label{fig:summary_weights_raw}
+\end{figure}
+
+
+
+
+
+\subsection{Pendulum Swing-Up}
+We have established that our networks approximate value functions in the Barron space $B_1^k(D)$, and that this space embeds into $H^k(D)$: the ability to approximate a discontinuous gradient is therefore structurally limited.
+We now exhibit this limit on the pendulum example and determine which atom class approximates the discontinuity most effectively.
+
+When the value function possesses a switching set --- a manifold across which
+$\nabla V$ is discontinuous, as in the pendulum swing-up problem --- a smooth
+derivative can no longer reproduce the target gradient field economically.
+Representing a jump in $\nabla V$ requires a derivative $\partial_{x}\sigma$
+that is itself able to break across a hyperplane, which relaxes the
+differentiability of Assumption~\ref{ass:diff_lipschitz}.
+Figure~\ref{fig:activation_shapes_switching} contrasts three such shapes. The
+rectified linear unit $\mathrm{ReLU}$ has a step derivative, so a single
+neuron seats a finite gradient jump exactly on its hyperplane; its squared
+variant $\mathrm{ReLU}^{2}$ has a kinked but continuous derivative --- a jump
+in the curvature --- that builds a sharp gradient transition while its
+quadratic growth still fits the smooth far field; softplus, whose derivative
+is smooth, can only smear the jump and consequently plateaus near the
+switching set. The positive homogeneity of the rectified families also makes
+them the natural setting for the fractional-exponent penalty of Section~4.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{plot/activation_shapes_discontinuous.png}
+\caption{Three activations for a target gradient that jumps across a switching set --- $\mathrm{ReLU}$, $\mathrm{ReLU}^{2}$, and softplus (smooth reference) --- shown, from left to right, as the value $\sigma$, its first derivative $\sigma'$, and its second derivative $\sigma''$ with respect to the pre-activation argument. Only the rectified derivatives can break at the origin: $\mathrm{ReLU}'$ jumps and $(\mathrm{ReLU}^{2})'$ kinks, whereas the softplus derivative is smooth. The curvature of $\mathrm{ReLU}$ is a Dirac mass at the origin (marked).}
+\label{fig:activation_shapes_switching}
+\end{figure}
+
+The example we consider follows from \cite{han2024nonsmooth}.
+We write the state as
+\begin{equation*}
+	x = (x_1,x_2)^T = (\theta,\dot{\theta})^T,
+\end{equation*}
+the pendulum angle and angular velocity. (The letter $\omega$ remains reserved
+for the network parameters.)
+We consider the optimal control problem
+\begin{equation*}
+	\min_{u \in L^2(0,\infty;\mathbb{R})} \int_0^\infty \big( q_1\sin^2\theta(t) + q_1(\cos\theta(t)-1)^2 + q_2\dot{\theta}^2(t) + r u^2(t) \big)\,dt
+\end{equation*}
+subject to
+\begin{equation*}
+\begin{cases}
+	ml^2\,\ddot{\theta} = -b\dot{\theta} + mgl\sin\theta + u,\\
+	(\theta(0),\dot{\theta}(0))=(x_1,x_2).
+\end{cases}
+\end{equation*}
+The target equilibrium is $x_U=(2j\pi,0)$, $j\in\mathbb{Z}$.
+
+In this setting the state dimension is $d=2$ and the control is scalar.
+The physical and cost parameters are $m = l = 1$, $b = 0.1$, $g = 9.8$,
+$q_1 = q_2 = 1$, and $r = 1$.
+To initialize the backward integration, we use the local linear-quadratic regulator (LQR) approximation near $x_U$.
+Let $\xi=x-x_U$ be the local coordinate around the upright equilibrium.
+Linearizing the dynamics at $(x_U,0)$ gives
+\begin{equation*}
+	\dot{\xi}=A\xi+Bu, \quad A= \begin{pmatrix} 0 & 1\\ \frac{g}{l} & -\frac{b}{ml^2} \end{pmatrix}, \quad B= \begin{pmatrix} 0\\ \frac{1}{ml^2} \end{pmatrix}.
+\end{equation*}
+The running cost is locally approximated by
+\begin{equation*}
+	\xi^TQ\xi + r u^2, \qquad Q= \begin{pmatrix} q_1 & 0\\ 0 & q_2 \end{pmatrix}.
+\end{equation*}
+The local infinite-horizon LQR value function is
+\begin{equation*}
+	V^\infty(\xi)=\xi^TP\xi,
+\end{equation*}
+where $P$ is the positive definite solution of the algebraic Riccati equation
+\begin{equation*}
+	A^TP+PA-\frac{1}{r}PBB^TP+Q=0.
+\end{equation*}
+The superscript $\infty$ refers to the infinite-horizon LQR problem.
+For $\varepsilon>0$, we define the local LQR sublevel set and boundary by
+\begin{equation*}
+	L_\varepsilon=\{\xi:V^\infty(\xi)\leq \varepsilon\},
+	\qquad
+	\partial L_\varepsilon=\{\xi:V^\infty(\xi)=\varepsilon\}.
+\end{equation*}
+The corresponding state-costate system becomes
+\begin{equation}
+\label{TPBVP_pendulum}
+\left\{
+\begin{aligned}
+	& ml^2\,\ddot{\theta}^* = -b\dot{\theta}^* + mgl\sin\theta^* + u^*,\\
+	& -\dot{p}_1^* = 2q_1\sin\theta^* + \frac{g}{l}\cos\theta^*\,p_2^*,\\
+	& -\dot{p}_2^* = 2q_2\dot{\theta}^* + p_1^* - \frac{b}{ml^2}p_2^*,\\
+	& x^*(0)=x, \quad x^*(T_x)-x_U\in \partial L_\varepsilon, \quad p^*(T_x)=\nabla V^\infty(x^*(T_x)-x_U).
+\end{aligned}
+\right.
+\end{equation}
+
+In the experiment we use $\varepsilon=2\times 10^{-4}$, and on $\partial L_\varepsilon$ the terminal costate is
+\begin{equation*}
+	p^*(T_x)=\nabla V^\infty(\xi^*(T_x))=2P\xi^*(T_x).
+\end{equation*}
+For the data generation, we solve the open-loop PMP system by integrating $2000$ characteristics backward from the local LQR boundary $\partial L_\varepsilon$.
+Along each PMP trajectory, the accumulated running cost gives the value sample $V(x)$, and the costate gives the gradient sample $\nabla V(x)=p$.
+The backward integration of each raw trajectory stops when the accumulated value reaches the cap $V \le 100$; the in-basin training samples are additionally restricted to values below $50$ (the resolved part of the basin).
+This yields the dataset
+\begin{equation*}
+\{x^m,V(x^m),\nabla V(x^m)\}_{m=1}^M .
+\end{equation*}
+
+This construction records the nonsmooth geometry of the pendulum value function.
+Because the clockwise and counter-clockwise swing-up branches have equal cost at the bottom position $((2k+1)\pi,0)$, the optimal value function is not globally $C^1$.
+The generator detects the switching curve by intersecting equal-value contours with their $2\pi$-shifted copies and restricts the PMP trajectories to a consistent smooth branch.
+Restriction alone, however, produces one-sided data --- every sample stops at the switching curve, so the gradient jump itself would never appear in the training set.
+The generator therefore harvests a two-sided band: the raw trajectories are tiled by $\pm 2\pi$ in $\theta$ and gated to within $0.5$ of the (tiled) switching arms, and a tiled point is kept only if its branch value beats the competing branch's locally extrapolated value \emph{and} matches its own branch's local lower envelope, certifying that it carries the true $(V,\nabla V)$ on its side of the curve.
+The band splits into a near-side pad ($300$ samples: the central branch between the basin's conservative trim and the true arm) and a far-side collar ($600$ samples: the neighboring upright's branch across the arm).
+We fix the terminology: the \emph{switching set} (or curve) is the geometric locus across which $\nabla V$ jumps; the \emph{switching band} is the two-sided slice of training data straddling it; the \emph{switching tube} is the evaluation region within distance $0.3$ of the (tiled) curve.
+The final $(x,V,dV)$ dataset (3{,}900 samples: a 3{,}000-sample in-basin body plus the 900-sample two-sided band) thus contains the gradient discontinuity as an interior feature.
+This makes the pendulum benchmark a stress test for the gradient-augmented sparse neural approximation: the value is continuous while its gradient jumps across a switching set that the models see from both sides.
+Figure~\ref{fig:pendulum_data} shows the dataset generated. 
+\begin{figure}[htbp]
+\centering
+\captionsetup[subfigure]{justification=centering}
+\begin{subfigure}[b]{0.32\textwidth}
+\centering
+\includegraphics[width=\textwidth]{plot/pendulum_value_scatter.png}
+\caption{value samples $\{x^m, V(x^m)\}$.}
+\label{fig:pendulum_data_scatter}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.32\textwidth}
+\centering
+\includegraphics[width=\textwidth]{plot/pendulum_value_surface.png}
+\caption{value surface $V(x)$.}
+\label{fig:pendulum_data_surface}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.32\textwidth}
+\centering
+\includegraphics[width=\textwidth]{plot/pendulum_regions.png}
+\caption{regions of attraction.}
+\label{fig:pendulum_data_regions}
+\end{subfigure}
+\caption{Optimal value function $V(x)$ over the $(\theta, \dot\theta)$ plane,
+$2\pi$-periodic in $\theta$. (a) The raw $(x, V)$ samples produced by the PMP
+generator. (b) The reconstructed value surface. (c) Regions of attraction of the
+periodic uprights; their boundaries are the switching-set spirals across which 
+$\nabla V$ is discontinuous.}
+\label{fig:pendulum_data} 
+\end{figure}
+
+
+
+\subsubsection{The representation limit at the switching set}
+As in the last example we fit the training data with the models we selected.
+Figure~\ref{fig:rs_surfaces} shows the fitted surfaces on the same physical window and value range as the true
+surface of Figure~\ref{fig:pendulum_data_surface}.
+The switching profiles are reproduced only approximately --- the quantitative limitation appears on the transect below.
+ 
+\begin{figure}[htbp]
+\centering
+\captionsetup[subfigure]{justification=centering}
+\begin{subfigure}[b]{0.32\textwidth}
+\centering
+\includegraphics[width=\textwidth]{plot/surface_gaussian.png}
+\caption{Gaussian}
+\label{fig:rs_surface_gaussian}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.32\textwidth}
+\centering
+\includegraphics[width=\textwidth]{plot/surface_softplus.png}
+\caption{softplus}
+\label{fig:rs_surface_softplus}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.32\textwidth}
+\centering
+\includegraphics[width=\textwidth]{plot/surface_leaky_relu.png}
+\caption{leaky ReLU}
+\label{fig:rs_surface_leaky_relu}
+\end{subfigure}
+\vspace{0.6em}
+\begin{subfigure}[b]{0.32\textwidth}
+\centering
+\includegraphics[width=\textwidth]{plot/surface_relu2.png}
+\caption{$\mathrm{ReLU}^{2}$}
+\label{fig:rs_surface_relu2}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.32\textwidth}
+\centering
+\includegraphics[width=\textwidth]{plot/surface_relu5.png}
+\caption{$\mathrm{ReLU}^{5}$}
+\label{fig:rs_surface_relu5}
+\end{subfigure}
+\caption{Learned value surfaces $\hat V(x)$ over the $(\theta,\dot\theta)$
+window $[-8,8]^{2}$, displayed on the common range $\hat V\in[0,60]$.
+The $\reluk$ models are trained with the fractional-exponent penalty $\psi_k$,
+the others with the log penalty $\phi_{\gamma}$; the weights $\alpha$ and
+$\gamma$ are selected per model.}
+\label{fig:rs_surfaces}
+\end{figure}
+
+Figure~\ref{fig:rs_transect} shows a normal cross-section of the
+switching curve through the densest data region. The true value (left) is the
+continuous lower envelope of the two PMP branches, with a concave kink at the
+crossing; the true normal gradient $n\cdot\nabla V$ (right) therefore
+jumps at the switching set $s=0$.
+The training data here carry samples on both sides of the curve, so the jump is in-sample.
+No model reproduces the magnitude of the jump: all undershoot the steep
+pre-jump gradient. The two kink-capable atoms come closest, each in the shape
+its atom geometry dictates. $\mathrm{ReLU}^{2}$ develops a visible kink at
+$s\approx 0$ --- its piecewise-quadratic atoms can break the derivative across
+a line --- and tracks the true value level best. The leaky-ReLU fit is a
+staircase: a piecewise-linear network has zero curvature between its atom
+lines, so its normal gradient is piecewise \emph{constant}, jumping where an
+atom line crosses the section and holding a plateau of $\approx -30$ to $-42$
+in between. The smooth activations necessarily interpolate a gentle slope
+through the discontinuity. The discontinuous gradient is thus a genuine
+representation cost.
+
+\begin{figure}[htbp]
+\centering
+\captionsetup[subfigure]{justification=centering}
+\begin{subfigure}[b]{0.48\textwidth}
+\centering
+\includegraphics[width=\textwidth]{plot/transect_value.png}
+\caption{value $V$ along the normal.}
+\label{fig:rs_transect_value}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.48\textwidth}
+\centering
+\includegraphics[width=\textwidth]{plot/transect_normal_gradient.png}
+\caption{normal gradient $n\cdot\nabla V$ along the normal.}
+\label{fig:rs_transect_gradient}
+\end{subfigure}
+\caption{Normal cross-section of the switching curve, parametrized by the normal
+distance $s$. Left: the true value (dashed)
+is a continuous lower envelope with a kink at $s=0$. Right: the true normal
+gradient jumps at $s=0$; $\mathrm{ReLU}^{2}$
+develops a kink near $s=0$ and leaky ReLU a piecewise-constant staircase,
+while the smooth models interpolate through the discontinuity. The rectangular
+excursion of the reference curve near $s\approx-0.3$ is a nearest-neighbor
+artifact of the envelope reference, not a feature of $V$.}
+\label{fig:rs_transect}
+\end{figure}
+
+
+Since the method is data-driven, we investigate next to what extent the representation limit can be mitigated by oversampling the switching region. 
+The hypothesis is that a model with good local approximation power should improve near the switching set when the sample density there is increased. 
+We test this with stratified sampling: 
+From the same generator we build four training sets that differ only in the
+fraction of samples placed around the switching curve:
+6{,}000 samples with the reference fraction of $23\%$, the same 6{,}000 budget
+reallocated to $40\%$ and to $60\%$, and the reference set with 2{,}000
+additional samples ($8{,}000$ total). On each set we train the Gaussian
+with $\phi_{\gamma}$ and $\mathrm{ReLU}^{2}$ with $\psi_{2}$, each for three
+regularization weights $\alpha$, and keep the best run per set. All models are
+evaluated on one common held-out set of ${\approx}9.4\times10^{5}$ points,
+disjoint from every training set, with the relative $H^{1}$ error reported
+separately on the switching tube (distance $\le 0.3$ to the switching curve) and on the
+rest of the domain.
+
+\begin{table}[htbp]
+\centering
+\setlength{\tabcolsep}{12pt}
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{llcc}
+\toprule
+Model & Training set & Switching tube & Rest \\
+\midrule
+Gaussian + $\phi_{\gamma}$ & 6k, $23\%$ band (reference) & $5.81 \times 10^{-1}$ & $5.89 \times 10^{-1}$ \\
+ & 6k, $40\%$ band & $5.72 \times 10^{-1}$ & $5.30 \times 10^{-1}$ \\
+ & 6k, $60\%$ band & $6.02 \times 10^{-1}$ & $6.68 \times 10^{-1}$ \\
+ & 6k $+$ 2k band & $5.97 \times 10^{-1}$ & $5.68 \times 10^{-1}$ \\
+\midrule
+$\mathrm{ReLU}^{2}$ + $\psi_{2}$ & 6k, $23\%$ band (reference) & $2.46 \times 10^{-1}$ & $1.56 \times 10^{-1}$ \\
+ & 6k, $40\%$ band & $2.89 \times 10^{-1}$ & $1.72 \times 10^{-1}$ \\
+ & 6k, $60\%$ band & $3.46 \times 10^{-1}$ & $2.20 \times 10^{-1}$ \\
+ & 6k $+$ 2k band & $2.88 \times 10^{-1}$ & $1.84 \times 10^{-1}$ \\
+\bottomrule
+\end{tabular}
+\caption{Relative $H^{1}$ error on the common held-out set (best of three
+regularization weights per training set), inside the tube of distance $\le 0.3$
+to the switching curve and on the rest of the domain.}
+\label{tab:rs_oversampling}
+\end{table}
+
+Neither model improves at the switching set
+(Table~\ref{tab:rs_oversampling}, Figure~\ref{fig:rs_oversampling}). The
+Gaussian is flat across all four sets: a smooth atom cannot represent the kink, and more samples of it do not change that.
+$\mathrm{ReLU}^{2}$ \emph{degrades monotonically} as the fraction grows
+($0.25 \to 0.29 \to 0.35$, with the rest error rising in step):
+samples moved into the switching set are samples removed from the interior, and the fit
+loses more there than it gains at the curve. Adding 2{,}000 band samples on top
+of the budget is less harmful than reallocation but still does not beat the
+reference. In particular we see the limitation of approximation can not be solved by adding more data.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.85\textwidth]{plot/oversampling_control.png}
+\caption{Relative $H^{1}$ error on the common held-out set against the four
+training sets, inside the switching tube (red) and on the rest (blue), for the
+Gaussian (solid) and $\mathrm{ReLU}^{2}$ (dashed). Faint dots: the three
+regularization weights; markers: the best run per set. Increasing the band
+fraction improves neither region for either model.}
+\label{fig:rs_oversampling}
+\end{figure}
+
+\subsubsection{ReLU$^2$ fits the discontinuous gradient best}
+Despite the limitation in representing the discontinuous gradient, $\mathrm{ReLU}^2$ fits the switching profile markedly better than the other activation functions.
+
+Figure~\ref{fig:rs_frontier}
+tracks the best relative $H^{1}$ validation error reached as neurons are
+inserted, for each activation paired with its penalty. $\mathrm{ReLU}^{2}$
+(fractional penalty $\psi_{2}$) separates from the other models within the first insertions and
+reaches the lowest error of all ($\approx 3.1\times10^{-1}$ at 131 neurons);
+leaky ReLU --- the other kink-capable atom --- is the runner-up
+($\approx 4.4\times10^{-1}$); softplus plateaus near $5.2\times10^{-1}$, and
+the Gaussian and $\mathrm{ReLU}^{5}$ ($\psi_{5}$) stall around
+$6.1\times10^{-1}$. The per-neuron accuracy
+advantage of the $\mathrm{ReLU}^{2}$ atom is unambiguous; raising the
+power to $5$ forfeits it, and even the piecewise-linear leaky ReLU trails
+$\mathrm{ReLU}^{2}$ by roughly $40\%$.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.7\textwidth]{plot/pendulum_insertion_frontier.png}
+\caption{Best relative $H^{1}$ validation error against
+neuron count, one curve per activation--penalty pair
+($\phi_{\gamma}$ the log penalty, $\psi_{k}$ the fractional-exponent penalty).
+$\mathrm{ReLU}^{2}$ reaches the lowest error overall; leaky ReLU follows at
+$\approx 1.4\times$ its error, softplus at $\approx 1.7\times$, and the
+Gaussian and $\mathrm{ReLU}^{5}$ plateau at $\approx 2\times$.}
+\label{fig:rs_frontier}
+\end{figure}
+
+The same ordering holds region by region. Figure~\ref{fig:rs_dumbbell} reports
+the relative $H^{1}$ error separately inside the switching tube and on the
+rest of the domain: $\mathrm{ReLU}^{2}$ leads in \emph{both} regions, leaky
+ReLU is the runner-up in both, and the two kink-capable atoms sit
+$1.5$--$3\times$ ahead of the smooth activations. $\mathrm{ReLU}^{5}$ is the
+one model that is better inside the tube than outside: its stiff high-degree
+ridges seat the switching band but pay for it everywhere else.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.8\textwidth]{plot/near_far_dumbbell.png}
+\caption{Relative $H^{1}$ error (log scale) inside the switching tube
+(distance $\le 0.3$ to the switching curve; filled markers) and on the rest of
+the domain (open markers), per representative model, rows ordered by the rest
+error.}
+\label{fig:rs_dumbbell}
+\end{figure}
+
+Figure~\ref{fig:rs_atoms} draws each atom's active line $\{a\cdot x + b = 0\}$
+in the physical $(\theta,\dot\theta)$ plane, with line strength proportional to
+the outer weight $|c_{n}|$, for $\mathrm{ReLU}^{2}$ (left) and Gaussian (right);
+the switching curve is shown in black. $\mathrm{ReLU}^{2}$ concentrates its
+strongest ridges parallel to the diagonal switching arms --- piecewise
+low-degree ridges whose derivative breaks exactly where the target's does ---
+whereas the Gaussian spends its capacity on near-isotropic bumps that can tile
+the wells but cannot seat a gradient break. This alignment is the mechanism
+behind the frontier advantage above and behind the transect kink of
+Figure~\ref{fig:rs_transect}.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.85\textwidth]{plot/atom_portrait.png}
+\caption{Active atom lines $\{a\cdot x + b = 0\}$ in the $(\theta,\dot\theta)$
+plane (strength $\propto |c_{n}|$) for $\mathrm{ReLU}^{2}$ (left) and Gaussian
+(right); the switching curve is black. $\mathrm{ReLU}^{2}$'s strongest ridges
+run parallel to the switching arms; the Gaussian atoms tile the wells
+isotropically.}
+\label{fig:rs_atoms}
+\end{figure}
+
+\subsubsection{Feedback synthesis across the switching set}
+Minimizing the Hamiltonian in $u$ gives the optimal control in feedback form,
+\begin{equation*}
+u(x) = -\frac{1}{2\,r\,ml^{2}}\,\partial_{\dot{\theta}}V(x);
+\end{equation*}
+replacing $V$ by a fitted $\hat V$ yields a candidate feedback law. We test
+each law in closed loop from two initial states placed on either side of the
+switching curve, $A=(0.71,\,0.68)$ and $B=(0.23,\,0.53)$, integrating the
+dynamics over the horizon $T=10$. The two starts demand different optimal
+behavior: from $A$ the optimal law swings the pendulum over the top to the
+upright at $\theta=2\pi$, while from $B$ it brakes directly to the upright at
+$\theta=0$ --- so a correct law must change branch across the curve. The
+reference law evaluates the same formula on the PMP solution itself.
+
+\begin{figure}[htbp]
+\centering  
+\captionsetup[subfigure]{justification=centering}
+\begin{subfigure}[b]{0.32\textwidth}
+\centering
+\includegraphics[width=\textwidth]{plot/feedback_true_pmp.png}
+\caption{reference (PMP)}
+\label{fig:rs_feedback_true}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.32\textwidth}
+\centering
+\includegraphics[width=\textwidth]{plot/feedback_gaussian.png}
+\caption{Gaussian + $\phi_{\gamma}$}
+\label{fig:rs_feedback_gaussian}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.32\textwidth}
+\centering
+\includegraphics[width=\textwidth]{plot/feedback_softplus.png}
+\caption{softplus + $\phi_{\gamma}$}
+\label{fig:rs_feedback_softplus}
+\end{subfigure}
+\vspace{0.6em}
+\begin{subfigure}[b]{0.32\textwidth}
+\centering
+\includegraphics[width=\textwidth]{plot/feedback_leaky_relu.png}
+\caption{leaky ReLU + $\phi_{\gamma}$}
+\label{fig:rs_feedback_leaky}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.32\textwidth}
+\centering
+\includegraphics[width=\textwidth]{plot/feedback_relu2.png}
+\caption{$\mathrm{ReLU}^{2}$ + $\psi_{2}$}
+\label{fig:rs_feedback_relu2}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.32\textwidth}
+\centering
+\includegraphics[width=\textwidth]{plot/feedback_relu5.png}
+\caption{$\mathrm{ReLU}^{5}$ + $\psi_{5}$}
+\label{fig:rs_feedback_relu5}
+\end{subfigure}
+\caption{Closed-loop trajectories in the $(\theta,\dot\theta)$ plane from the
+two starts $A$ (blue) and $B$ (red) on either side of the switching curve
+(black), one panel per feedback law; all panels share the same axes. The
+reference law swings over the top from $A$ and brakes to $\theta=0$ from $B$;
+$\mathrm{ReLU}^{2}$ reproduces both behaviors.}
+\label{fig:rs_feedback}
+\end{figure}
+
+Only $\mathrm{ReLU}^{2}$ stabilizes (Table~\ref{tab:rs_feedback_cost}). From
+$B$ it brakes to the upright at essentially the true optimal cost ($10.3$ vs
+$10.2$); from $A$ it takes the correct branch --- swinging over to the upright
+at $2\pi$ --- though with an over-energetic arc that roughly doubles the cost
+($57.9$ vs $26.2$). Every
+other law fails from both starts: softplus and leaky ReLU over-accelerate,
+pass the uprights and never brake; the Gaussian settles into a periodic orbit
+around the wells without reaching an upright; $\mathrm{ReLU}^{5}$ swings over
+from $A$ but arrives at $2\pi$ too slowly to be captured, and from $B$ stalls
+short of the upright. Figure~\ref{fig:rs_feedback_control} shows the control
+signal from $B$: the $\mathrm{ReLU}^{2}$ law tracks the reference almost
+exactly, while the others oscillate or saturate. The failures track the global
+fit quality of the value approximation: a
+feedback law is only as good as the gradient field.
+
+\begin{table}[htbp]
+\centering
+\setlength{\tabcolsep}{12pt}
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{lcccc}
+\toprule
+ & \multicolumn{2}{c}{start $A = (0.71, 0.68)$} & \multicolumn{2}{c}{start $B = (0.23, 0.53)$} \\
+\cmidrule(lr){2-3} \cmidrule(lr){4-5}
+Feedback law & cost & reaches upright & cost & reaches upright \\
+\midrule
+reference (PMP) & $26.2$ & yes & $10.2$ & yes \\
+Gaussian $+\, \phi_{\gamma}$ & $298.5$ & no & $278.9$ & no \\
+softplus $+\, \phi_{\gamma}$ & $73013.3$ & no & $66996.7$ & no \\
+leaky ReLU $+\, \phi_{\gamma}$ & $869.1$ & no & $776.9$ & no \\
+$\mathrm{ReLU}^{2} + \psi_{2}$ & $57.9$ & yes & $10.3$ & yes \\
+$\mathrm{ReLU}^{5} + \psi_{5}$ & $235.9$ & no & $232.4$ & no \\
+\bottomrule
+\end{tabular}
+\caption{Closed-loop cost over the horizon $T = 10$ and stabilization outcome
+for each feedback law, from the two starts on either side of the switching
+curve.}
+\label{tab:rs_feedback_cost}
+\end{table}
+
+\begin{figure}[htbp]
+\centering
+\captionsetup[subfigure]{justification=centering}
+\begin{subfigure}[b]{0.48\textwidth}
+\centering
+\includegraphics[width=\textwidth]{plot/feedback_control_b_log_penalty.png}
+\caption{log-penalty models.}
+\label{fig:rs_feedback_control_log}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.48\textwidth}
+\centering
+\includegraphics[width=\textwidth]{plot/feedback_control_b_relu.png}
+\caption{$\mathrm{ReLU}^{k}$ models.}
+\label{fig:rs_feedback_control_relu}
+\end{subfigure}
+\caption{Feedback control $u(t)$ from start $B$, per law, beside the reference
+(black); the axis is clipped to the informative band --- softplus's
+actuator-saturation excursion of $\pm 30$ leaves the frame. The reference
+brakes to $\theta=0$ with $u$ rising from ${\approx}{-7}$ to $0$;
+$\mathrm{ReLU}^{2}$ tracks it almost exactly.}
+\label{fig:rs_feedback_control}
+\end{figure}
+
+In summary, $\mathrm{ReLU}^{2}$ with the fractional-exponent penalty is the
+best atom class for this nonsmooth target. With the switching set in the training data, only
+$\mathrm{ReLU}^{2}$ --- whose derivative can break across a hyperplane ---
+partially seats the jump (Figure~\ref{fig:rs_transect}).
+In closed loop the branch decision at the curve
+becomes learnable, and $\mathrm{ReLU}^{2}$ alone makes it correctly from both
+sides of the switching set --- at the true optimal cost from $B$, and along
+the correct branch at roughly twice the optimal cost from $A$;
+every other law fails from both starts. The bottleneck has moved from data
+coverage across the curve to the atoms' ability to represent the kink ---
+which the sparse rectified atoms address directly.
+
+
+\FloatBarrier
+\section{Conclusion and outlook}
+
+This thesis studied the approximation of value functions of nonlinear optimal
+control problems from PMP-generated data by sparse shallow networks, combining
+a gradient-augmented ($H^1$) loss with nonconvex sparsity penalties over a
+measure-space formulation.
+
+On the theoretical side, the analysis of \cite{pieper2022nonconvex} was
+extended in three directions. For localized ridge activations, the existence
+of global minimizers, the first-order optimality conditions, and the finite
+support of local minimizers were established on the \emph{unbounded} parameter
+domain $\mathbb{R}^{d+1}$ (Theorems~\ref{thm:existence},
+\ref{opt_cdt}, \ref{thm:finite_support}, \ref{sc_opt}), with the no-escape
+condition \eqref{no_escape} making the behavior of the dual variable at
+infinity explicit. The localization was shown to be sharp: for saturating or
+growing activations such as $\tanh$ and softplus, fit mass escapes to
+infinity and existence genuinely fails (Example~\ref{ex:tanh_escape}) --- for
+softplus the regularization even degenerates entirely, since every ReLU
+network is reached at vanishing penalty. For positively $k$-homogeneous
+activations, the problem was reformulated on the sphere with the
+fractional-exponent penalty $|c|^{2/(k+1)}$, and the optimality and existence
+theory was extended to this singular penalty class despite the failure of the
+classical assumptions at zero.
+
+On the numerical side, the two benchmarks isolate two regimes. On the smooth
+Van der Pol value function, gradient augmentation is decisive for gradient
+accuracy, and the nonconvex penalties act as a pure sparsity lever: the
+$\reluk$ atoms with the fractional-exponent penalty reach the accuracy of the
+best log-penalty activation with a fraction of the neurons, and every
+resulting feedback law stabilizes at essentially the optimal cost. On the
+pendulum swing-up, whose value function carries a gradient discontinuity
+along the switching set, the picture inverts: the switching set is a
+representation limit --- no atom class reproduces the jump, and oversampling
+the switching region does not pay the error down --- and the choice of atom
+decides control viability rather than merely sparsity: only
+$\mathrm{ReLU}^2$, whose derivative can break across a hyperplane, develops
+the kink and yields a feedback law that makes the correct branch decision
+from both sides of the switching set.
+
+Several directions remain open. The experiments are two-dimensional; the
+causality-free data generation and the sparse networks are built to scale,
+but high-dimensional deployment is untested. In the oversampling study,
+per-sample objective weighting is the natural untried lever against the
+interior cost of two-sided switching data. On the theory side, the
+counterexamples suggest a well-posed completion for the saturating class: an
+impact-normalized penalty $\phi(|c|\,\|\sigma(\cdot,\omega)\|_{H^1})$ closes
+the zero-cost escape directions, and the compactified dictionary --- whose
+boundary atoms are exactly the ReLU ridges and constants reached by the
+dilation limits, cf.\ the embedding of Section~2.2 --- would carry the
+sparse-measure theory for softplus-type activations. Finally, an explicit
+affine term in the model would absorb the constant and affine escape directions
+directly and plausibly restore existence on the unbounded domain for the
+saturating class.
+
+\newpage
+\bibliographystyle{plain}
+\bibliography{ref}
+\end{document}
