@@ -82,3 +82,6 @@ deploy/terraform/*.tfvars.json
 papar/*
 !papar/Mthesis.pdf
 !papar/Mthesis.tex
+
+# domain-language notes are local working docs
+CONTEXT.md
