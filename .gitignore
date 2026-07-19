@@ -82,6 +82,10 @@ deploy/terraform/*.tfvars.json
 papar/*
 !papar/Mthesis.pdf
 !papar/Mthesis.tex
+!papar/draft/
+papar/draft/*
+!papar/draft/PROOF_NARROW-CONVERGENCE.tex
+!papar/draft/PROOF_NARROW-CONVERGENCE.pdf
 
 # domain-language notes are local working docs
 CONTEXT.md

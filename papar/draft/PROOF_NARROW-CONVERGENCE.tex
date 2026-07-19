@@ -1,0 +1,891 @@
+\documentclass[11pt]{amsart}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{booktabs}
+\usepackage[a4paper,left=28mm,right=28mm,top=27mm,bottom=27mm]{geometry}
+\usepackage[colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}
+\usepackage{microtype}
+
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{corollary}[theorem]{Corollary}
+\theoremstyle{definition}
+\newtheorem{assumption}[theorem]{Assumption}
+\newtheorem{definition}[theorem]{Definition}
+\theoremstyle{remark}
+\newtheorem{remark}[theorem]{Remark}
+\newtheorem{example}[theorem]{Example}
+
+\DeclareMathOperator{\supp}{supp}
+\DeclareMathOperator{\sign}{sign}
+\DeclareMathOperator{\atom}{atom}
+\DeclareMathOperator{\cont}{cont}
+
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\M}{\mathcal{M}}
+\newcommand{\N}{\mathcal{N}}
+\newcommand{\TV}{\mathrm{TV}}
+\newcommand{\weakn}{\rightharpoonup_{\mathrm n}}
+
+\title{A Narrow-Convergence Existence Proof with Parameter-Moment Regularization}
+\author{}
+\date{\today}
+
+\begin{document}
+
+\begin{abstract}
+This note formulates and proves an existence theorem for a modified version of
+the unbounded-parameter sparse-neural-network problem from the thesis.  The
+modification is the addition of a coercive parameter-moment term
+\[
+  \beta\int_{\R^{d+1}}\bigl(1+|\omega|^p\bigr)\,d|\mu|(\omega).
+\]
+The moment bound supplies the tightness that is missing from the original
+location-blind penalty.  Signed Prokhorov compactness then gives narrow
+convergence, while the condition that the moment order dominate the growth of
+the activation gives uniform integrability of the network atoms.  The note also
+records a finite-support consequence under an additional global
+$H^1$-growth assumption of the activation function.  The result concerns the modified objective; it is
+not a topology-only reproof of existence for the original objective.
+\end{abstract}
+
+\maketitle
+
+\section{Problem and notation}
+
+Let $D\subset\R^d$ be a bounded Lipschitz domain, let
+$V\in H^1(D)$, and set
+\[
+  \Omega:=\R^{d+1},\qquad \omega=(a,b)\in\R^d\times\R.
+\]
+Given a continuous activation profile $\rho:\R\to\R$, define the ridge atom
+\[
+  K(\omega)(x):=\sigma(x,\omega):=\rho(a\cdot x+b),
+  \qquad x\in D.
+\]
+
+For $p>0$, introduce the coercive weight
+\[
+  w_p(\omega):=1+|\omega|^p
+\]
+and the weighted space of finite signed Radon measures
+\[
+  \M_p(\Omega)
+  :=
+  \left\{
+    \mu\in\M(\Omega):
+    \Psi_p(\mu):=\int_\Omega w_p(\omega)\,d|\mu|(\omega)<\infty
+  \right\}.
+\]
+
+\begin{definition}[Narrow convergence for signed measures]
+We write $\mu_n\weakn\mu$ if
+\[
+  \int_\Omega f\,d\mu_n\longrightarrow\int_\Omega f\,d\mu
+  \qquad\text{for every }f\in C_b(\Omega).
+\]
+\end{definition}
+
+Suppose for the moment that
+\begin{equation}
+  \label{eq:value-growth}
+  |\rho(z)|\leq C_\rho(1+|z|)^k
+  \qquad (z\in\R)
+\end{equation}
+for some $k\geq0$.  Since $D$ is bounded, there is a constant $C_D$ such that
+\begin{equation}
+  \label{eq:atom-L2-growth}
+  \|K(\omega)\|_{L^2(D)}
+  \leq C_D(1+|\omega|)^k .
+\end{equation}
+The map $K:\Omega\to L^2(D)$ is continuous: if $\omega_n\to\omega$, then all
+preactivations $a_n\cdot x+b_n$ remain in one compact interval for
+$x\in D$, and uniform continuity of $\rho$ on that interval gives
+$K(\omega_n)\to K(\omega)$ uniformly on $D$.
+If $p>k$ and $\mu\in\M_p(\Omega)$, the map
+$\omega\mapsto K(\omega)$ is Bochner integrable in $L^2(D)$ with respect to
+$\mu$, and we may define
+\[
+  \N\mu:=\int_\Omega K(\omega)\,d\mu(\omega)\in L^2(D).
+\]
+As in the thesis, the gradient is understood distributionally and the fidelity
+is
+\[
+  L(\mu):=
+  \begin{cases}
+  \dfrac12\|\N\mu-V\|_{L^2(D)}^2
+  +\dfrac12\|\nabla(\N\mu)-\nabla V\|_{L^2(D)}^2,
+  &\N\mu\in H^1(D),\\[5pt]
+  +\infty,&\N\mu\notin H^1(D).
+  \end{cases}
+\]
+
+Let $\mu=\mu_{\cont}+\mu_{\atom}$ denote its continuous/atomic
+decomposition, where
+\[
+  \mu_{\atom}
+  =
+  \sum_{\omega\in\atom\mu}\mu(\{\omega\})\delta_\omega.
+\]
+For a function $\phi:\R_+\to\R_+$, define the thesis penalty
+\[
+  \Phi_1(\mu)
+  :=
+  \|\mu_{\cont}\|_{\M(\Omega)}
+  +
+  \sum_{\omega\in\atom\mu}
+  \phi\bigl(|\mu(\{\omega\})|\bigr).
+\]
+
+\begin{assumption}[Penalty assumptions]
+\label{ass:phi}
+The function $\phi$ satisfies the thesis assumptions:
+\begin{enumerate}
+\item $\phi(0)=0$, $\phi$ is differentiable on $\R_+$, and
+      $\phi'(0)=1$;
+\item $\phi$ is concave, nondecreasing, and coercive.
+\end{enumerate}
+\end{assumption}
+
+For $\alpha,\beta>0$, the modified objective is
+\begin{equation}
+  \label{eq:modified-objective}
+  J_{\beta,p}(\mu)
+  :=
+  L(\mu)+\alpha\Phi_1(\mu)+\beta\Psi_p(\mu),
+  \qquad \mu\in\M_p(\Omega),
+\end{equation}
+and it is extended by $+\infty$ to
+$\M(\Omega)\setminus\M_p(\Omega)$.
+
+\begin{remark}[This is a genuine model modification]
+For a finite network
+\[
+  \mu=\sum_{j=1}^N c_j\delta_{\omega_j},
+\]
+the new term is
+\[
+  \beta\Psi_p(\mu)
+  =
+  \beta\sum_{j=1}^N |c_j|\bigl(1+|\omega_j|^p\bigr).
+\]
+Thus the cost of a distant neuron is weighted by the magnitude of its output
+coefficient.  The term is a weighted total-variation penalty, or equivalently
+a parameter-moment penalty.  It is not generated automatically by the narrow
+topology.
+The choice $1+|\omega|^p$, rather than $(1+|\omega|)^p$, is immaterial for
+compactness but is smoother at the origin when $p>1$ and agrees with the
+standard polynomial moment used in the cited literature.
+\end{remark}
+
+\section{Main existence theorem}
+
+\begin{theorem}[Existence by the narrow direct method]
+\label{thm:narrow-existence}
+Assume that $D\subset\R^d$ is bounded and Lipschitz,
+$V\in H^1(D)$, Assumption~\ref{ass:phi} holds, and
+$\rho\in C(\R)$ satisfies the polynomial growth bound
+\eqref{eq:value-growth} for some $k\geq0$.  If
+\[
+  p>k,\qquad \alpha>0,\qquad \beta>0,
+\]
+then the modified problem
+\[
+  \inf_{\mu\in\M_p(\Omega)}J_{\beta,p}(\mu)
+\]
+admits at least one global minimizer.
+\end{theorem}
+
+The proof uses three elementary consequences of the moment bound.
+
+\subsection{Moment bounds give narrow compactness}
+
+\begin{lemma}[Tightness and signed Prokhorov compactness]
+\label{lem:moment-compactness}
+Let $(\mu_n)\subset\M_p(\Omega)$ satisfy
+\[
+  \sup_n\Psi_p(\mu_n)\leq M<\infty.
+\]
+Then $(\mu_n)$ has a narrowly convergent subsequence.
+\end{lemma}
+
+\begin{proof}
+Since $w_p\geq1$,
+\[
+  \|\mu_n\|_{\M(\Omega)}
+  =|\mu_n|(\Omega)
+  \leq\Psi_p(\mu_n)
+  \leq M.
+\]
+Moreover, for every $R>0$,
+\begin{equation}
+  \label{eq:tightness-estimate}
+  |\mu_n|(\Omega\setminus B_R)
+  \leq
+  \frac{1}{1+R^p}
+  \int_{\Omega\setminus B_R}w_p\,d|\mu_n|
+  \leq\frac{M}{1+R^p}.
+\end{equation}
+Hence the variations $|\mu_n|$ are uniformly tight.
+
+Write the Jordan decomposition as
+$\mu_n=\mu_n^+-\mu_n^-$.  Both nonnegative families
+$(\mu_n^+)$ and $(\mu_n^-)$ are uniformly bounded in mass and uniformly
+tight because $\mu_n^\pm\leq|\mu_n|$.  Prokhorov's theorem, applied twice and
+with a diagonal subsequence, gives nonnegative finite measures
+$\lambda^+,\lambda^-$ such that
+\[
+  \mu_n^+\weakn\lambda^+,
+  \qquad
+  \mu_n^-\weakn\lambda^-.
+\]
+It follows that
+\[
+  \mu_n\weakn\lambda^+-\lambda^-.
+\]
+The pair $(\lambda^+,\lambda^-)$ need not be the Jordan decomposition of the
+limit, but this is irrelevant for compactness.
+\end{proof}
+
+\subsection{Lower semicontinuity of the moment}
+
+\begin{lemma}[Narrow lower semicontinuity of $\Psi_p$]
+\label{lem:moment-lsc}
+If $\mu_n\weakn\mu$, then
+\[
+  \Psi_p(\mu)
+  \leq
+  \liminf_{n\to\infty}\Psi_p(\mu_n).
+\]
+\end{lemma}
+
+\begin{proof}
+For $m\in\mathbb{N}$ set
+\[
+  g_m(\omega):=\min\{w_p(\omega),m\}.
+\]
+Then $g_m\in C_b(\Omega)$ and $g_m\geq0$.  For every finite signed measure
+$\nu$,
+\[
+  \int_\Omega g_m\,d|\nu|
+  =
+  \|g_m\nu\|_{\M(\Omega)}
+  =
+  \sup_{\substack{f\in C_0(\Omega)\\\|f\|_\infty\leq1}}
+  \int_\Omega f g_m\,d\nu.
+\]
+If $\mu_n\weakn\mu$, then
+$\int f g_m\,d\mu_n\to\int f g_m\,d\mu$ for every
+$f\in C_0(\Omega)$, because $fg_m\in C_0(\Omega)\subset C_b(\Omega)$.
+Taking the supremum gives
+\[
+  \int_\Omega g_m\,d|\mu|
+  \leq
+  \liminf_{n\to\infty}\int_\Omega g_m\,d|\mu_n|
+  \leq
+  \liminf_{n\to\infty}\Psi_p(\mu_n).
+\]
+Finally, $g_m\uparrow w_p$ pointwise, so monotone convergence and then the
+supremum over $m$ yield the claim.
+\end{proof}
+
+\subsection{Continuity of the value operator}
+
+\begin{lemma}[Uniform moments imply strong value convergence]
+\label{lem:value-continuity}
+Assume \eqref{eq:atom-L2-growth}, let $p>k$, and suppose
+\[
+  \mu_n\weakn\mu,
+  \qquad
+  \sup_n\Psi_p(\mu_n)\leq M.
+\]
+Then
+\[
+  \N\mu_n\longrightarrow\N\mu
+  \qquad\text{strongly in }L^2(D).
+\]
+\end{lemma}
+
+\begin{proof}
+Lemma~\ref{lem:moment-lsc} gives $\Psi_p(\mu)\leq M$.
+Choose $\chi_R\in C_c(\Omega)$ with
+\[
+  0\leq\chi_R\leq1,\qquad
+  \chi_R=1\text{ on }B_R,\qquad
+  \supp\chi_R\subset B_{R+1}.
+\]
+The truncated map
+\[
+  K_R:\Omega\to L^2(D),\qquad
+  K_R(\omega):=\chi_R(\omega)K(\omega),
+\]
+is continuous and compactly supported.  We first claim that
+\begin{equation}
+  \label{eq:compact-vector-integral}
+  \int_\Omega K_R\,d\mu_n
+  \longrightarrow
+  \int_\Omega K_R\,d\mu
+  \qquad\text{strongly in }L^2(D).
+\end{equation}
+Indeed, a continuous compactly supported Banach-valued map can be approximated
+uniformly by finite-rank maps of the form
+\[
+  F_\varepsilon(\omega)
+  =
+  \sum_{j=1}^{J_\varepsilon}f_j(\omega)h_j,
+  \qquad
+  f_j\in C_c(\Omega),\quad h_j\in L^2(D).
+\]
+This follows by covering the compact image of $K_R$ with finitely many
+$L^2$-balls and using a continuous partition of unity; see
+Ryan~\cite[Section~3.2]{ryan-tensor}.  Narrow convergence
+gives
+\[
+  \int_\Omega F_\varepsilon\,d\mu_n
+  \longrightarrow
+  \int_\Omega F_\varepsilon\,d\mu
+  \quad\text{in }L^2(D),
+\]
+because only finitely many scalar integrals are involved.  The approximation
+error is bounded by
+\[
+  \left\|
+    \int_\Omega(K_R-F_\varepsilon)\,d\mu_n
+  \right\|_{L^2(D)}
+  \leq
+  \|K_R-F_\varepsilon\|_\infty\|\mu_n\|_{\M(\Omega)},
+\]
+uniformly in $n$, and similarly for $\mu$.  This proves
+\eqref{eq:compact-vector-integral}.
+
+It remains to remove the cutoff.  For $R\geq1$, $|\omega|>R$, and $p>k$,
+\[
+  (1+|\omega|)^k
+  \leq
+  2^k R^{k-p}\bigl(1+|\omega|^p\bigr).
+\]
+Consequently,
+\begin{align*}
+  \left\|
+    \int_\Omega(1-\chi_R)K\,d\mu_n
+  \right\|_{L^2(D)}
+  &\leq
+  \int_{\Omega\setminus B_R}\|K(\omega)\|_{L^2(D)}\,d|\mu_n|(\omega)\\
+  &\leq
+  2^k C_D R^{k-p}\Psi_p(\mu_n)\\
+  &\leq
+  2^k C_D M R^{k-p}.
+\end{align*}
+The same estimate holds for $\mu$.  First let $n\to\infty$ in the truncated
+integrals and then let $R\to\infty$.  Since $k-p<0$, the tail estimate tends
+to zero and the claimed strong convergence follows.
+\end{proof}
+
+\subsection{Inherited lower semicontinuity of the nonconvex penalty}
+
+\begin{lemma}[Lower semicontinuity of the thesis penalty]
+\label{lem:phi-lsc}
+Under Assumption~\ref{ass:phi}, if $\mu_n\weakn\mu$, then
+\[
+  \Phi_1(\mu)
+  \leq
+  \liminf_{n\to\infty}\Phi_1(\mu_n).
+\]
+\end{lemma}
+
+\begin{proof}
+Narrow convergence implies weak-$*$ convergence against $C_0(\Omega)$.
+The sequential weak-$*$ lower semicontinuity of $\Phi_1$ under
+Assumption~\ref{ass:phi} is the lower-semicontinuity lemma already proved in
+the thesis, based on the nonconvex measure-functional theory of
+Bouchitt\'e and Buttazzo~\cite{bouchitte-buttazzo}.  Hence that result applies
+without modification.
+\end{proof}
+
+\subsection{Proof of Theorem~\ref{thm:narrow-existence}}
+
+\begin{proof}[Proof of Theorem~\ref{thm:narrow-existence}]
+Since $V\in H^1(D)$,
+\[
+  J_{\beta,p}(0)=\frac12\|V\|_{H^1(D)}^2<\infty.
+\]
+Choose a minimizing sequence $(\mu_n)\subset\M_p(\Omega)$ such that
+$J_{\beta,p}(\mu_n)\leq C$.  All three terms in
+\eqref{eq:modified-objective} are nonnegative, and therefore
+\[
+  \Psi_p(\mu_n)\leq\frac{C}{\beta}.
+\]
+Lemma~\ref{lem:moment-compactness} gives, after extracting a subsequence,
+\[
+  \mu_n\weakn\bar\mu.
+\]
+By Lemma~\ref{lem:moment-lsc},
+$\bar\mu\in\M_p(\Omega)$ and
+\[
+  \Psi_p(\bar\mu)
+  \leq
+  \liminf_n\Psi_p(\mu_n).
+\]
+Lemma~\ref{lem:value-continuity} gives
+\begin{equation}
+  \label{eq:value-strong}
+  \N\mu_n\longrightarrow\N\bar\mu
+  \qquad\text{strongly in }L^2(D).
+\end{equation}
+
+The bound on the fidelity gives
+\[
+  \sup_n\|\nabla(\N\mu_n)\|_{L^2(D)}
+  \leq
+  \|\nabla V\|_{L^2(D)}+\sqrt{2C}.
+\]
+After another extraction,
+\[
+  \nabla(\N\mu_n)\rightharpoonup g
+  \qquad\text{weakly in }L^2(D)^d
+\]
+for some $g$.  For every $\psi\in C_c^\infty(D)^d$,
+\begin{align*}
+  \int_D g\cdot\psi\,dx
+  &=
+  \lim_{n\to\infty}
+  \int_D\nabla(\N\mu_n)\cdot\psi\,dx\\
+  &=
+  -\lim_{n\to\infty}
+  \int_D\N\mu_n\,\operatorname{div}\psi\,dx\\
+  &=
+  -\int_D\N\bar\mu\,\operatorname{div}\psi\,dx,
+\end{align*}
+where the last step follows from \eqref{eq:value-strong}.  Hence
+$g=\nabla(\N\bar\mu)$ distributionally and
+$\N\bar\mu\in H^1(D)$.
+
+The value part of the fidelity is continuous by
+\eqref{eq:value-strong}, while the gradient part is weakly lower
+semicontinuous.  Therefore
+\[
+  L(\bar\mu)\leq\liminf_{n\to\infty}L(\mu_n).
+\]
+Lemma~\ref{lem:phi-lsc} and Lemma~\ref{lem:moment-lsc} give the same
+inequality for the two regularizers.  Combining the three terms,
+\[
+  J_{\beta,p}(\bar\mu)
+  \leq
+  \liminf_{n\to\infty}J_{\beta,p}(\mu_n)
+  =
+  \inf_{\mu\in\M_p(\Omega)}J_{\beta,p}(\mu).
+\]
+Thus $\bar\mu$ is a global minimizer.
+\end{proof}
+
+\section{A finite-support consequence}
+
+The existence theorem only uses growth of the value atoms in $L^2(D)$.  To
+make the thesis's finite-support argument unconditional, the moment must
+instead dominate the growth of the full $H^1$ atom.
+
+\begin{assumption}[$H^1$ atom growth]
+\label{ass:H1-growth}
+The map $K:\Omega\to H^1(D)$ is continuous and, for some $q\geq0$,
+\begin{equation}
+  \label{eq:H1-growth}
+  \|K(\omega)\|_{H^1(D)}
+  \leq C_K(1+|\omega|)^q
+  \qquad(\omega\in\Omega).
+\end{equation}
+\end{assumption}
+
+\begin{assumption}[Strict local concavity]
+\label{ass:strict-concavity}
+There exist $\gamma>0$ and $z_0>0$ such that
+\[
+  \phi'(z_2)-\phi'(z_1)
+  \leq
+  -\gamma(z_2-z_1)
+  \qquad
+  (0\leq z_1\leq z_2\leq z_0).
+\]
+\end{assumption}
+
+\begin{theorem}[Finite support without a separate no-escape condition]
+\label{thm:finite-support}
+Assume Assumptions~\ref{ass:phi}, \ref{ass:H1-growth}, and
+\ref{ass:strict-concavity}.  Let $p>q$, and let
+$\bar\mu\in\M_p(\Omega)$ be a local minimizer of $J_{\beta,p}$ with respect
+to the total-variation norm, with $J_{\beta,p}(\bar\mu)<\infty$.
+Then $\bar\mu$ is finitely supported.
+\end{theorem}
+
+\begin{proof}
+Set
+\[
+  r:=\N\bar\mu-V\in H^1(D)
+\]
+and define the dual field
+\[
+  P(\omega)
+  :=
+  \langle r,K(\omega)\rangle_{H^1(D)}.
+\]
+Assumption~\ref{ass:H1-growth} implies that $P$ is continuous and
+\begin{equation}
+  \label{eq:P-growth}
+  |P(\omega)|
+  \leq
+  C_K\|r\|_{H^1(D)}(1+|\omega|)^q.
+\end{equation}
+
+\medskip
+\noindent
+\emph{Step 1: first-order conditions.}
+Coefficient perturbations by $\pm t\delta_\omega$ give
+\begin{equation}
+  \label{eq:weighted-insertion}
+  |P(\omega)|
+  \leq
+  \alpha+\beta w_p(\omega)
+  \qquad(\omega\notin\atom\bar\mu).
+\end{equation}
+If $c=\bar\mu(\{\omega\})\neq0$, perturbing the existing coefficient in both
+directions gives
+\begin{equation}
+  \label{eq:weighted-atom-condition}
+  P(\omega)
+  =
+  -\left[
+    \alpha\phi'(|c|)+\beta w_p(\omega)
+  \right]\sign(c).
+\end{equation}
+Finally, applying the two scaling directions to compact restrictions of
+$\bar\mu_{\cont}$ and then exhausting $\Omega$ gives
+\begin{equation}
+  \label{eq:weighted-cont-condition}
+  P(\omega)
+  =
+  -\left[\alpha+\beta w_p(\omega)\right]
+  \sign(\bar\mu_{\cont})(\omega)
+  \quad\text{for }|\bar\mu_{\cont}|\text{-a.e. }\omega.
+\end{equation}
+These calculations are the thesis's directional-derivative proof with the
+additional derivative
+\[
+  \frac{d}{dt}\bigg|_{t=0}
+  \Psi_p(\bar\mu+t u)
+\]
+included.  All directions used above are compactly supported, so their
+networks lie in $H^1(D)$ by Assumption~\ref{ass:H1-growth}.
+
+\medskip
+\noindent
+\emph{Step 2: the support is automatically confined.}
+Equations \eqref{eq:weighted-atom-condition} and
+\eqref{eq:weighted-cont-condition} show that every atom, and
+$|\bar\mu_{\cont}|$-almost every point, belongs to
+\[
+  E
+  :=
+  \{\omega\in\Omega:\beta w_p(\omega)\leq|P(\omega)|\}.
+\]
+The set $E$ is closed.  By \eqref{eq:P-growth} and $p>q$, it is also bounded,
+and therefore compact.  Hence
+\[
+  \supp\bar\mu\subset E.
+\]
+This is the step that replaces the thesis's separate no-escape
+condition.
+
+\medskip
+\noindent
+\emph{Step 3: the continuous part vanishes.}
+Suppose, for contradiction, that the positive continuous part
+$\bar\mu_{\cont}^+$ is nonzero; the negative case is analogous.  By
+\eqref{eq:weighted-cont-condition}, choose
+\[
+  \widehat\omega\in\supp\bar\mu_{\cont}^+,
+  \qquad
+  \bar\mu(\{\widehat\omega\})=0,
+  \qquad
+  P(\widehat\omega)+\beta w_p(\widehat\omega)=-\alpha.
+\]
+For $\delta>0$, let
+\[
+  \nu_\delta
+  :=
+  \bar\mu_{\cont}^+|_{B_\delta(\widehat\omega)},
+  \qquad
+  m_\delta:=\nu_\delta(\Omega),
+\]
+and merge this mass onto its center:
+\[
+  \mu_\delta
+  :=
+  \bar\mu-\nu_\delta+m_\delta\delta_{\widehat\omega}.
+\]
+Then $m_\delta>0$, $m_\delta\to0$, and
+$\|\mu_\delta-\bar\mu\|_{\M(\Omega)}\leq2m_\delta\to0$.
+
+Because the support lies in a compact set and
+$K:\Omega\to H^1(D)$ is continuous, there is a modulus
+$\eta(\delta)\to0$ such that
+\[
+  \|\N(\mu_\delta-\bar\mu)\|_{H^1(D)}
+  \leq
+  \eta(\delta)m_\delta.
+\]
+The quadratic fidelity has the exact expansion
+\begin{align*}
+  L(\mu_\delta)-L(\bar\mu)
+  &=
+  \int_\Omega P\,d(\mu_\delta-\bar\mu)
+  +
+  \frac12
+  \|\N(\mu_\delta-\bar\mu)\|_{H^1(D)}^2.
+\end{align*}
+The linear fidelity term and the change of the moment cancel together:
+\begin{align*}
+  &\int_\Omega P\,d(\mu_\delta-\bar\mu)
+  +\beta\bigl[\Psi_p(\mu_\delta)-\Psi_p(\bar\mu)\bigr]\\
+  &\qquad
+  =
+  m_\delta\bigl[P(\widehat\omega)+\beta w_p(\widehat\omega)\bigr]
+  -
+  \int_{B_\delta(\widehat\omega)}
+  \bigl[P+\beta w_p\bigr]\,d\nu_\delta
+  =0.
+\end{align*}
+The moved mass was continuous and creates one new atom, so
+\[
+  \Phi_1(\mu_\delta)-\Phi_1(\bar\mu)
+  =
+  \phi(m_\delta)-m_\delta.
+\]
+Assumption~\ref{ass:strict-concavity} and $\phi'(0)=1$ imply, for sufficiently
+small $m_\delta$,
+\[
+  \phi(m_\delta)-m_\delta
+  \leq
+  -\frac{\gamma}{2}m_\delta^2.
+\]
+Consequently,
+\[
+  J_{\beta,p}(\mu_\delta)-J_{\beta,p}(\bar\mu)
+  \leq
+  \frac12\left[\eta(\delta)^2-\alpha\gamma\right]m_\delta^2<0
+\]
+for small $\delta$, contradicting local minimality.  Thus
+$\bar\mu_{\cont}=0$.
+
+\medskip
+\noindent
+\emph{Step 4: there are only finitely many atoms.}
+Suppose instead that $\bar\mu$ has infinitely many atoms.  Since their support
+is contained in the compact set $E$, there are distinct atoms
+$\omega_i\to\widehat\omega$ whose coefficients have a common sign.  Reversing
+signs if necessary, write
+\[
+  c_i:=\bar\mu(\{\omega_i\})>0.
+\]
+Finite total variation gives $c_i\to0$.  By
+\eqref{eq:weighted-atom-condition}, continuity of $P$ and $w_p$, and
+$\phi'(c_i)\to\phi'(0)=1$,
+\[
+  P(\widehat\omega)
+  =
+  -\alpha-\beta w_p(\widehat\omega).
+\]
+For $N\in\mathbb{N}$ set
+\[
+  C_N:=\sum_{i=N}^\infty c_i,\qquad
+  \delta_N:=\sup_{i\geq N}|\omega_i-\widehat\omega|,
+\]
+and merge the tail:
+\[
+  \mu_N
+  :=
+  \bar\mu-\sum_{i=N}^\infty c_i\delta_{\omega_i}
+  +C_N\delta_{\widehat\omega}.
+\]
+Then $C_N\to0$, $\delta_N\to0$, and
+$\|\mu_N-\bar\mu\|_{\M(\Omega)}\leq2C_N\to0$.  Uniform continuity of $K$ on
+the compact support gives
+\[
+  \|\N(\mu_N-\bar\mu)\|_{H^1(D)}
+  \leq\eta(\delta_N)C_N.
+\]
+At a pre-existing atom at $\widehat\omega$, the triangle inequality gives the
+upper bounds
+\begin{align*}
+  \Psi_p(\mu_N)-\Psi_p(\bar\mu)
+  &\leq
+  -\sum_{i=N}^\infty c_i w_p(\omega_i)
+  +C_N w_p(\widehat\omega),\\
+  \Phi_1(\mu_N)-\Phi_1(\bar\mu)
+  &\leq
+  -\sum_{i=N}^\infty\phi(c_i)+\phi(C_N).
+\end{align*}
+Combining these estimates with the exact quadratic expansion of $L$ and the
+weighted atom condition gives
+\begin{align*}
+  J_{\beta,p}(\mu_N)-J_{\beta,p}(\bar\mu)
+  &\leq
+  -\alpha\sum_{i=N}^\infty
+  \bigl[\phi(c_i)-c_i\phi'(c_i)\bigr]\\
+  &\quad
+  -\alpha\bigl[C_N-\phi(C_N)\bigr]
+  +\frac12\eta(\delta_N)^2C_N^2.
+\end{align*}
+Concavity and $\phi(0)=0$ give
+$\phi(c)-c\phi'(c)\geq0$.  Assumption~\ref{ass:strict-concavity} gives
+$C_N-\phi(C_N)\geq\frac{\gamma}{2}C_N^2$ for large $N$.  Therefore
+\[
+  J_{\beta,p}(\mu_N)-J_{\beta,p}(\bar\mu)
+  \leq
+  \frac12\left[\eta(\delta_N)^2-\alpha\gamma\right]C_N^2<0
+\]
+for large $N$, again contradicting local minimality.  The atomic support is
+therefore finite.
+\end{proof}
+
+\begin{corollary}[Existence of a finite network]
+\label{cor:finite-global-minimizer}
+Assume the hypotheses of Theorem~\ref{thm:narrow-existence},
+Assumptions~\ref{ass:H1-growth} and \ref{ass:strict-concavity}, and
+\[
+  p>\max\{k,q\}.
+\]
+Then the modified problem admits a finitely supported global minimizer.  In
+particular, the existence and finite-support conclusions compose without a
+separate no-escape condition.
+\end{corollary}
+
+\begin{proof}
+Theorem~\ref{thm:narrow-existence} supplies a global minimizer
+$\bar\mu\in\M_p(\Omega)$ with finite objective.  A global minimizer is a
+total-variation local minimizer, and $p>q$ allows
+Theorem~\ref{thm:finite-support} to be applied to $\bar\mu$.
+\end{proof}
+
+\section{Activation exponents}
+
+The following safe exponents follow from elementary pointwise bounds on a
+bounded domain.  The exponent $k$ controls the value atom in $L^2(D)$ and is
+enough for Theorem~\ref{thm:narrow-existence}; the exponent $q$ controls the
+full atom in $H^1(D)$ and is needed for
+Theorem~\ref{thm:finite-support}.
+\[
+\begin{array}{lccc}
+\toprule
+\text{activation} & k & \text{safe }q
+& \text{one choice giving existence and finite support}\\
+\midrule
+\tanh z              &0&1&p>1\\
+e^{-z^2}             &0&1&p>1\\
+\log(1+e^z)          &1&1&p>1\\
+(z_+)^m              &m&m&p>m\\
+\bottomrule
+\end{array}
+\]
+For bounded activations such as $\tanh$ and the Gaussian, existence alone
+requires only $p>0$.  The safer condition $p>1$ is shown in the table because
+it also dominates the elementary global $H^1$ growth estimate.
+
+\section{What fails when the moment term is absent}
+
+\begin{example}[Loss of narrow compactness]
+Let $\omega_n=(0,n)$ and $\mu_n=\delta_{\omega_n}$.  Then
+\[
+  \|\mu_n\|_{\M(\Omega)}=1,
+  \qquad
+  \Phi_1(\mu_n)=\phi(1),
+\]
+so the original regularizer is uniformly bounded.  Nevertheless,
+$(\mu_n)$ has no narrowly convergent subsequence.  Indeed, compactly supported
+test functions force every putative limit to be zero, while the bounded
+continuous test function $1$ preserves the mass:
+\[
+  \int_\Omega1\,d\mu_n=1.
+\]
+Thus bounded mass without a location-coercive term does not give narrow
+compactness.
+\end{example}
+
+\begin{example}[Narrow convergence does not control an unbounded dictionary]
+For softplus, let
+\[
+  \rho(z)=\log(1+e^z),\qquad
+  \omega_n=(0,n),\qquad
+  \mu_n=\frac{1}{\rho(n)}\delta_{\omega_n}.
+\]
+Then $\mu_n\weakn0$, because
+$\|\mu_n\|_{\M(\Omega)}=\rho(n)^{-1}\to0$.  However,
+\[
+  \N\mu_n\equiv1
+  \qquad\text{while}\qquad
+  \N0=0.
+\]
+For $V\equiv1$, the original objective satisfies
+\[
+  L(\mu_n)=0,\qquad
+  \Phi_1(\mu_n)=\phi(\rho(n)^{-1})\longrightarrow0,
+\]
+which yields the nonattainment mechanism recorded in the thesis.  With the
+moment term,
+\[
+  \Psi_p(\mu_n)
+  =
+  \frac{1+n^p}{\rho(n)}
+  \asymp n^{p-1},
+\]
+so every $p>1$ prices out this escape.
+\end{example}
+
+\section{Relation to the literature}
+
+The compactness mechanism is classical: Prokhorov's theorem converts uniform
+tightness and a total-mass bound into narrow precompactness.  A coercive moment
+bound supplies tightness through the elementary estimate
+\eqref{eq:tightness-estimate}; see, for example,
+Bogachev~\cite{bogachev-measure}.
+
+In the neural-network literature, Bartolucci, Carioni, Iglesias, Korolev,
+Naldi, and Vigogna~\cite{bartolucci-et-al} study signed measures on unbounded
+parameter spaces and explicitly regularize by total variation and parameter
+moments.  Their Theorem~3.7 proves compactness in the stronger unbalanced
+Kantorovich--Rubinstein norm for moments of order strictly larger than one.
+The present proof only seeks narrow compactness, so the compactness step itself
+needs any coercive moment.  The additional restriction $p>k$ comes instead
+from uniform integrability of a dictionary growing like $|\omega|^k$.
+
+\begin{thebibliography}{9}
+
+\bibitem{bartolucci-et-al}
+F.~Bartolucci, M.~Carioni, J.~A.~Iglesias, Y.~Korolev, E.~Naldi, and
+S.~Vigogna,
+\emph{A Lipschitz spaces view of infinitely wide shallow neural networks},
+SIAM J. Math. Anal. \textbf{58} (2026), no.~3, 2786--2828.
+\href{https://doi.org/10.1137/24M1718615}{doi:10.1137/24M1718615}.
+
+\bibitem{bogachev-measure}
+V.~I.~Bogachev,
+\emph{Measure Theory, Vol.~II},
+Springer, Berlin, 2007.
+
+\bibitem{bouchitte-buttazzo}
+G.~Bouchitt\'e and G.~Buttazzo,
+\emph{New lower semicontinuity results for nonconvex functionals defined on
+measures},
+Nonlinear Anal. \textbf{15} (1990), no.~7, 679--692.
+
+\bibitem{ryan-tensor}
+R.~A.~Ryan,
+\emph{Introduction to Tensor Products of Banach Spaces},
+Springer Monographs in Mathematics,
+Springer-Verlag, London, 2002, Section~3.2, pp.~49--50.
+\href{https://doi.org/10.1007/978-1-4471-3903-4}
+{doi:10.1007/978-1-4471-3903-4}.
+
+\end{thebibliography}
+
+\end{document}
