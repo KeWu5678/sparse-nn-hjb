@@ -529,13 +529,30 @@ and define the dual field
   :=
   \langle r,K(\omega)\rangle_{H^1(D)}.
 \]
-Assumption~\ref{ass:H1-growth} implies that $P$ is continuous and
+For the ridge atom $K(\omega)(x)=\rho(a\cdot x+b)$, with
+$\omega=(a,b)$ and differentiable $\rho$, this reads
+\[
+  P(a,b)
+  =
+  \int_D r(x)\rho(a\cdot x+b)\,dx
+  +
+  \int_D \nabla r(x)\cdot a\rho'(a\cdot x+b)\,dx.
+\]
+Thus $P(\omega)$ is the first-order change of the fidelity produced by
+inserting the atom at $\omega$.  By Cauchy--Schwarz and
+Assumption~\ref{ass:H1-growth}, $P$ is continuous and
 \begin{equation}
   \label{eq:P-growth}
   |P(\omega)|
   \leq
-  C_K\|r\|_{H^1(D)}(1+|\omega|)^q.
+  \|r\|_{H^1(D)}\|K(\omega)\|_{H^1(D)}
+  \leq
+  C_P(1+|\omega|)^q,
+  \qquad
+  C_P:=C_K\|r\|_{H^1(D)}<\infty.
 \end{equation}
+The constant $C_P$ may depend on the fixed minimizer through its residual
+$r=\N\bar\mu-V$, but it does not depend on $\omega$.
 
 \medskip
 \noindent
@@ -580,21 +597,58 @@ networks lie in $H^1(D)$ by Assumption~\ref{ass:H1-growth}.
 \medskip
 \noindent
 \emph{Step 2: the support is automatically confined.}
-Equations \eqref{eq:weighted-atom-condition} and
-\eqref{eq:weighted-cont-condition} show that every atom, and
-$|\bar\mu_{\cont}|$-almost every point, belongs to
+At an atom, taking absolute values in
+\eqref{eq:weighted-atom-condition} and using $\phi'\geq0$ gives
+\[
+  |P(\omega)|
+  =\alpha\phi'(|c|)+\beta w_p(\omega)
+  \geq \beta w_p(\omega).
+\]
+Likewise, \eqref{eq:weighted-cont-condition} gives
+\[
+  |P(\omega)|
+  =\alpha+\beta w_p(\omega)
+  \geq\beta w_p(\omega)
+  \qquad\text{for }|\bar\mu_{\cont}|\text{-a.e. }\omega.
+\]
+Consequently $|\bar\mu|$ is concentrated on
 \[
   E
   :=
   \{\omega\in\Omega:\beta w_p(\omega)\leq|P(\omega)|\}.
 \]
-The set $E$ is closed.  By \eqref{eq:P-growth} and $p>q$, it is also bounded,
-and therefore compact.  Hence
+The set $E$ is closed because $P$ and $w_p$ are continuous.  We now show
+explicitly that it is bounded.  Let $\omega\in E$ and set $R:=|\omega|\geq1$.
+Since $w_p(\omega)=1+R^p$, \eqref{eq:P-growth} yields
+\[
+  \beta R^p
+  \leq \beta(1+R^p)
+  \leq |P(\omega)|
+  \leq C_P(1+R)^q
+  \leq 2^q C_P R^q.
+\]
+Therefore
+\[
+  R^{p-q}\leq \frac{2^q C_P}{\beta}.
+\]
+Because $p-q>0$, this inequality cannot hold for arbitrarily large $R$;
+indeed,
+\[
+  E\subset \overline B_{R_*},
+  \qquad
+  R_*:=\max\left\{1,
+  \left(\frac{2^qC_P}{\beta}\right)^{1/(p-q)}\right\}.
+\]
+Thus $E$ is closed and bounded, hence compact.  Since
+$|\bar\mu|(\Omega\setminus E)=0$ and $E$ is closed,
 \[
   \supp\bar\mu\subset E.
 \]
-This is the step that replaces the thesis's separate no-escape
-condition.
+In words, the largest possible fidelity gain grows at most like $R^q$, whereas
+the moment cost grows like $R^p$.  The strict inequality $p>q$ makes the cost
+dominate at infinity.  This is the step that replaces the thesis's separate
+no-escape condition; when $\beta=0$, the set $E$ is all of $\Omega$ and this
+confinement argument disappears.
 
 \medskip
 \noindent
