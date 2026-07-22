@@ -16,11 +16,12 @@ import torch
 from torch.nn.utils import parameters_to_vector
 
 from ..eval import data_loss_terms, relative_errors
+from .moment import moment_penalty, moment_weight
 from .ssn_solve import Objective, nonconvex_penalty
 
 
 def objective_value(model, objective: Objective, data) -> float:
-    """The training objective (data fidelity + nonconvex penalty) at ``model``."""
+    """The training objective (data fidelity + nonconvex penalty [+ moment]) at ``model``."""
     X, V, dV = data
     Vp, dVp = model.predict_tensors(X)
     data_loss = data_loss_terms(Vp, dVp, V, dV, objective.loss_weights)[0]
@@ -30,7 +31,13 @@ def objective_value(model, objective: Objective, data) -> float:
         theta, penalized, nonneg,
         alpha=objective.alpha, th=objective.th, gamma=objective.gamma, q=model.q,
     )
-    return float((data_loss + penalty).detach())
+    total = data_loss + penalty
+    if objective.moment_beta > 0.0:
+        W, b, c = model.get_atoms()
+        total = total + moment_penalty(
+            c, moment_weight(W, b, objective.moment_order), objective.moment_beta
+        )
+    return float(total.detach())
 
 
 @dataclass

@@ -20,6 +20,7 @@ from typing import Callable, Tuple
 import torch
 
 from ..SSN.prox import _phi_prox
+from .moment import moment_weight
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +39,8 @@ def warm_start(
     gamma: float,
     use_sphere: bool = True,
     nonneg: bool = False,
+    moment_beta: float = 0.0,
+    moment_order: float = 2.0,
     verbose: bool = False,
 ) -> torch.Tensor:
     """Return initial outer weights ``(n_new,)`` for the new atoms.
@@ -91,8 +94,18 @@ def warm_start(
             phat = -phat
         what = float((w1 / Nx) * Kv.dot(Kv) + (w2 / Nx) * Kg.dot(Kg))
 
-        if phat <= -alpha and what > 1e-30:
-            tau = _phi_prox(alpha / what, -phat / what, th, gamma, q=2.0 / (p + 1.0))
+        # Moment axis: the descent direction carries a linear moment cost
+        # kappa_dir = beta * sum_j w_p(omega_j) * |coeff_j| (per unit step), which
+        # shifts the proximal center by kappa_dir/what.  This is an initialization;
+        # the (fully moment-aware) SSN solve refines it.  kappa_dir = 0 when off,
+        # recovering the plain center -phat/what and the guard phat <= -alpha.
+        kappa_dir = 0.0
+        if moment_beta > 0.0:
+            w_p_new = moment_weight(W_new, b_new, moment_order)
+            kappa_dir = float(moment_beta * (w_p_new * coeff.abs()).sum())
+
+        if (-phat - kappa_dir) >= alpha and what > 1e-30:
+            tau = _phi_prox(alpha / what, (-phat - kappa_dir) / what, th, gamma, q=2.0 / (p + 1.0))
         else:
             tau = 0.0
         out = tau * coeff

@@ -54,6 +54,16 @@ class ModelConfig:
     alpha: float = 1e-5
     gamma: float = 0.0   # 0 => log term off (power penalty); > 0 => log penalty
     th: float = 0.5      # L1 (th=1) <-> non-convex log (th=0); only acts when gamma > 0
+    # Parameter-moment axis (papar/draft/PROOF_NARROW-CONVERGENCE): adds, on top
+    # of alpha*Phi_1, the weighted-TV term  beta * sum_j (1 + |omega_j|^p) |c_j|
+    # with omega_j = (a_j, b_j).  It prices distant neurons out and supplies the
+    # tightness Phi_1 lacks (existence by narrow compactness; confined support).
+    # moment_beta = 0 turns it off (default => today's behavior).  When on it is
+    # confined to its meaningful regime -- a non-sphere activation (|omega| is a
+    # free scale, not gauge-fixed to the sphere), the q=1 log family (power == 1),
+    # signed kind, and profile insertion -- and PDAP raises otherwise.
+    moment_beta: float = 0.0    # 0 => moment axis off; > 0 => on
+    moment_order: float = 2.0   # p in the weight w_p(omega) = 1 + |omega|^p
 
 
 @dataclass

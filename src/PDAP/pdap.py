@@ -46,9 +46,36 @@ class PDAP:
 
         self.insertion_kind = m.insertion
         self._use_sphere = get_use_sphere(m.activation)
+
+        # Parameter-moment axis validation: confine it to the regime where it is
+        # meaningful (|omega| is a free scale, not sphere-gauge-fixed) and where it
+        # is implemented (signed kind, q=1 log family, profile insertion).  When
+        # off (moment_beta == 0) nothing is checked -- today's behavior.
+        if m.moment_beta > 0.0:
+            if m.kind != "signed":
+                raise ValueError(
+                    f"moment_beta > 0 requires a signed model (kind='signed'); got kind={m.kind!r}"
+                )
+            if self._use_sphere:
+                raise ValueError(
+                    f"moment_beta > 0 requires a non-sphere activation (|omega| a free scale); "
+                    f"activation {m.activation!r} is sphere-gauge-fixed (|omega|=1), so the "
+                    f"moment term is a degenerate constant"
+                )
+            if m.power != 1.0:
+                raise ValueError(
+                    f"moment_beta > 0 requires power == 1 (the q=1 log penalty family); "
+                    f"got power={m.power}"
+                )
+            if m.insertion != "profile":
+                raise ValueError(
+                    f"moment_beta > 0 requires profile insertion; got insertion={m.insertion!r}"
+                )
+
         # The objective (what is minimized) and the SSN solver settings.
         self.objective = Objective(
             alpha=m.alpha, gamma=m.gamma, th=m.th, loss_weights=tuple(m.loss_weights),
+            moment_beta=m.moment_beta, moment_order=m.moment_order,
         )
         self.solver = SolverConfig(
             lr=t.lr, method=t.method, max_ls_iter=t.max_ls_iter,
@@ -117,6 +144,7 @@ class PDAP:
             activation=model.activation, power=model.power,
             loss_weights=o.loss_weights, alpha=o.alpha, th=o.th, gamma=o.gamma,
             use_sphere=self._use_sphere, nonneg=not isinstance(model, SignedModel),
+            moment_beta=o.moment_beta, moment_order=o.moment_order,
             verbose=verbose,
         )
 
@@ -152,7 +180,11 @@ class PDAP:
             lbfgs_lr=self.lbfgs_lr, lbfgs_steps=self.lbfgs_steps,
         )
         if self.insertion_kind == "profile":
-            W, b = profile_threshold(X, res_v, res_dv, two_sided=two_sided, **common)
+            W, b = profile_threshold(
+                X, res_v, res_dv, two_sided=two_sided,
+                moment_beta=self.objective.moment_beta, moment_order=self.objective.moment_order,
+                **common,
+            )
             return W, b, None
         W, b, c = finite_step(
             X, res_v, res_dv,
