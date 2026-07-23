@@ -55,12 +55,14 @@ jobs:
         run: uv run pytest -q --junitxml=report.xml
 
       - name: Build results comment
-        if: always() && github.event_name == 'pull_request'
+        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+        continue-on-error: true
         run: uv run python .github/scripts/pr_comment.py report.xml comment.md
 
       # Edits one comment in place rather than posting one per push.
       - name: Comment results on PR
-        if: always() && github.event_name == 'pull_request'
+        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR: ${{ github.event.number }}
