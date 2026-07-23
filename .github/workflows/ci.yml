@@ -1,21 +1,82 @@
 name: CI
 
 on:
+  # Direct pushes to main are paper/proof commits most of the time; skip those.
+  # paths-ignore is deliberately NOT set on pull_request: `test` is a required
+  # check, and a PR that never runs it can never report it, so it would hang
+  # on "Expected — waiting for status" and be unmergeable.
   push:
-    branches: [main, research]
+    branches: [main]
+    paths-ignore:
+      - 'papar/**'
+      - '**.md'
+      - '.gitignore'
   pull_request:
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  # Job name is the required status check on main — renaming it silently
+  # disables branch protection. Update the protection rule first if it moves.
   test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
+
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
+          # Pinned to the local dev interpreter. Left unset, uv takes the
+          # runner's system python (3.12.3 on ubuntu-24.04) and the version
+          # drifts whenever GitHub repoints the image.
+          python-version: "3.14"
+
       - name: Install dependencies
         run: uv sync --extra dev
+
+      # Hook environments are rebuilt from scratch otherwise, which costs more
+      # than the lint itself.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
+
+      # Single source of truth for lint: the same hooks that run locally,
+      # so a --no-verify commit cannot bypass them.
       - name: Lint
-        run: uv run ruff check src tests experiments scripts
+        run: uv run pre-commit run --all-files
+
       - name: Test
-        run: uv run pytest -q
+        run: uv run pytest -q --junitxml=report.xml
+
+      - name: Build results comment
+        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+        continue-on-error: true
+        run: uv run python .github/scripts/pr_comment.py report.xml comment.md
+
+      # Edits one comment in place rather than posting one per push.
+      - name: Comment results on PR
+        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.number }}
+        run: |
+          marker='<!-- ci-results -->'
+          existing=$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR}/comments" \
+            --paginate --jq "[.[] | select(.body | startswith(\"${marker}\"))] | .[0].id // empty")
+
+          if [ -n "$existing" ]; then
+            gh api -X PATCH "repos/${GITHUB_REPOSITORY}/issues/comments/${existing}" \
+              -F body=@comment.md >/dev/null
+            echo "Updated comment ${existing}"
+          else
+            gh api -X POST "repos/${GITHUB_REPOSITORY}/issues/${PR}/comments" \
+              -F body=@comment.md >/dev/null
+            echo "Posted new comment"
+          fi
