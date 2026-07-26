@@ -38,22 +38,14 @@ Thesis & papers: `/Users/chaoruiz/Documents/NotePaper/MasterThesis/`
   (the theory-side glossary is `docs/research/NOTATION.md`).
 
 ## Plotting Style
-Publication figures follow one house style. `PALETTE` and
-`apply_publication_style()` live in `src/plotstyle.py` — import from there
-(experiment scripts alias it as `_apply_publication_style`); do not re-declare
-them per script. Save helpers (`_finalize_figure`/`_save_png`) remain local to
-each `analysis.py`. The `scientific-plotting` / `scientific-figure-making`
-skills cover the same conventions.
+Publication figures follow one house style. The palette, typography, and axes
+rcParams live in `src/plotstyle.py` (`PALETTE`, `apply_publication_style()`) —
+never use matplotlib defaults, import from there (experiment scripts alias it
+as `_apply_publication_style`), and do not re-declare them per script. Save
+helpers (`_finalize_figure`/`_save_png`) remain local to each `analysis.py`.
+The `scientific-figure-making` skill follows this house style; where any other
+plotting skill differs, the rules here win.
 
-- **Palette** (never use matplotlib defaults):
-  `blue_main #0F4D92`, `teal #42949E`, `red_strong #B64342`,
-  `neutral #CFCECE`, `violet #9A4D8E`.
-- **Typography**: serif (`CMU Serif` → `Computer Modern Roman` → `cmr10` →
-  `DejaVu Serif`), base `font.size` 12, `mathtext.fontset = cm`,
-  `text.usetex = False` (math via mathtext so figures build without a TeX
-  install).
-- **Axes**: hide top and right spines, `axes.linewidth` 1.0,
-  `legend.frameon = False`, `axes.formatter.use_mathtext = True`.
 - **Frontier plots are the one exception** (neuron/H1 frontiers): boxed axes
   (all four spines), dotted grid, dash-dot lines with dark-edged markers, and a
   framed legend row centred **below** the axes — apply via
