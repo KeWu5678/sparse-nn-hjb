@@ -78,11 +78,14 @@ deploy/terraform/*.tfvars
 deploy/terraform/*.tfvars.json
 !deploy/terraform/example.tfvars
 
-# ---- paper/ (LaTeX working dir): only the three compiled PDFs are tracked ----
+# ---- paper/ (LaTeX working dir): paper.tex + the three compiled PDFs are tracked ----
 paper/*
 !paper/archiv/
 paper/archiv/*
+!paper/paper.tex
 !paper/paper.pdf
+!paper/paper_0805.tex
+!paper/paper_0805.pdf
 !paper/archiv/Mthesis.pdf
 !paper/archiv/PROOF_NARROW-CONVERGENCE.pdf
 

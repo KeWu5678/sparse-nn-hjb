@@ -9,7 +9,7 @@ repos:
     hooks:
       - id: check-added-large-files
         args: [--maxkb=1024]
-        exclude: '^paper/(paper|archiv/Mthesis)\.pdf$'
+        exclude: '^paper/(paper|paper_0805|archiv/Mthesis)\.pdf$'
       - id: end-of-file-fixer
         exclude: '^paper/'
       - id: trailing-whitespace
