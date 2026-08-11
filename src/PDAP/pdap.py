@@ -51,6 +51,14 @@ class PDAP:
         # meaningful (|omega| is a free scale, not sphere-gauge-fixed) and where it
         # is implemented (signed kind, q=1 log family, profile insertion).  When
         # off (moment_beta == 0) nothing is checked -- today's behavior.
+        if not m.moment_beta >= 0.0:
+            raise ValueError(
+                f"moment_beta must be nonnegative; got moment_beta={m.moment_beta}"
+            )
+        if not m.moment_order > 0.0:
+            raise ValueError(
+                f"moment_order must be positive; got moment_order={m.moment_order}"
+            )
         if m.moment_beta > 0.0:
             if m.kind != "signed":
                 raise ValueError(
@@ -228,7 +236,15 @@ class PDAP:
         W = torch.as_tensor(W_np, dtype=torch.float64)
         b = torch.as_tensor(b_np, dtype=torch.float64)
         if W.shape[0] == 0:
-            raise RuntimeError("PDAP: initial insertion accepted no atoms")
+            # No candidate clears the insertion threshold.  Under strong
+            # regularization the zero measure is a valid terminal PDAP result,
+            # not a training failure; record it once and skip the SSN loop,
+            # which requires a nonempty outer-parameter vector.
+            history.record(model, self.objective, data_train, data_valid)
+            history.final_neurons = 0
+            if verbose:
+                logger.info("Initial insertion accepted no atoms; returning the zero measure")
+            return history
         c = self._initial_outer_weights(model, data_train, W, b, c, verbose)
         model.set_atoms(W, b, c)
         if verbose:

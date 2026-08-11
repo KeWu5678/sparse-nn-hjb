@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import torch
 
-__all__ = ["moment_weight", "moment_penalty"]
+__all__ = ["amplitude_mass_radius", "moment_weight", "moment_penalty"]
 
 
 def moment_weight(W: torch.Tensor, b: torch.Tensor, p: float) -> torch.Tensor:
@@ -43,6 +43,8 @@ def moment_weight(W: torch.Tensor, b: torch.Tensor, p: float) -> torch.Tensor:
     Returns:
         ``w_p``, shape ``(n,)`` (or scalar for a single atom), matching ``b``.
     """
+    if not p > 0.0:
+        raise ValueError("moment order p must be positive")
     W = torch.as_tensor(W, dtype=torch.float64)
     b = torch.as_tensor(b, dtype=torch.float64)
     sq = (W * W).sum(dim=-1) + b * b
@@ -60,7 +62,47 @@ def moment_penalty(c: torch.Tensor, w_p: torch.Tensor, beta: float) -> torch.Ten
     Returns:
         A 0-d tensor.
     """
+    if not beta >= 0.0:
+        raise ValueError("moment beta must be nonnegative")
     c = torch.as_tensor(c, dtype=torch.float64).reshape(-1)
     if c.numel() == 0:
         return c.new_zeros(())
     return beta * torch.sum(w_p.reshape(-1) * c.abs())
+
+
+def amplitude_mass_radius(
+    W: torch.Tensor,
+    b: torch.Tensor,
+    c: torch.Tensor,
+    mass_fraction: float = 0.95,
+) -> torch.Tensor:
+    """Smallest parameter radius containing ``mass_fraction`` of ``sum |c_j|``.
+
+    This is the amplitude-mass-weighted radius diagnostic used by the
+    moment-penalty experiments.  Atoms are sorted by
+    ``|omega_j| = sqrt(|a_j|^2 + b_j^2)`` and accumulated with weights
+    ``|c_j|``.  Empty supports and supports with zero total amplitude mass have
+    radius zero.
+    """
+    if not 0.0 < mass_fraction <= 1.0:
+        raise ValueError("mass_fraction must lie in (0, 1]")
+
+    W = torch.as_tensor(W, dtype=torch.float64)
+    b = torch.as_tensor(b, dtype=torch.float64).reshape(-1)
+    c = torch.as_tensor(c, dtype=torch.float64).reshape(-1)
+    if W.shape[0] != b.numel() or b.numel() != c.numel():
+        raise ValueError("W, b, and c must contain the same number of atoms")
+    if c.numel() == 0:
+        return c.new_zeros(())
+
+    amplitude = c.abs()
+    total = amplitude.sum()
+    if float(total) == 0.0:
+        return total
+
+    radius = torch.sqrt((W * W).sum(dim=-1) + b * b)
+    order = torch.argsort(radius)
+    radius = radius[order]
+    cumulative = torch.cumsum(amplitude[order], dim=0)
+    index = torch.searchsorted(cumulative, mass_fraction * total).clamp_max(c.numel() - 1)
+    return radius[index]

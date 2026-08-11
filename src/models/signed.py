@@ -71,7 +71,9 @@ class SignedModel(ShallowNetwork):
     def get_atoms(self) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Read the current support as (W (n,d), b (n,), c (n,))."""
         if "hidden" not in self._modules:
-            raise RuntimeError("no support yet; call set_atoms() first")
+            d = self.input_dim or 0
+            empty = torch.zeros(0, dtype=torch.float64)
+            return torch.zeros(0, d, dtype=torch.float64), empty, empty.clone()
         return (
             self.hidden.weight.detach().clone(),
             self.hidden.bias.detach().clone(),

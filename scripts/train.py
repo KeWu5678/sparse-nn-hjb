@@ -112,10 +112,8 @@ def region_split_metrics(cfg, model, data, normalizer) -> dict:
     The distance-binned profile diagnostic stays on the emitted dataset (the
     dataset-aligned distance cache).
 
-    Scored on the **live, as-fit** ``model`` (final iteration), not a reconstructed
-    best-iteration one: reconstruction via ``set_atoms`` loses the semiconcave
-    envelope (``C``/affine) that ``History`` never snapshots (issue #19), so only
-    the live model is complete for both model kinds.
+    The caller supplies the model restored from ``History`` at the same selected
+    iteration used by the run's global validation metrics.
     """
     if not cfg.eval.eval_pool:
         raise ValueError("eval.kind=region_split requires eval.eval_pool")
@@ -226,7 +224,9 @@ def main(cfg: DictConfig) -> None:
     # split by distance to the switching set, merged into the run record so the
     # analysis layer reads them like any other metric.
     if cfg.eval.kind == "region_split":
-        region = region_split_metrics(cfg, model, data, normalizer)
+        evaluation_model = build_model(cfg, input_dim)
+        history.restore_model(evaluation_model)
+        region = region_split_metrics(cfg, evaluation_model, data, normalizer)
         metrics.update(region)
         logger.info(
             "region split | switching H1 %.3e (n=%d) | rest H1 %.3e (n=%d)",

@@ -1,0 +1,25 @@
+# @package _global_
+# vdp/moment_penalty: first-pass screen for the unbounded, nonhomogeneous
+# moment-penalized model.  The Make target supplies the Cartesian axes so that
+# beta=0 can be run once (p is immaterial there) and positive beta values can be
+# swept separately without duplicate baselines.
+defaults:
+  - override /model: log_penalty
+  - override /data: vdp
+
+name: vdp_moment_penalty
+
+model:
+  kind: signed
+  insertion: profile
+  activation: tanh
+  power: 1.0
+  alpha: 1e-5
+  gamma: 1.0
+  th: 0.5
+  loss_weights: [1.0, 1.0]
+  moment_beta: 1e-5
+  moment_order: 2.01
+
+data:
+  normalize: true

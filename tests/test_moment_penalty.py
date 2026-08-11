@@ -14,7 +14,7 @@ import torch
 
 from src.config.schema import ExperimentConfig, ModelConfig
 from src.PDAP import PDAP
-from src.PDAP.moment import moment_penalty, moment_weight
+from src.PDAP.moment import amplitude_mass_radius, moment_penalty, moment_weight
 
 
 # --------------------------------------------------------------------------- #
@@ -65,6 +65,34 @@ def test_moment_penalty_beta_zero_is_zero() -> None:
     assert float(moment_penalty(c, w, beta=0.0)) == 0.0
 
 
+def test_moment_primitives_reject_invalid_parameters() -> None:
+    with pytest.raises(ValueError, match="moment order"):
+        moment_weight(torch.zeros(1, 1), torch.zeros(1), p=0.0)
+    with pytest.raises(ValueError, match="moment beta"):
+        moment_penalty(torch.ones(1), torch.ones(1), beta=-1.0)
+
+
+def test_amplitude_mass_radius_is_weighted_parameter_quantile() -> None:
+    # Radii are [1, 2, 5], while |c|-mass is [50, 45, 5].  The first two
+    # atoms contain exactly 95% of the amplitude mass, hence R95 = 2.
+    W = torch.tensor([[1.0, 0.0], [0.0, 2.0], [3.0, 4.0]], dtype=torch.float64)
+    b = torch.zeros(3, dtype=torch.float64)
+    c = torch.tensor([50.0, -45.0, 5.0], dtype=torch.float64)
+
+    got = amplitude_mass_radius(W, b, c, mass_fraction=0.95)
+
+    assert math.isclose(float(got), 2.0, rel_tol=1e-12)
+
+
+def test_amplitude_mass_radius_is_zero_without_amplitude_mass() -> None:
+    W = torch.tensor([[3.0, 4.0]], dtype=torch.float64)
+    b = torch.tensor([0.0], dtype=torch.float64)
+    c = torch.tensor([0.0], dtype=torch.float64)
+
+    assert float(amplitude_mass_radius(W, b, c)) == 0.0
+    assert float(amplitude_mass_radius(W[:0], b[:0], c[:0])) == 0.0
+
+
 # --------------------------------------------------------------------------- #
 # Config schema
 # --------------------------------------------------------------------------- #
@@ -89,6 +117,16 @@ def test_guard_allows_valid_moment_config() -> None:
 def test_guard_off_by_default_allows_sphere() -> None:
     # beta=0 (default) must not trip the guard even for a sphere activation.
     PDAP(_cfg(activation="relu", power=1.0))
+
+
+def test_guard_rejects_negative_moment_beta() -> None:
+    with pytest.raises(ValueError, match="moment_beta"):
+        PDAP(_cfg(moment_beta=-1e-3))
+
+
+def test_guard_rejects_nonpositive_moment_order() -> None:
+    with pytest.raises(ValueError, match="moment_order"):
+        PDAP(_cfg(moment_order=0.0))
 
 
 def test_guard_rejects_sphere_activation() -> None:
@@ -206,3 +244,42 @@ def test_moment_path_runs_end_to_end_and_confines_scale() -> None:
     # The moment term prices out large-scale atoms: the confined run's largest
     # parameter norm does not exceed the unconstrained run's (with a small slack).
     assert omega_on <= omega_off + 1e-9
+
+
+def test_empty_initial_insertion_records_the_zero_measure() -> None:
+    """Strong regularization may make the zero measure the valid PDAP result."""
+    from src.models import build_model
+
+    torch.manual_seed(0)
+    cfg = ExperimentConfig(
+        model=ModelConfig(
+            kind="signed",
+            insertion="profile",
+            activation="softplus",
+            power=1.0,
+            alpha=1e6,
+            gamma=1.0,
+            moment_beta=1e6,
+            moment_order=2.01,
+        )
+    )
+    data = _tiny_data()
+    model = build_model(cfg, input_dim=1)
+
+    history = PDAP(cfg).fit(
+        model,
+        data,
+        data,
+        num_iterations=1,
+        num_insertion=4,
+        max_insert=2,
+        verbose=False,
+    )
+    metrics = history.summary_metrics()
+
+    assert metrics["best_neurons"] == 0
+    assert metrics["final_neurons"] == 0
+    assert metrics["rel_h1_train"] == pytest.approx(1.0)
+    assert metrics["phi_1"] == 0.0
+    assert metrics["psi_p"] == 0.0
+    assert metrics["radius_r95"] == 0.0

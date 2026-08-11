@@ -9,9 +9,9 @@ repos:
     hooks:
       - id: check-added-large-files
         args: [--maxkb=1024]
-        exclude: '^papar/Mthesis\.pdf$'
+        exclude: '^(paper/paper_0805\.pdf|experiments/02_pendulum/moment_penalty/figures/atom_portrait\.png)$'
       - id: end-of-file-fixer
-        exclude: '^papar/'
+        exclude: '^paper/'
       - id: trailing-whitespace
-        exclude: '^papar/'
+        exclude: '^paper/'
       - id: check-merge-conflict
