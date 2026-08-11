@@ -2274,7 +2274,14 @@ For bounded activations such as $\tanh$ and the Gaussian, existence alone
 requires only $p > 0$; the condition $p > 1$ in the table is the one that also
 dominates the elementary global $H^1$ growth estimate. The last row is listed
 for comparison with the positively homogeneous formulation of Section~4.
+
+
+
 \section{The \texorpdfstring{$k$}{k}-homogeneous formulation}
+Section~3 treats concave penalties whose right slope
+$L_\phi=\phi'(0+)$ is finite and positive. 
+In this section we observe the case where this assumption does not hold. 
+
 This section treats activations for which radial scaling can be absorbed into
 the outer coefficient. Positive homogeneity makes the radial part of an inner
 parameter redundant: every atom can be moved onto the unit sphere
@@ -2289,8 +2296,12 @@ $\mathbb S^d$; the value operator $\mathcal N$, the residual
 $r_\mu=\mathcal N\mu-V$, and the fidelities $L$ and $l^M$ are those of
 Section~3. Whenever $K:\mathbb S^d\to H^1(D)$ is continuous, $\mathcal N\mu$
 is read as the $H^1(D)$-valued Bochner integral $\int_{\mathbb S^d}K\,d\mu$,
-which exists because a continuous map on a compact metric space is bounded,
-strongly measurable and separably valued; for a purely atomic
+which exists because a continuous map on a compact metric space is bounded and
+has compact, hence separable, range; by the Pettis measurability theorem it is
+strongly measurable, and
+$\int_{\mathbb S^d}\|K\|_{H^1(D)}\,d|\mu|
+\le\bigl(\sup_{\mathbb S^d}\|K\|_{H^1(D)}\bigr)
+\|\mu\|_{\mathcal M(\mathbb S^d)}<\infty$; for a purely atomic
 $\mu=\sum_jc_j\delta_{\omega_j}$ with $\sum_j|c_j|<\infty$ it is the
 absolutely convergent series $\sum_jc_jK(\omega_j)$, and it agrees with the
 pointwise definition of Section~3 whenever both are defined. We use the inner
@@ -2300,8 +2311,7 @@ $\langle u,v\rangle_{H^1(D)}
 that $L(\mu)=\tfrac12\|r_\mu\|_{H^1(D)}^2$ whenever
 $\mathcal N\mu\in H^1(D)$.
 
-Section~3 treats concave penalties whose right slope
-$L_\phi=\phi'(0+)$ is finite and positive. For the $k\ge2$
+For the $k\ge2$
 gradient-fitting case below, the induced exponent is
 $q=2/(k+1)<1$, so $\psi_k(t)=t^q$ has infinite right slope at zero. The
 homogeneous formulation is therefore the infinite-slope endpoint of the same
@@ -3008,43 +3018,36 @@ The identity $\psi_k'(0^+)=+\infty$ has three consequences.
 
 \begin{theorem}[Existence and width bound]
 \label{thm:homogeneous_existence}
-Let $k\ge2$, $q=2/(k+1)\in(0,1)$, $\alpha>0$, $V\in H^1(D)$, and let
-$K:\mathbb S^d\to H^1(D)$ be continuous, with
-$C_S=\sup_{\omega\in\mathbb S^d}\|K(\omega)\|_{H^1(D)}$.
-\begin{enumerate}
-	\item If $V=0$ or $C_S=0$, then $\bar\mu=0$ is the unique global minimizer
-	of \eqref{prob:homogeneous} and its reduced width is $0$.
-	\item If $V\ne0$ and $C_S>0$, then \eqref{prob:homogeneous} admits a
-	global minimizer, and its minimum value equals the finite-network infimum
-	on the right-hand side of \eqref{eq:homogeneous-infima}. Every global
-	minimizer $\bar\mu$ is a finite atomic measure whose reduced width
-	satisfies
-	\begin{equation*}
-		N\le N_{\max}:=
-		\frac{\|V\|^2_{H^1(D)}}{2\alpha\,c_{\min,\mathrm{glob}}^{\,q}},
-		\qquad
-		c_{\min,\mathrm{glob}}:=
-		\left(
-			\frac{\alpha q}{\|V\|_{H^1(D)}\,C_S}
-		\right)^{1/(1-q)}.
-	\end{equation*}
-\end{enumerate}
+Let $k\ge2$, $q=2/(k+1)\in(0,1)$, $\alpha>0$, let $V\in H^1(D)$ with
+$V\ne0$, and let $K:\mathbb S^d\to H^1(D)$ be continuous with
+$C_S=\sup_{\omega\in\mathbb S^d}\|K(\omega)\|_{H^1(D)}>0$; the latter holds
+for $\reluk$ by Lemma~\ref{lem:reluk-dictionary}(4). Then
+\eqref{prob:homogeneous} admits a global minimizer, and its minimum value
+equals the finite-network infimum on the right-hand side of
+\eqref{eq:homogeneous-infima}. Every global minimizer $\bar\mu$ is a finite
+atomic measure whose reduced width satisfies
+\begin{equation*}
+	N\le N_{\max}:=
+	\frac{\|V\|^2_{H^1(D)}}{2\alpha\,c_{\min,\mathrm{glob}}^{\,q}},
+	\qquad
+	c_{\min,\mathrm{glob}}:=
+	\left(
+		\frac{\alpha q}{\|V\|_{H^1(D)}\,C_S}
+	\right)^{1/(1-q)}.
+\end{equation*}
 \end{theorem}
-\begin{proof}
-We first dispose of the degenerate cases, then prove existence for the
-finite-network problem in three steps, and finally transfer the conclusion to
-\eqref{prob:homogeneous} by Proposition~\ref{prop:homogeneous_reduction}.
 
-\emph{Step 0: the degenerate cases.} If $V=0$, then $J_{\psi_k}(0)=0$, and
-every $\mu\ne0$ with $J_{\psi_k}(\mu)<\infty$ has
-$J_{\psi_k}(\mu)\ge\alpha\Phi_{\psi_k}(\mu)>0$ by
-Lemma~\ref{lem:homogeneous-penalty-properties}(2). If $C_S=0$, then
-$K\equiv0$ on $\mathbb S^d$, so $\mathcal N\mu=0$ and
-$L(\mu)=\frac12\|V\|^2_{H^1(D)}$ for every $\mu\in\mathcal M(\mathbb S^d)$,
-and again the penalty is minimized only at $\mu=0$. In both cases $\mu=0$ is
-the unique global minimizer and $\#\atom 0=0$. Assume from now on that
-$V\ne0$ and $C_S>0$; then $c_{\min,\mathrm{glob}}\in(0,\infty)$ and
+If $V=0$ or $C_S=0$ the problem degenerates: the fidelity is then either
+minimized at $\mathcal N\mu=0$ or, since $K\equiv0$ forces $\mathcal N\mu=0$,
+constant, so by Lemma~\ref{lem:homogeneous-penalty-properties}(2) the measure
+$\bar\mu=0$ is the unique global minimizer, of reduced width $0$. Under the
+hypotheses of the theorem $c_{\min,\mathrm{glob}}\in(0,\infty)$ and
 $N_{\max}<\infty$ are well defined.
+
+\begin{proof}
+We prove existence for the finite-network problem in three steps and then
+transfer the conclusion to \eqref{prob:homogeneous} by
+Proposition~\ref{prop:homogeneous_reduction}.
 
 \emph{Step 1: existence at a fixed width.} Fix $N\in\mathbb N$ and consider
 \begin{equation*}
@@ -3253,7 +3256,12 @@ Lemma~\ref{lem:reluk-dictionary}(2)--(3) and hence bounded there, which is
 the second property. Substituting these data for $H^1(D)$, $V$ and $K$
 throughout replaces $C_S$ and $\|V\|_{H^1(D)}$ by the corresponding empirical
 quantities and leaves every argument unchanged; the population proofs are not
-repeated. Lemma~\ref{prop:homogeneous_penalty} and
+repeated. The nondegeneracy hypotheses of
+Theorem~\ref{thm:homogeneous_existence} become the requirements that the
+empirical dictionary bound be positive, which holds because
+$\widehat\omega=(0,1)\in\mathbb S^d$ has
+$[K(\widehat\omega)](x)=1$ and $\nabla K(\widehat\omega)(x)=0$ on $D$, and
+that the sampled data not vanish identically. Lemma~\ref{prop:homogeneous_penalty} and
 Lemma~\ref{lem:reluk-dictionary} concern the radial calculus and the
 dictionary alone and are independent of which fidelity is used.
 \end{remark}

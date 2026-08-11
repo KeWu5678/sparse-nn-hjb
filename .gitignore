@@ -78,14 +78,13 @@ deploy/terraform/*.tfvars
 deploy/terraform/*.tfvars.json
 !deploy/terraform/example.tfvars
 
-# ---- papar/ (LaTeX thesis): only the compiled PDF + main source are tracked ----
-papar/*
-!papar/Mthesis.pdf
-!papar/Mthesis.tex
-!papar/draft/
-papar/draft/*
-!papar/draft/PROOF_NARROW-CONVERGENCE.tex
-!papar/draft/PROOF_NARROW-CONVERGENCE.pdf
+# ---- paper/ (LaTeX working dir): only the current manuscript is tracked ----
+paper/*
+!paper/paper_0805.tex
+!paper/paper_0805.pdf
+
+# ---- superseded manuscript versions and their review record: local only ----
+docs/paper_archive/
 
 # domain-language notes are local working docs
 CONTEXT.md
