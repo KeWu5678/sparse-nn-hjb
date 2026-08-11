@@ -26,6 +26,8 @@ from typing import Callable, List, Optional, Tuple
 import numpy as np
 import torch
 
+from .moment import moment_weight
+
 logger = logging.getLogger(__name__)
 
 __all__ = ["profile_threshold", "finite_step", "solve_insertion_weight"]
@@ -68,7 +70,7 @@ def _generate_candidates(
     X, residual_v, residual_dv, *,
     activation, power, loss_weights, sample_sphere, N,
     merge_tol, two_sided, use_sphere, existing_atoms,
-    lbfgs_lr=1e-2, lbfgs_steps=200,
+    lbfgs_lr=1e-2, lbfgs_steps=200, moment_beta=0.0, moment_order=2.0,
 ) -> Tuple[torch.Tensor, torch.Tensor, int]:
     """Return (a_t, b_t, n_after_merge): distinct dual-profile maximisers on S^d."""
     K, d_dim = X.shape
@@ -139,7 +141,14 @@ def _generate_candidates(
             break
 
     # Step 2.5: non-sphere activations also optimise a per-direction scale r>0.
+    # With the moment axis on, the scale search maximises the net margin
+    # |P(r*d)| - beta*w_p(r*d) rather than the raw profile, so a real
+    # fidelity-vs-moment tradeoff confines r (replacing the ad-hoc exp(5) clamp,
+    # which is kept only as a numeric safety rail).  The profile here is against
+    # the *normalized* residual, so the moment cost is divided by res_norm to
+    # share units with it; argmax is unchanged relative to the raw-unit tradeoff.
     if not use_sphere:
+        moment_scale = float(moment_beta) / float(res_norm) if moment_beta > 0.0 else 0.0
         scaled_a, scaled_b = [], []
         for a_hat, b_hat in zip(a_t, b_t):
             s = torch.tensor([0.0], dtype=torch.float64, requires_grad=True)
@@ -151,6 +160,8 @@ def _generate_candidates(
                 r = torch.exp(s.clamp(-3, 5))
                 obj = _profile_value(X, r * a_h, r * b_h, activation, power,
                                      w1, w2, Kx, res_v_n, res_dv_n, two_sided)
+                if moment_scale > 0.0:
+                    obj = obj - moment_scale * moment_weight(r * a_h, r * b_h, moment_order)
                 (-obj).backward()
                 return -obj
 
@@ -172,9 +183,15 @@ def profile_threshold(
     activation, power, loss_weights, alpha, sample_sphere, N,
     max_insert=15, merge_tol=1e-2, two_sided=True, use_sphere=True,
     existing_atoms=None, verbose=True,
-    lbfgs_lr=1e-2, lbfgs_steps=200,
+    lbfgs_lr=1e-2, lbfgs_steps=200, moment_beta=0.0, moment_order=2.0,
 ) -> Tuple[np.ndarray, np.ndarray]:
-    """Accept atoms whose (unnormalised) dual profile exceeds ``alpha``."""
+    """Accept atoms whose (unnormalised) dual profile exceeds the threshold.
+
+    Without the moment axis the threshold is ``alpha`` (the classical rule).  With
+    it (``moment_beta > 0``) the threshold is the draft's insertion condition
+    ``alpha + beta*w_p(omega)`` -- a distant candidate must clear a higher bar --
+    and candidates are ranked by the margin above it.
+    """
     K, d_dim = X.shape
     Kx = K * d_dim
     w1, w2 = loss_weights
@@ -184,30 +201,32 @@ def profile_threshold(
         loss_weights=loss_weights, sample_sphere=sample_sphere, N=N,
         merge_tol=merge_tol, two_sided=two_sided, use_sphere=use_sphere,
         existing_atoms=existing_atoms, lbfgs_lr=lbfgs_lr, lbfgs_steps=lbfgs_steps,
+        moment_beta=moment_beta, moment_order=moment_order,
     )
 
     accepted_a: List[torch.Tensor] = []
     accepted_b: List[torch.Tensor] = []
-    accepted_vals: List[float] = []
+    accepted_scores: List[float] = []
     with torch.enable_grad():
         for a_i, b_i in zip(a_t, b_t):
             v = float(_profile_value(X, a_i, b_i, activation, power,
                                      w1, w2, Kx, residual_v, residual_dv, two_sided).item())
-            if v > alpha:
+            moment_cost = moment_beta * float(moment_weight(a_i, b_i, moment_order)) if moment_beta > 0.0 else 0.0
+            if v > alpha + moment_cost:
                 accepted_a.append(a_i.detach())
                 accepted_b.append(b_i.detach())
-                accepted_vals.append(v)
+                accepted_scores.append(v - moment_cost)  # margin above alpha; ranks candidates
 
-    if len(accepted_vals) > max_insert:
-        order = sorted(range(len(accepted_vals)), key=lambda i: accepted_vals[i], reverse=True)[:max_insert]
+    if len(accepted_scores) > max_insert:
+        order = sorted(range(len(accepted_scores)), key=lambda i: accepted_scores[i], reverse=True)[:max_insert]
         accepted_a = [accepted_a[i] for i in order]
         accepted_b = [accepted_b[i] for i in order]
 
     if verbose:
         logger.debug(
             "Candidate search  sampled=%d  unique=%d  accepted=%d/%d  "
-            "rule=residual correlation above alpha (alpha=%.2e)",
-            N, n_after, len(accepted_a), max_insert, alpha,
+            "rule=residual correlation above alpha+beta*w_p (alpha=%.2e, moment_beta=%.2e)",
+            N, n_after, len(accepted_a), max_insert, alpha, moment_beta,
         )
 
     if len(accepted_a) == 0:

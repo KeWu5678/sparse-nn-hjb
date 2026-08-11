@@ -55,6 +55,14 @@ class SSN(Optimizer):
         tolerance_grad: early-exit tol on ||Gq||_inf; 0.0 disables it.
         penalized_mask: bool mask of penalised coords (default: all True).
         nonneg_mask:    bool mask of coords clamped >= 0 (default: all False).
+        moment_vec:     per-coordinate moment weight ``beta * w_p(omega)`` of the
+                        parameter-moment axis, or ``None`` (default) for no moment
+                        term.  It is a *convex* per-atom L1 coefficient, so it
+                        joins ``alpha_vec`` in the proximal threshold and the
+                        first-order optimality, and contributes nothing to the
+                        concave correction or the Jacobian (a linear term has
+                        ``phi'' = 0``).  ``None`` reproduces the plain solve
+                        bit-for-bit.
 
     Note:
         ``data_hessian`` (the Gauss-Newton Hessian of the data term) must be set
@@ -79,6 +87,7 @@ class SSN(Optimizer):
         tolerance_grad: float = 0.0,
         penalized_mask: Optional[Tensor] = None,
         nonneg_mask: Optional[Tensor] = None,
+        moment_vec: Optional[Tensor] = None,
     ) -> None:
         if method not in _STRATEGIES:
             raise ValueError(
@@ -136,6 +145,15 @@ class SSN(Optimizer):
         self.alpha_vec: Tensor = torch.where(
             self.penalized_mask, torch.full_like(flat, float(alpha)), torch.zeros_like(flat)
         )
+        # Optional per-coordinate moment weight (beta * w_p); None => no moment.
+        if moment_vec is None:
+            self.moment_vec: Optional[Tensor] = None
+        else:
+            self.moment_vec = moment_vec.to(dtype=flat.dtype, device=flat.device).reshape(-1)
+            if self.moment_vec.shape[0] != P:
+                raise ValueError(
+                    f"moment_vec length {self.moment_vec.shape[0]} != param vector length {P}"
+                )
 
     # ------------------------------------------------------------------ #
     # Masked nonnegative proximal and its Jacobian.
@@ -143,8 +161,15 @@ class SSN(Optimizer):
     # plain signed soft-threshold prox and its diagonal Jacobian.
     # ------------------------------------------------------------------ #
     def _mu(self, c: float) -> Tensor:
-        """Per-coordinate proximal parameter alpha_vec / c (0 => identity prox)."""
-        return self.alpha_vec / c
+        """Per-coordinate proximal parameter (alpha_vec [+ moment_vec]) / c.
+
+        The moment weight is a convex per-atom L1 coefficient, so it rides the
+        same proximal-threshold channel as ``alpha_vec``.  ``moment_vec is None``
+        recovers the plain ``alpha_vec / c``.
+        """
+        if self.moment_vec is None:
+            return self.alpha_vec / c
+        return (self.alpha_vec + self.moment_vec) / c
 
     def _prox(self, v: Tensor, c: float) -> Tensor:
         out = _compute_prox(v, self._mu(c), q=self.q)
@@ -198,21 +223,31 @@ class SSN(Optimizer):
 
         # Subtract reg gradient from autograd (which includes it) to get data-only.
         # alpha_vec is ``alpha`` on penalised coords and 0 on free coords, so the
-        # penalty terms vanish on free coords automatically.
+        # penalty terms vanish on free coords automatically.  The moment term is a
+        # linear L1 whose gradient (moment_vec * sign_u) autograd also folds into
+        # grad_flat; it belongs to the proximal channel, not the smooth part, so
+        # it is subtracted here too.
         reg_grad = _penalty_grad(abs_u, sign_u, self.alpha_vec, th, gamma, q=qq)
         grad_data = grad_flat - reg_grad
+        if self.moment_vec is not None:
+            grad_data = grad_data - self.moment_vec * sign_u
 
         # gf_u = grad_data + alpha * D_nonconvex
         gf_u = grad_data + self.alpha_vec * _nonconvex_correction(abs_u, sign_u, th, gamma, q=qq)
 
-        # Override on nonzero *penalised* entries (NOC condition).
-        # For q=1: -alpha * sign(u). For general q: -alpha * q * |u|^{q-1} * sign(u).
+        # Override on nonzero *penalised* entries (NOC condition).  The L1
+        # subgradient there is alpha's plus the moment weight.
+        # For q=1: -(alpha + moment) * sign(u).  General q: -(alpha*q*|u|^{q-1} + moment) * sign(u).
         active = (abs_u > 0) & self.penalized_mask
         if qq == 1.0:
-            gf_u = torch.where(active, -self.alpha_vec * sign_u, gf_u)
+            l1 = self.alpha_vec if self.moment_vec is None else self.alpha_vec + self.moment_vec
+            gf_u = torch.where(active, -l1 * sign_u, gf_u)
         else:
             s = abs_u.clamp(min=1e-30)
-            gf_u = torch.where(active, -self.alpha_vec * qq * s ** (qq - 1) * sign_u, gf_u)
+            base = self.alpha_vec * qq * s ** (qq - 1)
+            if self.moment_vec is not None:
+                base = base + self.moment_vec
+            gf_u = torch.where(active, -base * sign_u, gf_u)
 
         q_var = params - (1.0 / c) * gf_u
         # On free (unpenalised) coords the proximal is the identity, whose preimage
@@ -244,6 +279,8 @@ class SSN(Optimizer):
 
         reg_grad = _penalty_grad(abs_u, sign_u, self.alpha_vec, th, gamma, q=qq)
         grad_data = grad_flat - reg_grad
+        if self.moment_vec is not None:
+            grad_data = grad_data - self.moment_vec * sign_u
 
         return c * (q_var - params) + self.alpha_vec * D_nc + grad_data
 

@@ -24,6 +24,7 @@ from torch.nn.utils import parameters_to_vector, vector_to_parameters
 
 from ..SSN import SSN
 from ..SSN.penalty import _phi
+from .moment import moment_weight
 
 if TYPE_CHECKING:
     from ..models.base import PDAPModel
@@ -38,12 +39,18 @@ class Objective:
     The penalty exponent q is *not* here -- it is q = 2/(power+1), derived from
     the model's activation power (the prox closed-forms depend on it), so it lives
     on the model.
+
+    ``moment_beta`` / ``moment_order`` carry the parameter-moment axis:
+    ``beta * sum_j (1 + |omega_j|^p) |c_j|``.  ``moment_beta = 0`` (default) means
+    the axis is off; when on it is validated in :class:`src.PDAP.PDAP`.
     """
 
     alpha: float = 1e-5
     gamma: float = 0.0
     th: float = 0.5
     loss_weights: Tuple[float, float] = (1.0, 1.0)
+    moment_beta: float = 0.0
+    moment_order: float = 2.0
 
 
 @dataclass(frozen=True)
@@ -101,12 +108,21 @@ def ssn_solve(
     theta = torch.nn.Parameter(parameters_to_vector(params).detach().clone())
     penalized, nonneg = model.penalty_masks()
 
+    # Parameter-moment axis: per-coordinate L1 weight beta * w_p(omega_j) aligned
+    # to theta (theta is the atom outer weights for the signed model, the only
+    # model the axis is enabled for).  None (beta == 0) reproduces the plain solve.
+    moment_vec = None
+    if objective.moment_beta > 0.0:
+        W, b, _ = model.get_atoms()
+        moment_vec = objective.moment_beta * moment_weight(W, b, objective.moment_order)
+
     optimizer = SSN(
         [theta], alpha=alpha, gamma=gamma,
         penalized_mask=penalized, nonneg_mask=nonneg,
         th=th, lr=solver.lr, power=model.power, method=solver.method,
         max_ls_iter=solver.max_ls_iter, tolerance_ls=solver.tolerance_ls,
         tolerance_grad=solver.tolerance_grad, sigmamax=solver.sigmamax,
+        moment_vec=moment_vec,
     )
     optimizer.data_hessian = H
 
@@ -116,6 +132,8 @@ def ssn_solve(
         rg = Phi_g @ theta - dVt
         data = (w1 / (2 * Nx)) * (rv @ rv) + (w2 / (2 * Nx)) * (rg @ rg)
         penalty = nonconvex_penalty(theta, penalized, nonneg, alpha=alpha, th=th, gamma=gamma, q=q)
+        if moment_vec is not None:
+            penalty = penalty + torch.sum(moment_vec * theta.abs())
         return data + penalty
 
     prev = float(closure().detach())

@@ -9,7 +9,9 @@ repos:
     hooks:
       - id: check-added-large-files
         args: [--maxkb=1024]
-        exclude: '^paper/(paper|paper_0805|archiv/Mthesis)\.pdf$'
+        # paper/ holds the manuscript and the assets it builds from -- a 14 MB
+        # PDF and print-resolution figures -- so the whole directory is exempt.
+        exclude: '^(paper/|experiments/02_pendulum/moment_penalty/figures/atom_portrait\.png$)'
       - id: end-of-file-fixer
         exclude: '^paper/'
       - id: trailing-whitespace

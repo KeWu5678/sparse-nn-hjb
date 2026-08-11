@@ -78,16 +78,20 @@ deploy/terraform/*.tfvars
 deploy/terraform/*.tfvars.json
 !deploy/terraform/example.tfvars
 
-# ---- paper/ (LaTeX working dir): paper.tex + the three compiled PDFs are tracked ----
+# ---- paper/ (LaTeX working dir): the current manuscript and what it builds from ----
+# Everything needed to rebuild paper_0805.pdf from a clean checkout is tracked:
+# the source, the bibliography, and the figures it includes from paper/plot/.
+# (Its other figures come straight from experiments/*/figures/, tracked there.)
 paper/*
-!paper/archiv/
-paper/archiv/*
-!paper/paper.tex
-!paper/paper.pdf
 !paper/paper_0805.tex
 !paper/paper_0805.pdf
-!paper/archiv/Mthesis.pdf
-!paper/archiv/PROOF_NARROW-CONVERGENCE.pdf
+!paper/ref.bib
+!paper/plot/
+paper/plot/*
+!paper/plot/*.png
+
+# ---- superseded manuscript versions and their review record: local only ----
+docs/paper_archive/
 
 # domain-language notes are local working docs
 CONTEXT.md
