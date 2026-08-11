@@ -9,9 +9,8 @@ from pathlib import Path
 from typing import Any
 
 import matplotlib.pyplot as plt
-import numpy as np
 
-from src.plotstyle import apply_publication_style
+from src.plotstyle import PALETTE, apply_publication_style
 
 ALL_BETAS = (
     0.0,
@@ -201,55 +200,117 @@ def _best_by_activation(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     ]
 
 
-def plot_refinement(spec: ProblemSpec, rows: list[dict[str, Any]]) -> Path:
+@dataclass(frozen=True)
+class PanelSeries:
+    """One line across the error / support / radius panels."""
+
+    label: str
+    x: list[int]
+    error: list[float]
+    neurons: list[float]
+    radius: list[float]
+
+
+def series_style(index: int) -> dict[str, Any]:
+    """House-palette line style for series ``index``.
+
+    ``PALETTE`` carries four line-strength colours (``neutral`` is a light grey
+    for de-emphasis), so runs longer than four are separated by dash pattern as
+    well as hue.
+    """
+    hues = (
+        PALETTE["blue_main"],
+        PALETTE["teal"],
+        PALETTE["red_strong"],
+        PALETTE["violet"],
+    )
+    dashes = ("-", "--", "-.")
+    return {
+        "color": hues[index % len(hues)],
+        "linestyle": dashes[(index // len(hues)) % len(dashes)],
+        "marker": "o",
+        "linewidth": 1.4,
+        "markersize": 4.5,
+    }
+
+
+def plot_metric_panels(
+    series: list[PanelSeries],
+    *,
+    tick_labels: list[str],
+    x_label: str,
+    error_label: str,
+    path: Path,
+    legend_ncol: int = 1,
+) -> Path:
+    """Draw the shared three-panel sweep figure and save it to ``path``.
+
+    The panels are one composite rather than three files because they share a
+    single x axis -- the sweep variable and its tick positions are identical, so
+    reading a run means reading one abscissa across all three.  Per the house
+    style there are no in-figure titles: the caption identifies the study.
+    """
     apply_publication_style()
-    fig, axes = plt.subplots(3, 1, figsize=(11.4, 10.0), constrained_layout=True)
-    positions = {beta: index for index, beta in enumerate(ALL_BETAS)}
-    colors = plt.get_cmap("viridis")(
-        np.linspace(0.05, 0.95, len(spec.curves))
+    fig, axes = plt.subplots(
+        3, 1, figsize=(11.4, 10.0), sharex=True
     )
 
-    for color, curve in zip(colors, spec.curves):
-        selected = _curve_rows(rows, curve)
-        x = [positions[row["beta"]] for row in selected]
-        style = {
-            "marker": "o",
-            "linewidth": 1.4,
-            "markersize": 4.5,
-            "color": color,
-            "label": curve.label,
-        }
-        axes[0].plot(x, [row["error"] for row in selected], **style)
-        axes[1].plot(x, [row["neurons"] for row in selected], **style)
-        axes[2].plot(x, [row["radius_r95"] for row in selected], **style)
+    for index, line in enumerate(series):
+        style = series_style(index) | {"label": line.label}
+        axes[0].plot(line.x, line.error, **style)
+        axes[1].plot(line.x, line.neurons, **style)
+        axes[2].plot(line.x, line.radius, **style)
 
-    axes[0].set_ylabel(spec.error_label)
+    axes[0].set_ylabel(error_label)
     axes[0].set_yscale("log")
     axes[1].set_ylabel("active support")
     axes[2].set_ylabel("amplitude-mass R95")
     axes[2].set_yscale("symlog", linthresh=0.1)
-    axes[2].axhline(
+    ceiling = axes[2].axhline(
         SCALE_CEILING,
-        color="black",
+        color=PALETTE["neutral"],
         linestyle="--",
         linewidth=1.0,
         label=r"radial ceiling $e^5$",
     )
     for ax in axes:
-        ax.set_xticks(
-            range(len(ALL_BETAS)), [_tick(beta) for beta in ALL_BETAS]
-        )
-        ax.set_xlabel(r"$\beta$")
-        ax.grid(True, alpha=0.18)
-    axes[0].legend(ncol=2, fontsize=7.5)
-    axes[2].legend(fontsize=7.5)
+        ax.set_xticks(range(len(tick_labels)), tick_labels)
+    axes[2].set_xlabel(x_label)
+    # The series are named once, on the top panel; the bottom panel's legend
+    # explains only the ceiling rule it adds.
+    axes[0].legend(ncol=legend_ncol, fontsize=7.5)
+    axes[2].legend(handles=[ceiling], fontsize=7.5)
 
-    figure_dir = spec.output_dir / "figures"
-    figure_dir.mkdir(parents=True, exist_ok=True)
-    path = figure_dir / "refinement.png"
-    fig.savefig(path, dpi=240, bbox_inches="tight")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fig.tight_layout(pad=2.0)
+    fig.savefig(path, dpi=300)
     plt.close(fig)
     return path
+
+
+def plot_refinement(spec: ProblemSpec, rows: list[dict[str, Any]]) -> Path:
+    positions = {beta: index for index, beta in enumerate(ALL_BETAS)}
+    series = []
+    for curve in spec.curves:
+        selected = _curve_rows(rows, curve)
+        series.append(
+            PanelSeries(
+                label=curve.label,
+                x=[positions[row["beta"]] for row in selected],
+                error=[row["error"] for row in selected],
+                neurons=[row["neurons"] for row in selected],
+                radius=[row["radius_r95"] for row in selected],
+            )
+        )
+
+    return plot_metric_panels(
+        series,
+        tick_labels=[_tick(beta) for beta in ALL_BETAS],
+        x_label=r"$\beta$",
+        error_label=spec.error_label,
+        path=spec.output_dir / "figures" / "refinement.png",
+        legend_ncol=2,
+    )
 
 
 def _table(rows: list[dict[str, Any]], include_stage: bool = False) -> str:

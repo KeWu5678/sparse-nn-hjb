@@ -104,6 +104,13 @@ moment-sweep:  ## run the seed-42 moment screen; beta=0 baseline is deduplicated
 	  *) echo "Use EXPERIMENT=vdp/moment_penalty or pendulum/moment_penalty."; exit 2 ;; \
 	esac
 	@$(PY) -c "from src.config.schema import ModelConfig; assert 'moment_beta' in ModelConfig.__dataclass_fields__, 'merge or check out the moment-penalty implementation before running this sweep'"
+	@test -f "$(ANALYSIS_DIR)/analysis.py" || { \
+	  echo "Missing $(ANALYSIS_DIR)/analysis.py, which this target runs on the"; \
+	  echo "records once the sweep finishes.  Per-study analysis.py files are"; \
+	  echo "gitignored (see .gitignore), so a clean checkout does not carry them."; \
+	  echo "Checked here rather than after the sweep, which costs hours."; \
+	  exit 2; \
+	}
 	@if find "$(SWEEP_DIR)/baseline" "$(SWEEP_DIR)/screen" -name '*.json' -print -quit 2>/dev/null | grep -q .; then \
 	  echo "$(SWEEP_DIR) already contains first-pass records; refusing to overwrite or duplicate them."; \
 	  exit 2; \

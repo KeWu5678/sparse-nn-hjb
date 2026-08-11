@@ -54,7 +54,7 @@ class ModelConfig:
     alpha: float = 1e-5
     gamma: float = 0.0   # 0 => log term off (power penalty); > 0 => log penalty
     th: float = 0.5      # L1 (th=1) <-> non-convex log (th=0); only acts when gamma > 0
-    # Parameter-moment axis (papar/draft/PROOF_NARROW-CONVERGENCE): adds, on top
+    # Parameter-moment axis (paper/paper_0805.tex, Section 3): adds, on top
     # of alpha*Phi_1, the weighted-TV term  beta * sum_j (1 + |omega_j|^p) |c_j|
     # with omega_j = (a_j, b_j).  It prices distant neurons out and supplies the
     # tightness Phi_1 lacks (existence by narrow compactness; confined support).

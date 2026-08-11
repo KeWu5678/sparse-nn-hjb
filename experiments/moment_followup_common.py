@@ -7,10 +7,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import matplotlib.pyplot as plt
-
-from experiments.moment_refinement_common import load_record
-from src.plotstyle import apply_publication_style
+from experiments.moment_refinement_common import (
+    PanelSeries,
+    load_record,
+    plot_metric_panels,
+)
 
 GAMMAS = (0.0, 0.1, 1.0, 10.0)
 H1_WEIGHTS = (1.0, 1.0)
@@ -160,54 +161,37 @@ def _loss_label(weights: tuple[float, float]) -> str:
 def plot_selection(
     spec: FollowupSpec, rows: list[dict[str, Any]], selection: Selection
 ) -> Path:
-    apply_publication_style()
-    fig, axes = plt.subplots(1, 3, figsize=(12.0, 3.8), constrained_layout=True)
-    positions = {gamma: index for index, gamma in enumerate(GAMMAS)}
-    colors = ("#31688e", "#35b779")
+    """Plot one selected configuration's gamma sweep.
 
+    ``selection.label`` names the configuration in the caption, not on the
+    figure -- the house style keeps identifying information out of the panels.
+    """
+    positions = {gamma: index for index, gamma in enumerate(GAMMAS)}
     selected = _selection_rows(rows, selection)
-    for color, weights in zip(colors, (L2_WEIGHTS, H1_WEIGHTS)):
+
+    series = []
+    for weights in (L2_WEIGHTS, H1_WEIGHTS):
         curve = sorted(
             (row for row in selected if row["loss_weights"] == weights),
             key=lambda row: positions[row["gamma"]],
         )
-        x = [positions[row["gamma"]] for row in curve]
-        style = {
-            "marker": "o",
-            "linewidth": 1.6,
-            "color": color,
-            "label": _loss_label(weights),
-        }
-        axes[0].plot(x, [row["error"] for row in curve], **style)
-        axes[1].plot(x, [row["neurons"] for row in curve], **style)
-        axes[2].plot(x, [row["radius_r95"] for row in curve], **style)
+        series.append(
+            PanelSeries(
+                label=_loss_label(weights),
+                x=[positions[row["gamma"]] for row in curve],
+                error=[row["error"] for row in curve],
+                neurons=[row["neurons"] for row in curve],
+                radius=[row["radius_r95"] for row in curve],
+            )
+        )
 
-    axes[0].set_ylabel(spec.error_label)
-    axes[0].set_yscale("log")
-    axes[1].set_ylabel("active support")
-    axes[2].set_ylabel("amplitude-mass R95")
-    axes[2].set_yscale("symlog", linthresh=0.1)
-    axes[2].axhline(
-        SCALE_CEILING,
-        color="black",
-        linestyle="--",
-        linewidth=1.0,
-        label=r"radial ceiling $e^5$",
+    return plot_metric_panels(
+        series,
+        tick_labels=[_tick(gamma) for gamma in GAMMAS],
+        x_label=r"$\gamma$",
+        error_label=spec.error_label,
+        path=spec.output_dir / "figures" / f"followup_{selection.slug}.png",
     )
-    for ax in axes:
-        ax.set_xticks(range(len(GAMMAS)), [_tick(gamma) for gamma in GAMMAS])
-        ax.set_xlabel(r"$\gamma$")
-        ax.grid(True, alpha=0.18)
-    axes[0].legend(fontsize=8)
-    axes[2].legend(fontsize=8)
-    fig.suptitle(selection.label)
-
-    figure_dir = spec.output_dir / "figures"
-    figure_dir.mkdir(parents=True, exist_ok=True)
-    path = figure_dir / f"followup_{selection.slug}.png"
-    fig.savefig(path, dpi=240, bbox_inches="tight")
-    plt.close(fig)
-    return path
 
 
 def _table(rows: list[dict[str, Any]], include_stage: bool = False) -> str:

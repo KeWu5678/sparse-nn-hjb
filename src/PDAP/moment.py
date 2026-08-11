@@ -6,8 +6,10 @@ weighted total-variation term
     beta * Psi_p(mu) = beta * sum_j (1 + |omega_j|^p) * |c_j|,
     omega_j = (a_j, b_j) in R^{d+1},
 
-from ``papar/draft/PROOF_NARROW-CONVERGENCE``.  It is a *per-atom weighted L1*
-on the outer coefficients ``c`` with weight ``w_p(omega) = 1 + |omega|^p``; the
+from the narrow-convergence proof, now Section 3 of ``paper/paper_0805.tex``
+(the standalone draft is archived under ``docs/paper_archive/``).  It is a
+*per-atom weighted L1* on the outer coefficients ``c`` with weight
+``w_p(omega) = 1 + |omega|^p``; the
 weight prices distant neurons out and supplies the tightness the location-blind
 ``Phi_1`` lacks.  These two helpers are the single home of ``w_p`` and of the
 scalar penalty value, shared by the SSN solve, insertion, warm start, and the

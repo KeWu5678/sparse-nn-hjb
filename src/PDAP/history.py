@@ -174,14 +174,19 @@ class History:
         return self.err_h1_train[self.best_iteration]
 
     def restore_model(self, model, iteration: int | None = None):
-        """Restore ``model`` to one recorded iteration (the selected best by default)."""
+        """Restore ``model`` to one recorded iteration (the selected best by default).
+
+        A zero-measure snapshot is restored as such: ``model`` is emptied rather
+        than left carrying whatever support it held before, so the restored model
+        always represents the recorded iteration.
+        """
         i = self.best_iteration if iteration is None else int(iteration)
         state = self.model_states[i]
         W = self.inner_weights[i]["weight"]
         b = self.inner_weights[i]["bias"]
         c = self.outer_weights[i]
-        if W.shape[0] > 0 or state:
-            model.set_atoms(W, b, c)
+        model.set_atoms(W, b, c)
+        if state:
             model.load_state_dict(state)
         return model
 

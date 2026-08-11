@@ -66,6 +66,39 @@ def test_history_records_full_semiconcave_state_for_reconstruction() -> None:
     assert torch.allclose(restored_dv, data[1])
 
 
+def test_restoring_a_zero_measure_snapshot_empties_an_initialized_model() -> None:
+    """A model that already carries atoms must not keep them across the restore.
+
+    This is the terminal zero-measure run of ``PDAP.fit``: under strong
+    regularization the initial insertion accepts no atom, and the recorded model
+    is the one ``build_model`` returned -- layerless, so its ``state_dict`` is
+    empty and only the emptiness of the support identifies the snapshot.
+    """
+    x = torch.tensor([[0.2, -0.3], [0.5, 0.7]], dtype=torch.float64)
+
+    empty = SignedModel(activation=torch.tanh, power=1.0, verbose=False)
+    empty.input_dim = 2  # what build_model does; set_atoms is never reached
+    assert dict(empty.state_dict()) == {}
+    samples = (x, *empty.predict_tensors(x))
+    history = History()
+    history.record(empty, Objective(), samples, samples)
+
+    restored = SignedModel(activation=torch.tanh, power=1.0, verbose=False)
+    restored.set_atoms(
+        torch.tensor([[1.0, 0.0], [0.0, 2.0]], dtype=torch.float64),
+        torch.tensor([0.1, -0.2], dtype=torch.float64),
+        torch.tensor([3.0, -4.0], dtype=torch.float64),
+    )
+    assert restored.get_atoms()[0].shape[0] == 2
+
+    history.restore_model(restored)
+
+    assert restored.get_atoms()[0].shape[0] == 0
+    value, gradient = restored.predict_tensors(x)
+    assert torch.allclose(value, torch.zeros_like(value))
+    assert torch.allclose(gradient, torch.zeros_like(gradient))
+
+
 def test_history_summary_records_moment_objective_decomposition() -> None:
     W = torch.tensor([[1.0, 0.0], [0.0, 2.0], [3.0, 4.0]], dtype=torch.float64)
     b = torch.zeros(3, dtype=torch.float64)
