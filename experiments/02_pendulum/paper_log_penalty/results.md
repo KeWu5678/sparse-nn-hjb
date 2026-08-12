@@ -20,9 +20,26 @@ The paper loop stops as soon as no candidate clears the insertion threshold; a r
 - **batch**: 80/224 cells terminated before `T_out = 10`; median 10 iterations, max 10.
 - **sequential**: 189/224 cells terminated before `T_out = 150`; median 25 iterations, max 150.
 
-## Accuracy envelope versus `../log_penalty`
+## Versus `../log_penalty`
 
-Best relative H¹ reached anywhere in each study's own α/γ grid, on the variants both studies cover. Relative errors are ratios of norms, so they are unaffected by the fidelity renormalization — this comparison is meaningful even though the `α` labels are not comparable across the two studies.
+Relative errors are ratios of norms, so the metric itself is unaffected by the fidelity renormalization. The **α grid is not**: this study's `l^M` divides by `M` where the comparator's divides by `M·d`, so at equal α *label* a cell here carries `1/d` the effective regularization and therefore tends to buy more neurons. Comparing best-per-α across the two studies would read that head start as an improvement.
+
+The comparison below is therefore made at a **matched neuron budget** — the best relative H¹ reachable with at most N neurons — which is free of both the α shift and any capacity difference.
+
+| ≤ N neurons | ../log_penalty | paper batch | paper sequential |
+| ----------- | -------------- | ----------- | ---------------- |
+| 10          | 0.6607         | 0.8387      | 0.6214           |
+| 20          | 0.5891         | 0.6003      | 0.5606           |
+| 40          | 0.4250         | 0.4920      | 0.3941           |
+| 80          | 0.4250         | 0.4857      | 0.3828           |
+| 120         | 0.4250         | 0.3473      | 0.3828           |
+| 160         | 0.4250         | 0.3473      | 0.2271           |
+
+Cell counts are asymmetric and favour the comparator: it draws on 224 H¹ cells against this study's 112 per mode, so it has more chances to find a good one.
+
+### Best-per-variant envelope (α grids not comparable)
+
+Retained for reference only. Each column is the best relative H¹ anywhere in that study's own α/γ grid, so the α shift described above applies and this table flatters the paper columns.
 
 | activation   | ../log_penalty | paper batch | paper sequential |
 | ------------ | -------------- | ----------- | ---------------- |

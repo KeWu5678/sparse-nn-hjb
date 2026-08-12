@@ -42,8 +42,21 @@ curated experiment summaries are now the source of truth; the legacy
    own coefficient, the correction is rejected when it raises the objective, and
    the loop inserts before correcting. These re-runs sit beside the preserved
    comparators rather than replacing them, so the algorithm change can be read
-   off cell for cell. Note that `α` is not comparable across the two — the
-   empirical fidelity now divides by `M` rather than `M·d`.
+   off cell for cell.
+
+   At a **matched neuron budget** — the comparison that is free of both the α
+   shift and any capacity difference — sequential insertion under the revised
+   algorithm is the best of the three at nearly every budget on both benchmarks,
+   substantially so on the pendulum (relative H¹ 0.2271 against the comparator's
+   0.4250 at ≤160 neurons). The exception is VDP at ≤20 neurons, where the
+   comparator still wins. Both readings are conservative: the comparator draws on
+   2–6× more cells.
+
+   Do **not** compare the two studies at equal α. The empirical fidelity now
+   divides by `M` rather than `M·d`, so at equal α *label* a paper cell carries
+   `1/d` the effective regularization and buys more neurons; a per-α table reads
+   that head start as an improvement. The `results.md` files lead with the
+   matched-budget table for this reason.
    Current curated readouts:
    [01_vdp/paper_log_penalty/results.md](01_vdp/paper_log_penalty/results.md),
    [02_pendulum/paper_log_penalty/results.md](02_pendulum/paper_log_penalty/results.md),
