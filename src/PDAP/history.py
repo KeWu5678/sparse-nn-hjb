@@ -215,6 +215,12 @@ class History:
             "best_iteration": i,
             "best_neurons": int(self.best_neurons),
             "final_neurons": int(self.final_neurons),
+            # How many outer iterations were actually recorded.  Under the paper's
+            # loop order this is less than the configured T_out exactly when the
+            # run stopped on its own rule -- no candidate cleared the insertion
+            # threshold -- which is the difference between converging in the
+            # algorithm's terms and merely exhausting the budget.
+            "iterations": int(len(self.train_loss)),
         }
         if getattr(self, "data_loss_train", []):
             w1, w2 = getattr(self, "loss_weights", (1.0, 1.0))

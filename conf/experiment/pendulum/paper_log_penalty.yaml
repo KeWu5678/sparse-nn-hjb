@@ -1,0 +1,36 @@
+# @package _global_
+# pendulum/paper_log_penalty: the log-penalty activation sweep re-run under
+# Algorithm 1 of paper/paper_0805.tex, on the pendulum swing-up value function
+# (two-sided switching-band data; data=pendulum auto-selects the region eval).
+#
+# Axes match conf/experiment/pendulum/log_penalty.yaml cell for cell, so the two
+# studies differ only in the algorithm.  See the VDP counterpart for why
+# `moment_order` is pinned rather than swept.
+defaults:
+  - override /model: paper_log_penalty
+  - override /data: pendulum
+
+name: pendulum_paper_log_penalty
+
+model:
+  power: 1.0
+  alpha: 1e-5
+  moment_order: 2.01
+
+training:
+  insert_init: guaranteed
+  correction_guard: true
+  loop_order: insertion_first
+  radial_cap: theorem
+
+data:
+  normalize: true
+
+hydra:
+  sweeper:
+    params:
+      model: paper_log_penalty
+      model.activation: leaky_relu,softplus,tanh,gaussian,gausscent_1,matern52,gelu_squared
+      model.alpha: 1e-2,1e-3,1e-4,1e-5
+      model.gamma: 0,0.1,1,10
+      model.loss_weights: "[1.0,0.0],[1.0,1.0]"

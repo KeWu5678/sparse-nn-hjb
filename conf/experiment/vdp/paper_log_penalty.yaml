@@ -1,0 +1,43 @@
+# @package _global_
+# vdp/paper_log_penalty: the log-penalty activation sweep re-run under Algorithm 1
+# of paper/paper_0805.tex (normalized-moment objective, theorem insertion
+# coefficient, guarded correction, paper loop order, theorem radius).
+#
+# The sweep axes match conf/experiment/vdp/log_penalty.yaml cell for cell so the
+# two studies differ only in the algorithm, not in the grid.  `moment_order` is
+# pinned at 2.01 rather than swept: it is a live parameter under this objective,
+# but sweeping it here would quadruple a sweep that is already ~1.6 h in the
+# sequential mode.  The dedicated p-study is the `paper_p_study` Make target.
+#
+# insert_mode is the schema default `batch`, i.e. Algorithm 1 as printed
+# (N_ins = 15).  `make paper-sequential EXPERIMENT=vdp/paper_log_penalty` runs the
+# guaranteed variant, which needs num_iterations = 150 for a matched neuron
+# budget (ADR 0008).
+defaults:
+  - override /model: paper_log_penalty
+  - override /data: vdp
+
+name: vdp_paper_log_penalty
+
+model:
+  power: 1.0
+  alpha: 1e-5
+  moment_order: 2.01
+
+training:
+  insert_init: guaranteed
+  correction_guard: true
+  loop_order: insertion_first
+  radial_cap: theorem
+
+data:
+  normalize: true
+
+hydra:
+  sweeper:
+    params:
+      model: paper_log_penalty
+      model.activation: leaky_relu,softplus,tanh,gaussian,gausscent_1,matern52,gelu_squared
+      model.alpha: 1e-2,1e-3,1e-4,1e-5
+      model.gamma: 0,0.1,1,10
+      model.loss_weights: "[1.0,0.0],[1.0,1.0]"

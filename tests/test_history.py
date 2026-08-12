@@ -34,6 +34,8 @@ def test_history_summary_metrics_uses_best_iteration() -> None:
         "best_iteration": 1,
         "best_neurons": 5,
         "final_neurons": 6,
+        # This fixture records no losses, so no outer iteration ran.
+        "iterations": 0,
     }
 
 

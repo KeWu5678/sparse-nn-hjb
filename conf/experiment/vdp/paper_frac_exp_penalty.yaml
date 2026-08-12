@@ -1,0 +1,38 @@
+# @package _global_
+# vdp/paper_frac_exp_penalty: the penalty-power sweep re-run under Algorithm 2 of
+# paper/paper_0805.tex.
+#
+# Only the loop-side axes apply here.  The k-homogeneous formulation is on the
+# sphere, so the normalized-moment objective, the theorem insertion coefficient
+# and the theorem radius are all inert (see conf/model/paper_frac_exp_penalty.yaml);
+# what changes against conf/experiment/vdp/frac_exp_penalty.yaml is the guarded
+# correction and the paper's loop order.  Axes match that config cell for cell.
+#
+# gamma = 0 by design: the nonconvexity is the penalty exponent q = 2/(k+1).
+defaults:
+  - override /model: paper_frac_exp_penalty
+  - override /data: vdp
+
+name: vdp_paper_frac_exp_penalty
+
+model:
+  power: 2.0
+  alpha: 1e-5
+  loss_weights: [1.0, 1.0]
+
+training:
+  correction_guard: true
+  loop_order: insertion_first
+
+data:
+  normalize: true
+
+hydra:
+  sweeper:
+    params:
+      model: paper_frac_exp_penalty
+      model.activation: relu
+      model.power: 2.0,2.01,3.0,4.0,5.0
+      model.alpha: 1e-3,1e-4,1e-5,1e-6
+      model.gamma: 0
+      model.loss_weights: "[1.0,0.0],[1.0,1.0]"

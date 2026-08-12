@@ -34,6 +34,25 @@ curated experiment summaries are now the source of truth; the legacy
    a single benchmark score.
    Legacy summary: [docs/research/D4_max_plus/refs/legacy-semiconcave-comparison.md](../docs/research/D4_max_plus/refs/legacy-semiconcave-comparison.md)
 
+5. Paper-conforming algorithms (2026-08-12).
+   The manuscript's revised Sections 3–5 changed the objective and both
+   insertion algorithms: the moment norm moved from an additive `β` term into
+   the penalty argument as `φ(w_p(ω)|c|)`, the insertion condition normalizes
+   the derivative representative by `w_p`, the accepted atom gets the theorem's
+   own coefficient, the correction is rejected when it raises the objective, and
+   the loop inserts before correcting. These re-runs sit beside the preserved
+   comparators rather than replacing them, so the algorithm change can be read
+   off cell for cell. Note that `α` is not comparable across the two — the
+   empirical fidelity now divides by `M` rather than `M·d`.
+   Current curated readouts:
+   [01_vdp/paper_log_penalty/results.md](01_vdp/paper_log_penalty/results.md),
+   [02_pendulum/paper_log_penalty/results.md](02_pendulum/paper_log_penalty/results.md),
+   [01_vdp/paper_frac_exp_penalty/results.md](01_vdp/paper_frac_exp_penalty/results.md)
+   and [02_pendulum/paper_frac_exp_penalty/results.md](02_pendulum/paper_frac_exp_penalty/results.md).
+   Decisions behind them: [docs/adr/0007](../docs/adr/0007-per-neuron-curvature-in-the-insertion-step.md),
+   [docs/adr/0008](../docs/adr/0008-sequential-insertion-budget.md), and the
+   amendment to [docs/adr/0006](../docs/adr/0006-retain-radial-search-clamp.md).
+
 ## Migration Note
 
 The old `autoresearch` summaries were consolidated into the curated experiment

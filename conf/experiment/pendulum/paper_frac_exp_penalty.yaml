@@ -1,0 +1,35 @@
+# @package _global_
+# pendulum/paper_frac_exp_penalty: the penalty-power sweep re-run under
+# Algorithm 2 of paper/paper_0805.tex, on the pendulum swing-up value function
+# (two-sided switching-band data; data=pendulum auto-selects the region eval).
+#
+# As in the VDP counterpart, only the guarded correction and the paper loop order
+# apply; the sphere formulation carries no moment weight.  Axes match
+# conf/experiment/pendulum/frac_exp_penalty.yaml cell for cell.
+defaults:
+  - override /model: paper_frac_exp_penalty
+  - override /data: pendulum
+
+name: pendulum_paper_frac_exp_penalty
+
+model:
+  power: 2.0
+  alpha: 1e-5
+  loss_weights: [1.0, 1.0]
+
+training:
+  correction_guard: true
+  loop_order: insertion_first
+
+data:
+  normalize: true
+
+hydra:
+  sweeper:
+    params:
+      model: paper_frac_exp_penalty
+      model.activation: relu
+      model.power: 2.0,2.01,3.0,4.0,5.0
+      model.alpha: 1e-3,1e-4,1e-5,1e-6
+      model.gamma: 0
+      model.loss_weights: "[1.0,0.0],[1.0,1.0]"

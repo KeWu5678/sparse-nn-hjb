@@ -41,14 +41,24 @@ MLFLOW_RECORDS ?= $(SWEEP_DIR)
 MLFLOW_LATEST ?= true
 MLFLOW_DRY_RUN ?= false
 MLFLOW_STOP_AFTER ?= true
-.PHONY: help openloop sweep moment-sweep moment-refine moment-followup moment-oversampling region-split paper-figures mlflow-deploy mlflow-backfill
+# Paper-conforming sweeps (paper/paper_0805.tex Algorithms 1 and 2) run each cell
+# in both insertion modes, into separate record subdirectories so one analysis can
+# compare them.  Sequential admits one atom per outer iteration, so it needs a
+# matched neuron budget rather than a matched iteration count (docs/adr/0008):
+# SEQ_ITERATIONS defaults to T_out * N_ins = 10 * 15, the batch cap.
+PAPER_MODE ?= both
+SEQ_ITERATIONS ?= 150
+
+.PHONY: help openloop sweep paper-sweep paper-p-study moment-sweep moment-refine moment-followup moment-oversampling region-split paper-figures mlflow-deploy mlflow-backfill
 
 help:  ## list targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
 	  awk 'BEGIN {FS = ":.*?## "} {printf "  %-20s %s\n", $$1, $$2}'
 	@printf "\n  %-20s %s\n" "VERBOSE=true" "also stream PDAP tables to console (always in per-run run.log)"
 	@printf "  %-20s %s\n" "JOBS=N" "parallel sweep workers (default 8)"
-	@printf "  %-20s %s\n" "EXPERIMENT=name" "sweep to run: {vdp,pendulum}/{log_penalty,frac_exp_penalty,moment_penalty}"
+	@printf "  %-20s %s\n" "EXPERIMENT=name" "sweep to run: {vdp,pendulum}/{log_penalty,frac_exp_penalty,moment_penalty,paper_log_penalty,paper_frac_exp_penalty}"
+	@printf "  %-20s %s\n" "PAPER_MODE=m" "paper-sweep insertion mode: batch|sequential|both (default both)"
+	@printf "  %-20s %s\n" "SEQ_ITERATIONS=N" "T_out for sequential insertion (default 150 = batch neuron budget)"
 	@printf "  %-20s %s\n" "MLFLOW_RECORDS=PATH" "JSON record file/dir for backfill (default current sweep dir)"
 	@printf "  %-20s %s\n" "MLFLOW_LATEST=false" "backfill all records under MLFLOW_RECORDS instead of the latest full sweep"
 	@printf "  %-20s %s\n" "MLFLOW_DRY_RUN=true" "preview MLflow backfill records without starting EC2 or uploading"
@@ -96,6 +106,55 @@ sweep:  ## run Hydra multirun EXPERIMENT ({vdp,pendulum}/{log_penalty,frac_exp_p
 	  hydra.sweep.dir=$(SWEEP_DIR) \
 	  env.verbose=$(VERBOSE) \
 	  env.seed=42
+	$(PY) "$(ANALYSIS_DIR)/analysis.py"
+
+paper-sweep:  ## run a paper-conforming sweep ({vdp,pendulum}/paper_{log,frac_exp}_penalty) in both insertion modes
+	@case "$(EXPERIMENT)" in \
+	  */paper_log_penalty|*/paper_frac_exp_penalty) ;; \
+	  *) echo "Use EXPERIMENT={vdp,pendulum}/paper_{log,frac_exp}_penalty."; exit 2 ;; \
+	esac
+	@test -f "$(ANALYSIS_DIR)/analysis.py" || { \
+	  echo "Missing $(ANALYSIS_DIR)/analysis.py, which this target runs once the"; \
+	  echo "sweep finishes.  Per-study analysis.py files are gitignored, so a clean"; \
+	  echo "checkout does not carry them.  Checked here rather than after the"; \
+	  echo "sweep, which costs hours."; \
+	  exit 2; \
+	}
+	@case "$(PAPER_MODE)" in \
+	  batch|both) \
+	    echo "== batch insertion (Algorithm as printed, N_ins=$${NINS:-15}) =="; \
+	    OMP_NUM_THREADS=1 $(PY) scripts/train.py -m +experiment=$(EXPERIMENT) \
+	      hydra/launcher=joblib hydra.launcher.n_jobs=$(JOBS) \
+	      hydra.sweep.dir=$(SWEEP_DIR)/batch \
+	      env.verbose=$(VERBOSE) env.seed=42 \
+	      training.insert_mode=batch ;; \
+	esac
+	@case "$(PAPER_MODE)" in \
+	  sequential|both) \
+	    echo "== sequential insertion (one atom per iteration, T_out=$(SEQ_ITERATIONS)) =="; \
+	    OMP_NUM_THREADS=1 $(PY) scripts/train.py -m +experiment=$(EXPERIMENT) \
+	      hydra/launcher=joblib hydra.launcher.n_jobs=$(JOBS) \
+	      hydra.sweep.dir=$(SWEEP_DIR)/sequential \
+	      env.verbose=$(VERBOSE) env.seed=42 \
+	      training.insert_mode=sequential \
+	      training.num_iterations=$(SEQ_ITERATIONS) ;; \
+	esac
+	$(PY) "$(ANALYSIS_DIR)/analysis.py"
+
+paper-p-study:  ## sweep the moment order p, which is live under the normalized objective even at beta=0
+	@case "$(EXPERIMENT)" in \
+	  */paper_log_penalty) ;; \
+	  *) echo "Use EXPERIMENT={vdp,pendulum}/paper_log_penalty (p is inert on the sphere)."; exit 2 ;; \
+	esac
+	OMP_NUM_THREADS=1 $(PY) scripts/train.py -m +experiment=$(EXPERIMENT) \
+	  hydra/launcher=joblib hydra.launcher.n_jobs=$(JOBS) \
+	  hydra.sweep.dir=$(SWEEP_DIR)/p_study \
+	  env.verbose=$(VERBOSE) env.seed=42 \
+	  training.insert_mode=batch \
+	  model.activation=softplus,tanh,gaussian,gelu_squared \
+	  model.moment_order=2.01,2.5,3,4 \
+	  model.alpha=1e-4,1e-5 \
+	  model.gamma=1 model.loss_weights='[1.0,1.0]'
 	$(PY) "$(ANALYSIS_DIR)/analysis.py"
 
 moment-sweep:  ## run the seed-42 moment screen; beta=0 baseline is deduplicated across p
