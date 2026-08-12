@@ -41,23 +41,38 @@ than per iteration.
 
 - Sequential can reach every width batch can, so the frontier is comparable over
   its whole range instead of only at the sparse end.
-- Cost rises roughly 15x per run: the candidate search and the coefficient solve
-  both run 150 times instead of 10. At the recorded 14 s median this is a few
-  minutes per run, so a 224-cell sweep moves from about 7 minutes to under two
-  hours at `JOBS=8`. Affordable, but no longer free — a full paper-conforming
-  sweep of both problems in both modes is a multi-hour job, not an interactive
-  one.
+- **The budget is not what binds, and the cost is far below the naive estimate.**
+  Reasoning from the iteration count alone predicts a 15x slowdown (150 solves
+  instead of 10). Measured on the `frac_exp` sweeps, it is closer to 3x, because
+  `insertion_first` also adopts the algorithms' termination rule and stops as
+  soon as no candidate clears the threshold — which fires long before 150:
+
+  | sweep / mode | median elapsed | median iterations | `T_out` | terminated early |
+  |---|---|---|---|---|
+  | vdp batch | 4.7 s | 4 | 10 | 37/40 |
+  | vdp sequential | 14.1 s | 15 | 150 | 40/40 |
+  | pendulum batch | 6.0 s | 6 | 10 | 30/40 |
+  | pendulum sequential | 16.1 s | 25.5 | 150 | 36/40 |
+
+  So `T_out = 150` is a ceiling that is never reached, not a budget that is
+  spent. The decision stands — a smaller `T_out` *would* truncate, since
+  sequential runs to 25+ iterations and the cap must not be the thing that stops
+  them — but it is nearly free, and the earlier framing of this as a multi-hour
+  trade was wrong.
+- The same measurement says something about the preserved loop order, which never
+  terminates: most of its configured iterations were inserting nothing. The
+  paper's stopping rule is not only cheaper, it is the only one that distinguishes
+  "converged" from "ran out of budget".
 - The frontier gains resolution as a side effect. Batch runs move the neuron axis
   in jumps of up to 15, while sequential advances one neuron at a time, so
   `fig:neuron_h1_frontier` becomes a genuine curve rather than a coarse
   staircase.
-- The comparison is budget-matched, not compute-matched. A sequential run costs
-  far more than the batch run it is compared against, so nothing here supports a
+- The comparison is budget-matched, not compute-matched. A sequential run still
+  costs about 3x the batch run it is compared against, so nothing here supports a
   claim about time-to-accuracy — only about accuracy at a given width.
-- `insertion_first` terminates when no candidate clears the threshold, so a
-  sequential run that exhausts its candidates stops well before 150 iterations.
-  "Terminated" versus "hit the cap" is worth reporting, since only the former
-  means the algorithm converged in its own terms.
+- "Terminated" versus "hit the cap" is reported per sweep, since only the former
+  means the algorithm converged in its own terms. On the evidence above it is
+  almost always the former.
 
 ## Alternatives considered
 
