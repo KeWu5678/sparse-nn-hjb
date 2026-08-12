@@ -41,28 +41,36 @@ than per iteration.
 
 - Sequential can reach every width batch can, so the frontier is comparable over
   its whole range instead of only at the sparse end.
-- **The budget is not what binds, and the cost is far below the naive estimate.**
-  Reasoning from the iteration count alone predicts a 15x slowdown (150 solves
-  instead of 10). Measured on the `frac_exp` sweeps, it is closer to 3x, because
-  `insertion_first` also adopts the algorithms' termination rule and stops as
-  soon as no candidate clears the threshold — which fires long before 150:
+- **The cost is far below the naive estimate.** Reasoning from the iteration
+  count alone predicts a 15x slowdown (150 solves instead of 10). Measured across
+  all four sweeps it is about 2–3x, because `insertion_first` also adopts the
+  algorithms' termination rule and stops as soon as no candidate clears the
+  threshold, which usually fires well before 150:
 
-  | sweep / mode | median elapsed | median iterations | `T_out` | terminated early |
-  |---|---|---|---|---|
-  | vdp batch | 4.7 s | 4 | 10 | 37/40 |
-  | vdp sequential | 14.1 s | 15 | 150 | 40/40 |
-  | pendulum batch | 6.0 s | 6 | 10 | 30/40 |
-  | pendulum sequential | 16.1 s | 25.5 | 150 | 36/40 |
+  | sweep / mode | `T_out` | median iters | max iters | hit the cap | median elapsed |
+  |---|---|---|---|---|---|
+  | vdp frac_exp batch | 10 | 4 | 10 | 3/40 | 4.7 s |
+  | vdp frac_exp sequential | 150 | 15 | 108 | 0/40 | 14.1 s |
+  | pendulum frac_exp batch | 10 | 6 | 10 | 10/40 | 6.0 s |
+  | pendulum frac_exp sequential | 150 | 25.5 | 150 | 4/40 | 16.1 s |
+  | vdp log batch | 10 | 10 | 10 | 150/224 | 7.2 s |
+  | vdp log sequential | 150 | 27.5 | 150 | 30/224 | 16.0 s |
+  | pendulum log batch | 10 | 10 | 10 | 144/224 | 8.0 s |
+  | pendulum log sequential | 150 | 25 | 150 | 35/224 | 16.0 s |
 
-  So `T_out = 150` is a ceiling that is never reached, not a budget that is
-  spent. The decision stands — a smaller `T_out` *would* truncate, since
-  sequential runs to 25+ iterations and the cap must not be the thing that stops
-  them — but it is nearly free, and the earlier framing of this as a multi-hour
-  trade was wrong.
-- The same measurement says something about the preserved loop order, which never
-  terminates: most of its configured iterations were inserting nothing. The
-  paper's stopping rule is not only cheaper, it is the only one that distinguishes
-  "converged" from "ran out of budget".
+  The full paper-conforming re-run of both problems in both modes took about
+  75 minutes at `JOBS=8`, not the several hours first estimated.
+- **The cap still binds, which is why it is 150 and not smaller.** A median
+  sequential run stops itself at 25–28 iterations, but 30–35 of 224 log-penalty
+  cells reach 150 and are truncated by the budget. Those are the widest, least
+  regularized fits — exactly the top of the frontier the comparison is for. A
+  smaller `T_out` would have cut them, so the decision holds; what was wrong in
+  the first version of this record was the cost, not the choice.
+- The same measurement indicts the preserved loop order, which never terminates.
+  Its batch runs hit the configured 10 iterations in roughly two thirds of the
+  log-penalty cells and stopped early in the rest — but having no stopping rule,
+  it could not report which was which. The paper's rule is the only one that
+  distinguishes "converged" from "ran out of budget".
 - The frontier gains resolution as a side effect. Batch runs move the neuron axis
   in jumps of up to 15, while sequential advances one neuron at a time, so
   `fig:neuron_h1_frontier` becomes a genuine curve rather than a coarse

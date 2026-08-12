@@ -119,13 +119,29 @@ So the clamp remains load-bearing across most of the sweep, and
 ever tighten the search, never loosen it.
 
 What changes is that the guarantee is now demonstrable somewhere. At `p = 4` the
-theorem radius binds strictly inside the clamp, so those cells are searched over
-a region the theory certifies rather than one the implementation imposes. The
-`p`-study is where that is reportable; elsewhere the honest statement remains the
-one this record already makes — confinement is proved, not demonstrated.
+theorem radius binds strictly inside the clamp for every `s₁ = 1` activation, so
+those cells are searched over a region the theory certifies rather than one the
+implementation imposes:
 
-`gelu_squared` has `s₁ = 2`, so `p = 2.01` gives an exponent of 100 and a
-numerically meaningless radius. No threshold guards against this: the value is a
-valid upper bound, merely a vacuous one, and `min(R(μ), e⁵)` reduces it to the
-clamp with no special case. `p ≤ s₁` fails the theorem's hypothesis outright, and
-there `certificate_radius` returns `None` and the clamp applies.
+| activation | `s₁` | `p = 4`, `α = 1e-4` | `p = 4`, `α = 1e-5` |
+|---|---|---|---|
+| softplus | 1 | R = 56.5 | R = 121.7 |
+| tanh, gaussian | 1 | R = 50.9 | R = 109.7 |
+| gelu_squared | 2 | clamp (148.4) | clamp (148.4) |
+
+`gelu_squared` is the exception in both directions: `s₁ = 2` makes the exponent
+`1/(p − s₁)` equal to 100 at `p = 2.01` (a valid but vacuous bound) and still only
+0.5 at `p = 4`, which is not enough to reach inside the clamp.
+
+The `p`-study measures what this costs. It costs nothing: at `p = 4`, where the
+search is restricted to the certified region, the fits are no worse than at
+`p = 2.01`, where the clamp governs (`softplus` 0.1158 against 0.1246,
+`tanh` 0.1078 against 0.1173, `gaussian` 0.1012 against 0.1104 relative H¹). So
+the theorem radius is not merely valid but harmless, and at `p = 4` the
+confinement claim is demonstrated rather than only proved. Elsewhere the honest
+statement remains the one this record already makes.
+
+No threshold guards the vacuous case: the value is a valid upper bound, merely an
+uninformative one, and `min(R(μ), e⁵)` reduces it to the clamp with no special
+case. `p ≤ s₁` fails the theorem's hypothesis outright, and there
+`certificate_radius` returns `None` and the clamp applies.

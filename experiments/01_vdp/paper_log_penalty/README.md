@@ -25,7 +25,8 @@ divides by `M` rather than `M·d`, which rescales `α` by `d = 2` (see
 
 ## Sweep axes
 
-Identical to `../log_penalty`, cell for cell, so the grid is not a variable:
+Identical to `../log_penalty`'s **current config**, cell for cell, so the grid is
+not a variable:
 
 | axis | values |
 |---|---|
@@ -44,6 +45,14 @@ L2/H1) — no region split.
 because it sets the weight `w_p` inside `φ`. It is pinned here rather than
 swept, so this study varies only what `../log_penalty` varied; the `p` axis is
 the separate `paper-p-study` target.
+
+**Caveat on comparing against `../log_penalty`.** Its *stored records* predate a
+change to its own config: they cover `lisht`, `snake_b0_25`, `silu_squared` and
+`rcip_2`, and do not cover `leaky_relu`. So a direct comparison is available on
+the six shared activations only, and `leaky_relu` has no comparator baseline
+until `../log_penalty` is re-run. (The pendulum counterpart and both
+`frac_exp_penalty` studies do not have this problem — their stored records match
+their configs.)
 
 ## Insertion modes
 
