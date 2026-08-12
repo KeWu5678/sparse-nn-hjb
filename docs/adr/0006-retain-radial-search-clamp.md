@@ -4,7 +4,9 @@ Date: 2026-07-25
 
 ## Status
 
-Accepted
+Accepted. Amended 2026-08-12 — see "Amendment: the revised objective" below.
+The decision stands; its justification now rests on `alpha` rather than on the
+`beta` this record was written against.
 
 ## Context
 
@@ -77,3 +79,53 @@ comparison would no longer be over a common dictionary.
 rows would exhibit the escape directly instead of having it suppressed.
 Rejected: the `β = 0` runs on tanh/softplus may not terminate usefully, which
 would cost the accuracy baselines that anchor the tables.
+
+## Amendment: the revised objective
+
+Date: 2026-08-12
+
+The manuscript's Sections 3–5 no longer carry an additive `β·Ψ_p` term. The
+moment norm defines the measure space, and the objective is
+`J = L(μ) + α·Φ_φ(μ_p)` with `μ_p = w_p·μ`. So the confinement radius this
+record weighed — `R_* = (2^{s₁}·C_P/β)^{1/(p−s₁)}`, scaling like
+`β^{−1/(p−s₁)}` — no longer exists, and the argument above cannot be evaluated
+as written.
+
+Its replacement is the quantitative insertion theorem's radius, which is driven
+by `α` rather than `β`:
+
+```
+R(μ) = max{1, (2^{s₁+1}·C·‖r_μ‖ / (α·L_φ))^{1/(p − s₁)}},
+C = C_ρ(A_M^{s₀} + A_M^{s₁−1}).
+```
+
+The conclusion is unchanged, for a structurally identical reason. `α` is small
+exactly where the best accuracy sits, so the radius is enormous there. Measured
+on `VDP_beta_0.1_grid_30x30` after max-abs normalization, with softplus
+(`C_ρ = 1`, `s₀ = s₁ = 1`): the sample extent is `A_M = √3 = 1.7321` — the
+normalizer puts every coordinate in `[-1,1]`, so `|x| ≤ √2` — giving
+`C = 2.7321`, and `‖r_μ‖ = 1.6216` at the zero network, where the radius is
+largest.
+
+| `p` | `1/(p − s₁)` | `R(μ)` at `α = 1e-5` | binds against `e⁵ ≈ 148`? |
+|---|---|---|---|
+| 2.01 | 0.99 | 1.5×10⁶ | no |
+| 2.5 | 0.67 | 1.5×10⁴ | no |
+| 3 | 0.5 | 1.3×10³ | no |
+| 4 | 0.33 | 1.2×10² | **yes** |
+
+So the clamp remains load-bearing across most of the sweep, and
+`training.radial_cap=theorem` is applied as `min(R(μ), e⁵)`: the theorem can only
+ever tighten the search, never loosen it.
+
+What changes is that the guarantee is now demonstrable somewhere. At `p = 4` the
+theorem radius binds strictly inside the clamp, so those cells are searched over
+a region the theory certifies rather than one the implementation imposes. The
+`p`-study is where that is reportable; elsewhere the honest statement remains the
+one this record already makes — confinement is proved, not demonstrated.
+
+`gelu_squared` has `s₁ = 2`, so `p = 2.01` gives an exponent of 100 and a
+numerically meaningless radius. No threshold guards against this: the value is a
+valid upper bound, merely a vacuous one, and `min(R(μ), e⁵)` reduces it to the
+clamp with no special case. `p ≤ s₁` fails the theorem's hypothesis outright, and
+there `certificate_radius` returns `None` and the clamp applies.
