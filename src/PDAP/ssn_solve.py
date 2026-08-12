@@ -5,7 +5,7 @@ just the model's trainable ``nn.Module`` parameters, read and written with torch
 ``parameters_to_vector`` / ``vector_to_parameters``; the model only has to supply
 the feature maps (``jacobians`` -> ``(Phi_v, Phi_g)``) and the penalized /
 nonnegative coordinate masks (``penalty_masks``). The data Hessian is the
-Gauss-Newton form ``(1/Nx)(w1 Phi_v'Phi_v + w2 Phi_g'Phi_g)``; the closure is the
+Gauss-Newton form ``(1/M)(w1 Phi_v'Phi_v + w2 Phi_g'Phi_g)``; the closure is the
 data loss on ``Phi @ theta`` plus the nonconvex penalty on the penalized block.
 :class:`src.SSN.SSN` owns the semismooth-Newton step.
 
@@ -24,7 +24,7 @@ from torch.nn.utils import parameters_to_vector, vector_to_parameters
 
 from ..SSN import SSN
 from ..SSN.penalty import _phi
-from .moment import moment_weight
+from .moment import atom_normalizer, moment_weight
 
 if TYPE_CHECKING:
     from ..models.base import PDAPModel
@@ -43,6 +43,12 @@ class Objective:
     ``moment_beta`` / ``moment_order`` carry the parameter-moment axis:
     ``beta * sum_j (1 + |omega_j|^p) |c_j|``.  ``moment_beta = 0`` (default) means
     the axis is off; when on it is validated in :class:`src.PDAP.PDAP`.
+
+    ``kind`` selects how the moment weight enters (see ``model.objective``):
+    ``"additive_moment"`` keeps the separate ``beta`` term, ``"normalized_moment"``
+    is the revised paper objective ``l^M + alpha * sum phi(w_p(omega_n)|c_n|)``,
+    realized by the ``u = w_p c`` substitution of
+    :func:`src.PDAP.moment.atom_normalizer`.
     """
 
     alpha: float = 1e-5
@@ -51,6 +57,12 @@ class Objective:
     loss_weights: Tuple[float, float] = (1.0, 1.0)
     moment_beta: float = 0.0
     moment_order: float = 2.0
+    kind: str = "additive_moment"
+
+    @property
+    def normalized(self) -> bool:
+        """True when the penalty is evaluated at the normalized measure ``mu_p``."""
+        return self.kind == "normalized_moment"
 
 
 @dataclass(frozen=True)
@@ -94,8 +106,7 @@ def ssn_solve(
     Phi_g = Phi_g.detach()
     Vt = V.reshape(-1).detach()
     dVt = dV.reshape(-1).detach()
-    N, d = X.shape[0], X.shape[1]
-    Nx = N * d
+    Nx = X.shape[0]  # M, the sample count: the empirical fidelity is 1/(2M) * sum_m
     w1, w2 = objective.loss_weights
     alpha, gamma, th, q = objective.alpha, objective.gamma, objective.th, model.q
 
@@ -107,6 +118,24 @@ def ssn_solve(
     params = [p for p in model.parameters() if p.requires_grad]
     theta = torch.nn.Parameter(parameters_to_vector(params).detach().clone())
     penalized, nonneg = model.penalty_masks()
+
+    # Normalized objective: solve in u = w_p * c over the dictionary K_p = K/w_p,
+    # so the penalty seen below is the ordinary phi(|u|) and none of the SSN math
+    # changes.  PDAP restricts this axis to the signed model, whose theta is
+    # exactly the per-atom outer weight, so the column scaling aligns with theta.
+    scale = None
+    if objective.normalized:
+        W, b, _ = model.get_atoms()
+        scale = atom_normalizer(W, b, normalized=True, p=objective.moment_order)
+        if scale.numel() != theta.numel():
+            raise RuntimeError(
+                "normalized_moment expects one trainable coordinate per atom "
+                f"(got {theta.numel()} for {scale.numel()} atoms)"
+            )
+        Phi_v = Phi_v / scale
+        Phi_g = Phi_g / scale
+        H = (w1 / Nx) * (Phi_v.T @ Phi_v) + (w2 / Nx) * (Phi_g.T @ Phi_g)
+        theta = torch.nn.Parameter((theta.detach() * scale).clone())
 
     # Parameter-moment axis: per-coordinate L1 weight beta * w_p(omega_j) aligned
     # to theta (theta is the atom outer weights for the signed model, the only
@@ -140,7 +169,8 @@ def ssn_solve(
     for _ in range(iterations):
         prev = float(optimizer.step(closure).detach())
 
-    vector_to_parameters(theta.detach(), params)
+    solved = theta.detach() if scale is None else theta.detach() / scale
+    vector_to_parameters(solved, params)
     if verbose:
         logger.debug("Output-weight solve complete  train_loss=%.6e", prev)
     return prev

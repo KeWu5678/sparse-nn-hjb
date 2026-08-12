@@ -41,6 +41,7 @@ def warm_start(
     nonneg: bool = False,
     moment_beta: float = 0.0,
     moment_order: float = 2.0,
+    normalized: bool = False,
     verbose: bool = False,
 ) -> torch.Tensor:
     """Return initial outer weights ``(n_new,)`` for the new atoms.
@@ -58,8 +59,7 @@ def warm_start(
     res_v = res_v.detach().reshape(-1)
     res_dv = res_dv.detach().reshape(-1)
     X_det = X.detach()
-    N, d = X_det.shape[0], X_det.shape[1]
-    Nx = N * d
+    Nx = X_det.shape[0]  # M, the sample count (empirical fidelity is 1/(2M) * sum_m)
     w1, w2 = loss_weights
     p = power
 
@@ -76,6 +76,16 @@ def warm_start(
                 act_deriv = torch.autograd.grad(act_tmp.sum(), pre_tmp, create_graph=False)[0].detach()
         dS_dz = act_deriv if p == 1.0 else p * act ** (p - 1) * act_deriv
         S_grad = (dS_dz.unsqueeze(2) * W_new.unsqueeze(0)).permute(0, 2, 1).reshape(-1, n_new)
+
+        # Normalized objective: run the whole warm start on the normalized
+        # dictionary K_p = K/w_p, so ``out`` is the normalized coefficient u and the
+        # penalty seen by the prox is the ordinary phi(|u|).  Converted back to the
+        # physical c = u/w_p on return.
+        w_p_atoms = None
+        if normalized:
+            w_p_atoms = moment_weight(W_new, b_new, moment_order).reshape(-1)
+            S_val = S_val / w_p_atoms
+            S_grad = S_grad / w_p_atoms
 
         profiles = (w1 / Nx) * (S_val.T @ res_v) + (w2 / Nx) * (S_grad.T @ res_dv)
         abs_profiles = profiles.abs()
@@ -109,6 +119,8 @@ def warm_start(
         else:
             tau = 0.0
         out = tau * coeff
+        if w_p_atoms is not None:
+            out = out / w_p_atoms          # u -> physical coefficient c
         if nonneg:
             out = out.clamp_min(0.0)
         if verbose:

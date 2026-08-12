@@ -26,14 +26,15 @@ def data_loss_terms(
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """Return ``(data_loss, value_loss, grad_loss)`` for the data-fidelity term.
 
-    MSE is normalized by ``Nx = N * d`` (matching the MATLAB reference, where
-    ``Nx = numel(xhat) = d * N``) and halved.  ``data_loss`` weights the two by
+    MSE is normalized by the sample count ``M`` and halved, so that
+    ``data_loss`` is the empirical fidelity of the paper,
+    ``l^M = (1/2M) sum_m (|r(x^m)|^2 + |grad r(x^m)|^2)``, weighted by
     ``loss_weights = (w1, w2)``.  Differentiable (plain torch ops), so it can sit
     inside an SSN closure as well as serve evaluation.
     """
-    nx = v_true.shape[0] * dv_true.shape[1]
-    value_loss = torch.sum((v_pred - v_true) ** 2) / (2 * nx)
-    grad_loss = torch.sum((dv_pred - dv_true) ** 2) / (2 * nx)
+    m = v_true.shape[0]
+    value_loss = torch.sum((v_pred - v_true) ** 2) / (2 * m)
+    grad_loss = torch.sum((dv_pred - dv_true) ** 2) / (2 * m)
     w1, w2 = loss_weights
     data_loss = w1 * value_loss + w2 * grad_loss
     return data_loss, value_loss, grad_loss

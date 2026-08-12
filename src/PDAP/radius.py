@@ -1,0 +1,90 @@
+"""The theorem-derived search radius for the radial candidate search.
+
+The quantitative insertion theorem (paper/paper_0805.tex, Section 5) states that
+under the growth bound
+
+    w_p(omega) * ||K_p(omega)||  =  ||K^M(omega)||  <=  C (1 + |omega|)^s,   s < p,
+
+every point with ``|P_p(omega)| > alpha*L_phi`` -- hence every candidate the
+insertion condition can accept, and every maximizer of ``|P_p|`` -- lies in the
+closed ball of radius
+
+    R(mu) = max{ 1, ( 2^(s+1) * C * ||r_mu|| / (alpha*L_phi) )^(1/(p - s)) }.
+
+``s`` is the activation's ``s1`` and ``C`` follows from its ``(C_rho, s0, s1)``
+together with the sample extent, so nothing here is calibrated numerically:
+
+    |K(omega)(x)|      <= C_rho * A_M^s0       * (1+|omega|)^s0
+    |grad K(omega)(x)| <= C_rho * A_M^(s1 - 1) * (1+|omega|)^s1     (|a| <= |omega|)
+    ==>  C = C_rho * (A_M^s0 + A_M^(s1 - 1)),   A_M = max{1, max_m sqrt(1+|x^m|^2)}.
+
+The empirical norm ``||.||_M`` averages over the samples rather than integrating
+over ``D``, which is why the ``|D|^(1/2)`` of the population lemma drops out.
+
+The radius only ever *shrinks* the search, so it is applied as
+``min(R(mu), exp(5))`` against the historical clamp (docs/adr/0006).  For the
+moment orders in use it is typically far larger than that clamp and therefore
+inert; it binds mainly at large ``p``, where ``1/(p - s1)`` is small.
+"""
+
+from __future__ import annotations
+
+import math
+from typing import Optional
+
+import torch
+
+from ..config.activations import Growth
+
+__all__ = ["FIXED_LOG_CLAMP", "sample_extent", "growth_constant", "certificate_radius"]
+
+# The historical radial clamp: the search runs over log-scale s in [-3, 5].
+FIXED_LOG_CLAMP = 5.0
+
+
+def sample_extent(X: torch.Tensor) -> float:
+    """``A_M = max{1, max_m sqrt(1 + |x^m|^2)}``, the data half of the constant."""
+    X = torch.as_tensor(X, dtype=torch.float64)
+    if X.numel() == 0:
+        return 1.0
+    return float(torch.sqrt(1.0 + (X * X).sum(dim=1)).max().clamp_min(1.0))
+
+
+def growth_constant(growth: Growth, extent: float) -> float:
+    """``C = C_rho * (A_M^s0 + A_M^(s1-1))`` from the activation and the samples."""
+    return growth.C_rho * (extent ** growth.s0 + extent ** (growth.s1 - 1.0))
+
+
+def certificate_radius(
+    growth: Optional[Growth],
+    *,
+    extent: float,
+    residual_norm: float,
+    alpha: float,
+    moment_order: float,
+    l_phi: float = 1.0,
+) -> Optional[float]:
+    """``min(R(mu), exp(5))``, or ``None`` when the theorem does not apply.
+
+    Returns ``None`` -- meaning "keep the fixed clamp" -- when the activation
+    declares no growth data, when ``p <= s1`` (the theorem's hypothesis fails, so
+    there is no finite radius to claim), or when the inputs are degenerate.
+    """
+    if growth is None or alpha <= 0.0 or l_phi <= 0.0:
+        return None
+    gap = moment_order - growth.s1
+    if gap <= 0.0:
+        return None
+    if residual_norm <= 0.0:
+        # A zero residual has no certificate to violate; nothing to search for.
+        return math.exp(FIXED_LOG_CLAMP)
+
+    C = growth_constant(growth, extent)
+    base = (2.0 ** (growth.s1 + 1.0)) * C * residual_norm / (alpha * l_phi)
+    try:
+        radius = max(1.0, base ** (1.0 / gap))
+    except OverflowError:
+        return math.exp(FIXED_LOG_CLAMP)
+    if not math.isfinite(radius):
+        return math.exp(FIXED_LOG_CLAMP)
+    return min(radius, math.exp(FIXED_LOG_CLAMP))

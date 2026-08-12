@@ -64,6 +64,18 @@ class ModelConfig:
     # signed kind, and profile insertion -- and PDAP raises otherwise.
     moment_beta: float = 0.0    # 0 => moment axis off; > 0 => on
     moment_order: float = 2.0   # p in the weight w_p(omega) = 1 + |omega|^p
+    # How the moment weight w_p enters the objective (paper/paper_0805.tex).
+    #   "additive_moment"   -- the preserved comparator
+    #                          J = l^M + alpha*sum phi(|c_n|) + beta*sum w_p|c_n|,
+    #                          i.e. the moment norm as a separate weighted-L1 term.
+    #   "normalized_moment" -- the revised paper objective (Section 3),
+    #                          J = l^M + alpha*sum phi(w_p(omega_n)*|c_n|),
+    #                          the penalty of the *normalized* measure mu_p = w_p*mu.
+    #                          moment_beta plays no role and must be 0; moment_order
+    #                          p is active here even at beta = 0.
+    # Implemented by the substitution u = w_p*c, which turns the normalized problem
+    # into the ordinary one with the dictionary K replaced by K_p = K/w_p.
+    objective: str = "additive_moment"
 
 
 @dataclass
@@ -71,10 +83,52 @@ class TrainingConfig:
     """How the model is fit: outer PDAP loop + SSN solver + insertion constants."""
 
     # outer PDAP loop
-    num_iterations: int = 10
-    num_insertion: int = 50
-    max_insert: int = 15
-    prune_amp_tol: float = 1e-8
+    num_iterations: int = 10      # T_out
+    num_insertion: int = 50       # N_trial, candidates sampled per iteration
+    max_insert: int = 15          # N_ins, cap on atoms inserted per iteration (batch mode)
+    prune_amp_tol: float = 1e-8   # eps_prune: drop atoms with |c_n| <= this
+    # --- paper-conformance axes (paper/paper_0805.tex, Section 5) --------------
+    # Each defaults to the behavior in force before the revised paper, so the
+    # default config reproduces the preserved comparator end to end.
+    #
+    # insert_init -- initial outer weight of a freshly inserted atom.
+    #   "warm_start"  -- the coordinate-descent batch warm start: one combined
+    #                    descent direction, one scalar prox step, so the best atom
+    #                    gets a real coefficient and the rest ~sqrt(eps).
+    #   "guaranteed"  -- the theorem's per-atom coefficient
+    #                    c(omega) = -Delta(mu,omega)/(w_p(omega)*||K_p(omega)||^2)
+    #                              * sign(P_p(omega)),
+    #                    which decreases the objective by at least
+    #                    Delta^2/(2||K_p||^2).  Ignored by finite_step insertion,
+    #                    whose c* is already the paper's initialization.
+    insert_init: str = "warm_start"
+    # insert_mode -- how many atoms enter per outer iteration.
+    #   "batch"       -- up to max_insert candidates at once, against one frozen
+    #                    residual.  Algorithm 1/2 as printed; the paper states that
+    #                    the per-step guarantees do not survive the cross terms.
+    #   "sequential"  -- exactly one atom, the argmax of |P_p|, per iteration.  The
+    #                    variant the rate bound actually requires.  Width grows by
+    #                    at most 1 per iteration, so raise num_iterations to match.
+    insert_mode: str = "batch"
+    # correction_guard -- accept the SSN correction only if it did not increase the
+    # objective, otherwise keep the post-insertion coefficients.  SSN is a local
+    # method on a nonconvex penalty with no descent guarantee (and for q < 1 the
+    # penalty is not locally Lipschitz at 0), so this is what makes the outer loop
+    # monotone.
+    correction_guard: bool = False
+    # loop_order -- where the correction sits relative to the insertion.
+    #   "correction_first"  -- insert once up front, then per iteration
+    #                          correct -> prune -> record -> insert.  Leaves the
+    #                          final batch uncorrected and counted in final_neurons.
+    #   "insertion_first"   -- per iteration insert -> correct -> prune -> record,
+    #                          the order of Algorithms 1 and 2.
+    loop_order: str = "correction_first"
+    # radial_cap -- upper bound on the radial candidate search (non-sphere only).
+    #   "fixed"     -- the exp(5) clamp (see docs/adr/0006).
+    #   "theorem"   -- min(R(mu_t), exp(5)) with R from the quantitative insertion
+    #                  theorem; requires growth data for the activation, and falls
+    #                  back to the clamp when the activation declares none.
+    radial_cap: str = "fixed"
     # SSN solver (src/SSN/optimizer.py defaults + the hardcoded iterations=20)
     lr: float = 1.0
     method: str = "levenberg_marquardt"   # "levenberg_marquardt" | "steihaug_cg"

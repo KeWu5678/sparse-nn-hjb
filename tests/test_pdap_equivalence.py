@@ -15,6 +15,13 @@ Notes:
 - the finite-step baseline was re-captured when PDAP pruning changed from
   duplicate-merge pruning to amplitude-only pruning; this keeps one additional
   atom in the short characterization run.
+- all three were re-captured when the empirical fidelity dropped the MATLAB
+  ``Nx = M*d`` divisor for the paper's ``1/(2M)``.  That is an exact
+  reparametrization of the objective (``alpha_paper = d * alpha_legacy``), so
+  the minimizer is unchanged, but it does not reproduce the old *run*: the
+  candidate L-BFGS (``insertion.py``) keeps torch's absolute
+  ``tolerance_grad=1e-7``, so scaling the profile by ``d`` shifts each refined
+  argmax by ~1e-6 and the trajectories separate.
 """
 
 from __future__ import annotations

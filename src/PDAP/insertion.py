@@ -71,10 +71,11 @@ def _generate_candidates(
     activation, power, loss_weights, sample_sphere, N,
     merge_tol, two_sided, use_sphere, existing_atoms,
     lbfgs_lr=1e-2, lbfgs_steps=200, moment_beta=0.0, moment_order=2.0,
+    normalized=False, radius=None,
 ) -> Tuple[torch.Tensor, torch.Tensor, int]:
     """Return (a_t, b_t, n_after_merge): distinct dual-profile maximisers on S^d."""
     K, d_dim = X.shape
-    Kx = K * d_dim  # MATLAB: numel(xhat) = d * N_points
+    Kx = K  # M, the sample count: the empirical fidelity is 1/(2M) * sum_m
     w1, w2 = loss_weights
 
     # Normalize residual for the L-BFGS direction search (MATLAB find_max:385).
@@ -141,14 +142,21 @@ def _generate_candidates(
             break
 
     # Step 2.5: non-sphere activations also optimise a per-direction scale r>0.
-    # With the moment axis on, the scale search maximises the net margin
-    # |P(r*d)| - beta*w_p(r*d) rather than the raw profile, so a real
-    # fidelity-vs-moment tradeoff confines r (replacing the ad-hoc exp(5) clamp,
-    # which is kept only as a numeric safety rail).  The profile here is against
-    # the *normalized* residual, so the moment cost is divided by res_norm to
-    # share units with it; argmax is unchanged relative to the raw-unit tradeoff.
+    # What the scale search maximises depends on the objective:
+    #   * plain              -- the raw profile |P(r*d)|, confined only by the clamp.
+    #   * additive moment    -- the net margin |P(r*d)| - beta*w_p(r*d), so a real
+    #                           fidelity-vs-moment tradeoff confines r.  The profile
+    #                           here is against the *normalized* residual, so the
+    #                           moment cost is divided by res_norm to share units
+    #                           with it; argmax is unchanged in raw units.
+    #   * normalized moment  -- the normalized profile |P_p(r*d)| = |P|/w_p, which is
+    #                           the quantity the revised paper's insertion condition
+    #                           tests and is confined by p > s_1 on its own.
+    # ``radius`` caps the search; None keeps the historical exp(5) clamp
+    # (docs/adr/0006), and the theorem radius enters as min(R(mu), exp(5)).
     if not use_sphere:
         moment_scale = float(moment_beta) / float(res_norm) if moment_beta > 0.0 else 0.0
+        log_hi = 5.0 if radius is None else float(np.log(max(float(radius), np.exp(-3.0))))
         scaled_a, scaled_b = [], []
         for a_hat, b_hat in zip(a_t, b_t):
             s = torch.tensor([0.0], dtype=torch.float64, requires_grad=True)
@@ -157,16 +165,18 @@ def _generate_candidates(
 
             def closure_s():
                 opt_s.zero_grad()
-                r = torch.exp(s.clamp(-3, 5))
+                r = torch.exp(s.clamp(-3, log_hi))
                 obj = _profile_value(X, r * a_h, r * b_h, activation, power,
                                      w1, w2, Kx, res_v_n, res_dv_n, two_sided)
-                if moment_scale > 0.0:
+                if normalized:
+                    obj = obj / moment_weight(r * a_h, r * b_h, moment_order)
+                elif moment_scale > 0.0:
                     obj = obj - moment_scale * moment_weight(r * a_h, r * b_h, moment_order)
                 (-obj).backward()
                 return -obj
 
             opt_s.step(closure_s)
-            best_r = torch.exp(s.clamp(-3, 5)).detach()
+            best_r = torch.exp(s.clamp(-3, log_hi)).detach()
             scaled_a.append((best_r * a_hat).detach())
             scaled_b.append((best_r * b_hat).detach())
         a_t = torch.stack(scaled_a)
@@ -184,16 +194,30 @@ def profile_threshold(
     max_insert=15, merge_tol=1e-2, two_sided=True, use_sphere=True,
     existing_atoms=None, verbose=True,
     lbfgs_lr=1e-2, lbfgs_steps=200, moment_beta=0.0, moment_order=2.0,
-) -> Tuple[np.ndarray, np.ndarray]:
-    """Accept atoms whose (unnormalised) dual profile exceeds the threshold.
+    normalized=False, insert_init="warm_start", radius=None,
+) -> Tuple[np.ndarray, np.ndarray, Optional[np.ndarray]]:
+    """Accept atoms whose dual profile clears the insertion threshold.
 
-    Without the moment axis the threshold is ``alpha`` (the classical rule).  With
-    it (``moment_beta > 0``) the threshold is the draft's insertion condition
-    ``alpha + beta*w_p(omega)`` -- a distant candidate must clear a higher bar --
-    and candidates are ranked by the margin above it.
+    Three acceptance rules, selected by the objective in force:
+
+      * plain (``moment_beta = 0``, not normalized) -- the classical
+        ``|P(omega)| > alpha``.
+      * additive moment (``moment_beta > 0``) -- the preserved comparator's
+        ``|P(omega)| > alpha + beta*w_p(omega)``, so a distant candidate must clear
+        a higher bar.
+      * normalized (``normalized=True``) -- the revised paper's
+        ``|P_p(omega)| > alpha*L_phi`` with ``P_p = P/w_p``.  ``L_phi = phi'(0+) = 1``
+        for the whole log family, so the threshold is just ``alpha``.
+
+    Candidates are ranked by their margin above the threshold, which in the
+    normalized case is the certificate violation
+    ``Delta(mu,omega) = max{|P_p(omega)| - alpha*L_phi, 0}``.
+
+    Returns ``(W, b, c)``; ``c`` is ``None`` unless ``insert_init="guaranteed"``,
+    in which case it carries the theorem's per-atom coefficient.
     """
     K, d_dim = X.shape
-    Kx = K * d_dim
+    Kx = K  # M, the sample count (empirical fidelity is 1/(2M) * sum_m)
     w1, w2 = loss_weights
 
     a_t, b_t, n_after = _generate_candidates(
@@ -202,38 +226,94 @@ def profile_threshold(
         merge_tol=merge_tol, two_sided=two_sided, use_sphere=use_sphere,
         existing_atoms=existing_atoms, lbfgs_lr=lbfgs_lr, lbfgs_steps=lbfgs_steps,
         moment_beta=moment_beta, moment_order=moment_order,
+        normalized=normalized, radius=radius,
     )
+
+    guaranteed = insert_init == "guaranteed"
+    if guaranteed and not two_sided:
+        raise ValueError(
+            "insert_init='guaranteed' is the signed theorem step; the one-sided "
+            "(semiconcave) convention has no counterpart in the paper"
+        )
+
+    res_v_flat = residual_v.reshape(-1)
+    res_dv_flat = residual_dv.reshape(-1)
 
     accepted_a: List[torch.Tensor] = []
     accepted_b: List[torch.Tensor] = []
     accepted_scores: List[float] = []
+    accepted_c: List[float] = []
     with torch.enable_grad():
         for a_i, b_i in zip(a_t, b_t):
-            v = float(_profile_value(X, a_i, b_i, activation, power,
-                                     w1, w2, Kx, residual_v, residual_dv, two_sided).item())
-            moment_cost = moment_beta * float(moment_weight(a_i, b_i, moment_order)) if moment_beta > 0.0 else 0.0
-            if v > alpha + moment_cost:
-                accepted_a.append(a_i.detach())
-                accepted_b.append(b_i.detach())
-                accepted_scores.append(v - moment_cost)  # margin above alpha; ranks candidates
+            neuron_v, neuron_dv = _neuron_value_grad(X, a_i, b_i, activation, power)
+            S_val = neuron_v.detach().reshape(-1)
+            S_grad = neuron_dv.detach().reshape(-1)
+            # P(omega): the Gateaux derivative of the fidelity in the direction
+            # delta_omega, in unnormalized (physical-coefficient) units.
+            p_signed = float(
+                (w1 / Kx) * S_val.dot(res_v_flat) + (w2 / Kx) * S_grad.dot(res_dv_flat)
+            )
+            v = abs(p_signed) if two_sided else p_signed
+            w_p = float(moment_weight(a_i, b_i, moment_order))
+
+            # The acceptance threshold, expressed on the unnormalized profile so the
+            # three rules share one comparison.  Normalized: |P|/w_p > alpha*L_phi
+            # with L_phi = phi'(0+) = 1.  Additive: |P| > alpha + beta*w_p.
+            if normalized:
+                threshold = alpha * w_p
+                score = v / w_p - alpha          # Delta(mu, omega)
+            else:
+                threshold = alpha + (moment_beta * w_p if moment_beta > 0.0 else 0.0)
+                score = v - threshold
+            if v <= threshold:
+                continue
+
+            accepted_a.append(a_i.detach())
+            accepted_b.append(b_i.detach())
+            accepted_scores.append(score)
+            if guaranteed:
+                # Exact minimizer of the increment bound
+                #   c*P + c^2*||K||^2/2 + (threshold)|c|,
+                # i.e. the theorem's step with the per-neuron curvature
+                # A_p = ||K_p||^2 in place of the uniform B_p^2.
+                S_sq = float(
+                    (w1 / Kx) * S_val.dot(S_val) + (w2 / Kx) * S_grad.dot(S_grad)
+                )
+                if S_sq < 1e-30:
+                    accepted_a.pop(); accepted_b.pop(); accepted_scores.pop()
+                    continue
+                magnitude = (v - threshold) / S_sq
+                accepted_c.append(-magnitude if p_signed > 0 else magnitude)
 
     if len(accepted_scores) > max_insert:
         order = sorted(range(len(accepted_scores)), key=lambda i: accepted_scores[i], reverse=True)[:max_insert]
         accepted_a = [accepted_a[i] for i in order]
         accepted_b = [accepted_b[i] for i in order]
+        if guaranteed:
+            accepted_c = [accepted_c[i] for i in order]
 
     if verbose:
+        rule = (
+            "|P|/w_p above alpha*L_phi" if normalized
+            else "|P| above alpha+beta*w_p"
+        )
         logger.debug(
             "Candidate search  sampled=%d  unique=%d  accepted=%d/%d  "
-            "rule=residual correlation above alpha+beta*w_p (alpha=%.2e, moment_beta=%.2e)",
-            N, n_after, len(accepted_a), max_insert, alpha, moment_beta,
+            "rule=%s (alpha=%.2e, moment_beta=%.2e, init=%s)",
+            N, n_after, len(accepted_a), max_insert, rule, alpha, moment_beta, insert_init,
         )
 
     if len(accepted_a) == 0:
-        return np.empty((0, d_dim), dtype=np.float64), np.empty((0,), dtype=np.float64)
+        empty_c = np.empty((0,), dtype=np.float64) if guaranteed else None
+        return (
+            np.empty((0, d_dim), dtype=np.float64),
+            np.empty((0,), dtype=np.float64),
+            empty_c,
+        )
     return (
         torch.stack(accepted_a, dim=0).detach().cpu().numpy(),
         torch.stack(accepted_b, dim=0).detach().cpu().numpy(),
+        np.array(accepted_c, dtype=np.float64) if guaranteed else None,
     )
 
 
@@ -296,10 +376,11 @@ def finite_step(
     max_insert=15, merge_tol=1e-2, use_sphere=True,
     existing_atoms=None, verbose=True,
     lbfgs_lr=1e-2, lbfgs_steps=200, newton_tol=1e-12, newton_max_iter=50,
+    radius=None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Accept atoms with a profitable finite step (Delta J(c*) < 0); return c* too."""
     K, d_dim = X.shape
-    Kx = K * d_dim
+    Kx = K  # M, the sample count (empirical fidelity is 1/(2M) * sum_m)
     w1, w2 = loss_weights
     q = 2.0 / (power + 1.0)
 
@@ -308,6 +389,7 @@ def finite_step(
         loss_weights=loss_weights, sample_sphere=sample_sphere, N=N,
         merge_tol=merge_tol, two_sided=True, use_sphere=use_sphere,
         existing_atoms=existing_atoms, lbfgs_lr=lbfgs_lr, lbfgs_steps=lbfgs_steps,
+        radius=radius,
     )
 
     res_v_flat = residual_v.reshape(-1)

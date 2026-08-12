@@ -16,7 +16,12 @@ import torch
 from torch.nn.utils import parameters_to_vector
 
 from ..eval import data_loss_terms, relative_errors
-from .moment import amplitude_mass_radius, moment_penalty, moment_weight
+from .moment import (
+    amplitude_mass_radius,
+    atom_normalizer,
+    moment_penalty,
+    moment_weight,
+)
 from .ssn_solve import Objective, nonconvex_penalty
 
 
@@ -27,6 +32,13 @@ def _regularizer_terms(model, objective: Objective) -> dict[str, float]:
     if params:
         theta = parameters_to_vector(params).detach()
         penalized, nonneg = model.penalty_masks()
+        # Normalized objective: the penalty is evaluated at the normalized measure,
+        # phi(w_p(omega_n)|c_n|) = phi(|u_n|), so score it on u = w_p * c -- the same
+        # quantity ssn_solve minimizes, so the recorded objective cannot drift from it.
+        if objective.normalized:
+            theta = theta * atom_normalizer(
+                W, b, normalized=True, p=objective.moment_order
+            )
         phi = nonconvex_penalty(
             theta,
             penalized,
