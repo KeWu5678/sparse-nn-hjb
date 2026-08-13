@@ -404,6 +404,12 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
              "default = the moment_penalty comparator sweep",
     )
     parser.add_argument(
+        "--traditional-records", type=Path, default=None,
+        help="record directory for the ReLU + l1 baseline curve; defaults to the "
+             "historical frontier_relu_l1 sweep, which predates the current "
+             "empirical-fidelity normalization",
+    )
+    parser.add_argument(
         "--records-alg2", type=Path, default=None,
         help="record dir for the Algorithm 2 (k-homogeneous ReLU) arm; "
              "default = the frac_exp_penalty comparator sweep",
@@ -423,6 +429,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def _apply_args(args: argparse.Namespace) -> None:
     """Rebind the module-level roots so one code path serves both studies."""
+    global TRADITIONAL_ROOT
     global MOMENT_ROOT, HOMOGENEOUS_ROOT, OUTPUT_DIR, OVERSAMPLE_ROOT, OPERATING_POINT
     global LEGACY_ACT_ROOT, LEGACY_RELU_ROOT
     if args.records_alg1 is not None:
@@ -432,6 +439,8 @@ def _apply_args(args: argparse.Namespace) -> None:
     if args.records_alg2 is not None:
         HOMOGENEOUS_ROOT = args.records_alg2.resolve()
         LEGACY_RELU_ROOT = HOMOGENEOUS_ROOT
+    if args.traditional_records is not None:
+        TRADITIONAL_ROOT = args.traditional_records.resolve()
     if args.out is not None:
         OUTPUT_DIR = args.out.resolve()
     if args.operating_point is not None:

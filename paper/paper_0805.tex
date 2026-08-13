@@ -356,12 +356,15 @@ The contributions are the following.
 
 Figure~\ref{fig:neuron_h1_frontier} compares the traditional ReLU network with
 an $\ell^1$ penalty against representative models from the two formulations.
-The comparison is one of accuracy at a given support size rather than of
-lowest attainable error: the $\ell^1$ baseline produces no fit below roughly
-ninety atoms on either problem, while the Gaussian and $\mathrm{ReLU}^2$ reach
-comparable accuracy on a fraction of that support. On the pendulum, where the
-value gradient jumps, only the homogeneous $\mathrm{ReLU}^k$ family follows
-the reference feedback.
+The comparison is one of accuracy at a given support size rather than of lowest
+attainable error. On the Van der Pol problem the $\ell^1$ baseline is the less
+accurate of the two at every support below $121$ atoms --- $1.62\times10^{-1}$
+against $1.00\times10^{-1}$ at twenty atoms --- and overtakes the sparse
+penalties only past that width, where it eventually reaches
+$7.4\times10^{-2}$. The nonconvex penalties therefore buy accuracy per neuron,
+not a lower floor. On the pendulum, where the value gradient jumps across the
+switching set, only the homogeneous $\mathrm{ReLU}^k$ family yields a feedback
+law that follows the reference.
 
 \begin{figure}[htbp]
 \centering
@@ -3787,9 +3790,7 @@ color) and costate labels $g^m$ (arrows); arrow color indicates $|g^m|$.}
 
 We solve the open-loop problem on a $30 \times 30$ grid over $[-3,3]^2$ ($M = 900$ data points).
 All experiments use $T_{\mathrm{out}} = 150$ outer iterations,
-$N_{\mathrm{trial}} = 50$ sampled candidate nodes per iteration,
-$N_{\mathrm{ins}} = 1$, and $\varepsilon_{\mathrm{prune}} = 10^{-8}$. Each
-iteration therefore inserts the single maximizing candidate, which is the case
+$N_{\mathrm{trial}} = 50$ sampled candidate nodes per iteration. Each iteration therefore inserts the single maximizing candidate ($N_{\mathrm{ins}} = 1$), which is the case
 in which the guarantees of Theorem~\ref{thm:quantitative-insertion} apply, and
 not the batch heuristic discussed in Section~5. The loop terminates when no
 candidate clears the insertion threshold, which on these problems occurs well
