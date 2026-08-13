@@ -356,9 +356,12 @@ The contributions are the following.
 
 Figure~\ref{fig:neuron_h1_frontier} compares the traditional ReLU network with
 an $\ell^1$ penalty against representative models from the two formulations.
-The Gaussian and $\mathrm{ReLU}^2$ reduce the relative $H^1$ error on the Van
-der Pol problem, and $\mathrm{ReLU}^2$ gives the lowest error on the pendulum
-problem.
+The comparison is one of accuracy at a given support size rather than of
+lowest attainable error: the $\ell^1$ baseline produces no fit below roughly
+ninety atoms on either problem, while the Gaussian and $\mathrm{ReLU}^2$ reach
+comparable accuracy on a fraction of that support. On the pendulum, where the
+value gradient jumps, only the homogeneous $\mathrm{ReLU}^k$ family follows
+the reference feedback.
 
 \begin{figure}[htbp]
 \centering
@@ -2202,14 +2205,20 @@ exponents satisfy the pointwise bounds on a bounded domain.
 \tanh z              &0&1&p>1\\
 e^{-z^2}             &0&1&p>1\\
 \log(1+e^z)          &1&1&p>1\\
+\bigl(z\Phi(z)\bigr)^2 &2&2&p>2\\
 (z_+)^k              &k&k&p>k\\
 \bottomrule
 \end{array}
 \end{equation*}
 For bounded activations such as $\tanh$ and the Gaussian, existence alone
 requires only $p > 0$; the condition $p > 1$ in the table is the one that also
-dominates the elementary global $H^1$ growth estimate. The last row is listed
-for comparison with the positively homogeneous formulation of Section~4.
+dominates the elementary global $H^1$ growth estimate. The fourth row is the
+squared Gaussian error linear unit, written $\mathrm{GELU}^2$ below, with
+$\Phi$ the standard normal distribution function; since $\Phi$ takes values in
+$(0,1)$ we have $|z\Phi(z)|\le|z|$, and its derivative
+$2z\Phi(z)\bigl(\Phi(z)+z\varphi(z)\bigr)$ grows linearly, which gives
+$s_0=s_1=2$. The last row is listed for comparison with the positively
+homogeneous formulation of Section~4.
 
 
 
@@ -3777,10 +3786,14 @@ color) and costate labels $g^m$ (arrows); arrow color indicates $|g^m|$.}
 \end{figure}
 
 We solve the open-loop problem on a $30 \times 30$ grid over $[-3,3]^2$ ($M = 900$ data points).
-All experiments use $T_{\mathrm{out}} = 10$ outer iterations,
+All experiments use $T_{\mathrm{out}} = 150$ outer iterations,
 $N_{\mathrm{trial}} = 50$ sampled candidate nodes per iteration,
-$N_{\mathrm{ins}} = 15$, and $\varepsilon_{\mathrm{prune}} = 10^{-8}$. The
-insertion batches are therefore of the heuristic kind discussed in Section~5.
+$N_{\mathrm{ins}} = 1$, and $\varepsilon_{\mathrm{prune}} = 10^{-8}$. Each
+iteration therefore inserts the single maximizing candidate, which is the case
+in which the guarantees of Theorem~\ref{thm:quantitative-insertion} apply, and
+not the batch heuristic discussed in Section~5. The loop terminates when no
+candidate clears the insertion threshold, which on these problems occurs well
+before $T_{\mathrm{out}}$.
 
 \subsubsection{Effect of the moment order \texorpdfstring{$p$}{p}}
 \label{sec:effect-of-p}
@@ -3798,8 +3811,10 @@ For a finite atomic $\mu$ write
 \begin{equation*}
 	R_{\max}(\mu):=\max\{|\omega| : \omega\in\atom\mu\}
 \end{equation*}
-for the radius of its support, which is the quantity
-Lemma~\ref{lem:support-bound} bounds. We use Algorithm~\ref{alg:log} with
+for the radius of its support. Lemma~\ref{lem:support-bound} confines that
+support to a compact superlevel set of $|\bar P_p|$, so $R_{\max}$ is finite;
+the lemma does not itself supply a numerical radius, and the values below are
+measured. We use Algorithm~\ref{alg:log} with
 $\gamma=1$, equal value and gradient weights, and seed $42$, for softplus,
 $\tanh$, the Gaussian and $\mathrm{GELU}^2$, over
 \begin{equation*}
@@ -3865,7 +3880,7 @@ both bounds, so neither is ever active. The confinement supplied by the
 moment weight is what keeps the support bounded in practice; the theoretical
 radius certifies a region the iterates never approach.
 
-\subsubsection{Algorithm~\ref{alg:log}: log penalty and moment norm}
+\subsubsection{Algorithm~\ref{alg:log}: the log penalty on the normalized measure}
 
 We investigate the effect of including gradient data for softplus, $\tanh$,
 and the Gaussian. Table~\ref{tab:alg1_gradient} compares fitting the values
@@ -4035,22 +4050,22 @@ $\alpha = 10^{-5}$.
 \captionsetup[subfigure]{justification=centering}
 \begin{subfigure}[t]{0.32\textwidth}
 \centering
-\includegraphics[width=\textwidth]{plot/value_surface_p2.png}
-\caption{$k=2$\\ ($N=41$, $\mathrm{Err}_{H^1} = 0.10$).}
+\includegraphics[width=\textwidth]{../experiments/01_vdp/paper_frac_exp_penalty/figures/value_surface_p2.png}
+\caption{$k=2$\\ ($N=40$, $\mathrm{Err}_{H^1} = 0.098$).}
 \label{fig:H1_power_p2}
 \end{subfigure}
 \hfill
 \begin{subfigure}[t]{0.32\textwidth}
 \centering
-\includegraphics[width=\textwidth]{plot/value_surface_p3.png}
-\caption{$k=3$\\ ($N=20$, $\mathrm{Err}_{H^1} = 0.10$).}
+\includegraphics[width=\textwidth]{../experiments/01_vdp/paper_frac_exp_penalty/figures/value_surface_p3.png}
+\caption{$k=3$\\ ($N=25$, $\mathrm{Err}_{H^1} = 0.099$).}
 \label{fig:H1_power_p3}
 \end{subfigure}
 \hfill
 \begin{subfigure}[t]{0.32\textwidth}
 \centering
-\includegraphics[width=\textwidth]{plot/value_surface_p5.png}
-\caption{$k=5$\\ ($N=21$, $\mathrm{Err}_{H^1} = 0.10$).}
+\includegraphics[width=\textwidth]{../experiments/01_vdp/paper_frac_exp_penalty/figures/value_surface_p5.png}
+\caption{$k=5$\\ ($N=21$, $\mathrm{Err}_{H^1} = 0.101$).}
 \label{fig:H1_power_p5}
 \end{subfigure}
 \caption{$H^1$-trained networks with $\alpha = 10^{-5}$ for
@@ -4073,11 +4088,11 @@ The $H^1$ loss drives the gradient error down to $\approx 1.0 \times 10^{-1}$ fo
 \toprule
 Power & $N$ & $\mathrm{Err}_{L^2}$ & $\mathrm{Err}_{H^1}$ \\
 \midrule
-$k = 2$ & 14 & $5.05 \times 10^{-2}$ & $4.83 \times 10^{-1}$ \\
-$k = 2.01$ & 14 & $4.83 \times 10^{-2}$ & $4.81 \times 10^{-1}$ \\
-$k = 3$ & 12 & $5.98 \times 10^{-2}$ & $4.94 \times 10^{-1}$ \\
-$k = 4$ & 12 & $5.48 \times 10^{-2}$ & $4.61 \times 10^{-1}$ \\
-$k = 5$ & 10 & $4.77 \times 10^{-2}$ & $4.04 \times 10^{-1}$ \\
+$k = 2$ & 13 & $5.05 \times 10^{-2}$ & $4.09 \times 10^{-1}$ \\
+$k = 2.01$ & 13 & $4.83 \times 10^{-2}$ & $4.09 \times 10^{-1}$ \\
+$k = 3$ & 12 & $5.98 \times 10^{-2}$ & $4.54 \times 10^{-1}$ \\
+$k = 4$ & 13 & $5.48 \times 10^{-2}$ & $4.53 \times 10^{-1}$ \\
+$k = 5$ & 10 & $4.77 \times 10^{-2}$ & $4.39 \times 10^{-1}$ \\
 \bottomrule
 \end{tabular}
 \caption{$L^2$ trained}
@@ -4092,11 +4107,11 @@ $k = 5$ & 10 & $4.77 \times 10^{-2}$ & $4.04 \times 10^{-1}$ \\
 \toprule
 Power & $N$ & $\mathrm{Err}_{L^2}$ & $\mathrm{Err}_{H^1}$ \\
 \midrule
-$k = 2$ & 41 & $4.16 \times 10^{-1}$ & $9.84 \times 10^{-2}$ \\
-$k = 2.01$ & 42 & $4.17 \times 10^{-1}$ & $9.93 \times 10^{-2}$ \\
-$k = 3$ & 20 & $4.17 \times 10^{-1}$ & $1.00 \times 10^{-1}$ \\
-$k = 4$ & 22 & $4.16 \times 10^{-1}$ & $9.97 \times 10^{-2}$ \\
-$k = 5$ & 21 & $4.14 \times 10^{-1}$ & $1.04 \times 10^{-1}$ \\
+$k = 2$ & 40 & $4.16 \times 10^{-1}$ & $9.83 \times 10^{-2}$ \\
+$k = 2.01$ & 45 & $4.17 \times 10^{-1}$ & $9.75 \times 10^{-2}$ \\
+$k = 3$ & 25 & $4.17 \times 10^{-1}$ & $9.94 \times 10^{-2}$ \\
+$k = 4$ & 22 & $4.16 \times 10^{-1}$ & $9.90 \times 10^{-2}$ \\
+$k = 5$ & 21 & $4.14 \times 10^{-1}$ & $1.007 \times 10^{-1}$ \\
 \bottomrule
 \end{tabular}
 \caption{$H^1$ trained}
@@ -4105,9 +4120,9 @@ $k = 5$ & 21 & $4.14 \times 10^{-1}$ & $1.04 \times 10^{-1}$ \\
 \end{table}
 
 Increasing $k$ changes both the activation and the induced exponent
-$q=2/(k+1)$. The support drops from $41$--$42$ atoms for $k=2$ and $2.01$ to
-$20$--$22$ atoms for $k=3,4,5$, while the error remains between $0.098$ and
-$0.104$.
+$q=2/(k+1)$. The support drops from $40$--$45$ atoms for $k=2$ and $2.01$ to
+$21$--$25$ atoms for $k=3,4,5$, while the error remains between $0.098$ and
+$0.101$.
 Under the $L^2$ loss the fits use $10$--$14$ atoms and have
 $\mathrm{Err}_{H^1} \approx 4$--$5 \times 10^{-1}$
 (Table~\ref{tab:alg2_gradient}\,(a)).
@@ -4115,10 +4130,11 @@ $\mathrm{Err}_{H^1} \approx 4$--$5 \times 10^{-1}$
 \subsubsection{Summary}
 
 Figure~\ref{fig:summary_frontier} plots the running best relative $H^1$ error.
-The Gaussian reaches $9.89\times10^{-2}$ with $112$ atoms, while
+The Gaussian reaches $9.71\times10^{-2}$ with $54$ atoms, while
 $\mathrm{ReLU}^2$ and $\mathrm{ReLU}^5$ reach comparable errors with roughly
-$40$ and $20$ atoms. Softplus stops at $1.25\times10^{-1}$ with $35$ atoms,
-and therefore uses fewer atoms than the Gaussian at a larger error.
+$40$ and $21$ atoms. Softplus stops at $1.23\times10^{-1}$ with $66$ atoms,
+so the homogeneous profiles reach the Gaussian's accuracy on a smaller
+support.
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=0.8\textwidth]{../experiments/01_vdp/paper_log_penalty/figures/frontier.png}
@@ -4136,7 +4152,7 @@ feedback. The finite-horizon optimal feedback is time-dependent and the
 rollout horizon exceeds the data horizon $T=3$. Therefore its rollout cost
 $6.48$ is not $V(0,y_0)$, and the comparison is not a test of finite-horizon
 optimality.
-Figure~\ref{fig:summary_feedback} shows $\|y(t)\|$ and $|u(t)|$ for softplus, the Gaussian, and $\reluk$ ($k = 5$), beside this reference. All three drive the state to the origin and track the reference control, at essentially its closed-loop cost ($6.63$, $6.58$, $6.49$ vs.\ $6.48$).
+Figure~\ref{fig:summary_feedback} shows $\|y(t)\|$ and $|u(t)|$ for softplus, the Gaussian, and $\reluk$ ($k = 5$), beside this reference. All three drive the state to the origin and track the reference control, at essentially its closed-loop cost ($6.54$, $6.50$, $6.50$ vs.\ $6.48$).
 \begin{figure}[htbp]
 \centering
 \captionsetup[subfigure]{justification=centering}
@@ -4168,13 +4184,13 @@ The two algorithms produce structurally different representations: Algorithm~2 c
 \begin{subfigure}[t]{0.32\textwidth}
 \centering
 \includegraphics[width=\textwidth]{../experiments/01_vdp/paper_log_penalty/figures/weights_raw3d_gaussian.png}
-\caption{Gaussian, $p=3$.}
+\caption{Gaussian.}
 \end{subfigure}
 \hfill
 \begin{subfigure}[t]{0.32\textwidth}
 \centering
 \includegraphics[width=\textwidth]{../experiments/01_vdp/paper_log_penalty/figures/weights_raw3d_softplus.png}
-\caption{softplus, $p=2.01$.}
+\caption{softplus.}
 \end{subfigure}
 \hfill
 \begin{subfigure}[t]{0.32\textwidth}
@@ -4382,10 +4398,10 @@ across which $\nabla V$ may be discontinuous.}
 \label{fig:pendulum_data}
 \end{figure}
 
-For $23$ tested parameter choices, at least $95\%$ of the total variation is
-carried by atoms at the upper radial bound $\lambda=e^5$. These runs are
-retained in the numerical record but excluded when selecting the
-nonhomogeneous networks reported below.
+No run places atoms at the upper radial bound $\lambda=e^5$: the largest
+support radius over all reported nonhomogeneous fits is $13.96$, and at the
+common operating point none exceeds $4.5$. The weight $w_p$ confines the
+support on its own, so no run has to be excluded on this ground.
 
 
 
@@ -4542,11 +4558,11 @@ tracks the best relative $H^{1}$ validation error reached as neurons are
 inserted, for each activation paired with its penalty. The three
 nonhomogeneous activations use the parameter values in
 Table~\ref{tab:rs_feedback_cost};
-the rectified powers use $\psi_k$, with $\alpha=10^{-6}$ for
-$k\in\{2,3\}$ and $\alpha=10^{-4}$ for $k=5$. The error for
+the rectified powers use $\psi_k$, with $\alpha=10^{-5}$ for
+$k=2$ and $\alpha=10^{-6}$ for $k\in\{3,5\}$. The error for
 $\mathrm{ReLU}^{2}$ becomes
 smaller than the other errors within the first insertions and reaches
-$\approx3.1\times10^{-1}$. $\mathrm{ReLU}^{3}$ is second, while softplus,
+$\approx2.6\times10^{-1}$. $\mathrm{ReLU}^{3}$ is second, while softplus,
 $\tanh$, and the Gaussian remain above $5\times10^{-1}$ and
 $\mathrm{ReLU}^{5}$ has the largest final error. Among the rectified powers,
 the error increases with $k$; $\mathrm{ReLU}^{3}$ remains second overall,
@@ -4569,8 +4585,8 @@ $9.6\times10^{5}$ points. Training rows are excluded, and for each run we use
 the recorded iterate with the smallest training objective. Errors are reported
 on $S_{0.3}$ and $D\setminus S_{0.3}$. $\mathrm{ReLU}^{2}$ has the smallest
 error in both sets, followed by
-$\mathrm{ReLU}^{3}$. Among the moment-regularized profiles, softplus has the
-smallest errors, followed by $\tanh$ and the Gaussian.
+$\mathrm{ReLU}^{3}$. Among the nonhomogeneous profiles the Gaussian has the
+smallest errors, followed by $\tanh$ and then softplus.
 $\mathrm{ReLU}^{5}$ is the one model whose two regional errors are nearly
 identical and largest.
 
@@ -4633,21 +4649,21 @@ the feedback formula using the costate associated with the smaller value.
 \begin{subfigure}[b]{0.32\textwidth}
 \centering
 \includegraphics[width=\textwidth]{../experiments/02_pendulum/paper_log_penalty/figures/feedback_gaussian.png}
-\caption{Gaussian, $\gamma=0$ and moment norm}
+\caption{Gaussian}
 \label{fig:rs_feedback_gaussian}
 \end{subfigure}
 \hfill
 \begin{subfigure}[b]{0.32\textwidth}
 \centering
 \includegraphics[width=\textwidth]{../experiments/02_pendulum/paper_log_penalty/figures/feedback_softplus.png}
-\caption{softplus, $\gamma=1$ and moment norm}
+\caption{softplus}
 \label{fig:rs_feedback_softplus}
 \end{subfigure}
 \vspace{0.6em}
 \begin{subfigure}[b]{0.32\textwidth}
 \centering
 \includegraphics[width=\textwidth]{../experiments/02_pendulum/paper_log_penalty/figures/feedback_tanh.png}
-\caption{$\tanh$, $\gamma=1$ and moment norm}
+\caption{$\tanh$}
 \label{fig:rs_feedback_tanh}
 \end{subfigure}
 \hfill
@@ -4828,8 +4844,8 @@ $H^1$ errors with smaller supports for larger $k$.
 
 For the pendulum swing-up, the $\mathrm{ReLU}^2$ errors in
 Table~\ref{tab:rs_oversampling} are larger on $S_{0.3}$ than on its
-complement, whereas the Gaussian errors are nearly equal for the first two
-training sets and larger on the complement for the other two. Adding training
+complement for every training set, whereas the Gaussian errors are nearly
+equal on the two regions throughout. Adding training
 samples near $S$ does not reduce the error on $S_{0.3}$ at the tested network
 widths.
 $\mathrm{ReLU}^{2}$ gives the smallest error and the closed-loop path closest
