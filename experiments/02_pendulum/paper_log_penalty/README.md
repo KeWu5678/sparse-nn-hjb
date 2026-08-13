@@ -49,4 +49,6 @@ sequential method on four sampling densities near the switching set.
 ```sh
 make paper-sweep EXPERIMENT=pendulum/paper_log_penalty
 make paper-p-study EXPERIMENT=pendulum/paper_log_penalty
+make paper-oversampling-study
+make paper-artifacts
 ```

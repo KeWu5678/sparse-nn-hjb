@@ -219,16 +219,18 @@ def main() -> None:
         f"![frontier](figures/{figure.name})\n\n"
         "*Running best relative H¹ validation error against neuron count, for the "
         "two insertion modes. Batch admits up to `N_ins = 15` atoms per outer "
-        "iteration against one frozen residual; sequential admits one — the "
-        "maximizer of `|P_p|` — and runs at `T_out = 150` for a matched neuron "
+        "iteration against one frozen residual; sequential admits the highest-"
+        "scoring candidate returned by the multistart search and runs at "
+        "`T_out = 150` for a matched neuron "
         "budget. All cells at seed 42.*\n"
     )
 
     lines.append("## Termination\n")
     lines.append(
-        "The paper loop stops as soon as no candidate clears the insertion "
-        "threshold; a run that stops early converged in the algorithm's own terms, "
-        "one that reaches `T_out` was still finding candidates.\n"
+        "The loop stops when the finite multistart search returns no candidate "
+        "above the insertion threshold. Early stopping records that numerical "
+        "event; it is not a certificate that the global profile condition holds. "
+        "A run that reaches `T_out` was still finding accepted candidates.\n"
     )
     for mode, (early, total, med, mx, req) in sorted(by_mode.items()):
         lines.append(
@@ -259,8 +261,8 @@ def main() -> None:
         lines.append("## Moment order p\n")
         lines.append(
             "`p` sets the weight `w_p(ω) = 1 + |ω|^p` inside the penalty and drives the theorem "
-            "search radius through the exponent `1/(p − s₁)`; on this data the "
-            "radius binds inside the `exp(5)` clamp only at `p = 4` "
+            "search radius through the exponent `1/(p − s₁)`. The dedicated "
+            "fixed-versus-theorem ablation records its numerical effect "
             "(see `docs/adr/0006`).\n"
         )
         p_summary = []

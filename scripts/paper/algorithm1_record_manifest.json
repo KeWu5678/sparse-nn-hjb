@@ -1,0 +1,32 @@
+{
+  "search_version": "joint_unconstrained_final_radius_filter_v1",
+  "merge_tolerance": 0.01,
+  "run_date": "2026-08-13",
+  "implementation_commit": "9660b15",
+  "algorithm1_record_roots": [
+    "rawdata/logs/multirun/pendulum/paper_log_penalty/batch",
+    "rawdata/logs/multirun/pendulum/paper_log_penalty/oversampling",
+    "rawdata/logs/multirun/pendulum/paper_log_penalty/p_study",
+    "rawdata/logs/multirun/pendulum/paper_log_penalty/p_study_sequential",
+    "rawdata/logs/multirun/pendulum/paper_log_penalty/sequential",
+    "rawdata/logs/multirun/vdp/paper_log_penalty/batch",
+    "rawdata/logs/multirun/vdp/paper_log_penalty/p_study",
+    "rawdata/logs/multirun/vdp/paper_log_penalty/p_study_sequential",
+    "rawdata/logs/multirun/vdp/paper_log_penalty/radius_ablation",
+    "rawdata/logs/multirun/vdp/paper_log_penalty/radius_ablation_sequential",
+    "rawdata/logs/multirun/vdp/paper_log_penalty/sequential"
+  ],
+  "record_digests": {
+    "rawdata/logs/multirun/pendulum/paper_log_penalty/batch": "ec51989bb3867170cea61c36928266f8dff7be3a9861f59edfb7954a5da3d230",
+    "rawdata/logs/multirun/pendulum/paper_log_penalty/oversampling": "6594eff69e7db2cb04509f2eb1de9d662e67f894f4c57fb25b9e1eae64d63318",
+    "rawdata/logs/multirun/pendulum/paper_log_penalty/p_study": "f91a8d75abe05292e0d988486151cc3189633bffa98da986f9f49df47fe1106f",
+    "rawdata/logs/multirun/pendulum/paper_log_penalty/p_study_sequential": "f808ac39810e59d10412635e535b1710a63e29474b9ecdbce86b81159e7fa7f0",
+    "rawdata/logs/multirun/pendulum/paper_log_penalty/sequential": "d9cfce41d83e265f3436e2086a354cc5bfbe1025f0d6a8019c794092cfa40ef5",
+    "rawdata/logs/multirun/vdp/paper_log_penalty/batch": "350875aaf754951457cb204f002fdb8e582470a84186b2046c7b02567d414243",
+    "rawdata/logs/multirun/vdp/paper_log_penalty/p_study": "3e76dcc50140cc5e1e0606cfa2136819062df145fecf1ccb85ee52a945f9880e",
+    "rawdata/logs/multirun/vdp/paper_log_penalty/p_study_sequential": "692ccb4ab6c45e022d13a320912add9e6e09b33b03b6e4f8c1898ccb5d99286e",
+    "rawdata/logs/multirun/vdp/paper_log_penalty/radius_ablation": "603e7514dcd1b284d48000dff53d8092036b36c8374478713496356cdaf23b31",
+    "rawdata/logs/multirun/vdp/paper_log_penalty/radius_ablation_sequential": "da1d31dccb32c148508f72226759cc260dce0ab904f04253592a8f64ebe0842b",
+    "rawdata/logs/multirun/vdp/paper_log_penalty/sequential": "35d8c190f3daa5c0e3264d7416f71a8446f8f58fec713af74ae57dfa1a4266a9"
+  }
+}

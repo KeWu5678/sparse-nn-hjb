@@ -15,5 +15,4 @@ kind: signed
 insertion: profile
 power: 1.0
 objective: normalized_moment
-moment_beta: 0.0
 moment_order: 2.01

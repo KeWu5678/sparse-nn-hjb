@@ -1,0 +1,1151 @@
+#!/usr/bin/env python3
+"""Rendering helpers for the current-paper pendulum evidence."""
+
+from __future__ import annotations
+
+import itertools
+import json
+import sys
+from pathlib import Path
+from typing import Any
+
+import numpy as np
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from src.paths import DATA_DIR  # noqa: E402
+
+EXPERIMENT = "paper_log_penalty"
+ALGORITHM2_ROOT = REPO_ROOT / "rawdata" / "logs" / "multirun" / "pendulum" / "paper_frac_exp_penalty" / "sequential"
+ALGORITHM1_ROOT = REPO_ROOT / "rawdata" / "logs" / "multirun" / "pendulum" / "paper_log_penalty" / "sequential"
+DATASET_STEM = "Pendulum_pmp_value_samples_2000"
+OUTPUT_DIR = REPO_ROOT / "experiments" / "02_pendulum" / "paper_log_penalty"
+
+_LOSS_LABEL = {(1.0, 0.0): "l2", (1.0, 1.0): "h1"}
+_N_BINS = 30
+# Fixed geometric tube (distance-to-switching-set) that defines the
+# "switching set" region for the switching-set / rest comparison. |V| is large
+# in this tube, so
+# relative error there is not confounded by the V->0 equilibrium.
+_SWITCHING_TUBE = 0.3
+# The Fig. 2 open-loop data panels (value surface, switching set, regions of
+# attraction) now live in experiments/00_openloop/pendulum; this analysis only
+# scores the region split and plots error-vs-distance.
+
+
+def _record_row(record: dict[str, Any], rs: dict | None, *, source: str) -> dict[str, Any] | None:
+    """One table row from a run record; None if it lacks region metrics or scope."""
+    cfg = record["config"]
+    model = cfg["model"]
+    m = record["metrics"][0]["values"]
+    if rs is None or int(m.get("best_neurons", 0)) == 0:
+        return None
+    if DATASET_STEM not in cfg["data"]["path"]:
+        return None
+    loss = _LOSS_LABEL.get(tuple(model["loss_weights"]), str(model["loss_weights"]))
+    # This study compares H1 (gradient-augmented) fits only; both source sweeps
+    # also contain L2 runs.
+    if loss != "h1":
+        return None
+    if source == "relu":
+        # Algorithm 2 rows: ReLU^p atoms, one row label per power.
+        if model["activation"] != "relu":
+            return None
+        activation = f"relu^{model['power']:g}"
+    else:
+        # Algorithm 1 rows: every signed activation of the current sweep.
+        if model["kind"] != "signed":
+            return None
+        activation = model["activation"]
+    return {
+        "act_name": model["activation"],
+        "power": float(model["power"]),
+        "data_path": cfg["data"]["path"],
+        "kind": model["kind"],
+        "insertion": model["insertion"],
+        "activation": activation,
+        "loss": loss,
+        "gamma": float(model["gamma"]),
+        "neurons": int(m["best_neurons"]),
+        "near_l1": float(rs["switching_l1_h1"]),
+        "far_l1": float(rs["rest_l1_h1"]),
+        "l1_near/far": float(rs["switching_l1_h1"]) / float(rs["rest_l1_h1"]) if rs["rest_l1_h1"] else float("inf"),
+        "near_h1": float(rs["switching_h1"]),
+        "far_h1": float(rs["rest_h1"]),
+        "rel_near/far": float(rs["switching_h1"]) / float(rs["rest_h1"]) if rs["rest_h1"] else float("inf"),
+        "bins": [m.get(f"distbin{i + 1}_ratio", float("nan")) for i in range(_N_BINS)],
+        "cache": cfg.get("eval", {}).get("distance_cache"),
+        "result_path": "",  # filled by load_rows (needs the record path)
+    }
+
+
+def load_rows() -> tuple[list[dict[str, Any]], str | None]:
+    """Rows from the two pendulum model-family sweeps (no sweep of our own).
+
+    Read both current algorithm families from their completed record roots.
+    """
+    relu_records = sorted(ALGORITHM2_ROOT.glob("*/*.json"))
+    act_records = sorted(ALGORITHM1_ROOT.glob("*/*.json"))
+    if not act_records:
+        raise FileNotFoundError(
+            f"no run records under {ALGORITHM1_ROOT}"
+        )
+    rows, cache = [], None
+    sources = ([(p, "relu") for p in relu_records]
+               + [(p, "act") for p in act_records])
+    for path, source in sources:
+        if path.name.startswith("region_rescored_"):
+            continue
+        record = json.loads(path.read_text(encoding="utf-8"))
+        sidecar = path.parent / f"region_rescored_{record.get('run_id', path.stem)}.json"
+        if not sidecar.exists():
+            raise FileNotFoundError(
+                f"missing physical-coordinate region sidecar for {path}: {sidecar}"
+            )
+        rs = json.loads(sidecar.read_text(encoding="utf-8"))
+        row = _record_row(record, rs, source=source)
+        if row is None:
+            continue
+        cache = cache or row.pop("cache")
+        row.pop("cache", None)
+        row["result_path"] = str(path.parent / f"result_{path.stem}.pkl")
+        rows.append(row)
+    return rows, cache
+
+
+def best_per_cell(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Lowest switching-region relative H1 per model family.
+
+    The paper reports regional relative H1, so the checkpoint selection uses that
+    same metric rather than an L1 diagnostic from another scale.
+    """
+    def cell(row: dict[str, Any]) -> tuple:
+        return (row["kind"], row["insertion"], row["activation"], row["loss"])
+
+    best = []
+    for _, group in itertools.groupby(sorted(rows, key=cell), key=cell):
+        best.append(min(group, key=lambda r: r["near_h1"]))
+    return best
+
+
+def _bin_centers(cache: str | None) -> tuple[np.ndarray, np.ndarray, np.ndarray] | None:
+    """Equal-width bin centers, counts, and raw distances from the distance cache.
+
+    Counts depend only on the fixed distance cache (not the model), so they are the
+    same for every run; the plot overlays them so under-supported far-tail points
+    are visible. Edges match ``distance_binned_error`` (uniform over [min, max],
+    last bin inclusive).
+    """
+    if not cache:
+        return None
+    d = np.load(DATA_DIR / cache)["distance"]
+    edges = np.linspace(d.min(), d.max(), _N_BINS + 1)
+    centers = 0.5 * (edges[:-1] + edges[1:])
+    counts, _ = np.histogram(d, edges)
+    return centers, counts, d
+
+
+def _smooth_distance_curve(values, counts: np.ndarray,
+                           *, sigma_bins: float = 1.6, radius: int = 5) -> np.ndarray:
+    """Local Gaussian smoothing over equal-width distance bins."""
+    y = np.asarray(values, dtype=np.float64)
+    c = np.asarray(counts, dtype=np.float64)
+    out = np.full_like(y, np.nan, dtype=np.float64)
+    valid = np.isfinite(y) & np.isfinite(c) & (c > 0.0)
+    for i in range(y.size):
+        lo = max(0, i - radius)
+        hi = min(y.size, i + radius + 1)
+        idx = np.arange(lo, hi)
+        m = valid[idx]
+        if not np.any(m):
+            continue
+        dx = idx[m] - i
+        w = np.exp(-0.5 * (dx / sigma_bins) ** 2)
+        out[i] = float(np.sum(w * y[idx[m]]) / np.sum(w))
+    return out
+
+
+def _smooth_distance_xy(centers: np.ndarray, values, counts: np.ndarray,
+                        *, n: int = 240) -> tuple[np.ndarray, np.ndarray]:
+    """Smoothed distance curve evaluated on a dense x-grid for visual continuity."""
+    y = _smooth_distance_curve(values, counts)
+    x = np.asarray(centers, dtype=np.float64)
+    valid = np.isfinite(x) & np.isfinite(y)
+    if np.count_nonzero(valid) < 3:
+        return x[valid], y[valid]
+    xs = np.linspace(float(x[valid].min()), float(x[valid].max()), n)
+    try:
+        from scipy.interpolate import PchipInterpolator
+        ys = PchipInterpolator(x[valid], y[valid], extrapolate=False)(xs)
+    except Exception:
+        ys = np.interp(xs, x[valid], y[valid])
+    return xs, ys
+
+
+def _plot_error_vs_distance(
+    best: list[dict[str, Any]], centers: np.ndarray, counts: np.ndarray
+) -> Path:
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    _apply_publication_style()
+    wanted = set(_MODEL_STYLE)
+    rows = [
+        r for r in best
+        if r["kind"] == "signed" and r["loss"] == "h1" and r["activation"] in wanted
+    ]
+    rows = sorted(rows, key=lambda r: list(_MODEL_STYLE).index(r["activation"]))
+    fig, ax = plt.subplots(figsize=(8.5, 5.2))
+    width = (centers[1] - centers[0]) * 0.9 if len(centers) > 1 else 0.1
+    ax2 = ax.twinx()
+    ax2.bar(centers, counts, width=width, color="0.88", zorder=0)
+    ax2.set_ylabel("samples per bin", color="0.55")
+    ax2.tick_params(axis="y", colors="0.55")
+    ax.set_zorder(ax2.get_zorder() + 1)
+    ax.patch.set_visible(False)
+    for r in rows:
+        color, ls = _MODEL_STYLE[r["activation"]]
+        xs, ys = _smooth_distance_xy(centers, r["bins"], counts)
+        ax.plot(xs, ys, color=color, ls=ls, lw=2.4,
+                label=_DISPLAY[r["activation"]], zorder=3)
+    ax.axhline(1.0, color="0.2", lw=0.9, ls="--", zorder=2)
+    ax.set_xlabel("distance to switching set")
+    ax.set_ylabel("combined per-sample error / model mean")
+    ax.legend(loc="upper left", fontsize=10)
+    fig.tight_layout(pad=2.0)
+    out = OUTPUT_DIR / "figures" / "error_vs_distance.png"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out, dpi=300)
+    plt.close(fig)
+    return out
+
+
+# ---------------------------------------------------------------------------- #
+# Model-comparison figures (F3–F7): representative signed H1 models
+# ---------------------------------------------------------------------------- #
+# Publication house style (CLAUDE.md): palette only, serif + cm mathtext, no
+# in-figure titles/annotations (captions carry the identifying info), top/right
+# spines hidden, frameless legends, PNG-only at 300 dpi.
+from src.plotstyle import PALETTE
+from src.plotstyle import apply_publication_style as _apply_publication_style
+
+# The compared models (all signed, H1 loss, best run per cell by rest L1).
+_MODEL_STYLE = {
+    "gaussian": (PALETTE["blue_main"], "-"),
+    "softplus": (PALETTE["violet"], "-"),
+    "leaky_relu": ("0.25", "-."),
+    "relu^2": (PALETTE["red_strong"], "-"),
+    "relu^5": (PALETTE["teal"], "-"),
+}
+_TRUE_COLOR = "0.0"
+_DISPLAY = {"relu^2": r"ReLU$^2$", "relu^5": r"ReLU$^5$",
+            "gaussian": "gaussian", "softplus": "softplus",
+            "leaky_relu": "leaky ReLU"}
+_SURFACE_MODEL_ORDER = ("gaussian", "softplus", "leaky_relu", "relu^2", "relu^5")
+FIG_DIR = OUTPUT_DIR / "figures"
+
+
+def _save_png(fig, name: str, *, tight: bool = True, pad: float = 2.0,
+              bbox: bool = False, palette_colors: int | None = None) -> str:
+    FIG_DIR.mkdir(parents=True, exist_ok=True)
+    if tight:
+        fig.tight_layout(pad=pad)
+    out = FIG_DIR / f"{name}.png"
+    # bbox=True includes artists outside the axes (e.g. an above-axes legend
+    # row), which tight_layout alone does not account for.
+    fig.savefig(out, dpi=300, bbox_inches="tight" if bbox else None)
+    import matplotlib.pyplot as plt
+    plt.close(fig)
+    if palette_colors is not None:
+        from PIL import Image
+        with Image.open(out) as image:
+            image.convert("P", palette=Image.Palette.ADAPTIVE,
+                          colors=palette_colors).save(out, optimize=True)
+    return f"figures/{out.name}"
+
+
+def select_models(best: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """The comparison models out of the best-per-cell rows (signed, H1)."""
+    wanted = list(_MODEL_STYLE)
+    picked = {r["activation"]: r for r in best
+              if r["kind"] == "signed" and r["loss"] == "h1" and r["activation"] in wanted}
+    missing = [w for w in wanted if w not in picked]
+    if missing:
+        raise ValueError(f"missing comparison models in records: {missing}")
+    return {w: picked[w] for w in wanted}
+
+
+def _build_net(row: dict[str, Any]):
+    import pickle
+
+    import torch  # noqa: F401
+
+    from src.config.activations import get_activation
+    from src.models.net import ShallowNetwork
+    from src.plots import _best_iteration_atoms
+
+    with open(row["result_path"], "rb") as f:
+        history = pickle.load(f)
+    a, b, u = _best_iteration_atoms(history)
+    net = ShallowNetwork(
+        layer_sizes=[a.shape[1], a.shape[0], 1],
+        activation=get_activation(row["act_name"]), p=row["power"],
+        inner_weights=a, inner_bias=b, outer_weights=u,
+    )
+    net.eval()
+    return net
+
+
+def _value_grad_phys(net, x_phys: np.ndarray, norm) -> tuple[np.ndarray, np.ndarray]:
+    import torch
+    xn = torch.tensor(np.asarray(x_phys, dtype=np.float64) / norm.x_scale,
+                      dtype=torch.float64, requires_grad=True)
+    val = net(xn)
+    (grad,) = torch.autograd.grad(val.sum(), xn)
+    return (val.detach().numpy().reshape(-1) * norm.v_scale,
+            grad.detach().numpy() * (norm.v_scale / norm.x_scale))
+
+
+def _load_geometry(best: list[dict[str, Any]]):
+    """Dataset, normalizer, curve, in-basin pool, tiled raw truth, band pool.
+
+    ``pool`` is the branch-restricted in-basin point set (it stops AT the
+    switching curve); ``band_pool`` is the envelope-certified two-sided band
+    (pad + collar) around the arms — together they are the full certified
+    two-sided evaluation pool. The global value function beyond the certified
+    region is the **lower envelope of the raw (unrestricted) trajectories,
+    tiled by 2πk in θ**: ``rawt`` holds the tiled raw points for envelope
+    queries.
+    """
+    import pickle
+
+    from src.data import ValueSampleNormalizer, load_value_samples
+    from src.OpenLoop.pendulum.nonsmooth import NonsmoothCurve, restrict_trajectory_to_curve
+    from src.OpenLoop.pendulum.solver import PendulumPmpSolver, PendulumPmpSolverConfig
+
+    data_rel = next(r["data_path"] for r in best)
+    samples = load_value_samples(data_rel)
+    norm = ValueSampleNormalizer.fit(samples)
+    data_abs = DATA_DIR / data_rel
+    curve = NonsmoothCurve.load_npz(data_abs.with_name(data_abs.stem + "_nonsmooth_curve.npz"))
+    raw_pkl = sorted(data_abs.parent.glob("*raw_trajectories*.pkl"))[0]
+    with open(raw_pkl, "rb") as f:
+        raw = pickle.load(f)
+    restricted = []
+    xs, vs, dvs = [], [], []
+    for tr in raw:
+        cut, _ = restrict_trajectory_to_curve(tr, curve)
+        restricted.append(cut)
+        if cut.state.size:
+            xs.append(cut.state); vs.append(cut.value); dvs.append(cut.costate)
+    pool = {"x": np.vstack(xs), "v": np.concatenate(vs), "dv": np.vstack(dvs)}
+    solver = PendulumPmpSolver(config=PendulumPmpSolverConfig(num_trajectories=len(raw)))
+    pad, collar = solver.build_collar_samples(tuple(raw), tuple(restricted), curve)
+    band_pool = {
+        "x": np.vstack([pad.x, collar.x]),
+        "v": np.concatenate([pad.v, collar.v]),
+        "dv": np.vstack([pad.dv, collar.dv]),
+    }
+    x_raw = np.vstack([tr.state for tr in raw])
+    v_raw = np.concatenate([tr.value for tr in raw])
+    dv_raw = np.vstack([tr.costate for tr in raw])
+    shifts = (-2, -1, 0, 1, 2)
+    rawt = {
+        "x": np.vstack([x_raw + np.array([2.0 * np.pi * k, 0.0]) for k in shifts]),
+        "v": np.concatenate([v_raw] * len(shifts)),
+        "dv": np.vstack([dv_raw] * len(shifts)),
+        "tile": np.concatenate([np.full(x_raw.shape[0], k, dtype=int) for k in shifts]),
+    }
+    return samples, norm, curve, pool, rawt, band_pool
+
+
+def _transect_frame(curve_pts: np.ndarray, pool_x: np.ndarray):
+    """Anchor point on the switching curve + unit normal, in the densest data region."""
+    from scipy.spatial import cKDTree
+    counts = cKDTree(pool_x).query_ball_point(curve_pts, r=0.3, return_length=True)
+    c0 = curve_pts[int(np.argmax(counts))]
+    local = curve_pts[np.linalg.norm(curve_pts - c0, axis=1) < 0.5]
+    _, _, vt = np.linalg.svd(local - local.mean(axis=0))
+    tang = vt[0] / np.linalg.norm(vt[0])
+    nrm = np.array([-tang[1], tang[0]])
+    return c0, tang, nrm
+
+
+def _envelope_tube(rawt, c0, tang, nrm, *, s_max: float, tube: float,
+                   n_bins: int = 60, v_slack: float = 0.4):
+    """Lower-envelope truth dots in a thin tube around the transect.
+
+    The raw trajectories make multiple (suboptimal) passes over a state; the true
+    global V is their pointwise minimum. Per s-bin, keep only points within
+    ``v_slack`` of the bin minimum — those lie on the optimal branch, so their
+    costates are the true (branch) gradients.
+    """
+    rel = rawt["x"] - c0
+    s_all, t_all = rel @ nrm, rel @ tang
+    mask = (np.abs(t_all) <= tube) & (np.abs(s_all) <= s_max)
+    s, v, g = s_all[mask], rawt["v"][mask], rawt["dv"][mask] @ nrm
+    keep = np.zeros(s.size, dtype=bool)
+    edges = np.linspace(-s_max, s_max, n_bins + 1)
+    for i in range(n_bins):
+        m = (s >= edges[i]) & (s < edges[i + 1])
+        if m.any():
+            keep |= m & (v <= v[m].min() + v_slack)
+    return s[keep], v[keep], g[keep]
+
+
+def fig_transect(models: dict[str, dict[str, Any]], nets: dict[str, Any], norm,
+                 curve, pool, rawt, *, s_max: float = 0.8, tube: float = 0.10) -> str:
+    """F3 — V and n·∇V along the switching-set normal through the densest data region.
+
+    Truth (both sides of the curve) = lower envelope of the tiled raw trajectories;
+    the models were trained only on the s<0 side (the restricted basin), so s>0
+    shows their smooth continuation against the other branch's true values.
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    _apply_publication_style()
+    c0, tang, nrm = _transect_frame(curve.points, pool["x"])
+    s_true, v_true, g_true = _envelope_tube(rawt, c0, tang, nrm, s_max=s_max, tube=tube)
+    # Subsample per side: the data side is ~50x denser than the far side, so a
+    # uniform draw would erase the far-side truth entirely.
+    rng = np.random.default_rng(0)
+    keep = np.zeros(s_true.size, dtype=bool)
+    for side_mask, cap in ((s_true <= 0.0, 400), (s_true > 0.0, 400)):
+        idx = np.flatnonzero(side_mask)
+        if idx.size > cap:
+            idx = rng.choice(idx, cap, replace=False)
+        keep[idx] = True
+    s_true, v_true, g_true = s_true[keep], v_true[keep], g_true[keep]
+
+    s = np.linspace(-s_max, s_max, 401)
+    line = c0[None, :] + s[:, None] * nrm[None, :]
+    fig, axes = plt.subplots(2, 1, figsize=(8.0, 7.0), sharex=True)
+    for ax in axes:
+        ax.axvline(0.0, color="0.8", lw=1.0, ls="--", zorder=0)
+    axes[0].scatter(s_true, v_true, s=12, color=_TRUE_COLOR, alpha=0.6,
+                    lw=0, zorder=1)
+    axes[1].scatter(s_true, g_true, s=12, color=_TRUE_COLOR, alpha=0.6,
+                    lw=0, zorder=1)
+    for name in models:
+        color, ls = _MODEL_STYLE[name]
+        v, g = _value_grad_phys(nets[name], line, norm)
+        axes[0].plot(s, v, color=color, ls=ls, lw=2.0, label=_DISPLAY[name], zorder=2)
+        axes[1].plot(s, g @ nrm, color=color, ls=ls, lw=2.0, label=_DISPLAY[name], zorder=2)
+    pad_v = 0.15 * (v_true.max() - v_true.min())
+    axes[0].set_ylim(min(0.0, v_true.min()) - pad_v, v_true.max() + pad_v)
+    pad_g = 0.15 * (g_true.max() - g_true.min())
+    axes[1].set_ylim(g_true.min() - pad_g, g_true.max() + pad_g)
+    axes[0].set_ylabel(r"$V$")
+    axes[1].set_ylabel(r"$n\cdot\nabla V$")
+    axes[1].set_xlabel(r"$s$")
+    axes[0].legend(loc="upper left", fontsize=10)
+    return _save_png(fig, "transect_switching_set")
+
+
+def fig_transect_split(models: dict[str, dict[str, Any]], nets: dict[str, Any], norm,
+                       curve, pool, rawt, *, s_max: float = 0.45,
+                       tube: float = 0.10) -> dict[str, str]:
+    """Separate V and n·∇V transects with the selected PMP branch shown explicitly."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    _apply_publication_style()
+    c0, tang, nrm = _transect_frame(curve.points, pool["x"])
+    s = np.linspace(-s_max, s_max, 401)
+    line = c0[None, :] + s[:, None] * nrm[None, :]
+    v0, g0, _ = _branch_candidate_on_line(rawt, c0, nrm, s, tile=0)
+    v1, g1, _ = _branch_candidate_on_line(rawt, c0, nrm, s, tile=1)
+    left = s <= 0.0
+    v_true = np.where(left, v0, v1)
+    g_true = np.where(left, g0, g1)
+    # Nearest-neighbour support is sparse in a few places; fall back to the
+    # available lower candidate rather than leaving small holes in the diagnostic.
+    v_stack = np.vstack([v0, v1])
+    g_stack = np.vstack([g0, g1])
+    fallback = np.nanargmin(np.where(np.isfinite(v_stack), v_stack, np.inf), axis=0)
+    missing = ~np.isfinite(v_true)
+    v_true[missing] = v_stack[fallback[missing], np.flatnonzero(missing)]
+    g_true[missing] = g_stack[fallback[missing], np.flatnonzero(missing)]
+
+    model_values: dict[str, tuple[np.ndarray, np.ndarray]] = {}
+    for name in models:
+        v, g = _value_grad_phys(nets[name], line, norm)
+        model_values[name] = (v, g @ nrm)
+
+    out: dict[str, str] = {}
+    for key, truth, ylabel, stem in (
+        ("value", v_true, r"$V$", "transect_value"),
+        ("gradient", g_true, r"$n\cdot\nabla V$", "transect_normal_gradient"),
+    ):
+        fig, ax = plt.subplots(figsize=(8.5, 4.4))
+        ax.axvline(0.0, color="0.8", lw=1.0, ls="--", zorder=0)
+        ax.plot(s, truth, color=_TRUE_COLOR, ls="-", lw=2.6, label="true PMP",
+                zorder=3)
+        model_stack = []
+        for name in models:
+            color, ls = _MODEL_STYLE[name]
+            y = model_values[name][0 if key == "value" else 1]
+            model_stack.append(y)
+            ax.plot(s, y, color=color, ls=ls, lw=2.0, label=_DISPLAY[name], zorder=2)
+        all_y = np.concatenate([truth, *model_stack])
+        ymin, ymax = float(np.nanmin(all_y)), float(np.nanmax(all_y))
+        pad = 0.06 * max(ymax - ymin, 1.0)
+        ax.set_ylim(ymin - pad, ymax + pad)
+        ax.set_xlabel(r"$s$")
+        ax.set_ylabel(ylabel)
+        # One shared placement for the pair: a frameless row above the axes.
+        # Inside-the-axes corners forced per-panel positions (the free corner
+        # moves with the data); each PNG stays self-contained because the
+        # thesis reuses the panels as individual subfigures.
+        ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.0), ncol=3,
+                  fontsize=10, borderaxespad=0.0)
+        out[key] = _save_png(fig, stem, bbox=True)
+    return out
+
+
+def _branch_candidate_on_line(rawt, c0: np.ndarray, nrm: np.ndarray,
+                              s: np.ndarray, tile: int, *, radius: float = 0.18,
+                              k_neigh: int = 20):
+    """Nearest local candidate branch from one 2π tile of the raw PMP data."""
+    from scipy.spatial import cKDTree
+
+    mask = rawt["tile"] == tile
+    x = rawt["x"][mask]
+    v = rawt["v"][mask]
+    g = rawt["dv"][mask] @ nrm
+    tree = cKDTree(x)
+    line = c0[None, :] + s[:, None] * nrm[None, :]
+    dist, idx = tree.query(line, k=k_neigh)
+    dist = np.atleast_2d(dist)
+    idx = np.atleast_2d(idx)
+    if dist.shape[0] != s.size:
+        dist = dist.T
+        idx = idx.T
+    vv = np.full(s.size, np.nan)
+    gg = np.full(s.size, np.nan)
+    dd = np.full(s.size, np.nan)
+    for i in range(s.size):
+        local = dist[i] <= radius
+        if not np.any(local):
+            continue
+        # Use the closest few points to reduce nearest-neighbour jitter while
+        # still staying on this single tiled PMP branch.
+        jj = idx[i, local][:5]
+        vv[i] = float(np.median(v[jj]))
+        gg[i] = float(np.median(g[jj]))
+        dd[i] = float(np.median(dist[i, local][:5]))
+    return vv, gg, dd
+
+
+def fig_true_branch_transect(curve, pool, rawt, *, s_max: float = 0.45) -> dict[str, str]:
+    """True branch candidates before taking the lower envelope.
+
+    Tile 0 and tile +1 are the two PMP branches that meet at the selected
+    switching-set transect. The true value is their pointwise minimum; the true
+    gradient jumps from the gradient of the lower branch on one side to the
+    gradient of the lower branch on the other side.
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    _apply_publication_style()
+    c0, _, nrm = _transect_frame(curve.points, pool["x"])
+    s = np.linspace(-s_max, s_max, 241)
+    v0, g0, _ = _branch_candidate_on_line(rawt, c0, nrm, s, tile=0)
+    v1, g1, _ = _branch_candidate_on_line(rawt, c0, nrm, s, tile=1)
+    left = s <= 0.0
+    v_min = np.where(left, v0, v1)
+    g_min = np.where(left, g0, g1)
+    vals = np.vstack([v0, v1])
+    g_stack = np.vstack([g0, g1])
+    fallback = np.nanargmin(np.where(np.isfinite(vals), vals, np.inf), axis=0)
+    missing = ~np.isfinite(v_min)
+    v_min[missing] = vals[fallback[missing], np.flatnonzero(missing)]
+    g_min[missing] = g_stack[fallback[missing], np.flatnonzero(missing)]
+
+    styles = {
+        "branch0": (PALETTE["blue_main"], "-", "PMP branch to upright 0"),
+        "branch1": (PALETTE["teal"], "-", r"PMP branch to upright $2\pi$"),
+        "min": ("0.2", "--", "selected minimum"),
+    }
+    out: dict[str, str] = {}
+    for y0, y1, ymin, ylabel, stem in (
+        (v0, v1, v_min, r"$V$", "transect_true_branches_value"),
+        (g0, g1, g_min, r"$n\cdot\nabla V$", "transect_true_branches_gradient"),
+    ):
+        fig, ax = plt.subplots(figsize=(8.5, 4.4))
+        ax.axvline(0.0, color="0.8", lw=1.0, ls="--", zorder=0)
+        ax.plot(s, y0, color=styles["branch0"][0], ls=styles["branch0"][1],
+                lw=2.2, label=styles["branch0"][2])
+        ax.plot(s, y1, color=styles["branch1"][0], ls=styles["branch1"][1],
+                lw=2.2, label=styles["branch1"][2])
+        ax.plot(s, ymin, color=styles["min"][0], ls=styles["min"][1],
+                lw=2.4, label=styles["min"][2])
+        ax.set_xlabel(r"$s$")
+        ax.set_ylabel(ylabel)
+        ax.legend(loc="best", fontsize=10)
+        out[stem] = _save_png(fig, stem)
+    return out
+
+
+def fig_dumbbell(models: dict[str, dict[str, Any]]) -> str:
+    """F4 — switching-tube vs rest relative H1 per model.
+
+    Values come from the consolidated rescore sidecars: fixed tube
+    (d <= 0.3 to the tiled switching curve) on the out-of-sample
+    region-eval pool.
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    _apply_publication_style()
+    rel = {name: {"tube": row["near_h1"], "rest": row["far_h1"]}
+           for name, row in models.items()}
+    order = sorted(models, key=lambda n: rel[n]["rest"], reverse=True)
+    fig, ax = plt.subplots(figsize=(8.0, 4.2))
+    for y, name in enumerate(order):
+        color, _ = _MODEL_STYLE[name]
+        ax.plot([rel[name]["rest"], rel[name]["tube"]], [y, y], color=color, lw=2.0, zorder=1)
+        ax.scatter([rel[name]["rest"]], [y], s=70, facecolor="white", edgecolor=color,
+                   lw=2.0, zorder=2)
+        ax.scatter([rel[name]["tube"]], [y], s=70, color=color, zorder=2)
+    ax.set_xscale("log")
+    ax.set_yticks(range(len(order)))
+    ax.set_yticklabels([_DISPLAY[n] for n in order])
+    ax.set_xlabel(r"relative $H^1$ error")
+    from matplotlib.lines import Line2D
+    ax.legend(handles=[
+        Line2D([], [], marker="o", ls="", markerfacecolor="0.3", color="0.3",
+               label=f"switching tube ($d\\leq{_SWITCHING_TUBE:g}$)"),
+        Line2D([], [], marker="o", ls="", markerfacecolor="white",
+               markeredgecolor="0.3", color="0.3", label="rest"),
+    ], loc="lower left", fontsize=10)
+    return _save_png(fig, "near_far_dumbbell")
+
+
+def fig_error_vs_distance_split(models: dict[str, dict[str, Any]], nets: dict[str, Any],
+                                samples, norm, distance: np.ndarray,
+                                centers: np.ndarray, counts: np.ndarray) -> dict[str, str]:
+    """Per-bin relative error vs distance to the switching set (value, gradient).
+
+    Each bin's mean absolute error is divided by that bin's mean absolute true
+    value / gradient (a within-bin relative error), so the value magnitude is
+    divided out and the curve is not a copy of the |V| profile.
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    _apply_publication_style()
+    x = np.asarray(samples["x"], dtype=np.float64)
+    v_true = np.asarray(samples["v"], dtype=np.float64).reshape(-1)
+    g_true = np.asarray(samples["dv"], dtype=np.float64)
+    edges = np.linspace(float(distance.min()), float(distance.max()), _N_BINS + 1)
+    width = (centers[1] - centers[0]) * 0.9 if len(centers) > 1 else 0.1
+
+    curves: dict[str, dict[str, list[float]]] = {}
+    for name in models:
+        v_pred, g_pred = _value_grad_phys(nets[name], x, norm)
+        v_err_abs = np.abs(v_pred - v_true)
+        g_err_abs = np.linalg.norm(g_pred - g_true, axis=1)
+        v_abs = np.abs(v_true)
+        g_abs = np.linalg.norm(g_true, axis=1)
+        curves[name] = {"value": [], "gradient": []}
+        for i in range(_N_BINS):
+            lo, hi = edges[i], edges[i + 1]
+            mask = (distance >= lo) & ((distance <= hi) if i == _N_BINS - 1 else (distance < hi))
+            if np.any(mask):
+                v_den = float(np.mean(v_abs[mask]))
+                g_den = float(np.mean(g_abs[mask]))
+                curves[name]["value"].append(
+                    float(np.mean(v_err_abs[mask])) / v_den if v_den > 0 else np.nan)
+                curves[name]["gradient"].append(
+                    float(np.mean(g_err_abs[mask])) / g_den if g_den > 0 else np.nan)
+            else:
+                curves[name]["value"].append(np.nan)
+                curves[name]["gradient"].append(np.nan)
+
+    out: dict[str, str] = {}
+    for quantity, ylabel, stem in (
+        ("value", r"bin mean $|\hat V - V|$ / bin mean $|V|$",
+         "error_vs_distance_value"),
+        ("gradient", r"bin mean $\|\nabla\hat V-\nabla V\|$ / bin mean $\|\nabla V\|$",
+         "error_vs_distance_gradient"),
+    ):
+        fig, ax = plt.subplots(figsize=(8.5, 5.2))
+        ax2 = ax.twinx()
+        ax2.bar(centers, counts, width=width, color="0.88", zorder=0)
+        ax2.set_ylabel("samples per bin", color="0.55")
+        ax2.tick_params(axis="y", colors="0.55")
+        ax.set_zorder(ax2.get_zorder() + 1)
+        ax.patch.set_visible(False)
+        for name in models:
+            color, ls = _MODEL_STYLE[name]
+            xs, ys = _smooth_distance_xy(centers, curves[name][quantity], counts)
+            ax.plot(xs, ys, color=color, ls=ls, lw=2.4,
+                    label=_DISPLAY[name], zorder=3)
+        ax.set_xlabel("distance to switching set")
+        ax.set_ylabel(ylabel)
+        ax.legend(loc="upper left", fontsize=10)
+        out[quantity] = _save_png(fig, stem)
+    return out
+
+
+OVERSAMPLE_ALGORITHM1_ROOT = REPO_ROOT / "rawdata" / "logs" / "multirun" / "pendulum" / "paper_log_penalty" / "oversampling"
+OVERSAMPLE_ALGORITHM2_ROOT = REPO_ROOT / "rawdata" / "logs" / "multirun" / "pendulum" / "paper_frac_exp_penalty" / "oversampling"
+# Two-sided oversampling variants (α capacity ladder per variant and family;
+# datasets from scripts/investigation/make_twosided_oversampling_sets.py), in
+# band-share order with the added-budget variant last. Each variant has a
+# gaussian (γ=1) and a ReLU² (γ=0) run dir.
+_OVERSAMPLE_VARIANTS = {
+    "6k 23% (base)": ("base6k",),
+    "6k 40% band": ("band40",),
+    "6k 60% band": ("band60",),
+    "6k+2k band add": ("add2k",),
+}
+_OVERSAMPLE_FAMILIES = ("gaussian", "relu^2")
+
+
+def _oversample_run_dirs(stem: str) -> list[Path]:
+    return sorted((OVERSAMPLE_ALGORITHM1_ROOT / stem).glob("[0-9]*")) + sorted(
+        (OVERSAMPLE_ALGORITHM2_ROOT / stem).glob("[0-9]*")
+    )
+
+
+def _oversample_family(model: dict[str, Any]) -> str | None:
+    """Which §3 family a run record belongs to, or None if out of scope."""
+    if model["kind"] != "signed":
+        return None
+    if model["activation"] == "gaussian" and model.get("objective") == "normalized_moment":
+        return "gaussian"
+    if model["activation"] == "relu" and float(model["power"]) == 2.0:
+        return "relu^2"
+    return None
+
+
+def _common_pool_scores(data_rel: str) -> list[dict[str, Any]] | None:
+    """Score every oversampling-variant model on ONE out-of-sample pool.
+
+    Each variant's recorded region metrics use its *own* region and its own
+    global denominator, so they are not cross-comparable. Here every fitted
+    model is rebuilt (with its own training normalizer) and scored on ONE
+    common two-sided set: the production region-eval pool artifact
+    (``build_region_eval_pool.py``) minus the **union of all variants'
+    training rows** (exact row match), so the set is identical across models
+    and strictly out-of-sample for every one of them — the same convention as
+    the consolidated per-run metrics. One switching tube (distance to the
+    ±2π-tiled switching curve ≤ 0.3), one denominator pair.
+    """
+    if not OVERSAMPLE_ALGORITHM1_ROOT.exists():
+        return None
+    import pickle
+
+    import torch
+
+    from src.config.activations import get_activation
+    from src.data import ValueSampleNormalizer, load_value_samples
+    from src.models.net import ShallowNetwork
+    from src.plots import _best_iteration_atoms
+
+    pool_path = (DATA_DIR / data_rel).with_name(
+        Path(data_rel).stem + "_region_eval_pool.npz"
+    )
+    with np.load(pool_path) as npz:
+        X = np.asarray(npz["x"], dtype=np.float64)
+        V = np.asarray(npz["v"], dtype=np.float64)
+        DV = np.asarray(npz["dv"], dtype=np.float64)
+        d = np.asarray(npz["distance"], dtype=np.float64)
+
+    train_keys: set[bytes] = set()
+    for variant_npz in sorted((DATA_DIR / "Pendulum_2sided_oversample_20260704").glob("*.npz")):
+        if variant_npz.stem.endswith(("_nonsmooth_curve", "_region_distances")):
+            continue
+        with np.load(variant_npz) as npz:
+            for row in np.ascontiguousarray(np.asarray(npz["x"], dtype=np.float64)):
+                train_keys.add(row.tobytes())
+    keep = np.fromiter(
+        (row.tobytes() not in train_keys for row in np.ascontiguousarray(X)),
+        bool, len(X),
+    )
+    X, V, DV, d = X[keep], V[keep], DV[keep], d[keep]
+    bands = {"switching": d <= _SWITCHING_TUBE, "rest": d > _SWITCHING_TUBE}
+    h1_true_sq = np.asarray(V, dtype=np.float64).reshape(-1) ** 2 + np.sum(
+        np.asarray(DV, dtype=np.float64) ** 2, axis=1)
+
+    norms: dict[str, ValueSampleNormalizer] = {}
+    scored = []
+    for variant, (stem,) in _OVERSAMPLE_VARIANTS.items():
+        for run_dir in _oversample_run_dirs(stem):
+            recs = sorted(
+                path
+                for path in Path(run_dir).glob("*.json")
+                if not path.name.startswith("region_rescored_")
+            )
+            if not recs:
+                continue
+            record = json.loads(recs[0].read_text(encoding="utf-8"))
+            model = record["config"]["model"]
+            family = _oversample_family(model)
+            if family is None:
+                continue
+            data_path = record["config"]["data"]["path"]
+            if data_path not in norms:
+                norms[data_path] = ValueSampleNormalizer.fit(load_value_samples(data_path))
+            norm = norms[data_path]
+            with open(Path(run_dir) / f"result_{recs[0].stem}.pkl", "rb") as f:
+                a, b, u = _best_iteration_atoms(pickle.load(f))
+            net = ShallowNetwork(layer_sizes=[a.shape[1], a.shape[0], 1],
+                                 activation=get_activation(model["activation"]),
+                                 p=model["power"], inner_weights=a, inner_bias=b,
+                                 outer_weights=u)
+            net.eval()
+            err_sq = np.empty(len(X))
+            for lo in range(0, len(X), 100_000):
+                hi = min(lo + 100_000, len(X))
+                xn = torch.tensor(X[lo:hi] / norm.x_scale, dtype=torch.float64,
+                                  requires_grad=True)
+                val = net(xn)
+                (grad,) = torch.autograd.grad(val.sum(), xn)
+                vp = val.detach().numpy().reshape(-1) * norm.v_scale
+                gp = grad.detach().numpy() * (norm.v_scale / norm.x_scale)
+                err_sq[lo:hi] = (vp - V[lo:hi]) ** 2 + np.sum((gp - DV[lo:hi]) ** 2, axis=1)
+            entry = {"variant": variant, "family": family,
+                     "alpha": float(model["alpha"]),
+                     "neurons": int(record["metrics"][0]["values"]["best_neurons"])}
+            # Per-region relative H1 error (well posed in the switching tube, |V| large):
+            # sqrt(sum(dV^2 + |d grad V|^2)) / sqrt(sum(V^2 + |grad V|^2)).
+            entry.update({
+                band: float(np.sqrt(err_sq[sel].sum()) / np.sqrt(h1_true_sq[sel].sum()))
+                if h1_true_sq[sel].sum() > 0 else np.nan
+                for band, sel in bands.items()
+            })
+            scored.append(entry)
+    return scored or None
+
+
+def fig_oversampling_control(scored: list[dict[str, Any]]) -> str:
+    """F8 — common-set error per band vs the training near-share ladder."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    _apply_publication_style()
+    variants = list(_OVERSAMPLE_VARIANTS)
+    band_color = {"switching": PALETTE["red_strong"], "rest": PALETTE["blue_main"]}
+    family_style = {"gaussian": ("-", "o"), "relu^2": ("--", "^")}
+    fig, ax = plt.subplots(figsize=(8.5, 5.2))
+    for family, (ls, marker) in family_style.items():
+        for band, color in band_color.items():
+            best = []
+            for i, variant in enumerate(variants):
+                candidates = [r for r in scored
+                              if r["variant"] == variant and r["family"] == family]
+                if not candidates:
+                    best.append(np.nan)
+                    continue
+                selected = min(candidates, key=lambda r: r["switching"])
+                vals = [r[band] for r in candidates]
+                ax.scatter([i] * len(vals), vals, s=22, color=color, alpha=0.3,
+                           lw=0, zorder=2)
+                best.append(selected[band])
+            ax.plot(range(len(variants)), best, ls=ls, marker=marker, color=color,
+                    lw=2.0, ms=7, label=f"{_DISPLAY[family]} {band}", zorder=3)
+    ax.set_yscale("log")
+    ax.set_xticks(range(len(variants)))
+    ax.set_xticklabels(variants, fontsize=10)
+    ax.set_ylabel(r"common-set relative $H^1$ error")
+    ax.legend(loc="center left", fontsize=10)
+    return _save_png(fig, "oversampling_control")
+
+
+def fig_feedback_split(models: dict[str, dict[str, Any]], nets: dict[str, Any], norm,
+                       curve, pool, rawt, *, offset: float = 0.25,
+                       roll_t: float = 10.0, dt: float = 0.005,
+                       u_clip: float = 30.0):
+    """Separate phase portraits and off-data control trace for feedback synthesis."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from scipy.spatial import cKDTree
+
+    from src.OpenLoop.pendulum.problem import PendulumSwingUpProblem
+
+    _apply_publication_style()
+    problem = PendulumSwingUpProblem()
+    c0, _, nrm = _transect_frame(curve.points, pool["x"])
+    starts = {"A": c0 - offset * nrm, "B": c0 + offset * nrm}
+    tree = cKDTree(rawt["x"])
+
+    def true_u(x):
+        _, j = tree.query(np.asarray(x, dtype=np.float64).reshape(1, 2), k=40)
+        j = np.asarray(j).ravel()
+        opt = j[int(np.argmin(rawt["v"][j]))]
+        return float(np.ravel(problem.feedback_from_gradient(rawt["dv"][opt]))[0])
+
+    def model_u(net):
+        def u(x):
+            _, g = _value_grad_phys(net, np.asarray(x).reshape(1, 2), norm)
+            return float(problem.feedback_from_gradient(g)[0])
+        return u
+
+    laws = {"true PMP": (_TRUE_COLOR, "-", true_u)}
+    for name in models:
+        color, ls = _MODEL_STYLE[name]
+        laws[name] = (color, ls, model_u(nets[name]))
+    rolled = {(side, name): problem.rk4_rollout(uf, x0, T=roll_t, dt=dt, u_clip=u_clip)
+              for side, x0 in starts.items() for name, (_, _, uf) in laws.items()}
+
+    def _reached(xs):
+        xf = xs[-1]
+        return abs((xf[0] + np.pi) % (2 * np.pi) - np.pi) < 0.4 and abs(xf[1]) < 0.4
+
+    all_xs = np.vstack([xs for (_, xs, _, _) in rolled.values()])
+    all_xs = all_xs[np.all(np.abs(all_xs) < 12.0, axis=1)]
+    xlo, xhi = all_xs[:, 0].min() - 0.7, all_xs[:, 0].max() + 0.7
+    ylo, yhi = all_xs[:, 1].min() - 0.7, all_xs[:, 1].max() + 0.7
+
+    # One small phase panel per feedback law (house subfigure rule): the two
+    # starts are the series (A = data side, blue; B = beyond the curve, red), so
+    # no trajectory ever hides another — in the composite overplot, ReLU^5's
+    # dashed line was drawn underneath four near-identical trajectories, which
+    # made it look disconnected from its start.
+    out: dict[str, str] = {}
+    for name in laws:
+        stem = "feedback_" + name.replace("^", "").replace(" ", "_").lower()
+        fig, ax = plt.subplots(figsize=(5.2, 4.2))
+        ax.scatter(curve.points[:, 0], curve.points[:, 1], s=3, color="0.1", zorder=3)
+        for side, scolor in (("A", PALETTE["blue_main"]), ("B", PALETTE["red_strong"])):
+            _, xs, _, _ = rolled[(side, name)]
+            ax.plot(xs[:, 0], xs[:, 1], color=scolor, lw=2.2,
+                    label=f"start {side}", zorder=2)
+            ax.scatter([starts[side][0]], [starts[side][1]], s=80, color=scolor,
+                       marker="x", lw=2.2, zorder=4)
+        ax.set_xlabel(r"$\theta$")
+        ax.set_ylabel(r"$\dot{\theta}$")
+        ax.set_xlim(xlo, xhi)
+        ax.set_ylim(ylo, yhi)
+        ax.legend(loc="upper right", fontsize=9)
+        out[name] = _save_png(fig, stem)
+
+    # One panel per model family (Algorithm 1 vs ReLU^p), true law as a thick
+    # solid black underlay in both. ReLU^p members are forced dashed so ReLU²'s
+    # near-exact tracking (the finding) reads as red dashes riding on black
+    # instead of an invisible overlap; log-penalty members keep their natural
+    # _MODEL_STYLE linestyle since none of them overlap the true-PMP curve.
+    # Each panel's y-range is set from its own members' full excursion (plus a
+    # margin) so softplus's saturation swings are shown in full rather than
+    # clipped — the ReLU^p panel stays tight since ReLU^2/^5 never saturate.
+    nonhomogeneous = tuple(name for name in models if not name.startswith("relu^"))
+    homogeneous = tuple(name for name in models if name.startswith("relu^"))
+    panels = {
+        "control_b_log": (
+            "feedback_control_b_log_penalty",
+            nonhomogeneous,
+            False,
+        ),
+        "control_b_relu": (
+            "feedback_control_b_relu",
+            homogeneous,
+            True,
+        ),
+    }
+    for key, (stem, members, force_dash) in panels.items():
+        fig, ax = plt.subplots(figsize=(6.4, 4.4))
+        t_true, _, us_true, _ = rolled[("B", "true PMP")]
+        member_us = [rolled[("B", name)][2] for name in members]
+        all_us = np.concatenate([us_true, *member_us])
+        ylo, yhi = all_us.min() - 1.0, all_us.max() + 1.0
+        ax.plot(t_true, us_true, color=_TRUE_COLOR, ls="-", lw=3.2, zorder=2,
+                label="true PMP")
+        for name in members:
+            color, ls, _ = laws[name]
+            if force_dash:
+                ls = (0, (4, 2.4))
+            t, _, us, _ = rolled[("B", name)]
+            ax.plot(t, us, color=color, ls=ls, lw=1.9, zorder=3,
+                    label=_DISPLAY.get(name, name))
+        ax.axhline(0.0, color="0.85", lw=0.8, zorder=0)
+        ax.set_xlabel(r"time $t$")
+        ax.set_ylabel(r"feedback control $u(t)$")
+        ax.set_xlim(0, roll_t)
+        ax.set_ylim(ylo, yhi)
+        ax.legend(loc="upper left", fontsize=9)
+        out[key] = _save_png(fig, stem)
+
+    table = []
+    for name in laws:
+        entry = {"model": _DISPLAY.get(name, name).replace("$", "")}
+        for side in ("A", "B"):
+            _, xs, _, cost = rolled[(side, name)]
+            entry[f"cost {side}"] = f"{cost:.1f}"
+            entry[f"upright {side}"] = "yes" if _reached(xs) else "no"
+        table.append(entry)
+    return out, table, starts
+
+
+def fig_atom_portrait(models: dict[str, dict[str, Any]], nets: dict[str, Any],
+                      norm, curve) -> str:
+    """F7 — atom lines {a·x+b=0} (physical coords) vs the switching curve,
+    relu^2 and gaussian panels; line strength ∝ |outer weight|."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    _apply_publication_style()
+    lim = 9.0
+    fig, axes = plt.subplots(1, 2, figsize=(11, 5.2))
+    for ax, name in zip(axes, ("relu^2", "gaussian")):
+        net = nets[name]
+        a = net.hidden.weight.detach().numpy() / norm.x_scale   # physical-coords normals
+        b = net.hidden.bias.detach().numpy()
+        c = np.abs(net.output.weight.detach().numpy()).ravel()
+        w = c / c.max()
+        color, _ = _MODEL_STYLE[name]
+        for (a1, a2), bi, wi in zip(a, b, w):
+            nn = np.hypot(a1, a2)
+            if nn < 1e-12:
+                continue
+            # line a1·x + a2·y + b = 0 through the box
+            p0 = -bi * np.array([a1, a2]) / nn**2
+            d = np.array([-a2, a1]) / nn
+            pts = np.array([p0 - 3 * lim * d, p0 + 3 * lim * d])
+            ax.plot(pts[:, 0], pts[:, 1], color=color, lw=0.5 + 1.6 * wi,
+                    alpha=0.12 + 0.55 * wi, zorder=1)
+        ax.scatter(curve.points[:, 0], curve.points[:, 1], s=3, color="0.15", zorder=3)
+        ax.set_xlim(-lim, lim); ax.set_ylim(-lim, lim)
+        ax.set_xlabel(r"$\theta$")
+        ax.set_ylabel(r"$\dot{\theta}$")
+        ax.set_aspect("equal")
+    return _save_png(fig, "atom_portrait", palette_colors=256)
+
+
+def fig_learned_surfaces(best: list[dict[str, Any]], norm) -> dict[str, str]:
+    """Learned value surface, one PNG per signed H1 model in the surface gallery."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib as mpl
+    import matplotlib.pyplot as plt
+
+    from src.plots import plot_model_value_surface
+
+    picked = {
+        r["activation"]: r for r in best
+        if r["kind"] == "signed" and r["loss"] == "h1"
+        and r["activation"] in _SURFACE_MODEL_ORDER
+    }
+    missing = [name for name in _SURFACE_MODEL_ORDER if name not in picked]
+    if missing:
+        raise ValueError(f"missing learned-surface models in records: {missing}")
+
+    FIG_DIR.mkdir(parents=True, exist_ok=True)
+    out: dict[str, str] = {}
+    for name in _SURFACE_MODEL_ORDER:
+        row = picked[name]
+        out_path = FIG_DIR / f"surface_{name.replace('^', '')}.png"
+        with mpl.rc_context():
+            _apply_publication_style()
+            fig = plt.figure(figsize=(4.2, 4.0))
+            ax = fig.add_subplot(111, projection="3d")
+            plot_model_value_surface(
+                row["result_path"],
+                activation=row["act_name"],
+                power=row["power"],
+                x_scale=norm.x_scale,
+                v_scale=norm.v_scale,
+                grid_n=220,
+                x_range=(-8.0, 8.0),
+                y_range=(-8.0, 8.0),
+                vmax=60.0,
+                xticks=(-8.0, 0.0, 8.0),
+                yticks=(-8.0, 0.0, 8.0),
+                zticks=(0.0, 30.0, 60.0),
+                ax=ax,
+                show=False,
+            )
+            fig.savefig(out_path, dpi=300, bbox_inches="tight")
+            plt.close(fig)
+        out[name] = f"figures/{out_path.name}"
+    return out
+
+
+def _frontier_trajectory(result_path: str) -> tuple[np.ndarray, np.ndarray]:
+    """(neurons, running-best relative H1 validation error) for one insertion run."""
+    import pickle
+
+    with open(result_path, "rb") as f:
+        history = pickle.load(f)
+    pts = []
+    for iw, h1 in zip(history.inner_weights, history.err_h1_val):
+        n = int(np.asarray(iw["weight"]).shape[0])
+        h1 = float(h1)
+        if n >= 1 and np.isfinite(h1):
+            pts.append((n, h1))
+    pts.sort(key=lambda nh: nh[0])
+    if not pts:
+        return np.array([]), np.array([])
+    ns = np.array([n for n, _ in pts])
+    h1 = np.minimum.accumulate(np.array([h for _, h in pts], dtype=np.float64))
+    return ns, h1
+
+
+def fig_frontier(best: list[dict[str, Any]]) -> str:
+    """Running-best relative H1 validation error vs network size."""
+    from src.plots import frontier_penalty_label, plot_neuron_h1_frontier
+
+    picked = {
+        r["activation"]: r for r in best
+        if r["kind"] == "signed" and r["loss"] == "h1"
+        and r["activation"] in _SURFACE_MODEL_ORDER
+    }
+    markers = {
+        "gaussian": "o",
+        "softplus": "s",
+        "tanh": "v",
+        "leaky_relu": "v",
+        "relu^2": "^",
+        "relu^3": "P",
+        "relu^5": "D",
+    }
+    tex_names = {
+        "gaussian": r"\mathrm{gaussian}",
+        "softplus": r"\mathrm{softplus}",
+        "tanh": r"\tanh",
+        "leaky_relu": r"\mathrm{leaky\,ReLU}",
+        "relu^2": r"\mathrm{ReLU}^2",
+        "relu^3": r"\mathrm{ReLU}^3",
+        "relu^5": r"\mathrm{ReLU}^5",
+    }
+    labels = {}
+    for name in _SURFACE_MODEL_ORDER:
+        labels[name] = frontier_penalty_label(
+            tex_names[name],
+            insertion=picked[name]["insertion"],
+            subscript=(
+                name.removeprefix("relu^")
+                if name.startswith("relu^")
+                else r"\gamma"
+            ),
+        )
+    series = []
+    for name in _SURFACE_MODEL_ORDER:
+        ns, h1 = _frontier_trajectory(picked[name]["result_path"])
+        color, ls = _MODEL_STYLE[name]
+        series.append({
+            "ns": ns,
+            "h1": h1,
+            "label": labels[name],
+            "color": color,
+            "marker": markers[name],
+            "ls": ls,
+        })
+    out = FIG_DIR / "frontier.png"
+    plot_neuron_h1_frontier(series, save_path=out)
+    return f"figures/{out.name}"

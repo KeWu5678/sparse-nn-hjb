@@ -46,4 +46,6 @@ iterations. Sequential insertion retains one candidate per iteration and uses a
 ```sh
 make paper-sweep EXPERIMENT=vdp/paper_log_penalty
 make paper-p-study EXPERIMENT=vdp/paper_log_penalty
+make paper-radius-study
+make paper-artifacts
 ```

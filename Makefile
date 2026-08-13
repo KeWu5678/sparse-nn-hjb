@@ -49,10 +49,10 @@ MLFLOW_STOP_AFTER ?= true
 PAPER_MODE ?= both
 SEQ_ITERATIONS ?= 150
 
-.PHONY: help openloop sweep paper-sweep paper-p-study paper-artifacts moment-sweep moment-refine moment-followup moment-oversampling region-split paper-figures mlflow-deploy mlflow-backfill
+.PHONY: help openloop sweep paper-sweep paper-p-study paper-radius-study paper-oversampling-study paper-l1-study paper-artifacts moment-sweep moment-refine moment-followup moment-oversampling region-split paper-figures mlflow-deploy mlflow-backfill
 
 help:  ## list targets
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
+	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
 	  awk 'BEGIN {FS = ":.*?## "} {printf "  %-20s %s\n", $$1, $$2}'
 	@printf "\n  %-20s %s\n" "VERBOSE=true" "also stream PDAP tables to console (always in per-run run.log)"
 	@printf "  %-20s %s\n" "JOBS=N" "parallel sweep workers (default 8)"
@@ -108,13 +108,20 @@ paper-sweep:  ## run a paper-conforming sweep ({vdp,pendulum}/paper_{log,frac_ex
 	  */paper_log_penalty|*/paper_frac_exp_penalty) ;; \
 	  *) echo "Use EXPERIMENT={vdp,pendulum}/paper_{log,frac_exp}_penalty."; exit 2 ;; \
 	esac
+	@case "$(PAPER_MODE)" in batch|sequential|both) ;; \
+	  *) echo "Use PAPER_MODE=batch, sequential, or both."; exit 2 ;; \
+	esac
 	@test -f "$(ANALYSIS_DIR)/analysis.py" || { \
-	  echo "Missing $(ANALYSIS_DIR)/analysis.py, which this target runs once the"; \
-	  echo "sweep finishes.  Per-study analysis.py files are gitignored, so a clean"; \
-	  echo "checkout does not carry them.  Checked here rather than after the"; \
-	  echo "sweep, which costs hours."; \
+	  echo "Missing tracked analysis entry point $(ANALYSIS_DIR)/analysis.py."; \
 	  exit 2; \
 	}
+	@for mode in batch sequential; do \
+	  case "$(PAPER_MODE)" in $$mode|both) \
+	    if find "$(SWEEP_DIR)/$$mode" -name '*.json' -print -quit 2>/dev/null | grep -q .; then \
+	      echo "$(SWEEP_DIR)/$$mode already contains records; refusing to mix runs."; exit 2; \
+	    fi ;; \
+	  esac; \
+	done
 	@case "$(PAPER_MODE)" in \
 	  batch|both) \
 	    echo "== batch insertion (Algorithm as printed, N_ins=$${NINS:-15}) =="; \
@@ -141,6 +148,20 @@ paper-p-study:  ## sweep the moment order p in Algorithm 1's normalized objectiv
 	  */paper_log_penalty) ;; \
 	  *) echo "Use EXPERIMENT={vdp,pendulum}/paper_log_penalty (p is inert on the sphere)."; exit 2 ;; \
 	esac
+	@if find "$(SWEEP_DIR)/p_study" "$(SWEEP_DIR)/p_study_sequential" \
+	  -name '*.json' -print -quit 2>/dev/null | grep -q .; then \
+	  echo "The p-study output already contains records; refusing to mix runs."; exit 2; \
+	fi
+	OMP_NUM_THREADS=1 $(PY) scripts/train.py -m +experiment=$(EXPERIMENT) \
+	  hydra/launcher=joblib hydra.launcher.n_jobs=$(JOBS) \
+	  hydra.sweep.dir=$(SWEEP_DIR)/p_study \
+	  env.verbose=$(VERBOSE) env.seed=42 \
+	  training.insert_mode=batch \
+	  training.num_iterations=10 \
+	  model.activation=softplus,tanh,gaussian,gelu_squared \
+	  model.moment_order=2.01,2.5,3,4 \
+	  model.alpha=1e-4,1e-5 \
+	  model.gamma=1 model.loss_weights='[1.0,1.0]'
 	OMP_NUM_THREADS=1 $(PY) scripts/train.py -m +experiment=$(EXPERIMENT) \
 	  hydra/launcher=joblib hydra.launcher.n_jobs=$(JOBS) \
 	  hydra.sweep.dir=$(SWEEP_DIR)/p_study_sequential \
@@ -152,6 +173,68 @@ paper-p-study:  ## sweep the moment order p in Algorithm 1's normalized objectiv
 	  model.alpha=1e-4,1e-5 \
 	  model.gamma=1 model.loss_weights='[1.0,1.0]'
 	$(PY) "$(ANALYSIS_DIR)/analysis.py"
+
+paper-radius-study:  ## compare fixed and theorem search radii for Algorithm 1 on VDP
+	@if find rawdata/logs/multirun/vdp/paper_log_penalty/radius_ablation \
+	  rawdata/logs/multirun/vdp/paper_log_penalty/radius_ablation_sequential \
+	  -name '*.json' -print -quit 2>/dev/null | grep -q .; then \
+	  echo "The radius-ablation output already contains records; refusing to mix runs."; exit 2; \
+	fi
+	@for mode in batch sequential; do \
+	  if [ "$$mode" = batch ]; then iterations=10; suffix=radius_ablation; \
+	  else iterations=$(SEQ_ITERATIONS); suffix=radius_ablation_sequential; fi; \
+	  OMP_NUM_THREADS=1 $(PY) scripts/train.py -m +experiment=vdp/paper_log_penalty \
+	    hydra/launcher=joblib hydra.launcher.n_jobs=$(JOBS) \
+	    hydra.sweep.dir=rawdata/logs/multirun/vdp/paper_log_penalty/$$suffix \
+	    env.verbose=$(VERBOSE) env.seed=42 \
+	    training.insert_mode=$$mode training.num_iterations=$$iterations \
+	    training.radial_cap=fixed,theorem \
+	    model.activation=softplus,tanh,gaussian,gelu_squared \
+	    model.moment_order=2.01,2.5,3,4 model.alpha=1e-4,1e-5 \
+	    model.gamma=1 model.loss_weights='[1.0,1.0]' || exit $$?; \
+	done
+
+paper-oversampling-study:  ## rerun both current algorithms on four pendulum switching-band datasets
+	@if find rawdata/logs/multirun/pendulum/paper_log_penalty/oversampling \
+	  rawdata/logs/multirun/pendulum/paper_frac_exp_penalty/oversampling \
+	  -name '*.json' -print -quit 2>/dev/null | grep -q .; then \
+	  echo "The oversampling output already contains records; refusing to mix runs."; exit 2; \
+	fi
+	@set -e; for variant in base6k band40 band60 add2k; do \
+	  OMP_NUM_THREADS=1 $(PY) scripts/train.py -m +experiment=pendulum/paper_log_penalty \
+	    hydra/launcher=joblib hydra.launcher.n_jobs=$(JOBS) \
+	    hydra.sweep.dir=rawdata/logs/multirun/pendulum/paper_log_penalty/oversampling/$$variant \
+	    env.verbose=$(VERBOSE) env.seed=42 \
+	    training.insert_mode=sequential training.num_iterations=$(SEQ_ITERATIONS) \
+	    model.activation=gaussian model.gamma=0 model.moment_order=2.01 \
+	    model.alpha=1e-3,1e-4,1e-5 model.loss_weights='[1.0,1.0]' \
+	    data.path=Pendulum_2sided_oversample_20260704/$$variant.npz \
+	    eval.distance_cache=Pendulum_2sided_oversample_20260704/$${variant}_region_distances.npz; \
+	  OMP_NUM_THREADS=1 $(PY) scripts/train.py -m +experiment=pendulum/paper_frac_exp_penalty \
+	    hydra/launcher=joblib hydra.launcher.n_jobs=$(JOBS) \
+	    hydra.sweep.dir=rawdata/logs/multirun/pendulum/paper_frac_exp_penalty/oversampling/$$variant \
+	    env.verbose=$(VERBOSE) env.seed=42 \
+	    training.insert_mode=sequential training.num_iterations=$(SEQ_ITERATIONS) \
+	    model.activation=relu model.power=2 model.gamma=0 \
+	    model.alpha=1e-4,1e-5,1e-6 model.loss_weights='[1.0,1.0]' \
+	    data.path=Pendulum_2sided_oversample_20260704/$$variant.npz \
+	    eval.distance_cache=Pendulum_2sided_oversample_20260704/$${variant}_region_distances.npz; \
+	done
+
+paper-l1-study:  ## run the current ReLU+l1 baselines used in both paper frontiers
+	@set -e; for problem in vdp pendulum; do \
+	  out=rawdata/logs/multirun/$$problem/paper_frac_exp_penalty/relu_l1; \
+	  if find "$$out" -name '*.json' -print -quit 2>/dev/null | grep -q .; then \
+	    echo "$$out already contains records; refusing to mix runs."; exit 2; \
+	  fi; \
+	  OMP_NUM_THREADS=1 $(PY) scripts/train.py -m +experiment=$$problem/paper_frac_exp_penalty \
+	    hydra/launcher=joblib hydra.launcher.n_jobs=$(JOBS) \
+	    hydra.sweep.dir=$$out env.verbose=$(VERBOSE) env.seed=42 \
+	    training.insert_mode=sequential training.num_iterations=$(SEQ_ITERATIONS) \
+	    model.activation=relu model.power=1 model.gamma=0 \
+	    model.alpha=1e-1,1e-2,1e-3,1e-4,1e-5,1e-6 \
+	    model.loss_weights='[1.0,1.0]'; \
+	done
 
 moment-sweep:  ## run the seed-42 moment screen; beta=0 baseline is deduplicated across p
 	@case "$(EXPERIMENT)" in \
