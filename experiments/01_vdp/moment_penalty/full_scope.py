@@ -283,7 +283,8 @@ def _loss_table(rows: list[dict[str, Any]]) -> str:
         for loss in ("l2", "h1"):
             row = _selected(rows, activation, loss=loss)
             lines.append(
-                f"| {activation} | {loss} | 1 | {_format_float(row['rel_l2'])} | "
+                f"| {activation} | {loss} | {SELECTED_GAMMA:g} | "
+                f"{_format_float(row['rel_l2'])} | "
                 f"{_format_float(row['rel_h1'])} | {row['neurons']} | "
                 f"{row['radius_r95']:.3g} |"
             )
@@ -397,13 +398,18 @@ def main(argv: list[str] | None = None) -> int:
     )
     insertion = legacy._insertion_section(rows)
     if all(row["beta"] == 0.0 for row in rows):
+        gaussian = _selected(rows, "gaussian")
+        softplus = _selected(rows, "softplus")
         insertion = (
-            insertion.replace(
-                "`J = L(μ) + α·Φ(μ)`",
-                "`J = l^M(μ) + α Σ φ_γ(w_p(ω_n)|c_n|)`",
-            )
-            .replace("clears the threshold α", "clears |P_p(ω)| > α L_φ")
-            .replace("fewer ω exceed α", "fewer ω clear the normalized threshold")
+            "### Sequential insertion and pruning\n\n"
+            "Each outer iteration retains at most one candidate satisfying "
+            "`|P_p(ω)| > α L_φ`. The guarded coefficient correction and pruning "
+            "then determine the recorded support, so its size may increase by one, "
+            "stay unchanged, or decrease; a negative change is pruning, not a "
+            "negative insertion. At the shared operating point, Gaussian uses "
+            f"{gaussian['neurons']} atoms and softplus {softplus['neurons']} atoms "
+            f"at relative H1 {gaussian['rel_h1']:.4f} and "
+            f"{softplus['rel_h1']:.4f}, respectively."
         )
     else:
         insertion = (
