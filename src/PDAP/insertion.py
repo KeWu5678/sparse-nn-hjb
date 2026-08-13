@@ -1,10 +1,9 @@
 """Insertion strategies for the PDAP outer loop.
 
 An insertion strategy proposes new atoms (inner weights/biases) to add to the
-current support, given the data and the current residual.  Both strategies share
-the same candidate generation (sample S^d, L-BFGS-refine the fidelity derivative,
-iterative cosine-merge dedup, optional per-direction rescale); they differ only
-in the *acceptance* test:
+current support, given the data and the current residual.  Both strategies use
+multistart L-BFGS on the fidelity derivative, but their parameter domains and
+acceptance tests differ:
 
   * ``profile_threshold`` — accept candidates whose derivative magnitude exceeds ``alpha``.
     Signed networks use the two-sided test ``|p|>alpha``; convex (semiconcave)
@@ -21,6 +20,7 @@ configuration.
 from __future__ import annotations
 
 import logging
+import math
 from typing import Callable, List, Optional, Tuple
 
 import numpy as np
@@ -64,16 +64,24 @@ def _profile_value(
 
 
 # ---------------------------------------------------------------------------- #
-# Shared candidate generation: sample -> (maximize -> merge) x5 -> rescale
+# Shared candidate generation
 # ---------------------------------------------------------------------------- #
 def _generate_candidates(
     X, residual_v, residual_dv, *,
     activation, power, loss_weights, sample_sphere, N,
     merge_tol, two_sided, use_sphere, existing_atoms,
     lbfgs_lr=1e-2, lbfgs_steps=200, moment_beta=0.0, moment_order=2.0,
-    normalized=False, radius=None,
+    normalized=False, radius=None, algorithm1_search=False,
 ) -> Tuple[torch.Tensor, torch.Tensor, int]:
-    """Return distinct locally refined derivative candidates on S^d."""
+    """Return distinct locally refined derivative-profile maximizers.
+
+    Homogeneous activations are searched on ``S^d``.  For nonhomogeneous
+    activations, initial points are sampled inside ``radius`` and all components
+    of ``omega=(a,b)`` are then optimized jointly without a constraint.  When
+    ``algorithm1_search`` is true, optimized points outside the sampling radius
+    are discarded rather than projected back.  The preserved comparators retain
+    their historical sphere-then-radius search.
+    """
     K, d_dim = X.shape
     Kx = K  # M, the sample count: the empirical fidelity is 1/(2M) * sum_m
     w1, w2 = loss_weights
@@ -84,6 +92,21 @@ def _generate_candidates(
     res_dv_n = residual_dv / res_norm
 
     def maximize_batch(a_batch, b_batch, steps=200, lr=1e-2, eps=1e-12):
+        """Locally maximize the derivative profile from each starting point.
+
+        For a positively homogeneous activation the parameter is gauge-fixed to
+        the sphere, so the profile is maximized over directions and the iterate
+        is renormalized after every step.  For a nonhomogeneous activation the
+        radial variable is a genuine shape parameter and is optimized *jointly*
+        with the direction: maximizing over directions at |omega| = 1 and then
+        over the radius along the winning direction is a strictly weaker search,
+        because the profile does not factor into radial and directional parts,
+        so the best direction at unit radius need not be the direction of a
+        joint maximizer.
+
+        The nonhomogeneous solve is unconstrained.  Its caller may subsequently
+        discard a final point outside the radius used to sample its start.
+        """
         results_a, results_b = [], []
         for a0, b0 in zip(a_batch, b_batch):
             w = torch.cat([a0.reshape(-1), b0.reshape(-1)]).detach().clone().requires_grad_(True)
@@ -91,14 +114,18 @@ def _generate_candidates(
 
             def closure():
                 opt.zero_grad()
-                w_s = w / w.norm().clamp_min(eps)
+                joint = algorithm1_search and not use_sphere
+                w_s = w if joint else w / w.norm().clamp_min(eps)
                 obj = _profile_value(X, w_s[:d_dim], w_s[d_dim], activation, power,
                                      w1, w2, Kx, res_v_n, res_dv_n, two_sided)
+                if joint and normalized:
+                    obj = obj / moment_weight(w_s[:d_dim], w_s[d_dim], moment_order)
                 (-obj).backward()
                 return -obj
 
             opt.step(closure)
-            w_s = (w / w.norm().clamp_min(eps)).detach()
+            joint = algorithm1_search and not use_sphere
+            w_s = w.detach() if joint else (w / w.norm().clamp_min(eps)).detach()
             results_a.append(w_s[:d_dim])
             results_b.append(w_s[d_dim:d_dim + 1])
         return torch.stack(results_a), torch.stack(results_b).reshape(-1)
@@ -108,19 +135,43 @@ def _generate_candidates(
         if n <= 1:
             return a_cands, b_cands
         U = torch.cat([a_cands, b_cands.reshape(-1, 1)], dim=1)
-        U = U / U.norm(dim=1, keepdim=True).clamp_min(1e-12)
-        sim = U @ U.T
         keep = torch.ones(n, dtype=torch.bool)
         for i in range(n):
             if keep[i]:
                 for j in range(i + 1, n):
-                    if keep[j] and sim[i, j] > 1.0 - merge_tol:
+                    if not algorithm1_search or use_sphere:
+                        u_i = U[i] / U[i].norm().clamp_min(1e-12)
+                        u_j = U[j] / U[j].norm().clamp_min(1e-12)
+                        duplicate = bool(u_i.dot(u_j) > 1.0 - merge_tol)
+                    else:
+                        duplicate = bool(torch.linalg.vector_norm(U[i] - U[j]) <= merge_tol)
+                    if keep[j] and duplicate:
                         keep[j] = False
         return a_cands[keep], b_cands[keep]
 
-    # Step 1: candidates = random samples + existing support.
+    # Step 1: random starts. Preserved non-Algorithm-1 paths also inject the
+    # existing support.
+    #
+    # The homogeneous search is posed on the sphere, so its starting points live
+    # there.  The nonhomogeneous search ranges over the ball of radius
+    # ``radius``, and its starting points carry a radius too -- starting every
+    # trajectory at |omega| = 1 would bias the search toward that shell.
+    #
+    # The radius is drawn log-uniformly, not uniformly in volume.  Uniform in
+    # the ball puts r = R * U^(1/(d+1)), whose median already sits at ~0.79 R;
+    # with R = e^5 nearly every start lands in the far field, where the
+    # normalized profile |P|/w_p is flat and vanishing, and the local solve
+    # cannot climb back.  Scale, not volume, is the meaningful spread for a
+    # shape parameter that ranges over decades.
     a_t, b_t = sample_sphere(N)
-    if existing_atoms is not None:
+    if algorithm1_search and not use_sphere:
+        r_max = float(radius) if radius is not None else math.exp(5.0)
+        lo, hi = math.log(math.exp(-3.0)), math.log(max(r_max, math.exp(-3.0) * 1.001))
+        u = torch.rand(a_t.shape[0], dtype=torch.float64)
+        r = torch.exp(lo + (hi - lo) * u)
+        a_t = a_t * r.unsqueeze(1)
+        b_t = b_t * r
+    if not algorithm1_search and existing_atoms is not None:
         W_exist, b_exist = existing_atoms
         if W_exist.shape[0] > 0:
             U_exist = torch.cat([W_exist, b_exist.reshape(-1, 1)], dim=1)
@@ -131,30 +182,27 @@ def _generate_candidates(
             a_t = torch.cat([a_t, U_exist[:, :d_dim]], dim=0)
             b_t = torch.cat([b_t, U_exist[:, d_dim]], dim=0)
 
-    # Step 2: iterative optimize + merge (MATLAB find_max:390-414).
+    # Algorithm 1 uses one joint solve from each random start, then filters and
+    # deduplicates once. Other paths retain their historical repeated sphere
+    # refinement.
     n_after = a_t.shape[0]
-    for _ in range(5):
+    refinement_rounds = 1 if algorithm1_search else 5
+    for _ in range(refinement_rounds):
         a_t, b_t = maximize_batch(a_t, b_t, steps=lbfgs_steps, lr=lbfgs_lr)
+        if algorithm1_search and not use_sphere:
+            U = torch.cat([a_t, b_t.reshape(-1, 1)], dim=1)
+            r_max = float(radius) if radius is not None else math.exp(5.0)
+            inside = torch.linalg.vector_norm(U, dim=1) <= r_max
+            a_t, b_t = a_t[inside], b_t[inside]
         n_before = a_t.shape[0]
         a_t, b_t = merge(a_t, b_t)
         n_after = a_t.shape[0]
         if n_before == n_after:
             break
 
-    # Step 2.5: non-sphere activations also optimise a per-direction scale r>0.
-    # What the scale search maximises depends on the objective:
-    #   * plain              -- the raw profile |P(r*d)|, confined only by the clamp.
-    #   * additive moment    -- the net margin |P(r*d)| - beta*w_p(r*d), so a real
-    #                           fidelity-vs-moment tradeoff confines r.  The profile
-    #                           here is against the *normalized* residual, so the
-    #                           moment cost is divided by res_norm to share units
-    #                           with it; argmax is unchanged in raw units.
-    #   * normalized moment  -- the normalized profile |P_p(r*d)| = |P|/w_p, which is
-    #                           the quantity the revised paper's insertion condition
-    #                           tests and is confined by p > s_1 on its own.
-    # ``radius`` caps the search; None keeps the historical exp(5) clamp
-    # (docs/adr/0006), and the theorem radius enters as min(R(mu), exp(5)).
-    if not use_sphere:
+    # Preserved comparator: optimize scale after the direction search.  The
+    # normalized-measure Algorithm 1 above deliberately has no such second solve.
+    if not algorithm1_search and not use_sphere:
         moment_scale = float(moment_beta) / float(res_norm) if moment_beta > 0.0 else 0.0
         log_hi = 5.0 if radius is None else float(np.log(max(float(radius), np.exp(-3.0))))
         scaled_a, scaled_b = [], []
@@ -168,9 +216,7 @@ def _generate_candidates(
                 r = torch.exp(s.clamp(-3, log_hi))
                 obj = _profile_value(X, r * a_h, r * b_h, activation, power,
                                      w1, w2, Kx, res_v_n, res_dv_n, two_sided)
-                if normalized:
-                    obj = obj / moment_weight(r * a_h, r * b_h, moment_order)
-                elif moment_scale > 0.0:
+                if moment_scale > 0.0:
                     obj = obj - moment_scale * moment_weight(r * a_h, r * b_h, moment_order)
                 (-obj).backward()
                 return -obj
@@ -226,7 +272,7 @@ def profile_threshold(
         merge_tol=merge_tol, two_sided=two_sided, use_sphere=use_sphere,
         existing_atoms=existing_atoms, lbfgs_lr=lbfgs_lr, lbfgs_steps=lbfgs_steps,
         moment_beta=moment_beta, moment_order=moment_order,
-        normalized=normalized, radius=radius,
+        normalized=normalized, radius=radius, algorithm1_search=normalized,
     )
 
     guaranteed = insert_init == "guaranteed"
