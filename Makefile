@@ -49,7 +49,7 @@ MLFLOW_STOP_AFTER ?= true
 PAPER_MODE ?= both
 SEQ_ITERATIONS ?= 150
 
-.PHONY: help openloop sweep paper-sweep paper-p-study moment-sweep moment-refine moment-followup moment-oversampling region-split paper-figures mlflow-deploy mlflow-backfill
+.PHONY: help openloop sweep paper-sweep paper-p-study paper-artifacts moment-sweep moment-refine moment-followup moment-oversampling region-split paper-figures mlflow-deploy mlflow-backfill
 
 help:  ## list targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -67,14 +67,6 @@ paper-figures:  ## refresh paper/plot/ from curated experiment figures (matched 
 	@for f in paper/plot/*.png; do \
 	  b=$$(basename "$$f"); \
 	  case "$$b" in \
-	    value_surface_softplus.png|value_surface_gaussian.png) \
-	      src="experiments/01_vdp/log_penalty/figures/$$b";; \
-	    value_surface_p2.png|value_surface_p3.png|value_surface_p5.png) \
-	      src="experiments/01_vdp/frac_exp_penalty/figures/$$b";; \
-	    frontier.png) \
-	      src="experiments/01_vdp/summary/figures/$$b";; \
-	    pendulum_insertion_frontier.png) \
-	      src="experiments/02_pendulum/region_split/figures/frontier.png";; \
 	    *) src=$$(find experiments -path "*/figures/$$b");; \
 	  esac; \
 	  n=$$(printf '%s\n' "$$src" | grep -c '[^ ]' || true); \
@@ -82,6 +74,9 @@ paper-figures:  ## refresh paper/plot/ from curated experiment figures (matched 
 	  elif [ -n "$$src" ]; then cp "$$src" "$$f" && echo "  $$src -> $$f"; \
 	  else echo "  (no experiment source for $$b — left as-is)"; fi; \
 	done
+
+paper-artifacts:  ## regenerate current Algorithm 1 analyses and manuscript figures from completed records
+	./scripts/regenerate_algorithm1_paper_artifacts.sh
 
 mlflow-deploy:  ## provision/update EC2 MLflow tracking server with Terraform
 	terraform -chdir=$(TF_DIR) init
