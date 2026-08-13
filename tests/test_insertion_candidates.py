@@ -57,6 +57,7 @@ def _generate(
     merge_tol=1e-2,
     existing_atoms=None,
     use_sphere=False,
+    normalized=None,
 ):
     if starts is None:
         starts = [[1.0, 0.0] for _ in outputs]
@@ -75,9 +76,8 @@ def _generate(
         two_sided=True,
         use_sphere=use_sphere,
         existing_atoms=existing_atoms,
-        normalized=not use_sphere,
+        normalized=(not use_sphere) if normalized is None else normalized,
         radius=radius,
-        algorithm1_search=not use_sphere,
     )
     return a, b, n, fake
 
@@ -119,6 +119,17 @@ def test_algorithm1_optimizes_each_random_start_once(monkeypatch):
         starts=[[1.0, 0.0], [1.0, 0.0]],
     )
     assert n == 1
+    assert len(fake.instances) == 2
+
+
+def test_all_nonhomogeneous_objectives_use_one_joint_solve_per_start(monkeypatch):
+    _, _, n, fake = _generate(
+        monkeypatch,
+        outputs=[[1.0, 0.0], [0.0, 1.0]],
+        starts=[[1.0, 0.0], [0.0, 1.0]],
+        normalized=False,
+    )
+    assert n == 2
     assert len(fake.instances) == 2
 
 

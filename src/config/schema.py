@@ -65,7 +65,7 @@ class ModelConfig:
     moment_beta: float = 0.0    # 0 => moment axis off; > 0 => on
     moment_order: float = 2.0   # p in the weight w_p(omega) = 1 + |omega|^p
     # How the moment weight w_p enters the objective (paper/paper_0805.tex).
-    #   "additive_moment"   -- the preserved comparator
+    #   "additive_moment"   -- optional additive weighted-L1 objective
     #                          J = l^M + alpha*sum phi(|c_n|) + beta*sum w_p|c_n|,
     #                          i.e. the moment norm as a separate weighted-L1 term.
     #   "normalized_moment" -- the revised paper objective (Section 3),
@@ -88,8 +88,8 @@ class TrainingConfig:
     max_insert: int = 15          # N_ins, cap on atoms inserted per iteration (batch mode)
     prune_amp_tol: float = 1e-8   # eps_prune: drop atoms with |c_n| <= this
     # --- paper-conformance axes (paper/paper_0805.tex, Section 5) --------------
-    # Each defaults to the behavior in force before the revised paper, so the
-    # default config reproduces the preserved comparator end to end.
+    # Defaults retain the general-purpose training behavior; the Algorithm 1
+    # experiment preset selects the paper-specific values explicitly.
     #
     # insert_init -- initial outer weight of a freshly inserted atom.
     #   "warm_start"  -- the coordinate-descent batch warm start: one combined
