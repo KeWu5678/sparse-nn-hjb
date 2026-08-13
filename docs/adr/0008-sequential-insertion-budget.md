@@ -41,11 +41,24 @@ than per iteration.
 
 - Sequential can reach every width batch can, so the frontier is comparable over
   its whole range instead of only at the sparse end.
-- **The cost is far below the naive estimate.** Reasoning from the iteration
-  count alone predicts a 15x slowdown (150 solves instead of 10). Measured across
-  all four sweeps it is about 2–3x, because `insertion_first` also adopts the
-  algorithms' termination rule and stops as soon as no candidate clears the
-  threshold, which usually fires well before 150:
+- **The cost is below the naive estimate, but quote the right number.** Reasoning
+  from the iteration count alone predicts a 15x slowdown (150 solves instead of
+  10). It is less, because `insertion_first` also adopts the algorithms'
+  termination rule and stops as soon as no candidate clears the threshold, which
+  usually fires well before 150. But the *median* run and the *whole sweep* give
+  different ratios, because the distribution is right-skewed — a minority of
+  long sequential runs dominates the total:
+
+  | sweep | median-run ratio | total-sweep ratio |
+  |---|---|---|
+  | vdp log | 2.2x | 5.5x |
+  | pendulum log | 2.0x | 4.4x |
+  | vdp frac_exp | 3.0x | 3.6x |
+  | pendulum frac_exp | 2.7x | 5.6x |
+
+  Plan sweeps with the total (4–6x); describe a single run with the median
+  (2–3x). An earlier revision of this record quoted only the median and so
+  understated the cost of a sweep.
 
   | sweep / mode | `T_out` | median iters | max iters | hit the cap | median elapsed |
   |---|---|---|---|---|---|
@@ -76,7 +89,7 @@ than per iteration.
   `fig:neuron_h1_frontier` becomes a genuine curve rather than a coarse
   staircase.
 - The comparison is budget-matched, not compute-matched. A sequential run still
-  costs about 3x the batch run it is compared against, so nothing here supports a
+  costs 2–3x the batch run it is compared against, so nothing here supports a
   claim about time-to-accuracy — only about accuracy at a given width.
 - "Terminated" versus "hit the cap" is reported per sweep, since only the former
   means the algorithm converged in its own terms. On the evidence above it is
