@@ -1,8 +1,11 @@
-"""Proximal operators for the SSN splitting: prox of mu * |.|^q and its Jacobian.
+"""Scalar maps for the SSN splitting and their generalized derivatives.
 
-Closed-form solvers for q in {1, 1/2, 2/3} and a Newton fallback for other q<1.
-``_phi_prox`` is the scalar proximal of sigma * phi(t^q) used by the PDAP
-insertion step.
+For ``q=1`` the map is the usual soft-thresholding proximal operator. For
+``q<1`` it selects zero below the stationarity turning threshold and the larger
+positive stationary branch above it. That selector is used by the local SSN
+system but is not, in general, the global proximal mapping of ``mu*|.|^q``.
+Closed-form stationary roots are used for ``q`` in ``{1/2, 2/3}``, with a
+Newton fallback for other ``q<1``.
 """
 
 import math
@@ -13,7 +16,7 @@ from .penalty import _ddphi, _dphi
 
 
 def _compute_prox_q_half(v, mu):
-    """Closed-form proximal for mu * |.|^{1/2}.
+    """Closed-form larger stationary branch for ``mu*|.|^(1/2)``.
 
     FOC: t + (mu/2)*t^{-1/2} = |v|.  Substitute s = sqrt(t):
       s^3 - |v|*s + mu/2 = 0  (depressed cubic)
@@ -39,7 +42,7 @@ def _compute_prox_q_half(v, mu):
 
 
 def _compute_prox_q_twothirds(v, mu):
-    """Closed-form proximal for mu * |.|^{2/3}.
+    """Closed-form larger stationary branch for ``mu*|.|^(2/3)``.
 
     FOC: t + (2mu/3)*t^{-1/3} = |v|.  Substitute s = t^{1/3}:
       s^4 - |v|*s + 2mu/3 = 0  (depressed quartic)
@@ -91,10 +94,11 @@ def _compute_prox_q_twothirds(v, mu):
 
 
 def _compute_prox(v, mu, q=1.0):
-    """Proximal operator for mu * |·|^q (the simple part of the SSN splitting).
+    """Return the scalar map used by the SSN splitting.
 
-    Solves: argmin_t { mu * t^q + (1/2) * (t - |v|)^2 } for t >= 0,
-    then returns sign(v) * t_opt.
+    For ``q=1`` this is the global proximal operator. For ``q<1`` it returns
+    zero below the turning threshold and the larger stationary root above it;
+    it does not compare that branch's scalar objective with the value at zero.
 
     For q=1: soft thresholding, prox(v) = sign(v) * max(|v| - mu, 0).
     For q=1/2: closed-form via depressed cubic (trigonometric method).
@@ -106,7 +110,7 @@ def _compute_prox(v, mu, q=1.0):
         mu: proximal parameter (typically alpha / c in SSN)
         q: power exponent, q = 2/(p+1) where p is the activation power
     Returns:
-        vprox: proximal operator result
+        vprox: selected scalar branch
     """
     if q == 1.0:
         normsv = torch.abs(v)
@@ -140,7 +144,7 @@ def _compute_prox(v, mu, q=1.0):
 
 
 def _compute_dprox(v, mu, q=1.0, prox_result=None):
-    """Jacobian of the proximal operator prox_{mu*|·|^q}(v).
+    """Generalized derivative of the scalar SSN selector.
 
     Ported from MATLAB computeDProx.m. With N=1 (scalar outer weights),
     each neuron's Jacobian block reduces to a scalar diagonal entry.
@@ -149,7 +153,7 @@ def _compute_dprox(v, mu, q=1.0, prox_result=None):
         d prox/dv = 1 for active (|v| > mu), 0 for inactive.
         (Computed via MATLAB's general N-dim formula specialized to N=1.)
 
-    For q<1 (prox from Newton solve of t + mu*q*t^{q-1} = |v|):
+    For q<1 (stationary branch from t + mu*q*t^{q-1} = |v|):
         d prox/dv = 1 / (1 + mu*q*(q-1)*|prox|^{q-2}) for active, 0 for inactive.
         Requires prox_result to avoid recomputing the Newton loop.
 

@@ -32,13 +32,13 @@ class SSN(Optimizer):
       * trust-region variant   -> ``method="steihaug_cg"``
 
     Symbol table (kept verbatim from the paper / MATLAB for traceability):
-      q       proximal preimage (the SSN working variable)
+      q       scalar-map preimage (the SSN working variable)
       Gq      residual G(q) of the reformulated optimality system
       DG      generalized (semismooth) Jacobian of G
       dq      Newton step,  solved from (DG + damping) dq = -Gq
       theta   damping parameter of the Levenberg-Marquardt strategy
       sigma   trust-region radius of the Steihaug-CG strategy
-      c       1 + alpha*gamma  (stable scaling of the prox parameter)
+      c       1 + alpha*gamma  (stable scaling of the scalar-map parameter)
       alpha_vec  per-coordinate alpha (alpha on penalised coords, 0 on free)
 
     Args:

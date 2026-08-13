@@ -1,19 +1,14 @@
 #!/usr/bin/env python3
-"""The moment-order figure that replaces the retired alpha-by-beta heatmap.
+"""Plot the effect of the moment order on Algorithm 1's fitted support.
 
-Under the revised objective the moment norm is not an additive term, so there is
-no beta axis to sweep.  What remains -- and what the earlier study could not
-show, because p was inert at beta = 0 and every p shared one fit -- is the effect
-of p alone: the weight w_p(omega) = 1 + |omega|^p inside phi prices distant
-atoms, so raising p confines the support.
+The weight ``w_p(omega) = 1 + |omega|^p`` appears inside the scalar penalty, so
+the moment order changes both the fitted objective and the theorem radius.
 
 The plotted statistic is ``radius_max`` = max|omega|, the **support radius**,
-because that is the quantity ``lem:support-bound`` bounds (the support lies in a
-compact superlevel set).  It falls with p in all 16 (problem, activation, alpha)
-rows and is monotone in 12.  Two statistics that look similar do *not* track it
-and must not stand in for it: ``R_0.95`` is a total-variation quantile
-(monotone in 4/16) and the support size N is a count (5/16).  ``R_0.95`` is
-plotted separately in ``p_study_r95.png`` as the contrast.
+because that is the quantity the support theorem bounds. ``R_0.95`` is a
+total-variation quantile and is plotted separately in ``p_study_r95.png``.
+The script prints monotonicity counts from the records instead of embedding a
+claim from a particular run in this source file.
 
 Panels share the p axis, one per benchmark; per house style unrelated panels
 would be separate PNGs.

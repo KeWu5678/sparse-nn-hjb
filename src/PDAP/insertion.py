@@ -366,15 +366,18 @@ def profile_threshold(
 
 
 # ---------------------------------------------------------------------------- #
-# Strategy 2: finite-step acceptance (q < 1)
+# Strategy 2: finite-step acceptance
 # ---------------------------------------------------------------------------- #
 def solve_insertion_weight(
     p_omega: float, S_sq: float, alpha: float, q: float,
     newton_tol: float = 1e-12, max_iter: int = 50,
 ) -> Optional[Tuple[float, float]]:
-    """Solve min_c Delta J(c; omega) and return (c*, Delta J(c*)), or None.
+    """Minimize the conservative insertion surrogate and return its best step.
 
-    Delta J(c; omega) = c * p_omega + (1/2) c^2 S_sq + (alpha/q) |c|^q.
+    The surrogate is
+    ``c*p_omega + (1/2)c^2*S_sq + (alpha/q)|c|^q``.  For ``q < 1`` its
+    penalty coefficient is larger than the ``alpha`` used by the corrected
+    objective, so a negative result is a sufficient decrease test.
     For q >= 1 this reduces to the classical criterion |p| > alpha.
     """
     if S_sq < 1e-30:
