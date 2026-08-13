@@ -34,29 +34,22 @@ curated experiment summaries are now the source of truth; the legacy
    a single benchmark score.
    Legacy summary: [docs/research/D4_max_plus/refs/legacy-semiconcave-comparison.md](../docs/research/D4_max_plus/refs/legacy-semiconcave-comparison.md)
 
-5. Paper-conforming algorithms (2026-08-12).
-   The manuscript's revised Sections 3–5 changed the objective and both
-   insertion algorithms: the moment norm moved from an additive `β` term into
-   the penalty argument as `φ(w_p(ω)|c|)`, the insertion condition normalizes
-   the derivative representative by `w_p`, the accepted atom gets the theorem's
-   own coefficient, the correction is rejected when it raises the objective, and
-   the loop inserts before correcting. These re-runs sit beside the preserved
-   comparators rather than replacing them, so the algorithm change can be read
-   off run for run.
+5. Algorithm 1 studies (2026-08-13).
+   The nonhomogeneous studies minimize
+   `l^M + alpha * sum phi_gamma(w_p(omega) * |c|)`. Candidate locations are
+   obtained by joint multistart optimization of the normalized profile over the
+   full parameter vector. Starts are sampled within the certified search radius;
+   final points outside it are discarded, Euclidean near-duplicates are removed,
+   and accepted atoms receive the candidate-specific warm coefficient before the
+   guarded semismooth Newton correction. The main studies report both batch and
+   sequential insertion, while the manuscript uses the sequential method covered
+   by the one-candidate decrease argument.
 
-   At a **matched neuron budget** — the comparison that is free of both the α
-   shift and any capacity difference — sequential insertion under the revised
-   algorithm is the best of the three at nearly every budget on both benchmarks,
-   substantially so on the pendulum (relative H¹ 0.2271 against the comparator's
-   0.4250 at ≤160 neurons). The exception is VDP at ≤20 neurons, where the
-   comparator still wins. Both readings are conservative: the comparator draws on
-   2–6× more runs.
-
-   Do **not** compare the two studies at equal α. The empirical fidelity now
-   divides by `M` rather than `M·d`, so at the same α label a paper run carries
-   `1/d` the effective regularization and buys more neurons; a per-α table reads
-   that head start as an improvement. The `results.md` files lead with the
-   matched-budget table for this reason.
+   The dedicated moment-order study measures support confinement, and the radius
+   ablation isolates the effect of the computable theorem radius from the fixed
+   numerical cap. The pendulum study additionally reports errors near and away
+   from the switching set and tests whether denser sampling there changes the
+   gradient-approximation floor.
    Current curated readouts:
    [01_vdp/paper_log_penalty/results.md](01_vdp/paper_log_penalty/results.md),
    [02_pendulum/paper_log_penalty/results.md](02_pendulum/paper_log_penalty/results.md),

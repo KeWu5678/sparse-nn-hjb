@@ -1,17 +1,11 @@
 # Registered model: the model half of Algorithm 1 in paper/paper_0805.tex.
-#
-# Same structure as `log_penalty` (signed network, profile insertion, log
-# penalty) but minimizing the revised objective
+# It is a signed network with profile insertion and the objective
 #
 #   J = l^M + alpha * sum_n phi_gamma( w_p(omega_n) * |c_n| ),
 #
 # the penalty of the normalized measure mu_p = w_p*mu, whose insertion condition
-# is |P_p(omega)| > alpha*L_phi with P_p = P/w_p.  `log_penalty` remains the
-# preserved comparator with the additive moment term.
-#
-# Note that `moment_order` p is a live parameter here even though beta = 0: it
-# sets the weight w_p inside phi.  Under the additive objective p only mattered
-# when moment_beta > 0.
+# is |P_p(omega)| > alpha*L_phi with P_p = P/w_p.  The moment order p is therefore
+# a live parameter of this objective.
 #
 # This file can only set `model` fields.  The loop-side axes of Algorithm 1 --
 # insert_init, insert_mode, correction_guard, loop_order, radial_cap -- live

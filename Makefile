@@ -136,7 +136,7 @@ paper-sweep:  ## run a paper-conforming sweep ({vdp,pendulum}/paper_{log,frac_ex
 	esac
 	$(PY) "$(ANALYSIS_DIR)/analysis.py"
 
-paper-p-study:  ## sweep the moment order p, which is live under the normalized objective even at beta=0
+paper-p-study:  ## sweep the moment order p in Algorithm 1's normalized objective
 	@case "$(EXPERIMENT)" in \
 	  */paper_log_penalty) ;; \
 	  *) echo "Use EXPERIMENT={vdp,pendulum}/paper_log_penalty (p is inert on the sphere)."; exit 2 ;; \

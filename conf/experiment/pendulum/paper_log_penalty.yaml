@@ -1,11 +1,10 @@
 # @package _global_
-# pendulum/paper_log_penalty: the log-penalty activation sweep re-run under
-# Algorithm 1 of paper/paper_0805.tex, on the pendulum swing-up value function
-# (two-sided switching-band data; data=pendulum auto-selects the region eval).
-#
-# Axes match conf/experiment/pendulum/log_penalty.yaml cell for cell, so the two
-# studies differ only in the algorithm.  See the VDP counterpart for why
-# `moment_order` is pinned rather than swept.
+# pendulum/paper_log_penalty: Algorithm 1 on the pendulum swing-up value
+# function, using two-sided switching-band data and region-aware evaluation.
+# `moment_order` is fixed at 2.01 here; `make paper-p-study` varies it separately.
+# The manuscript reports sequential insertion with one candidate per iteration
+# and a 150-iteration neuron budget.  The main study also records batch insertion
+# as a numerical variant.
 defaults:
   - override /model: paper_log_penalty
   - override /data: pendulum

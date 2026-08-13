@@ -1,18 +1,11 @@
 # @package _global_
-# vdp/paper_log_penalty: the log-penalty activation sweep re-run under Algorithm 1
-# of paper/paper_0805.tex (normalized-moment objective, theorem insertion
-# coefficient, guarded correction, paper loop order, theorem radius).
-#
-# The sweep axes match conf/experiment/vdp/log_penalty.yaml cell for cell so the
-# two studies differ only in the algorithm, not in the grid.  `moment_order` is
-# pinned at 2.01 rather than swept: it is a live parameter under this objective,
-# but sweeping it here would quadruple a sweep that is already ~1.6 h in the
-# sequential mode.  The dedicated p-study is the `paper_p_study` Make target.
-#
-# insert_mode is the schema default `batch`, i.e. Algorithm 1 as printed
-# (N_ins = 15).  `make paper-sequential EXPERIMENT=vdp/paper_log_penalty` runs the
-# guaranteed variant, which needs num_iterations = 150 for a matched neuron
-# budget (ADR 0008).
+# vdp/paper_log_penalty: Algorithm 1 on the Van der Pol value function, using
+# the normalized-measure objective, candidate-specific insertion coefficient,
+# guarded correction, insertion-first loop, and computable search radius.
+# `moment_order` is fixed at 2.01 here; `make paper-p-study` varies it separately.
+# The manuscript reports sequential insertion with one candidate per iteration
+# and a 150-iteration neuron budget.  The main study also records batch insertion
+# as a numerical variant.
 defaults:
   - override /model: paper_log_penalty
   - override /data: vdp

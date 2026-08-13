@@ -121,7 +121,7 @@ def frontier_figure(rows: list[dict[str, Any]]) -> Path:
         "batch": dict(color=PALETTE["blue_main"], marker="o", ls="-."),
         "sequential": dict(color=PALETTE["red_strong"], marker="s", ls="--"),
     }
-    for mode, style in styles.items():
+    for index, (mode, style) in enumerate(styles.items()):
         pts = sorted(
             ((r["neurons"], r["rel_h1"]) for r in rows if r["mode"] == mode and r["loss"] == "h1"),
             key=lambda t: t[0],
@@ -134,8 +134,9 @@ def frontier_figure(rows: list[dict[str, Any]]) -> Path:
             best = min(best, e)
             xs.append(n)
             ys.append(best)
+        phase = 0.08 * index / len(styles)
         ax.plot(xs, ys, label=mode, markersize=4, markeredgecolor="0.2",
-                markeredgewidth=0.6, lw=1.4, **style)
+                markeredgewidth=0.6, markevery=(phase, 0.08), lw=1.4, **style)
     ax.set_xlabel("neurons")
     ax.set_ylabel(r"relative $H^1$ validation error")
     ax.set_yscale("log")
