@@ -16,9 +16,11 @@ test controls, so "neither a decrease per outer iteration nor monotonicity of
 `J^M` along the iterates is claimed." The reported numerics in Section 6 use
 `N_ins = 15` and therefore run the unguaranteed variant.
 
-`training.insert_mode=sequential` restores the guarantee by admitting exactly one
-atom per outer iteration — the maximizer of `|P_p|`, which is what the rate bound
-`eq:certificate-violation-rate` requires at every insertion.
+`training.insert_mode=sequential` restores the single-candidate condition by
+admitting exactly one atom per outer iteration. The implementation selects the
+highest-ranked candidate returned by multistart L-BFGS; the rate bound
+`eq:certificate-violation-rate` additionally requires that candidate to be an
+exact global maximizer, which the practical search does not certify.
 
 That changes what an iteration buys. Under batch insertion the support grows by
 up to `N_ins` per iteration; the recorded runs reach a maximum of 150 neurons,
@@ -75,13 +77,13 @@ than per iteration.
   75 minutes at `JOBS=8`, not the several hours first estimated.
 - **The cap still binds, which is why it is 150 and not smaller.** A median
   sequential run stops itself at 25–28 iterations, but 30–35 of 224 log-penalty
-  cells reach 150 and are truncated by the budget. Those are the widest, least
+  runs reach 150 and are truncated by the budget. Those are the widest, least
   regularized fits — exactly the top of the frontier the comparison is for. A
   smaller `T_out` would have cut them, so the decision holds; what was wrong in
   the first version of this record was the cost, not the choice.
 - The same measurement indicts the preserved loop order, which never terminates.
   Its batch runs hit the configured 10 iterations in roughly two thirds of the
-  log-penalty cells and stopped early in the rest — but having no stopping rule,
+  log-penalty runs and stopped early in the rest—but having no stopping rule,
   it could not report which was which. The paper's rule is the only one that
   distinguishes "converged" from "ran out of budget".
 - The frontier gains resolution as a side effect. Batch runs move the neuron axis

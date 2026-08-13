@@ -37,12 +37,12 @@ REPRESENTATIVES = {
     "gaussian": {"alpha": 1e-5, "beta": 1e-10, "order": 3.0},
 }
 
-# The operating point at which the cross-activation figures are read off.  The
+# The shared parameters at which the cross-activation figures are read off. The
 # defaults reproduce the comparator study; ``--gamma`` and friends repoint the
 # same drawing code at the paper-conforming records so both studies are rendered
 # by one code path and cannot drift in styling.
 SELECTED_GAMMA = 1.0
-# None => pick the most accurate cell at each power instead of pinning alpha.
+# None => pick the lowest-H1 run at each power instead of pinning alpha.
 HOMOGENEOUS_ALPHA: float | None = 1e-5
 
 
@@ -195,7 +195,7 @@ def _homogeneous_champion(power: float) -> dict[str, Any]:
         raise ValueError(f"no ReLU^{power:g} champion found under {HOMOGENEOUS_ROOT}")
     if HOMOGENEOUS_ALPHA is not None and len(matches) != 1:
         raise ValueError(f"expected one ReLU^{power:g} champion, got {len(matches)}")
-    # With the alpha unpinned, the champion is the most accurate cell at this power.
+    # With alpha unpinned, the champion is the lowest-H1 run at this power.
     return min(matches, key=lambda m: m["rel_h1"])
 
 
@@ -320,18 +320,18 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--out", type=Path, default=None,
                         help="study directory the figures are written under")
     parser.add_argument("--alpha", type=float, default=None,
-                        help="operating-point alpha for the cross-activation figures")
+                        help="shared alpha for the cross-activation figures")
     parser.add_argument("--gamma", type=float, default=None,
-                        help="operating-point gamma for the cross-activation figures")
+                        help="shared gamma for the cross-activation figures")
     parser.add_argument("--order", type=float, default=None,
-                        help="operating-point moment order p")
+                        help="shared moment order p")
     parser.add_argument("--beta", type=float, default=None,
                         help="moment_beta of the selected records (0 for the paper study)")
     parser.add_argument("--homogeneous-alpha", type=float, default=None,
                         help="pin Algorithm 2's alpha; omit with --records to take "
-                             "the most accurate cell at each power")
+                             "the lowest-H1 run at each power")
     parser.add_argument("--free-homogeneous-alpha", action="store_true",
-                        help="choose Algorithm 2 cells by best H1 instead of a pinned alpha")
+                        help="choose Algorithm 2 runs by lowest H1 instead of a pinned alpha")
     return parser.parse_args(argv)
 
 
@@ -376,7 +376,7 @@ def main(argv: list[str] | None = None) -> int:
         ROOT / "experiments" / "01_vdp" / "log_penalty" / "analysis.py",
     )
     legacy.OUTPUT_DIR = OUTPUT_DIR
-    # The loaded module reads its own fixed operating point when selecting the
+    # The loaded module reads its own fixed parameters when selecting the
     # run behind each surface/feedback figure; keep it in step with ours.
     legacy._FIXED_ALPHA = REPRESENTATIVES["softplus"]["alpha"]
     legacy._FIXED_GAMMA = SELECTED_GAMMA
@@ -396,7 +396,7 @@ def main(argv: list[str] | None = None) -> int:
     insertion = (
         insertion.replace(
             "`J = L(μ) + α·Φ(μ)`",
-            "`J = L(μ) + α·Φ(μ) + β·Ψ_p(μ)`",
+            "`J_add = L(μ) + α·Φ_φ(μ) + β‖μ‖_{M_p}`",
         )
         .replace(
             "clears the threshold α",
@@ -467,7 +467,7 @@ def main(argv: list[str] | None = None) -> int:
     if uniform and not any(s["beta"] for s in specs):
         spec = specs[0]
         selection_note = (
-            "All Algorithm 1 rows use one operating point "
+            "All Algorithm 1 rows use shared parameters "
             f"(alpha={spec['alpha']:.0e}, gamma={SELECTED_GAMMA:g}, "
             f"p={spec['order']:g}), so the cross-activation comparison is not "
             "confounded with per-activation tuning."

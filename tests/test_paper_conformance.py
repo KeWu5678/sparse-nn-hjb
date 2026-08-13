@@ -242,7 +242,7 @@ def test_certificate_radius_never_exceeds_the_fixed_clamp() -> None:
 
 def test_certificate_radius_is_unavailable_without_hypotheses() -> None:
     extent = sample_extent(torch.as_tensor(_data()["x"]))
-    # No declared growth data -> keep the fixed clamp.
+    # No declared growth data -> keep the fixed comparison bound.
     assert certificate_radius(get_growth("snake_b0_25"), extent=extent,
                               residual_norm=1.0, alpha=1e-5, moment_order=2.01) is None
     # p <= s1 fails the theorem's hypothesis, so there is no finite radius to claim.

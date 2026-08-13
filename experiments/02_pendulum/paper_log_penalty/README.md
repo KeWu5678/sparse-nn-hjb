@@ -23,7 +23,7 @@ than `M·d`, rescaling `α` by `d = 2` (see `CONTEXT.md`, *Empirical Fidelity*).
 
 ## Sweep axes
 
-Identical to `../log_penalty`, cell for cell:
+Identical to `../log_penalty`, run for run:
 
 | axis | values |
 |---|---|
@@ -37,17 +37,18 @@ Identical to `../log_penalty`, cell for cell:
 Fixed: `model.power=1.0`, `model.moment_order=2.01`, `data.normalize=true`,
 `env.seed=42`. The pendulum value is nondifferentiable across the switching set,
 so `data=pendulum` selects the **region-split** eval — errors are additionally
-reported inside and outside the switching tube.
+reported on $S_{0.3}$ and its complement.
 
 `moment_order` `p` is pinned rather than swept, so this study varies only what
 `../log_penalty` varied; the `p` axis is the separate `paper-p-study` target.
 
 ## Insertion modes
 
-`batch` is Algorithm 1 as printed (`N_ins = 15`), which the paper states forfeits
-the per-step guarantees to the cross terms of a joint insertion. `sequential`
-admits one atom per iteration — the maximizer of `|P_p|`, the variant the rate
-bound requires — at `T_out = 150` for a matched neuron budget (`docs/adr/0008`).
+`batch` is Algorithm 1 with `N_ins = 15`, whose joint insertion introduces
+uncontrolled cross terms. `sequential` admits the highest-ranked candidate
+returned by the multistart search, one atom per iteration, at `T_out = 150` for
+a matched neuron budget (`docs/adr/0008`). The theorem's rate additionally
+requires an exact global maximizer, which this search does not certify.
 
 ## Reproduce
 

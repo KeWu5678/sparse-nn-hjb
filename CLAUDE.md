@@ -41,29 +41,32 @@ Thesis & papers: `/Users/chaoruiz/Documents/NotePaper/MasterThesis/`
 - `vault/` — layered technical docs (this file links them).
 - `rawdata/` — generated datasets/plots; `outdated/` — gitignored archive of
   deprecated experiments and migrated legacy trees (e.g. the old `autoresearch/`).
-- `CONTEXT.md` — canonical project and thesis vocabulary
-  (the detailed theory notation is `docs/research/NOTATION.md`).
+- `CONTEXT.md` — canonical project-wide domain vocabulary. Manuscript-specific
+  decisions and contracts live in `paper/plan.md`, `paper/notation.md`, and
+  `paper/term.md`; the separate research program uses
+  `docs/research/NOTATION.md`.
 
 ## Standalone Thesis
 
 - `docs/paper_archive/Mthesis/Mthesis.tex` is the source of mathematical
   material retained from the earlier thesis source.
 - `paper/paper_0805.tex` is the standalone thesis — the only manuscript in
-  `paper/`. Its authoritative writing and restructuring specification is
-  `prompt.md`, which still uses the pre-rename `papar/` paths and the earlier
-  `paper_codex.tex` name for this file.
+  `paper/`. `paper/plan.md` records its formulation, scope, and current
+  decisions; `paper/notation.md` and `paper/term.md` are the narrower symbol
+  and controlled-vocabulary contracts.
 - Do not use the superseded versions in `docs/paper_archive/` (`paper_0725/`,
   `paper_0726/`) as a source for `paper_0805.tex` unless the user explicitly
   requests it.
-- The thesis gives equal prominence to two treatments of the unbounded radial
-  parameter: the moment-regularized nonhomogeneous formulation and the
-  sphere-normalized positively homogeneous formulation.
-- Use the notation and mathematical terms in `prompt.md` and `CONTEXT.md`. In
-  particular, write the moment contribution as
-  `β||μ||_{\mathcal M_p(\Omega)}`, describe `\bar P` as the function
-  representing the Gâteaux derivative, and use “path,” “switching set,” and
-  “the direct method of the calculus of variations using narrow convergence.”
-  Do not introduce replacement labels or parallel notation for these notions.
+- The thesis gives equal prominence to the normalized nonhomogeneous
+  formulation on the unbounded parameter space and the sphere-normalized
+  positively homogeneous formulation. In the former,
+  `μ_p = w_p μ` and `J(μ) = L(μ) + α Φ_φ(μ_p)`; the moment norm defines the
+  space and topology but is not an additive term in the objective.
+- Authority is scoped rather than overlapping: `CONTEXT.md` defines
+  project-wide domain meanings; `paper/plan.md` defines the current manuscript
+  formulation and scope; `paper/notation.md` and `paper/term.md` refine symbols
+  and prose locally; ADRs record implementation and experiment decisions.
+  Resolve conflicts explicitly instead of silently choosing a source.
 
 ## Plotting Style
 Publication figures follow one house style. The palette, typography, and axes
@@ -113,4 +116,5 @@ Five canonical triage roles, each label string equal to its name. See `docs/agen
 
 ### Domain docs
 
-Single-context: `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+Project context is `CONTEXT.md` plus `docs/adr/`; manuscript work additionally
+uses the three tracked contracts under `paper/`. See `docs/agents/domain.md`.

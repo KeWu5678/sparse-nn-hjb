@@ -31,7 +31,7 @@ the outer iteration monotone regardless.
 
 ## Sweep axes
 
-Identical to `../frac_exp_penalty`, cell for cell:
+Identical to `../frac_exp_penalty`, run for run:
 
 | axis | values |
 |---|---|

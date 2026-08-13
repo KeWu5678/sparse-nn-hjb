@@ -86,6 +86,9 @@ paper/*
 !paper/paper_0805.tex
 !paper/paper_0805.pdf
 !paper/ref.bib
+!paper/plan.md
+!paper/notation.md
+!paper/term.md
 !paper/plot/
 paper/plot/*
 !paper/plot/*.png

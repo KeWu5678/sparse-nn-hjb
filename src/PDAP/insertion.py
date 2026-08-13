@@ -2,11 +2,11 @@
 
 An insertion strategy proposes new atoms (inner weights/biases) to add to the
 current support, given the data and the current residual.  Both strategies share
-the same candidate generation (sample S^d, L-BFGS-maximize the dual profile,
+the same candidate generation (sample S^d, L-BFGS-refine the fidelity derivative,
 iterative cosine-merge dedup, optional per-direction rescale); they differ only
 in the *acceptance* test:
 
-  * ``profile_threshold`` — accept candidates whose dual profile exceeds ``alpha``.
+  * ``profile_threshold`` — accept candidates whose derivative magnitude exceeds ``alpha``.
     Signed networks use the two-sided test ``|p|>alpha``; convex (semiconcave)
     models use the one-sided ``p>alpha`` (convex atoms carry nonnegative mass).
   * ``finite_step`` — accept candidates with a profitable finite step, i.e. where
@@ -55,7 +55,7 @@ def _neuron_value_grad(
 def _profile_value(
     X, a, b, activation, power, w1, w2, Kx, res_v, res_dv, two_sided: bool,
 ) -> torch.Tensor:
-    """Dual profile p_t(omega) = w1/Kx <S,res_v> + w2/Kx <dS,res_dv> (abs if two_sided)."""
+    """Empirical fidelity derivative P_mu^M(omega), absolute when two-sided."""
     neuron_v, neuron_dv = _neuron_value_grad(X, a, b, activation, power)
     val_part = (neuron_v * res_v).sum() / Kx
     grad_part = (neuron_dv * res_dv).sum() / Kx
@@ -73,7 +73,7 @@ def _generate_candidates(
     lbfgs_lr=1e-2, lbfgs_steps=200, moment_beta=0.0, moment_order=2.0,
     normalized=False, radius=None,
 ) -> Tuple[torch.Tensor, torch.Tensor, int]:
-    """Return (a_t, b_t, n_after_merge): distinct dual-profile maximisers on S^d."""
+    """Return distinct locally refined derivative candidates on S^d."""
     K, d_dim = X.shape
     Kx = K  # M, the sample count: the empirical fidelity is 1/(2M) * sum_m
     w1, w2 = loss_weights
@@ -196,7 +196,7 @@ def profile_threshold(
     lbfgs_lr=1e-2, lbfgs_steps=200, moment_beta=0.0, moment_order=2.0,
     normalized=False, insert_init="warm_start", radius=None,
 ) -> Tuple[np.ndarray, np.ndarray, Optional[np.ndarray]]:
-    """Accept atoms whose dual profile clears the insertion threshold.
+    """Accept atoms whose derivative magnitude clears the insertion threshold.
 
     Three acceptance rules, selected by the objective in force:
 

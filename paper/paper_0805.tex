@@ -357,7 +357,7 @@ The contributions are the following.
 Figure~\ref{fig:neuron_h1_frontier} compares the traditional ReLU network with
 an $\ell^1$ penalty against representative models from the two formulations.
 The comparison is one of accuracy at a given support size rather than of lowest
-attainable error. On the Van der Pol problem the $\ell^1$ baseline is the less
+attainable error. On the Van der Pol problem the traditional $\ell^1$ network is the less
 accurate of the two at every support below $121$ atoms --- $1.62\times10^{-1}$
 against $1.00\times10^{-1}$ at twenty atoms --- and overtakes the sparse
 penalties only past that width, where it eventually reaches
@@ -382,9 +382,9 @@ law that follows the reference.
 \label{fig:frontier_pendulum}
 \end{subfigure}
 \caption{Running best relative $H^1$ validation error as neurons are inserted.
-The nonhomogeneous activations are fitted by Algorithm~\ref{alg:log} at the
-common operating point $(\alpha,\gamma,p)=(10^{-4},10,2.01)$; $\mathrm{ReLU}^2$
-and the $\ell^1$ baseline are fitted by Algorithm~\ref{alg:q}, the latter at
+The nonhomogeneous activations are fitted by Algorithm~\ref{alg:log} with
+$(\alpha,\gamma,p)=(10^{-4},10,2.01)$; $\mathrm{ReLU}^2$
+and the traditional $\ell^1$ network are fitted by Algorithm~\ref{alg:q}, the latter at
 $k=1$, where the induced exponent is $q=1$. All curves use one atom per
 outer iteration and seed $42$.}
 \label{fig:neuron_h1_frontier}
@@ -3601,12 +3601,14 @@ additive, but the fidelity change carries the additional cross terms
 	\bigl\langle K^M(\omega_i),K^M(\omega_j)
 	\bigr\rangle_{\mathbb R^{M(d+1)}},
 \end{equation*}
-which no individual test controls. For $N_{\mathrm{ins}}=1$ the guarantees of
-Theorem~\ref{thm:quantitative-insertion} and of the finite-step criterion
-apply as stated; for $N_{\mathrm{ins}}>1$ they do not, and neither a decrease
-per outer iteration nor monotonicity of $J^M$ along the iterates is claimed.
-Restoring the guarantee requires recomputing the residual after each
-insertion, or testing the joint increment of the whole batch.
+which no individual test controls. For $N_{\mathrm{ins}}=1$ the individual
+decrease statement applies to every accepted candidate, while the rate in
+Theorem~\ref{thm:quantitative-insertion} additionally requires an exact global
+maximizer. For $N_{\mathrm{ins}}>1$ the individual estimates do not compose,
+and neither a decrease per outer iteration nor monotonicity of $J^M$ along the
+iterates is claimed. Restoring a batch decrease guarantee requires recomputing
+the residual after each insertion, or testing the joint increment of the whole
+batch.
 
 \begin{algorithm}[htbp]
 \caption{Iterative node insertion for $J^M$}
@@ -3616,13 +3618,14 @@ insertion, or testing the joint increment of the whole batch.
 $\varepsilon_{\mathrm{prune}}$, and an initial network
 $\boldsymbol\omega^{(0)},c^{(0)}$ of width $N(0)$; set $t=0$.
 \While{$t < T_{\mathrm{out}}$}
-\State Evaluate $\omega=0$ and sample $N_{\mathrm{trial}}$ random directions
+\State Sample $N_{\mathrm{trial}}$ random directions
 $\widehat\omega\in\mathbb{R}^{d+1}$.
 \State Refine the directions by L-BFGS applied to
 $|P^M_{p,\mu_t}(\widehat\omega)|$, and remove near-duplicate candidates.
-\State For each retained direction, optimize $0\le\lambda\le R(\mu_t)$ in
-$|P^M_{p,\mu_t}(\lambda\widehat{\omega})|$ over the search region from
-Theorem~\ref{thm:quantitative-insertion}.
+\State For each retained direction, optimize
+$e^{-3}\le\lambda\le\min\{R(\mu_t),e^5\}$ in
+$|P^M_{p,\mu_t}(\lambda\widehat{\omega})|$; when the theorem radius is
+unavailable, use $e^5$ as the upper bound.
 \State Keep the candidates satisfying
 \eqref{eq:empirical-insertion-condition}; terminate if there is none.
 \State Retain the at most $N_{\mathrm{ins}}$ candidates with the largest
@@ -3789,12 +3792,14 @@ color) and costate labels $g^m$ (arrows); arrow color indicates $|g^m|$.}
 \end{figure}
 
 We solve the open-loop problem on a $30 \times 30$ grid over $[-3,3]^2$ ($M = 900$ data points).
-All experiments use $T_{\mathrm{out}} = 150$ outer iterations,
-$N_{\mathrm{trial}} = 50$ sampled candidate nodes per iteration. Each iteration therefore inserts the single maximizing candidate ($N_{\mathrm{ins}} = 1$), which is the case
-in which the guarantees of Theorem~\ref{thm:quantitative-insertion} apply, and
-not the batch heuristic discussed in Section~5. The loop terminates when no
-candidate clears the insertion threshold, which on these problems occurs well
-before $T_{\mathrm{out}}$.
+All experiments use $T_{\mathrm{out}} = 150$ outer iterations and
+$N_{\mathrm{trial}} = 50$ sampled candidate nodes per iteration. Each iteration
+inserts the single selected candidate ($N_{\mathrm{ins}} = 1$), so the
+one-candidate decrease statement applies. The certificate-rate conclusion of
+Theorem~\ref{thm:quantitative-insertion} remains conditional on the selected
+candidate being an exact global maximizer and is not claimed for the multistart
+search. The loop terminates when no candidate clears the insertion threshold,
+which on these problems occurs well before $T_{\mathrm{out}}$.
 
 \subsubsection{Effect of the moment order \texorpdfstring{$p$}{p}}
 \label{sec:effect-of-p}
@@ -3807,13 +3812,13 @@ the atom sits from the origin. The exponent $p$ is therefore an active
 parameter of the objective, not a device that acts only through a separate
 coefficient.
 
-\paragraph{\textbf{Support confinement.}}
+\paragraph{\textbf{Observed support radius.}}
 For a finite atomic $\mu$ write
 \begin{equation*}
 	R_{\max}(\mu):=\max\{|\omega| : \omega\in\atom\mu\}
 \end{equation*}
-for the radius of its support. Lemma~\ref{lem:support-bound} confines that
-support to a compact superlevel set of $|\bar P_p|$, so $R_{\max}$ is finite;
+for the radius of its support. Lemma~\ref{lem:support-bound} places that
+support in a compact superlevel set of $|\bar P_p|$, so $R_{\max}$ is finite;
 the lemma does not itself supply a numerical radius, and the values below are
 measured. We use Algorithm~\ref{alg:log} with
 $\gamma=1$, equal value and gradient weights, and seed $42$, for softplus,
@@ -3832,7 +3837,7 @@ and on Van der Pol\,) to $1.54$ and $1.67$ at $p=4$, and no family exceeds
 $R_{\max}=2.10$ at $p=4$. Figure~\ref{fig:p_study} shows the sixteen curves.
 
 Two nearby quantities do \emph{not} follow this pattern, and we record that
-explicitly. The amplitude-mass radius $R_{0.95}$, defined for a discrete
+explicitly. The radius $R_{0.95}$, defined for a discrete
 measure $\mu=\sum_jc_j\delta_{\omega_j}$ by
 \begin{equation*}
 	R_{0.95}(\mu):=\inf\left\{R\ge0:
@@ -3840,8 +3845,8 @@ measure $\mu=\sum_jc_j\delta_{\omega_j}$ by
 \end{equation*}
 is monotone in only four of the sixteen families, and the support size in only
 five. Both are statistics of the coefficient distribution rather than of the
-support, and the theory bounds the support. Increasing $p$ confines the
-support; it does not reliably shrink it.
+support, and the theory bounds the support. Increasing $p$ contracts the
+observed support radius; it does not reliably reduce these other quantities.
 
 \begin{figure}[htbp]
 \centering
@@ -3877,9 +3882,9 @@ $\min\{R(\mu_t),e^5\}$ instead of $e^5$ leaves the support size and the
 validation error identical in all thirty-two paired runs, to machine
 precision. The explanation is visible in the fits themselves: the largest
 $R_{\max}$ over all of these runs is $13.96$, an order of magnitude inside
-both bounds, so neither is ever active. The confinement supplied by the
-moment weight is what keeps the support bounded in practice; the theoretical
-radius certifies a region the iterates never approach.
+both bounds, so neither is ever active. The normalized weight keeps the
+observed support bounded in these runs; the theoretical radius certifies a
+region the iterates never approach.
 
 \subsubsection{Algorithm~\ref{alg:log}: the log penalty on the normalized measure}
 
@@ -3889,7 +3894,7 @@ alone with fitting both values and gradients.
 
 \begin{table}[htbp]
 \centering
-\caption{Effect of gradient-augmented fitting at the common operating point
+\caption{Effect of gradient-augmented fitting with
 $\alpha=10^{-4}$, $\gamma=10$, $p=2.01$, seed $42$. The same parameters are
 used for all three activations, so the comparison is not confounded with
 per-activation tuning.}
@@ -4200,8 +4205,8 @@ The two algorithms produce structurally different representations: Algorithm~2 c
 \caption{$\mathrm{ReLU}^5 + \alpha\,\psi_5$.}
 \end{subfigure}
 \caption{Inner parameters $(a_1,a_2,b)$, with the unit circle in the plane
-$b=0$ shown in light green. The two nonhomogeneous fits use the common
-operating point $\alpha=10^{-4}$, $\gamma=10$, $p=2.01$; dot color gives the
+$b=0$ shown in light green. The two nonhomogeneous fits use
+$\alpha=10^{-4}$, $\gamma=10$, $p=2.01$; dot color gives the
 sign and dot size the magnitude of the outer weight.}
 \label{fig:summary_weights_raw}
 \end{figure}
@@ -4352,8 +4357,8 @@ closed $\delta$-neighbourhood are
 \end{equation*}
 The regional errors below use $\delta=0.3$.
 At points of $S$, two adjacent fixed-target values agree while their gradients
-may differ; the sampled PMP costates provide branchwise labels, without
-asserting a classical gradient on $S$.
+may differ; the sampled PMP costates provide the corresponding one-sided
+gradients, without asserting a classical gradient on $S$.
 
 The generator locates $S_{0,2\pi}$ by intersecting equal-value contours with
 their $2\pi$-shifted copies and uses periodic translates in $D$. To obtain
@@ -4400,9 +4405,10 @@ across which $\nabla V$ may be discontinuous.}
 \end{figure}
 
 No run places atoms at the upper radial bound $\lambda=e^5$: the largest
-support radius over all reported nonhomogeneous fits is $13.96$, and at the
-common operating point none exceeds $4.5$. The weight $w_p$ confines the
-support on its own, so no run has to be excluded on this ground.
+support radius over all reported nonhomogeneous fits is $13.96$, and with
+$\alpha=10^{-4}$, $\gamma=10$, $p=2.01$ none exceeds $4.5$. The normalized
+weight keeps the support away from the numerical bound, so no run has to be
+excluded on this ground.
 
 
 
@@ -4731,13 +4737,14 @@ $\operatorname{dist}(\theta, 2\pi\mathbb{Z}) < 0.4$ and $|\dot\theta| < 0.4$
 at $T = 10$. This condition concerns the terminal state of one finite
 rollout and does not assert asymptotic stability. The reference law compares $V_0$ and
 $V_{2\pi}$ using the nearest PMP samples. The middle block uses
-Algorithm~\ref{alg:log} at the common operating point
+Algorithm~\ref{alg:log} with
 $\alpha = 10^{-4}$, $\gamma = 10$, $p = 2.01$; the lower block uses
 Algorithm~\ref{alg:q} at the most accurate $\alpha$ for each $k$. For
 $\mathrm{ReLU}^{3}$ from $A$ the rollout diverges, so no cost is reported.
 The claim that only $\mathrm{ReLU}^{2}$ synthesizes a law reaching upright
-from both starts is scoped to this fixed operating point; selecting each
-activation's own best cell admits further laws that reach upright from $B$.}
+from both starts is scoped to these fixed parameters; selecting the
+lowest-error run for each activation admits further laws that reach upright
+from $B$.}
 \label{tab:rs_feedback_cost}
 \end{table}
 
@@ -4835,9 +4842,8 @@ This infinite-slope case is structurally linked to, but is not obtained by
 substitution into, the finite-slope theory of Section~3.
 
 For the Van der Pol oscillator, raising the moment order $p$ contracts the
-support radius in every tested family, which is the confinement the
-normalization is introduced to provide; the amplitude-mass radius and the
-support size do not follow it. The Gaussian gives the smallest $H^1$ error
+support radius in every tested family, as predicted by the normalized
+formulation; $R_{0.95}$ and the support size do not follow it. The Gaussian gives the smallest $H^1$ error
 among the tested nonhomogeneous profiles, while softplus uses fewer atoms, and
 all three synthesize a feedback law that stabilizes the system at close to the
 reference cost. The homogeneous $\mathrm{ReLU}^k$ networks obtain comparable

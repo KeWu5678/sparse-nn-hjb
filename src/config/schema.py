@@ -106,9 +106,9 @@ class TrainingConfig:
     #   "batch"       -- up to max_insert candidates at once, against one frozen
     #                    residual.  Algorithm 1/2 as printed; the paper states that
     #                    the per-step guarantees do not survive the cross terms.
-    #   "sequential"  -- exactly one atom, the argmax of |P_p|, per iteration.  The
-    #                    variant the rate bound actually requires.  Width grows by
-    #                    at most 1 per iteration, so raise num_iterations to match.
+    #   "sequential"  -- exactly one selected atom per iteration. This removes the
+    #                    batch cross terms; the rate bound additionally requires an
+    #                    exact global maximizer. Raise num_iterations to match width.
     insert_mode: str = "batch"
     # correction_guard -- accept the SSN correction only if it did not increase the
     # objective, otherwise keep the post-insertion coefficients.  SSN is a local

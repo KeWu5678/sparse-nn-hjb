@@ -25,7 +25,7 @@ divides by `M` rather than `M·d`, which rescales `α` by `d = 2` (see
 
 ## Sweep axes
 
-Identical to `../log_penalty`'s **current config**, cell for cell, so the grid is
+Identical to `../log_penalty`'s **current parameter grid**, run for run, so the grid is
 not a variable:
 
 | axis | values |
@@ -49,18 +49,19 @@ the separate `paper-p-study` target.
 **Caveat on comparing against `../log_penalty`.** Its *stored records* predate a
 change to its own config: they cover `lisht`, `snake_b0_25`, `silu_squared` and
 `rcip_2`, and do not cover `leaky_relu`. So a direct comparison is available on
-the six shared activations only, and `leaky_relu` has no comparator baseline
+the six shared activations only, and `leaky_relu` has no corresponding comparator run
 until `../log_penalty` is re-run. (The pendulum counterpart and both
 `frac_exp_penalty` studies do not have this problem — their stored records match
 their configs.)
 
 ## Insertion modes
 
-`batch` is Algorithm 1 as printed (`N_ins = 15`), which the paper states forfeits
-the per-step guarantees to the cross terms of a joint insertion. `sequential`
-admits one atom per iteration — the maximizer of `|P_p|`, the variant the rate
-bound requires — and runs at `T_out = 150` for a matched neuron budget rather
-than a matched iteration count (`docs/adr/0008`). Compare the two on the
+`batch` is Algorithm 1 with `N_ins = 15`, whose joint insertion introduces
+uncontrolled cross terms. `sequential` admits the highest-ranked candidate
+returned by the multistart search, one atom per iteration, and runs at
+`T_out = 150` for a matched neuron budget rather than a matched iteration count
+(`docs/adr/0008`). The theorem's rate additionally requires an exact global
+maximizer, which this search does not certify. Compare the two on the
 neurons-versus-error frontier, not per iteration.
 
 ## Reproduce

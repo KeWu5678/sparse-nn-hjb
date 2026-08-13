@@ -148,9 +148,10 @@ paper-p-study:  ## sweep the moment order p, which is live under the normalized 
 	esac
 	OMP_NUM_THREADS=1 $(PY) scripts/train.py -m +experiment=$(EXPERIMENT) \
 	  hydra/launcher=joblib hydra.launcher.n_jobs=$(JOBS) \
-	  hydra.sweep.dir=$(SWEEP_DIR)/p_study \
+	  hydra.sweep.dir=$(SWEEP_DIR)/p_study_sequential \
 	  env.verbose=$(VERBOSE) env.seed=42 \
-	  training.insert_mode=batch \
+	  training.insert_mode=sequential \
+	  training.num_iterations=$(SEQ_ITERATIONS) \
 	  model.activation=softplus,tanh,gaussian,gelu_squared \
 	  model.moment_order=2.01,2.5,3,4 \
 	  model.alpha=1e-4,1e-5 \

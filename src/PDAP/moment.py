@@ -109,10 +109,10 @@ def amplitude_mass_radius(
 ) -> torch.Tensor:
     """Smallest parameter radius containing ``mass_fraction`` of ``sum |c_j|``.
 
-    This is the amplitude-mass-weighted radius diagnostic used by the
-    moment-penalty experiments.  Atoms are sorted by
+    This is the R_0.95-type radius diagnostic used by the moment-penalty
+    experiments. Atoms are sorted by
     ``|omega_j| = sqrt(|a_j|^2 + b_j^2)`` and accumulated with weights
-    ``|c_j|``.  Empty supports and supports with zero total amplitude mass have
+    ``|c_j|``. Empty supports and supports with zero total variation have
     radius zero.
     """
     if not 0.0 < mass_fraction <= 1.0:

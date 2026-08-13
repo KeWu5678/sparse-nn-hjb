@@ -371,7 +371,7 @@ class Growth:
 # Kept in its own table rather than as a third slot in ``ACTIVATIONS`` because
 # only the swept activations have derived constants; a third tuple element would
 # force an explicit ``None`` onto all 300+ registry lines.  An activation absent
-# here simply has no theorem radius and keeps the fixed clamp.
+# here simply has no theorem radius and keeps the fixed comparison bound.
 GROWTH: dict[str, Growth] = {
     # |relu(z)| <= |z|, |relu'| <= 1.  (s1 = 1 is the assumption's floor.)
     "relu": Growth(1.0, 1.0, 1.0),

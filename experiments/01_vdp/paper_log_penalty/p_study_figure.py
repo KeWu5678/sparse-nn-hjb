@@ -11,7 +11,7 @@ The plotted statistic is ``radius_max`` = max|omega|, the **support radius**,
 because that is the quantity ``lem:support-bound`` bounds (the support lies in a
 compact superlevel set).  It falls with p in all 16 (problem, activation, alpha)
 rows and is monotone in 12.  Two statistics that look similar do *not* track it
-and must not stand in for it: ``R_0.95`` is a 95%-amplitude-mass quantile
+and must not stand in for it: ``R_0.95`` is a total-variation quantile
 (monotone in 4/16) and the support size N is a count (5/16).  ``R_0.95`` is
 plotted separately in ``p_study_r95.png`` as the contrast.
 

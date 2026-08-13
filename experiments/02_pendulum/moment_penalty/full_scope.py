@@ -34,7 +34,7 @@ LEGACY_OVERSAMPLE_ROOT = (
 
 # Algorithm 1 checkpoint selection.  The comparator study pins a per-activation
 # (alpha, beta, p, gamma) from REPRESENTATIVES below.  The paper-conforming study
-# has no beta at all and pins one operating point shared by every activation, so
+# has no beta at all and pins one parameter triple shared by every activation, so
 # the cross-activation comparison is not confounded with per-activation tuning;
 # --operating-point switches to that rule.  None keeps the comparator behaviour.
 OPERATING_POINT: dict[str, float] | None = None
@@ -158,7 +158,7 @@ def _moment_row(record: dict[str, Any], path: Path) -> dict[str, Any]:
 def _matches_selection(model: dict[str, Any], activation: str) -> bool:
     """Does this record supply the Algorithm 1 checkpoint for ``activation``?"""
     if OPERATING_POINT is not None:
-        # Paper-conforming: one shared operating point, no moment_beta.
+        # Paper-conforming: one shared parameter triple, no moment_beta.
         return (
             _close(float(model["alpha"]), OPERATING_POINT["alpha"])
             and _close(float(model["gamma"]), OPERATING_POINT["gamma"])
@@ -405,7 +405,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--traditional-records", type=Path, default=None,
-        help="record directory for the ReLU + l1 baseline curve; defaults to the "
+        help="record directory for the traditional ReLU + l1 curve; defaults to the "
              "historical frontier_relu_l1 sweep, which predates the current "
              "empirical-fidelity normalization",
     )
@@ -420,7 +420,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--operating-point", type=str, default=None, metavar="ALPHA,GAMMA,P",
-        help="pin one (alpha, gamma, moment_order) for every Algorithm 1 "
+        help="pin one shared (alpha, gamma, moment_order) triple for every Algorithm 1 "
              "activation instead of the per-activation REPRESENTATIVES table; "
              "requires moment_beta = 0 records",
     )

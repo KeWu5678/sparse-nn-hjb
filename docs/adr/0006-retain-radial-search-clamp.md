@@ -1,4 +1,4 @@
-# 6. Retain the radial search clamp under the moment penalty
+# 6. Retain the fixed radial search bound
 
 Date: 2026-07-25
 
@@ -17,36 +17,36 @@ so the search runs on the compact sphere `S^d`. For non-homogeneous activations
 parameter, so the search must also range over `r > 0`.
 
 Without a location-coercive penalty that search need not attain its maximum:
-`sup_r |P_t(r·ω̂)|` can stay bounded away from zero as `r → ∞`, which is the
+`sup_r |P^M_μ(r·ω̂)|` can stay bounded away from zero as `r → ∞`, which is the
 escape mechanism the paper's Example 3.x isolates. The implementation therefore
 clamps the log-scale to `s ∈ [-3, 5]`, i.e. `r ∈ [e^-3, e^5] ≈ [0.05, 148]`
 (`src/PDAP/insertion.py:160`), which truncates the computational dictionary to
 a compact set and makes the subproblem well posed.
 
-The parameter-moment penalty `β·Ψ_p` changes this. The insertion objective
-becomes `|P_t(r·ω̂)| − β·w_p(r·ω̂)`, which tends to `−∞` as `r → ∞` whenever
+The retired additive-moment comparator changes this. Its insertion objective
+becomes `|P^M_μ(r·ω̂)| − β·w_p(r·ω̂)`, which tends to `−∞` as `r → ∞` whenever
 `p > s_1`, so the subproblem is coercive on its own and the clamp is
 unnecessary in principle. Removing it would make theory and implementation
 agree exactly.
 
-Against that: the confinement lemma bounds the support radius by
+Against that: the bounded-support argument gives the radius
 `R_* = (2^{s_1}·C_P/β)^{1/(p−s_1)}`, which is finite but scales like
 `β^{−1/(p−s_1)}`. For softplus at `p = 2.01` this is of order `10^10` at
 `β = 1e-10` — ten orders of magnitude beyond the clamp. So at the small `β`
 where the best accuracy sits, the guarantee is numerically vacuous and the
 clamp is load-bearing. Removing it there would send atoms to large finite
-radii, not to infinity, and would change those cells materially.
+radii, not to infinity, and would change those runs materially.
 
 ## Decision
 
-Keep the clamp at `s ∈ [-3, 5]` for all cells of the sweeps, including `β > 0`.
+Keep the bound at `s ∈ [-3, 5]` for all runs of the sweeps, including `β > 0`.
 
 Report it in the paper for what it is: the compactness substitute that the
-`β = 0` model requires, retained under `β > 0` so that every cell — including
-the `β = 0` baselines, which have no confinement of their own — is searched
+`β = 0` model requires, retained under `β > 0` so that every run — including
+the `β = 0` comparison runs, which have no location-coercive term of their own — is searched
 over one common dictionary.
 
-Cells in which at least 95% of the amplitude mass sits at the ceiling
+Runs in which at least 95% of the total variation sits at the ceiling
 `r = e^5` are recorded in the raw grid but excluded from model selection, on
 the stated grounds that there the clamp rather than `β` confines the support.
 
@@ -56,15 +56,15 @@ the stated grounds that there the clamp rather than `β` confines the support.
   differences are attributable to the objective rather than to the search
   space. This is what makes the matched control study
   (`experiments/02_pendulum/moment_penalty/control.py`) interpretable.
-- No re-runs. The 272-cell screen, the refinement, and the follow-up stages
+- No re-runs. The 272-run screen, the refinement, and the follow-up stages
   remain valid.
 - The paper cannot claim that the moment term is demonstrated to make the
   greedy step well posed — only that it is proved to. The demonstration would
   require dropping the clamp for `β > 0` and re-running both benchmarks.
-- `R95` at or near 148 is a diagnostic, not a defect: it marks cells where the
+- `R95` at or near 148 is a diagnostic, not a defect: it marks runs where the
   clamp binds. The censoring rule depends on it, so the ceiling value must not
   be changed without re-deriving the affected tables.
-- The `p` axis becomes the reportable confinement evidence, since
+- The `p` axis becomes the reportable bounded-support evidence, since
   `1/(p − s_1)` controls how fast the guarantee degrades as `β → 0`.
 
 ## Alternatives considered
@@ -72,21 +72,21 @@ the stated grounds that there the clamp rather than `β` confines the support.
 **Drop the upper clamp for `β > 0` and re-run.** Theory and implementation
 would agree exactly and the fits would go wherever the moment term puts them.
 Rejected for now: a full re-run of screen, refinement, and follow-up on both
-benchmarks, and the `β = 0` baselines would still need the clamp, so the
+benchmarks, and the `β = 0` comparison runs would still need the bound, so the
 comparison would no longer be over a common dictionary.
 
 **Drop it everywhere, `β = 0` included.** Maximally consistent, and the `β = 0`
 rows would exhibit the escape directly instead of having it suppressed.
 Rejected: the `β = 0` runs on tanh/softplus may not terminate usefully, which
-would cost the accuracy baselines that anchor the tables.
+would cost the accuracy comparisons that anchor the tables.
 
 ## Amendment: the revised objective
 
 Date: 2026-08-12
 
-The manuscript's Sections 3–5 no longer carry an additive `β·Ψ_p` term. The
+The manuscript's Sections 3–5 no longer carry an additive moment term. The
 moment norm defines the measure space, and the objective is
-`J = L(μ) + α·Φ_φ(μ_p)` with `μ_p = w_p·μ`. So the confinement radius this
+`J = L(μ) + α·Φ_φ(μ_p)` with `μ_p = w_p·μ`. So the support-radius bound this
 record weighed — `R_* = (2^{s₁}·C_P/β)^{1/(p−s₁)}`, scaling like
 `β^{−1/(p−s₁)}` — no longer exists, and the argument above cannot be evaluated
 as written.
@@ -120,7 +120,7 @@ ever tighten the search, never loosen it.
 
 What changes is that the guarantee is now demonstrable somewhere. At `p = 4` the
 theorem radius binds strictly inside the clamp for every `s₁ = 1` activation, so
-those cells are searched over a region the theory certifies rather than one the
+those runs are searched over a region the theory certifies rather than one the
 implementation imposes:
 
 | activation | `s₁` | `p = 4`, `α = 1e-4` | `p = 4`, `α = 1e-5` |
@@ -138,7 +138,7 @@ search is restricted to the certified region, the fits are no worse than at
 `p = 2.01`, where the clamp governs (`softplus` 0.1158 against 0.1246,
 `tanh` 0.1078 against 0.1173, `gaussian` 0.1012 against 0.1104 relative H¹). So
 the theorem radius is not merely valid but harmless, and at `p = 4` the
-confinement claim is demonstrated rather than only proved. Elsewhere the honest
+bounded-search claim is demonstrated rather than only proved. Elsewhere the honest
 statement remains the one this record already makes.
 
 No threshold guards the vacuous case: the value is a valid upper bound, merely an

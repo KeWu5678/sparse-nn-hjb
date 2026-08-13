@@ -42,7 +42,7 @@ curated experiment summaries are now the source of truth; the legacy
    own coefficient, the correction is rejected when it raises the objective, and
    the loop inserts before correcting. These re-runs sit beside the preserved
    comparators rather than replacing them, so the algorithm change can be read
-   off cell for cell.
+   off run for run.
 
    At a **matched neuron budget** — the comparison that is free of both the α
    shift and any capacity difference — sequential insertion under the revised
@@ -50,10 +50,10 @@ curated experiment summaries are now the source of truth; the legacy
    substantially so on the pendulum (relative H¹ 0.2271 against the comparator's
    0.4250 at ≤160 neurons). The exception is VDP at ≤20 neurons, where the
    comparator still wins. Both readings are conservative: the comparator draws on
-   2–6× more cells.
+   2–6× more runs.
 
    Do **not** compare the two studies at equal α. The empirical fidelity now
-   divides by `M` rather than `M·d`, so at equal α *label* a paper cell carries
+   divides by `M` rather than `M·d`, so at the same α label a paper run carries
    `1/d` the effective regularization and buys more neurons; a per-α table reads
    that head start as an improvement. The `results.md` files lead with the
    matched-budget table for this reason.

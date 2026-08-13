@@ -209,7 +209,7 @@ class PDAP:
         return (Vp - V).detach(), (dVp - dV).detach()
 
     def _search_radius(self, model, data_train):
-        """Radial search cap for this iterate: ``None`` keeps the fixed clamp.
+        """Radial search cap for this iterate; ``None`` keeps the fixed comparison bound.
 
         The theorem radius depends on the iterate only through ``||r_mu||``, so it
         is recomputed each insertion; everything else is fixed by the activation
@@ -260,11 +260,10 @@ class PDAP:
     # ------------------------------------------------------------------ #
     def _insert(self, model, data_train, num_insertion: int, max_insert: int, verbose: bool):
         """Return (W, b, c) where c is None for the profile strategy (needs warm-start)."""
-        # Sequential insertion admits exactly one atom per outer iteration -- the
-        # argmax of the certificate violation, which is the top of the same ranking.
-        # This is the variant the theorem's rate bound requires; a batch shares one
-        # frozen residual, and the paper states its guarantees do not survive the
-        # resulting cross terms.
+        # Sequential insertion admits the highest-ranked candidate returned by the
+        # multistart search, one atom per outer iteration. The theorem's rate bound
+        # additionally requires that this candidate be an exact global maximizer; a
+        # batch also introduces cross terms through its shared frozen residual.
         if self.insert_mode == "sequential":
             max_insert = 1
         X = data_train[0]

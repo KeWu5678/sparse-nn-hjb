@@ -1,6 +1,6 @@
 # Van der Pol full evidence scope with a parameter moment
 
-All Algorithm 1 rows use one operating point (alpha=1e-04, gamma=10, p=2.01), so the cross-activation comparison is not confounded with per-activation tuning.
+All Algorithm 1 rows use shared parameters (alpha=1e-04, gamma=10, p=2.01), so the cross-activation comparison is not confounded with per-activation tuning.
 Algorithm 2 rows reuse the unchanged homogeneous experiment.
 
 ## Algorithm 1: gradient augmentation
@@ -26,7 +26,7 @@ Algorithm 2 rows reuse the unchanged homogeneous experiment.
 
 ### Sparsity and the insertion dynamics
 
-The gaussian and softplus fits differ sharply in size — 32 vs 15 neurons, a factor of ~2.1 — even though gaussian is the *more* accurate of the two. Tracking the profile insertion neuron-by-neuron shows why: gaussian adds neurons in large batches (-1–1 per iteration) while softplus adds only 0–1, and each gaussian neuron buys a far smaller drop in the objective `J = L(μ) + α·Φ(μ) + β·Ψ_p(μ)`.
+The gaussian and softplus fits differ sharply in size — 32 vs 15 neurons, a factor of ~2.1 — even though gaussian is the *more* accurate of the two. Tracking insertion neuron-by-neuron shows why: gaussian adds neurons in large batches (-1–1 per iteration) while softplus adds only 0–1, and each gaussian neuron buys a far smaller drop in the additive-moment comparator objective `J_add = L(μ) + α·Φ_φ(μ) + β‖μ‖_{M_p}`.
 
 | iter | gaussian N | ins | ΔJ/n | softplus N | ins | ΔJ/n |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -91,7 +91,7 @@ The gaussian and softplus fits differ sharply in size — 32 vs 15 neurons, a fa
 
 `N` = support size after SSN and pruning; `ins` = neurons added that iteration; `ΔJ/n` = decrease of `J` per neuron added (relative to the previous iterate; iteration 1 has no predecessor).
 
-The mechanism is the dual variable: the insertion score `p_t(ω) = ⟨σ(·;ω), g_t⟩` scores a candidate direction ω against the current residual `g_t`. The gaussian is **localized** (a bump concentrated near the hyperplane a·x + b ≈ 0), so `p_t` is sensitive to local residual pockets and a fresh batch of atoms clears the weighted insertion threshold every iteration, each correcting only a small local portion of the residual. Softplus has **global support**, so `p_t` averages the residual over the whole domain — positive and negative contributions cancel, fewer ω clear the weighted insertion threshold, but each admitted atom removes a global component.
+The mechanism is the function representing the empirical fidelity derivative: `P^M_{μ_t}(ω)=⟨K(ω),r_{μ_t}⟩` scores a candidate direction `ω` against the current residual. The gaussian is **localized** (a bump concentrated near the hyperplane `a·x+b≈0`), so this derivative is sensitive to local residual pockets and a fresh batch of atoms clears the weighted insertion threshold every iteration, each correcting only a small local portion of the residual. Softplus has **global support**, so its derivative averages the residual over the whole domain—positive and negative contributions cancel, fewer `ω` clear the weighted insertion threshold, but each admitted atom removes a global component.
 
 ## Algorithm 1: synthesized feedback
 

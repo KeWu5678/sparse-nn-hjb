@@ -66,7 +66,7 @@ def certificate_radius(
 ) -> Optional[float]:
     """``min(R(mu), exp(5))``, or ``None`` when the theorem does not apply.
 
-    Returns ``None`` -- meaning "keep the fixed clamp" -- when the activation
+    Returns ``None`` -- meaning "keep the fixed comparison bound" -- when the activation
     declares no growth data, when ``p <= s1`` (the theorem's hypothesis fails, so
     there is no finite radius to claim), or when the inputs are degenerate.
     """
