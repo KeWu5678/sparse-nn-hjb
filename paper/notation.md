@@ -490,7 +490,7 @@ solved by the semismooth Newton correction of both algorithms.
 Number of outer insertion iterations.
 
 **`N_trial` — new**
-Number of candidate directions sampled per outer iteration.
+Number of random candidate starts sampled per outer iteration.
 
 **`N_ins` — new**
 Maximum number of candidates inserted per outer iteration. The one-candidate
@@ -501,9 +501,11 @@ Pruning tolerance: atoms with `|cₙ| ≤ ε_prune` are removed after the
 correction step.
 
 **`θ_merge` — new**
-Near-duplicate tolerance: two refined candidates with unit representatives
-satisfying `ω̂ᵢ·ω̂ⱼ > 1 − θ_merge` are near-duplicates, and only the first in
-the enumeration is kept.
+Near-duplicate tolerance. In Algorithm 1, two refined candidates are duplicates
+when their Euclidean parameter distance is at most `θ_merge = 10⁻²`. In
+Algorithm 2, whose parameters lie on the unit sphere, the cosine rule
+`ω̂ᵢ·ω̂ⱼ > 1 − θ_merge` is used. Only the first candidate in the enumeration is
+kept.
 
 **`Err_{L²}`, `Err_{H¹}` — new**
 Relative validation errors of a fit `V̂` against `V`, defined at the opening of

@@ -5,9 +5,11 @@ current support, given the data and the current residual.  Both strategies use
 multistart L-BFGS on the fidelity derivative, but their parameter domains and
 acceptance tests differ:
 
-  * ``profile_threshold`` — accept candidates whose derivative magnitude exceeds ``alpha``.
-    Signed networks use the two-sided test ``|p|>alpha``; convex (semiconcave)
-    models use the one-sided ``p>alpha`` (convex atoms carry nonnegative mass).
+  * ``profile_threshold`` — for the normalized-measure objective, sample inside
+    the theorem/numerical radius, jointly refine ``omega=(a,b)``, discard final
+    points outside that radius, remove Euclidean near-duplicates, and accept
+    candidates satisfying ``|P_p(omega)| > alpha*L_phi``.  Preserved comparator
+    objectives keep their historical profile rules.
   * ``finite_step`` — accept candidates with a profitable finite step, i.e. where
     min_c Delta J(c; omega) < 0 (see :func:`solve_insertion_weight`); returns the
     optimal outer weight c* alongside each atom.  Used for the q<1 penalty.
