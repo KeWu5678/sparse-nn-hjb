@@ -1,14 +1,14 @@
 # Pendulum full experimental scope
 
-## Algorithm 1: positive-moment nonhomogeneous model
+## Algorithm 1: normalized-measure nonhomogeneous model
 
-Selected positive-moment Algorithm 1 fits
+Selected Algorithm 1 fits
 
-| activation | alpha | beta  | p    | gamma | N  | switching H1 | rest H1 |
-| ---------- | ----- | ----- | ---- | ----- | -- | ------------ | ------- |
-| gaussian   | 1e-04 | 0e+00 | 2.01 | 10    | 25 | 0.563        | 0.579   |
-| softplus   | 1e-04 | 0e+00 | 2.01 | 10    | 15 | 0.807        | 0.968   |
-| tanh       | 1e-04 | 0e+00 | 2.01 | 10    | 30 | 0.613        | 0.585   |
+| activation | alpha | p    | gamma | N  | switching H1 | rest H1 |
+| ---------- | ----- | ---- | ----- | -- | ------------ | ------- |
+| gaussian   | 1e-04 | 2.01 | 10    | 77 | 0.304        | 0.191   |
+| softplus   | 1e-04 | 2.01 | 10    | 30 | 0.501        | 0.417   |
+| tanh       | 1e-04 | 2.01 | 10    | 75 | 0.358        | 0.197   |
 
 ### Synthesized feedback law
 
@@ -17,9 +17,9 @@ Algorithm 1 feedback: closed-loop cost and stabilization from A=(0.71, 0.68) and
 | model    | cost A | upright A | cost B | upright B |
 | -------- | ------ | --------- | ------ | --------- |
 | true PMP | 26.2   | yes       | 10.2   | yes       |
-| Gaussian | 157.1  | no        | 164.2  | no        |
-| softplus | 85.0   | no        | 87.7   | no        |
-| tanh     | 264.7  | no        | 258.4  | no        |
+| Gaussian | 8451.8 | no        | 10.1   | yes       |
+| softplus | 69.8   | yes       | 11.2   | yes       |
+| tanh     | 7822.2 | no        | 10.2   | yes       |
 
 Control trace: `figures/feedback_control_b_log_penalty.png`
 
@@ -32,9 +32,9 @@ Algorithm 2 feedback: closed-loop cost and stabilization from A=(0.71, 0.68) and
 | model    | cost A   | upright A | cost B | upright B |
 | -------- | -------- | --------- | ------ | --------- |
 | true PMP | 26.2     | yes       | 10.2   | yes       |
-| ReLU^2   | 55.5     | yes       | 10.1   | yes       |
+| ReLU^2   | 64.9     | yes       | 10.3   | yes       |
 | ReLU^3   | 140002.5 | no        | 10.2   | yes       |
-| ReLU^5   | 218.8    | no        | 216.1  | no        |
+| ReLU^5   | 117.8    | yes       | 149.6  | yes       |
 
 Control trace: `figures/feedback_control_b_relu.png`
 
@@ -73,6 +73,17 @@ Control trace: `figures/feedback_control_b_relu.png`
 
 ## Oversampling control
 
-Oversampling fits are still running.
+Common-set relative H1 error for the switching-best run (three alpha values per variant; all entries come from one run)
 
-Figure: ``
+| family   | variant        | runs | alpha | switching | rest  | N   |
+| -------- | -------------- | ---- | ----- | --------- | ----- | --- |
+| Gaussian | 6k 23% (base)  | 3    | 1e-04 | 0.278     | 0.136 | 73  |
+| Gaussian | 6k 40% band    | 3    | 1e-05 | 0.276     | 0.158 | 143 |
+| Gaussian | 6k 60% band    | 3    | 1e-05 | 0.299     | 0.179 | 145 |
+| Gaussian | 6k+2k band add | 3    | 1e-04 | 0.296     | 0.165 | 79  |
+| ReLU^2   | 6k 23% (base)  | 3    | 1e-05 | 0.238     | 0.146 | 110 |
+| ReLU^2   | 6k 40% band    | 3    | 1e-06 | 0.277     | 0.170 | 133 |
+| ReLU^2   | 6k 60% band    | 3    | 1e-05 | 0.310     | 0.189 | 112 |
+| ReLU^2   | 6k+2k band add | 3    | 1e-06 | 0.246     | 0.160 | 133 |
+
+Figure: `figures/oversampling_control.png`
