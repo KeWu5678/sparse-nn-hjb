@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Regenerate the original Van der Pol evidence scope for the moment model.
+"""Generate the Van der Pol evidence scope for the two insertion algorithms.
 
-The moment sweep owns model selection.  This script restores the downstream
-tests from the original paper using the selected positive-beta checkpoints:
-activation surfaces, derivative diagnostics, insertion dynamics, Algorithm 1
-feedback, and the Algorithm 1/Algorithm 2 summary figures.
+Record-root and operating-point arguments select the Algorithm 1 study; the
+same rendering code produces activation surfaces, derivative diagnostics,
+insertion dynamics, feedback, and cross-algorithm summary figures.
 """
 
 from __future__ import annotations
@@ -317,6 +316,8 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                         help="Algorithm 1 run-record root (default: the moment sweep)")
     parser.add_argument("--homogeneous-records", type=Path, default=None,
                         help="Algorithm 2 run-record root (default: frac_exp_penalty)")
+    parser.add_argument("--traditional-records", type=Path, default=None,
+                        help="ReLU plus l1 run-record root")
     parser.add_argument("--out", type=Path, default=None,
                         help="study directory the figures are written under")
     parser.add_argument("--alpha", type=float, default=None,
@@ -337,13 +338,15 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def _apply_overrides(args: argparse.Namespace) -> None:
     """Repoint the module-level roots/selection; globals resolve at call time."""
-    global MOMENT_ROOT, HOMOGENEOUS_ROOT, OUTPUT_DIR, REPRESENTATIVES
+    global MOMENT_ROOT, HOMOGENEOUS_ROOT, TRADITIONAL_ROOT, OUTPUT_DIR, REPRESENTATIVES
     global SELECTED_GAMMA, HOMOGENEOUS_ALPHA
 
     if args.records is not None:
         MOMENT_ROOT = args.records.resolve()
     if args.homogeneous_records is not None:
         HOMOGENEOUS_ROOT = args.homogeneous_records.resolve()
+    if args.traditional_records is not None:
+        TRADITIONAL_ROOT = args.traditional_records.resolve()
     if args.out is not None:
         OUTPUT_DIR = args.out.resolve()
     if args.gamma is not None:
@@ -393,20 +396,24 @@ def main(argv: list[str] | None = None) -> int:
         rows, samples, norm
     )
     insertion = legacy._insertion_section(rows)
-    insertion = (
-        insertion.replace(
-            "`J = L(μ) + α·Φ(μ)`",
-            "`J_add = L(μ) + α·Φ_φ(μ) + β‖μ‖_{M_p}`",
+    if all(row["beta"] == 0.0 for row in rows):
+        insertion = (
+            insertion.replace(
+                "`J = L(μ) + α·Φ(μ)`",
+                "`J = l^M(μ) + α Σ φ_γ(w_p(ω_n)|c_n|)`",
+            )
+            .replace("clears the threshold α", "clears |P_p(ω)| > α L_φ")
+            .replace("fewer ω exceed α", "fewer ω clear the normalized threshold")
         )
-        .replace(
-            "clears the threshold α",
-            "clears the weighted insertion threshold",
+    else:
+        insertion = (
+            insertion.replace(
+                "`J = L(μ) + α·Φ(μ)`",
+                "`J_add = L(μ) + α·Φ_φ(μ) + β‖μ‖_{M_p}`",
+            )
+            .replace("clears the threshold α", "clears the weighted insertion threshold")
+            .replace("fewer ω exceed α", "fewer ω clear the weighted insertion threshold")
         )
-        .replace(
-            "fewer ω exceed α",
-            "fewer ω clear the weighted insertion threshold",
-        )
-    )
 
     summary = _load_module(
         "vdp_summary_scope",
@@ -456,12 +463,8 @@ def main(argv: list[str] | None = None) -> int:
         f"![{key}]({raw_weights[key]})"
         for key in ("gaussian", "softplus", "relu5")
     )
-    # The header describes how Algorithm 1 rows were selected, which differs
-    # between the comparator (per-activation checkpoints carrying a positive
-    # moment coefficient) and a paper-conforming run pinned to one operating
-    # point.  Reporting the comparator's wording for both would leave a retired
-    # formulation in the new study's report.  A uniform selection across
-    # activations, with no moment coefficient, identifies the latter.
+    # A uniform selection across activations identifies the manuscript's shared
+    # operating point and keeps the cross-activation comparison untuned.
     specs = list(REPRESENTATIVES.values())
     uniform = all(s == specs[0] for s in specs)
     if uniform and not any(s["beta"] for s in specs):
@@ -476,10 +479,10 @@ def main(argv: list[str] | None = None) -> int:
         selection_note = (
             "All Algorithm 1 rows use selected interior positive-beta configurations."
         )
-    report = f"""# Van der Pol full evidence scope with a parameter moment
+    report = f"""# Van der Pol full evidence scope
 
 {selection_note}
-Algorithm 2 rows reuse the unchanged homogeneous experiment.
+Algorithm 2 rows use the sphere formulation.
 
 ## Algorithm 1: gradient augmentation
 

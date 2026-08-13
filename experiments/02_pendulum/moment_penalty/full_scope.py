@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Regenerate the original pendulum evidence scope for both sparse models.
+"""Generate the pendulum evidence scope for both insertion algorithms.
 
-Algorithm 1 uses the selected positive-moment tanh, softplus, and Gaussian
-checkpoints. Algorithm 2 uses the unchanged homogeneous ReLU^2 and ReLU^5
-checkpoints. Each algorithm receives its own feedback-law table and figures;
-the shared plots compare the two independently tested model families.
+Record-root and operating-point arguments select the Algorithm 1 study.
+Algorithm 2 uses the homogeneous ReLU checkpoints. Each algorithm receives its
+own feedback table and figures; shared plots compare the fitted model families.
 """
 
 from __future__ import annotations
@@ -334,6 +333,7 @@ def _feedback_table(
 
 
 def _fit_table(rows: list[dict[str, Any]]) -> str:
+    current_objective = all(row["beta"] == 0.0 for row in rows)
     rendered = []
     for row in rows:
         rendered.append(
@@ -348,20 +348,11 @@ def _fit_table(rows: list[dict[str, Any]]) -> str:
                 "rest H1": f"{row['far_h1']:.3f}",
             }
         )
-    return format_table(
-        rendered,
-        [
-            "activation",
-            "alpha",
-            "beta",
-            "p",
-            "gamma",
-            "N",
-            "switching H1",
-            "rest H1",
-        ],
-        title="Selected positive-moment Algorithm 1 fits",
-    )
+    columns = ["activation", "alpha"]
+    if not current_objective:
+        columns.append("beta")
+    columns.extend(["p", "gamma", "N", "switching H1", "rest H1"])
+    return format_table(rendered, columns, title="Selected Algorithm 1 fits")
 
 
 def _oversampling_table(scored: list[dict[str, Any]], legacy: ModuleType) -> str:
@@ -405,9 +396,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--traditional-records", type=Path, default=None,
-        help="record directory for the traditional ReLU + l1 curve; defaults to the "
-             "historical frontier_relu_l1 sweep, which predates the current "
-             "empirical-fidelity normalization",
+        help="record directory for the ReLU plus l1 curve",
     )
     parser.add_argument(
         "--records-alg2", type=Path, default=None,
@@ -567,7 +556,7 @@ def main(argv: list[str] | None = None) -> int:
     out = OUTPUT_DIR / "full_scope.md"
     out.write_text(
         "# Pendulum full experimental scope\n\n"
-        "## Algorithm 1: positive-moment nonhomogeneous model\n\n"
+        "## Algorithm 1: normalized-measure nonhomogeneous model\n\n"
         f"{_fit_table(algorithm1)}\n\n"
         "### Synthesized feedback law\n\n"
         f"{algorithm1_feedback}\n\n"
