@@ -9,6 +9,7 @@ the shared plots compare the two independently tested model families.
 
 from __future__ import annotations
 
+import argparse
 import importlib.util
 import json
 import math
@@ -30,6 +31,20 @@ OVERSAMPLE_ROOT = MOMENT_ROOT / "oversampling"
 LEGACY_OVERSAMPLE_ROOT = (
     ROOT / "rawdata" / "logs" / "multirun" / "region_split_twosided_oversampling"
 )
+
+# Algorithm 1 checkpoint selection.  The comparator study pins a per-activation
+# (alpha, beta, p, gamma) from REPRESENTATIVES below.  The paper-conforming study
+# has no beta at all and pins one operating point shared by every activation, so
+# the cross-activation comparison is not confounded with per-activation tuning;
+# --operating-point switches to that rule.  None keeps the comparator behaviour.
+OPERATING_POINT: dict[str, float] | None = None
+
+# Record roots to push into region_split/analysis.py.  None means "leave that
+# module's own default alone": the comparator run needs its ACT_MULTIRUN_DIR to
+# stay at pendulum/log_penalty (load_rows reads it for the Algorithm 2 arm), so
+# these are only set when the corresponding CLI override is supplied.
+LEGACY_ACT_ROOT: Path | None = None
+LEGACY_RELU_ROOT: Path | None = None
 
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -87,14 +102,31 @@ def _artifact_path(record: dict[str, Any], record_path: Path) -> Path:
     return path
 
 
+def _region_values(record: dict[str, Any], path: Path) -> dict[str, Any]:
+    """Region metrics for this run, preferring the rescored sidecar.
+
+    The two sources are *not* interchangeable: the inline metrics score the pool
+    in normalized coordinates, while the sidecar un-normalizes first, and the
+    value and gradient terms carry different scale factors, so the combined H1
+    ratio differs.  ``region_split/analysis.py`` reads sidecars, so preferring
+    them here keeps both algorithm arms on one definition.  Records that predate
+    the rescoring pipeline have inline metrics only and fall back to them.
+    """
+    sidecar = path.parent / f"region_rescored_{record.get('run_id', path.stem)}.json"
+    if sidecar.exists():
+        return json.loads(sidecar.read_text(encoding="utf-8"))
+    return record["metrics"][-1]["values"]
+
+
 def _moment_row(record: dict[str, Any], path: Path) -> dict[str, Any]:
     cfg = record["config"]
     model = cfg["model"]
     values = record["metrics"][-1]["values"]
-    near_l1 = float(values["switching_l1_h1"])
-    far_l1 = float(values["rest_l1_h1"])
-    near_h1 = float(values["switching_h1"])
-    far_h1 = float(values["rest_h1"])
+    region = _region_values(record, path)
+    near_l1 = float(region["switching_l1_h1"])
+    far_l1 = float(region["rest_l1_h1"])
+    near_h1 = float(region["switching_h1"])
+    far_h1 = float(region["rest_h1"])
     return {
         "act_name": str(model["activation"]),
         "power": float(model["power"]),
@@ -123,27 +155,47 @@ def _moment_row(record: dict[str, Any], path: Path) -> dict[str, Any]:
     }
 
 
+def _matches_selection(model: dict[str, Any], activation: str) -> bool:
+    """Does this record supply the Algorithm 1 checkpoint for ``activation``?"""
+    if OPERATING_POINT is not None:
+        # Paper-conforming: one shared operating point, no moment_beta.
+        return (
+            _close(float(model["alpha"]), OPERATING_POINT["alpha"])
+            and _close(float(model["gamma"]), OPERATING_POINT["gamma"])
+            and _close(float(model["moment_order"]), OPERATING_POINT["order"])
+            and _close(float(model.get("moment_beta", 0.0)), 0.0)
+        )
+    selected = REPRESENTATIVES.get(activation)
+    if selected is None:
+        return False
+    return (
+        _close(float(model["alpha"]), selected["alpha"])
+        and _close(float(model["moment_beta"]), selected["beta"])
+        and _close(float(model["moment_order"]), selected["order"])
+        and _close(float(model["gamma"]), selected["gamma"])
+    )
+
+
 def load_algorithm1_rows() -> tuple[list[dict[str, Any]], str]:
     rows: list[dict[str, Any]] = []
     for path in sorted(MOMENT_ROOT.glob("**/*.json")):
         if OVERSAMPLE_ROOT in path.parents:
             continue
+        if path.name.startswith("region_rescored_"):
+            continue
         record = json.loads(path.read_text(encoding="utf-8"))
         if record.get("status") != "completed":
             continue
         model = record["config"]["model"]
-        selected = REPRESENTATIVES.get(str(model["activation"]))
-        if selected is None:
+        activation = str(model["activation"])
+        if activation not in REPRESENTATIVES:
             continue
         if not (
             model["kind"] == "signed"
             and model["insertion"] == "profile"
             and tuple(float(value) for value in model["loss_weights"])
             == (1.0, 1.0)
-            and _close(float(model["alpha"]), selected["alpha"])
-            and _close(float(model["moment_beta"]), selected["beta"])
-            and _close(float(model["moment_order"]), selected["order"])
-            and _close(float(model["gamma"]), selected["gamma"])
+            and _matches_selection(model, activation)
         ):
             continue
         rows.append(_moment_row(record, path))
@@ -344,7 +396,51 @@ def _oversampling_table(scored: list[dict[str, Any]], legacy: ModuleType) -> str
     )
 
 
-def main() -> int:
+def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--records-alg1", type=Path, default=None,
+        help="record dir for the Algorithm 1 (nonhomogeneous) arm; "
+             "default = the moment_penalty comparator sweep",
+    )
+    parser.add_argument(
+        "--records-alg2", type=Path, default=None,
+        help="record dir for the Algorithm 2 (k-homogeneous ReLU) arm; "
+             "default = the frac_exp_penalty comparator sweep",
+    )
+    parser.add_argument(
+        "--out", type=Path, default=None,
+        help="study directory to write figures/ and full_scope.md into",
+    )
+    parser.add_argument(
+        "--operating-point", type=str, default=None, metavar="ALPHA,GAMMA,P",
+        help="pin one (alpha, gamma, moment_order) for every Algorithm 1 "
+             "activation instead of the per-activation REPRESENTATIVES table; "
+             "requires moment_beta = 0 records",
+    )
+    return parser.parse_args(argv)
+
+
+def _apply_args(args: argparse.Namespace) -> None:
+    """Rebind the module-level roots so one code path serves both studies."""
+    global MOMENT_ROOT, HOMOGENEOUS_ROOT, OUTPUT_DIR, OVERSAMPLE_ROOT, OPERATING_POINT
+    global LEGACY_ACT_ROOT, LEGACY_RELU_ROOT
+    if args.records_alg1 is not None:
+        MOMENT_ROOT = args.records_alg1.resolve()
+        OVERSAMPLE_ROOT = MOMENT_ROOT / "oversampling"
+        LEGACY_ACT_ROOT = MOMENT_ROOT
+    if args.records_alg2 is not None:
+        HOMOGENEOUS_ROOT = args.records_alg2.resolve()
+        LEGACY_RELU_ROOT = HOMOGENEOUS_ROOT
+    if args.out is not None:
+        OUTPUT_DIR = args.out.resolve()
+    if args.operating_point is not None:
+        alpha, gamma, order = (float(v) for v in args.operating_point.split(","))
+        OPERATING_POINT = {"alpha": alpha, "gamma": gamma, "order": order}
+
+
+def main(argv: list[str] | None = None) -> int:
+    _apply_args(_parse_args(argv))
     legacy = _load_module(
         "pendulum_region_scope",
         ROOT / "experiments" / "02_pendulum" / "region_split" / "analysis.py",
@@ -353,6 +449,13 @@ def main() -> int:
     legacy.FIG_DIR = OUTPUT_DIR / "figures"
     legacy.OVERSAMPLE_DIR = OVERSAMPLE_ROOT
     legacy.OVERSAMPLE_RELU_DIR = LEGACY_OVERSAMPLE_ROOT
+    # The Algorithm 2 arm is read through the region_split loader.  Only override
+    # its roots when this invocation supplied them; the comparator run relies on
+    # that module's own defaults.
+    if LEGACY_RELU_ROOT is not None:
+        legacy.RELU_MULTIRUN_DIR = LEGACY_RELU_ROOT
+    if LEGACY_ACT_ROOT is not None:
+        legacy.ACT_MULTIRUN_DIR = LEGACY_ACT_ROOT
     legacy._MODEL_STYLE = {
         "gaussian": (PALETTE["blue_main"], "-"),
         "softplus": (PALETTE["violet"], "-"),

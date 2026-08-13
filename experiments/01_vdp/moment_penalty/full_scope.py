@@ -9,6 +9,7 @@ feedback, and the Algorithm 1/Algorithm 2 summary figures.
 
 from __future__ import annotations
 
+import argparse
 import importlib.util
 import json
 import math
@@ -35,6 +36,14 @@ REPRESENTATIVES = {
     "softplus": {"alpha": 1e-5, "beta": 1e-10, "order": 2.01},
     "gaussian": {"alpha": 1e-5, "beta": 1e-10, "order": 3.0},
 }
+
+# The operating point at which the cross-activation figures are read off.  The
+# defaults reproduce the comparator study; ``--gamma`` and friends repoint the
+# same drawing code at the paper-conforming records so both studies are rendered
+# by one code path and cannot drift in styling.
+SELECTED_GAMMA = 1.0
+# None => pick the most accurate cell at each power instead of pinning alpha.
+HOMOGENEOUS_ALPHA: float | None = 1e-5
 
 
 def _load_module(name: str, path: Path) -> ModuleType:
@@ -134,8 +143,10 @@ def _selected(
     activation: str,
     *,
     loss: str = "h1",
-    gamma: float = 1.0,
+    gamma: float | None = None,
 ) -> dict[str, Any]:
+    if gamma is None:
+        gamma = SELECTED_GAMMA
     matches = [
         row
         for row in rows
@@ -164,7 +175,8 @@ def _homogeneous_champion(power: float) -> dict[str, Any]:
             and tuple(float(value) for value in model["loss_weights"])
             == (1.0, 1.0)
             and _close(float(model["power"]), power)
-            and _close(float(model["alpha"]), 1e-5)
+            and (HOMOGENEOUS_ALPHA is None
+                 or _close(float(model["alpha"]), HOMOGENEOUS_ALPHA))
             and _close(float(model["gamma"]), 0.0)
             and int(cfg["env"]["seed"]) == 42
         ):
@@ -179,9 +191,12 @@ def _homogeneous_champion(power: float) -> dict[str, Any]:
                 "data_file": cfg["data"]["path"],
             }
         )
-    if len(matches) != 1:
+    if not matches:
+        raise ValueError(f"no ReLU^{power:g} champion found under {HOMOGENEOUS_ROOT}")
+    if HOMOGENEOUS_ALPHA is not None and len(matches) != 1:
         raise ValueError(f"expected one ReLU^{power:g} champion, got {len(matches)}")
-    return matches[0]
+    # With the alpha unpinned, the champion is the most accurate cell at this power.
+    return min(matches, key=lambda m: m["rel_h1"])
 
 
 def _traditional_relu_champion(data_file: str) -> dict[str, Any]:
@@ -267,7 +282,7 @@ def _loss_table(rows: list[dict[str, Any]]) -> str:
     ]
     for activation in REPRESENTATIVES:
         for loss in ("l2", "h1"):
-            row = _selected(rows, activation, loss=loss, gamma=1.0)
+            row = _selected(rows, activation, loss=loss)
             lines.append(
                 f"| {activation} | {loss} | 1 | {_format_float(row['rel_l2'])} | "
                 f"{_format_float(row['rel_h1'])} | {row['neurons']} | "
@@ -289,13 +304,83 @@ def _cost_table(rows: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
-def main() -> int:
+def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Draw the Van der Pol evidence scope.  With no arguments this "
+            "reproduces the comparator (moment) study exactly; the options "
+            "repoint the same drawing code at another study's records so the "
+            "two cannot drift in styling."
+        )
+    )
+    parser.add_argument("--records", type=Path, default=None,
+                        help="Algorithm 1 run-record root (default: the moment sweep)")
+    parser.add_argument("--homogeneous-records", type=Path, default=None,
+                        help="Algorithm 2 run-record root (default: frac_exp_penalty)")
+    parser.add_argument("--out", type=Path, default=None,
+                        help="study directory the figures are written under")
+    parser.add_argument("--alpha", type=float, default=None,
+                        help="operating-point alpha for the cross-activation figures")
+    parser.add_argument("--gamma", type=float, default=None,
+                        help="operating-point gamma for the cross-activation figures")
+    parser.add_argument("--order", type=float, default=None,
+                        help="operating-point moment order p")
+    parser.add_argument("--beta", type=float, default=None,
+                        help="moment_beta of the selected records (0 for the paper study)")
+    parser.add_argument("--homogeneous-alpha", type=float, default=None,
+                        help="pin Algorithm 2's alpha; omit with --records to take "
+                             "the most accurate cell at each power")
+    parser.add_argument("--free-homogeneous-alpha", action="store_true",
+                        help="choose Algorithm 2 cells by best H1 instead of a pinned alpha")
+    return parser.parse_args(argv)
+
+
+def _apply_overrides(args: argparse.Namespace) -> None:
+    """Repoint the module-level roots/selection; globals resolve at call time."""
+    global MOMENT_ROOT, HOMOGENEOUS_ROOT, OUTPUT_DIR, REPRESENTATIVES
+    global SELECTED_GAMMA, HOMOGENEOUS_ALPHA
+
+    if args.records is not None:
+        MOMENT_ROOT = args.records.resolve()
+    if args.homogeneous_records is not None:
+        HOMOGENEOUS_ROOT = args.homogeneous_records.resolve()
+    if args.out is not None:
+        OUTPUT_DIR = args.out.resolve()
+    if args.gamma is not None:
+        SELECTED_GAMMA = args.gamma
+    if args.free_homogeneous_alpha:
+        HOMOGENEOUS_ALPHA = None
+    elif args.homogeneous_alpha is not None:
+        HOMOGENEOUS_ALPHA = args.homogeneous_alpha
+
+    # The representative selection is (alpha, beta, order) per activation.  A
+    # paper-conforming study has no beta, so its selection is uniform.
+    if any(v is not None for v in (args.alpha, args.beta, args.order)):
+        REPRESENTATIVES = {
+            activation: {
+                "alpha": args.alpha if args.alpha is not None else spec["alpha"],
+                "beta": args.beta if args.beta is not None else spec["beta"],
+                "order": args.order if args.order is not None else spec["order"],
+            }
+            for activation, spec in REPRESENTATIVES.items()
+        }
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = _parse_args(argv)
+    _apply_overrides(args)
+
     rows = load_representative_rows()
     legacy = _load_module(
         "vdp_log_penalty_scope",
         ROOT / "experiments" / "01_vdp" / "log_penalty" / "analysis.py",
     )
     legacy.OUTPUT_DIR = OUTPUT_DIR
+    # The loaded module reads its own fixed operating point when selecting the
+    # run behind each surface/feedback figure; keep it in step with ours.
+    legacy._FIXED_ALPHA = REPRESENTATIVES["softplus"]["alpha"]
+    legacy._FIXED_GAMMA = SELECTED_GAMMA
+    (OUTPUT_DIR / "figures").mkdir(parents=True, exist_ok=True)
 
     data_file = _selected(rows, "softplus")["data_file"]
     samples = load_value_samples(data_file)
@@ -371,9 +456,29 @@ def main() -> int:
         f"![{key}]({raw_weights[key]})"
         for key in ("gaussian", "softplus", "relu5")
     )
+    # The header describes how Algorithm 1 rows were selected, which differs
+    # between the comparator (per-activation checkpoints carrying a positive
+    # moment coefficient) and a paper-conforming run pinned to one operating
+    # point.  Reporting the comparator's wording for both would leave a retired
+    # formulation in the new study's report.  A uniform selection across
+    # activations, with no moment coefficient, identifies the latter.
+    specs = list(REPRESENTATIVES.values())
+    uniform = all(s == specs[0] for s in specs)
+    if uniform and not any(s["beta"] for s in specs):
+        spec = specs[0]
+        selection_note = (
+            "All Algorithm 1 rows use one operating point "
+            f"(alpha={spec['alpha']:.0e}, gamma={SELECTED_GAMMA:g}, "
+            f"p={spec['order']:g}), so the cross-activation comparison is not "
+            "confounded with per-activation tuning."
+        )
+    else:
+        selection_note = (
+            "All Algorithm 1 rows use selected interior positive-beta configurations."
+        )
     report = f"""# Van der Pol full evidence scope with a parameter moment
 
-All Algorithm 1 rows use selected interior positive-beta configurations.
+{selection_note}
 Algorithm 2 rows reuse the unchanged homogeneous experiment.
 
 ## Algorithm 1: gradient augmentation
