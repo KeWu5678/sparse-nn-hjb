@@ -67,12 +67,15 @@ autoresearch/**/*.log
 # ---- Private research notes (theory program) ----
 docs/research/
 
-# ---- Untracked locally: analysis scripts and thesis source ----
+# ---- Untracked locally: analysis scripts and experiment artifacts ----
 experiments/**/analysis.py
-!experiments/01_vdp/paper_log_penalty/analysis.py
-!experiments/01_vdp/paper_frac_exp_penalty/analysis.py
-!experiments/02_pendulum/paper_log_penalty/analysis.py
-!experiments/02_pendulum/paper_frac_exp_penalty/analysis.py
+experiments/*/paper_log_penalty/
+experiments/*/paper_frac_exp_penalty/
+experiments/algorithm2_rho_pilot.md
+scripts/paper/
+scripts/regenerate_paper_artifacts.sh
+scripts/refresh_algorithm2_paper_runs.sh
+tests/test_paper_artifact_preflight.py
 
 # ---- Terraform (deploy/terraform/) — .terraform.lock.hcl stays tracked ----
 deploy/terraform/.terraform/
@@ -82,20 +85,12 @@ deploy/terraform/*.tfvars
 deploy/terraform/*.tfvars.json
 !deploy/terraform/example.tfvars
 
-# ---- paper/ (LaTeX working dir): the current manuscript and what it builds from ----
-# Everything needed to rebuild paper_0805.pdf from a clean checkout is tracked:
-# the source, the bibliography, and the figures it includes from paper/plot/.
-# (Its other figures come straight from experiments/*/figures/, tracked there.)
+# ---- paper/ (LaTeX working dir) ----
+# Only the current source and compiled publication are version-controlled.
+# Bibliography, figures, auxiliary files, and working notes stay local.
 paper/*
 !paper/paper_0805.tex
 !paper/paper_0805.pdf
-!paper/ref.bib
-!paper/plan.md
-!paper/notation.md
-!paper/term.md
-!paper/plot/
-paper/plot/*
-!paper/plot/*.png
 
 # ---- superseded manuscript versions and their review record: local only ----
 docs/paper_archive/

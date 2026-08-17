@@ -2,18 +2,9 @@
 
 [![CI](https://github.com/KeWu5678/sparse-nn-hjb/actions/workflows/ci.yml/badge.svg)](https://github.com/KeWu5678/sparse-nn-hjb/actions/workflows/ci.yml)
 
-**A 16-neuron softplus network stabilizes the Van der Pol system at
-near-reference cost (6.48 vs 6.48), while a 40-neuron
-ReLU<sup>3</sup> network reaches relative \(H^1\) error 0.097.**
-
-| closed-loop state $\|y(t)\|$ | control $u(t)$ |
-| --- | --- |
-| ![closed-loop state](experiments/01_vdp/paper_log_penalty/figures/feedback_state.png) | ![control](experiments/01_vdp/paper_log_penalty/figures/feedback_control.png) |
-
-Closed-loop rollout of the Van der Pol oscillator from \(y_0=(2,1)\):
-feedback laws synthesized from learned value functions beside the reference
-law. All displayed variants stabilize; they differ in support size and
-gradient accuracy.
+The current mathematical formulation and numerical study are in
+[`paper/paper_0805.tex`](paper/paper_0805.tex) and the tracked
+[`paper/paper_0805.pdf`](paper/paper_0805.pdf).
 
 ## The problem
 
@@ -40,78 +31,13 @@ scalar global proximal maps are evaluated in closed form and the normal map is
 scaled from the insertion warm start. The correction is retained only when it
 does not increase the objective.
 
-## Main result: accuracy per neuron
+## Numerical studies
 
-Representative Van der Pol runs from the paper-facing sweeps:
-
-| activation | penalty | neurons | rel. $H^1$ error | stabilizes | closed-loop cost |
-| --- | --- | --- | --- | --- | --- |
-| softplus | normalized log penalty | **16** | 0.103 | yes | **6.48** |
-| gaussian | normalized log penalty | 34 | 0.098 | yes | 6.50 |
-| tanh | normalized log penalty | 38 | 0.101 | yes | 6.50 |
-| ReLU<sup>2</sup> | $|c|^{2/3}$ | 75 | 0.098 | — | — |
-| ReLU<sup>3</sup> | $|c|^{1/2}$ | 40 | **0.097** | yes | 6.50 |
-
-(true optimal cost: 6.48)
-
-![sparsity frontier](experiments/01_vdp/paper_log_penalty/figures/frontier.png)
-
-Insertion trajectories show the running-best \(H^1\) error against support
-size. The nonhomogeneous models reach the 0.10 error scale with 16–38 atoms;
-ReLU<sup>3</sup> reaches a slightly lower error with 40. The traditional
-ReLU+\(\ell^1\) baseline eventually reaches a lower error, but only overtakes
-both sparse formulations after 121 atoms.
-
-The two algorithm families also leave a visible structural signature on the
-learned weights — the $|c|^q$ formulation constrains atoms to the unit sphere,
-the log-penalty family does not:
-
-| gaussian (normalized log penalty) | ReLU<sup>3</sup> (\(q=1/2\)) |
-| --- | --- |
-| ![gaussian atoms](experiments/01_vdp/paper_log_penalty/figures/weights_raw3d_gaussian.png) | ![relu3 atoms](experiments/01_vdp/paper_log_penalty/figures/weights_raw3d_relu3.png) |
-
-Learned inner weights $(a_1, a_2, b)$, dot size $\propto$ outer weight, color = sign.
-
-The paper-facing tables and figures are regenerated from validated run records
-by `make paper-artifacts`. Full findings: [`experiments/01_vdp`](experiments/01_vdp).
-
-## Probing the limit: value functions with nonsmooth gradients
-
-The Van der Pol value function is smooth. Real HJB value functions usually are
-not — they are only semiconcave, with **gradient jumps across switching sets**
-(states where the optimal strategy changes branch discontinuously). The
-pendulum swing-up benchmark was built to hit this regime deliberately: its
-switching curve separates "brake to the upright at $\theta = 0$" from "swing over the
-top to $\theta = 2\pi$", and the training data is constructed two-sided so the gradient
-jump is *in-sample*, not an extrapolation artifact
-([`experiments/02_pendulum/paper_log_penalty`](experiments/02_pendulum/paper_log_penalty)).
-
-The findings are sharp:
-
-- **Every reported model has larger error in the switching tube than away
-  from it**, and adding samples near the tube gives no systematic or material
-  reduction at the tested widths.
-- **No model reproduces the gradient jump's magnitude.** ReLU<sup>2</sup>
-  develops the sharpest change of slope, while smooth activations interpolate
-  through the discontinuity:
-
-![gradient along the switching cross-section](experiments/02_pendulum/paper_log_penalty/figures/transect_normal_gradient.png)
-
-Normal gradient $n\cdot\nabla V$ along a cross-section of the switching curve:
-the true lower-envelope gradient (black) jumps at $s=0$; ReLU<sup>2</sup>
-develops the sharpest fitted kink, while the smooth activations smooth the
-jump away.
-
-- **Regional error and feedback quality rank the models differently.** The
-  Gaussian has the smallest regional errors, but fails from the harder start.
-  ReLU<sup>2</sup> gives the rollout closest to the reference and softplus also
-  reaches an upright from both starts; Gaussian, tanh, and ReLU<sup>3</sup>
-  succeed only from the easier start.
-
-A parallel theory program asks *why* semiconcavity-adapted atoms should need
-fewer neurons on such targets: [`docs/research/OVERVIEW.md`](docs/research/OVERVIEW.md),
-with a proved/refuted/open claims registry in
-[`docs/research/CLAIMS.md`](docs/research/CLAIMS.md).
+The paper compares the normalized nonhomogeneous formulation on the Van der
+Pol problem with the positively homogeneous formulation on both Van der Pol
+and pendulum swing-up data. Run records, derived reports, and figures remain
+local; the manuscript and compiled PDF are the version-controlled publication
+record.
 
 ## Reproduce it
 
@@ -121,14 +47,15 @@ uv run pytest                # test suite
 make help                    # list experiment targets
 ```
 
-The current manuscript studies are Hydra sweeps with a strict artifact
-preflight. From a clean record root, the main entry points are:
+The experiment definitions are tracked Hydra configs. For example:
 
 ```bash
-make paper-sweep EXPERIMENT=vdp/paper_log_penalty PAPER_MODE=sequential
-make paper-algorithm2-refresh
-make paper-artifacts
+uv run python scripts/train.py -m +experiment=vdp/paper_log_penalty
+uv run python scripts/train.py -m +experiment=pendulum/paper_frac_exp_penalty
 ```
+
+Their run records and derived artifacts are written only to local ignored
+paths.
 
 ### Under the hood
 
@@ -147,9 +74,9 @@ make paper-artifacts
   `rawdata/logs/multirun/`; `make mlflow-backfill` publishes them to an MLflow
   tracking server whose full stack is defined as Terraform in
   [`deploy/`](deploy) — see [docs/adr/mlflow.md](docs/adr/mlflow.md).
-- **Results are code**: the current manuscript reports and figures are emitted
-  by the validated pipeline under `scripts/paper/`, so findings stay in sync
-  with the runs that produced them.
+- **Publication artifacts are local**: experiment run records, generated
+  reports, figures, and paper-support scripts are intentionally not tracked.
+  The manuscript source and compiled PDF are the publication record.
 - CI runs the test suite and `ruff` on every push.
 
 ## Repository layout
@@ -159,7 +86,7 @@ make paper-artifacts
 | `src/` | Library code: `models/` (signed/semiconcave nets), `PDAP/`, `SSN/`, data/eval/plotting |
 | `conf/` | Hydra configs: data, model, eval, experiment sweeps |
 | `scripts/` | Training entrypoint (`train.py`), dataset generators, MLflow backfill |
-| `experiments/` | Curated studies — `00_openloop` (data) → `01_vdp` (smooth benchmark) → `02_pendulum` (switching set); each with `README.md` (scope), `analysis.py`, `results.md` (findings), `figures/` |
+| `experiments/` | Experiment definitions and legacy curated studies; current paper outputs stay local |
 | `tests/` | pytest suite incl. golden-output solver tests |
 | `docs/` | Research program & claims registry, ADRs, MLflow guide |
 | `deploy/` | Terraform for the MLflow tracking server |
