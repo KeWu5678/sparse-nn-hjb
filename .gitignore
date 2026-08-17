@@ -69,6 +69,10 @@ docs/research/
 
 # ---- Untracked locally: analysis scripts and thesis source ----
 experiments/**/analysis.py
+!experiments/01_vdp/paper_log_penalty/analysis.py
+!experiments/01_vdp/paper_frac_exp_penalty/analysis.py
+!experiments/02_pendulum/paper_log_penalty/analysis.py
+!experiments/02_pendulum/paper_frac_exp_penalty/analysis.py
 
 # ---- Terraform (deploy/terraform/) — .terraform.lock.hcl stays tracked ----
 deploy/terraform/.terraform/

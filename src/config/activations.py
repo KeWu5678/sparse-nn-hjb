@@ -367,7 +367,8 @@ class Growth:
     s1: float
 
 
-# Derived by hand and checked numerically by ``tests/test_activation_growth.py``.
+# Derived by hand and checked numerically by
+# ``tests/test_paper_conformance.py::test_declared_growth_constants_are_upper_bounds``.
 # Kept in its own table rather than as a third slot in ``ACTIVATIONS`` because
 # only the swept activations have derived constants; a third tuple element would
 # force an explicit ``None`` onto all 300+ registry lines.  An activation absent

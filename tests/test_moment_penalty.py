@@ -13,7 +13,7 @@ import pytest
 import torch
 
 from src.config.schema import ExperimentConfig, ModelConfig
-from src.PDAP import PDAP
+from src.PDAP import PDAP, profile_threshold
 from src.PDAP.moment import amplitude_mass_radius, moment_penalty, moment_weight
 
 
@@ -63,6 +63,45 @@ def test_moment_penalty_beta_zero_is_zero() -> None:
     c = torch.tensor([5.0, -7.0], dtype=torch.float64)
     w = torch.tensor([3.0, 9.0], dtype=torch.float64)
     assert float(moment_penalty(c, w, beta=0.0)) == 0.0
+
+
+def test_additive_moment_search_maximizes_the_acceptance_margin() -> None:
+    """The beta-weighted search finds the finite maximizer, not the raw-profile ray."""
+    X = torch.zeros((1, 1), dtype=torch.float64)
+    residual_v = torch.ones((1, 1), dtype=torch.float64)
+    residual_dv = torch.zeros_like(X)
+
+    def fixed_starts(count: int) -> tuple[torch.Tensor, torch.Tensor]:
+        return (
+            torch.zeros((count, 1), dtype=torch.float64),
+            torch.full((count,), 0.5, dtype=torch.float64),
+        )
+
+    W, b, _ = profile_threshold(
+        X,
+        residual_v,
+        residual_dv,
+        activation=lambda z: z,
+        power=1.0,
+        loss_weights=(1.0, 0.0),
+        alpha=1e-2,
+        sample_sphere=fixed_starts,
+        N=1,
+        max_insert=1,
+        merge_tol=1e-2,
+        two_sided=True,
+        use_sphere=False,
+        lbfgs_lr=1.0,
+        lbfgs_steps=50,
+        moment_beta=0.25,
+        moment_order=2.0,
+        normalized=False,
+        radius=10.0,
+        verbose=False,
+    )
+
+    assert W.shape == (1, 1)
+    assert b[0] == pytest.approx(2.0, abs=1e-6)
 
 
 def test_moment_primitives_reject_invalid_parameters() -> None:
@@ -234,13 +273,13 @@ def _fit_softplus(moment_beta: float):
 
 
 def test_moment_path_runs_end_to_end() -> None:
-    hist_off, n_off, omega_off = _fit_softplus(moment_beta=0.0)
+    hist_off, _, omega_off = _fit_softplus(moment_beta=0.0)
     hist_on, n_on, omega_on = _fit_softplus(moment_beta=1e-1)
 
-    # Both complete with a finite (possibly empty) support and finite recorded
-    # objective.  A finite multistart search may return no accepted candidate;
-    # the zero measure is then the valid result for either comparator run.
-    assert n_off >= 0 and n_on >= 0
+    # The additive-moment path must produce an accepted finite-radius candidate
+    # on this deterministic problem; this guards the beta-aware candidate search.
+    assert n_on >= 1
+    assert omega_on > 0.0
     assert math.isfinite(hist_on.train_loss[-1]) and math.isfinite(hist_off.train_loss[-1])
     assert math.isfinite(omega_off) and math.isfinite(omega_on)
 

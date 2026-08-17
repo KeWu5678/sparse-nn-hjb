@@ -82,7 +82,7 @@ def certificate_radius(
         return None
     if residual_norm <= 0.0:
         # A zero residual has no certificate to violate; nothing to search for.
-        return math.exp(FIXED_LOG_CLAMP)
+        return 1.0
 
     C = growth_constant(growth, extent)
     base = (2.0 ** (growth.s1 + 1.0)) * C * residual_norm / (alpha * l_phi)

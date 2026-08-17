@@ -68,7 +68,10 @@ def _run_trajectory(config: dict) -> np.ndarray:
 
     kind = config["kind"]
     if kind == "ssn":
-        opt = SSN([theta], alpha=alpha, gamma=gamma, th=th, lr=1.0, power=power)
+        opt = SSN(
+            [theta], alpha=alpha, gamma=gamma, th=th, lr=1.0, power=power,
+            prox_scale=config.get("prox_scale"),
+        )
     elif kind == "ssn_tr":
         # folded into the base SSN: trust-region (Steihaug-CG) globalization
         opt = SSN([theta], alpha=alpha, gamma=gamma, th=th, lr=1.0, power=power,
@@ -102,6 +105,10 @@ def _configs() -> dict[str, dict]:
         "ssn_signed_q1": dict(
             kind="ssn", P=4, Nx=20, alpha=1e-2, gamma=1.0, th=0.5, power=1.0,
             seed=1, theta0=t4,
+        ),
+        "ssn_signed_q_half": dict(
+            kind="ssn", P=4, Nx=20, alpha=1e-2, gamma=0.0, th=0.5, power=3.0,
+            prox_scale=1e-2, seed=2, theta0=t4,
         ),
         "ssn_tr_signed": dict(
             kind="ssn_tr", P=4, Nx=20, alpha=1e-2, gamma=1.0, th=0.5, power=1.0,

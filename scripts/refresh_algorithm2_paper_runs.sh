@@ -64,13 +64,50 @@ done
 
 "$python_cmd" scripts/paper/preflight.py --algorithm2-root "$stage"
 
+for problem in vdp pendulum; do
+  for root in "$canonical" "$stage"; do
+    records="$root/$problem/paper_frac_exp_penalty"
+    if [[ ! -d "$records" ]]; then
+      echo "missing validated record tree $records; canonical records were not changed."
+      exit 2
+    fi
+  done
+done
+
 mkdir -p "$archive/vdp" "$archive/pendulum"
+typeset -A archived installed
+
+rollback_record_swap() {
+  local status=${1:-1}
+  (( status == 0 )) && status=1
+  trap - ZERR INT TERM
+  set +e
+  for problem in pendulum vdp; do
+    if [[ ${installed[$problem]:-false} == true ]]; then
+      mv "$canonical/$problem/paper_frac_exp_penalty" \
+        "$stage/$problem/paper_frac_exp_penalty"
+    fi
+    if [[ ${archived[$problem]:-false} == true ]]; then
+      mv "$archive/$problem/paper_frac_exp_penalty" \
+        "$canonical/$problem/paper_frac_exp_penalty"
+    fi
+  done
+  rmdir "$archive/vdp" "$archive/pendulum" "$archive" 2>/dev/null
+  echo "Algorithm 2 record replacement failed; canonical records were restored."
+  exit "$status"
+}
+
+trap 'rollback_record_swap $?' ZERR INT TERM
 for problem in vdp pendulum; do
   mv "$canonical/$problem/paper_frac_exp_penalty" \
     "$archive/$problem/paper_frac_exp_penalty"
+  archived[$problem]=true
   mv "$stage/$problem/paper_frac_exp_penalty" \
     "$canonical/$problem/paper_frac_exp_penalty"
+  installed[$problem]=true
 done
+trap - ZERR INT TERM
+rmdir "$stage/vdp" "$stage/pendulum" "$stage" 2>/dev/null || true
 
 "$python_cmd" scripts/paper/rescore_regions.py --force \
   "$canonical/pendulum/paper_frac_exp_penalty/sequential"

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the pendulum Algorithm 1 study report."""
+"""Regenerate the pendulum Algorithm 2 paper artifacts."""
 
 import sys
 from pathlib import Path
@@ -11,6 +11,6 @@ if str(REPO_ROOT) not in sys.path:
 
 
 if __name__ == "__main__":
-    from scripts.paper.log_penalty_analysis import generate
+    from scripts.paper.pendulum_full_scope import main
 
-    generate("pendulum", OUTPUT_DIR)
+    raise SystemExit(main())

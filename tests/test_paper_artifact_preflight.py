@@ -14,6 +14,24 @@ preflight = importlib.util.module_from_spec(_SPEC)
 sys.modules[_SPEC.name] = preflight
 _SPEC.loader.exec_module(preflight)
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+@pytest.mark.parametrize(
+    "study",
+    [
+        "experiments/01_vdp/paper_log_penalty",
+        "experiments/01_vdp/paper_frac_exp_penalty",
+        "experiments/02_pendulum/paper_log_penalty",
+        "experiments/02_pendulum/paper_frac_exp_penalty",
+    ],
+)
+def test_current_paper_study_has_a_reproducible_entry_point(study: str) -> None:
+    root = REPO_ROOT / study
+
+    for required in ("README.md", "analysis.py", "results.md", "figures"):
+        assert (root / required).exists(), f"{study} is missing {required}"
+
 
 def _write_record(root: Path, *, job: str = "0") -> Path:
     run_dir = root / job

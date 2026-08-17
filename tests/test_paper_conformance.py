@@ -240,6 +240,18 @@ def test_certificate_radius_never_exceeds_the_fixed_clamp() -> None:
         assert radius is not None and radius <= math.exp(5.0) + 1e-9
 
 
+def test_certificate_radius_is_one_for_zero_residual() -> None:
+    radius = certificate_radius(
+        get_growth("softplus"),
+        extent=2.13,
+        residual_norm=0.0,
+        alpha=1e-5,
+        moment_order=2.01,
+    )
+
+    assert radius == 1.0
+
+
 def test_certificate_radius_is_unavailable_without_hypotheses() -> None:
     extent = sample_extent(torch.as_tensor(_data()["x"]))
     # No declared growth data -> keep the fixed comparison bound.
@@ -259,6 +271,45 @@ def test_theorem_radius_binds_only_at_large_moment_order() -> None:
                                alpha=1e-5, moment_order=4.0)
     assert loose == pytest.approx(math.exp(5.0))
     assert tight < math.exp(5.0)
+
+
+def test_insertion_reuses_the_residual_for_the_theorem_radius() -> None:
+    cfg = _cfg(
+        objective="normalized_moment",
+        alpha=1e6,
+        moment_order=2.01,
+        insert_init="guaranteed",
+        insert_mode="sequential",
+        loop_order="insertion_first",
+        radial_cap="theorem",
+    )
+    samples = _data(n=8)
+    data = tuple(
+        torch.as_tensor(samples[key], dtype=torch.float64)
+        for key in ("x", "v", "dv")
+    )
+    model = build_model(cfg, input_dim=2)
+    original_predict = model.predict_tensors
+    prediction_calls = 0
+
+    def counted_predict(x: torch.Tensor):
+        nonlocal prediction_calls
+        prediction_calls += 1
+        return original_predict(x)
+
+    model.predict_tensors = counted_predict
+    PDAP(cfg).fit(
+        model,
+        data,
+        data,
+        num_iterations=1,
+        num_insertion=1,
+        max_insert=1,
+        verbose=False,
+    )
+
+    # One residual evaluation for insertion and one evaluation per recorded split.
+    assert prediction_calls == 3
 
 
 # --------------------------------------------------------------------------- #

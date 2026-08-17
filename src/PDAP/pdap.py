@@ -248,7 +248,7 @@ class PDAP:
         Vp, dVp = model.predict_tensors(X)
         return (Vp - V).detach(), (dVp - dV).detach()
 
-    def _search_radius(self, model, data_train):
+    def _search_radius(self, data_train, residual):
         """Radial search cap for this iterate; ``None`` keeps the fixed comparison bound.
 
         The theorem radius depends on the iterate only through ``||r_mu||``, so it
@@ -257,7 +257,7 @@ class PDAP:
         """
         if self.radial_cap != "theorem" or self._use_sphere:
             return None
-        res_v, res_dv = self._residual(model, data_train)
+        res_v, res_dv = residual
         w1, w2 = self.objective.loss_weights
         M = int(data_train[0].shape[0])
         # ||r_mu|| in the same empirical norm the fidelity uses: l^M = ||r||^2 / 2.
@@ -274,11 +274,11 @@ class PDAP:
             moment_order=self.objective.moment_order,
         )
 
-    def _warm_start(self, model, data_train, W, b, verbose: bool) -> torch.Tensor:
+    def _warm_start(self, model, data_train, residual, W, b, verbose: bool) -> torch.Tensor:
         """Coordinate-descent initial outer weights for new atoms (W, b)."""
         o = self.objective
         return warm_start(
-            W, b, self._residual(model, data_train), data_train[0],
+            W, b, residual, data_train[0],
             activation=model.activation, power=model.power,
             loss_weights=o.loss_weights, alpha=o.alpha, th=o.th, gamma=o.gamma,
             use_sphere=self._use_sphere, nonneg=not isinstance(model, SignedModel),
@@ -286,20 +286,13 @@ class PDAP:
             normalized=o.normalized, verbose=verbose,
         )
 
-    def _initial_outer_weights(self, model, data_train, W, b, c, verbose: bool) -> torch.Tensor:
-        """Outer weights for freshly inserted atoms: warm-start (profile, c is
-        None) or the finite-step's own coefficients."""
-        if c is None:
-            return self._warm_start(model, data_train, W, b, verbose)
-        return torch.as_tensor(c, dtype=torch.float64).reshape(-1)
-
     # ------------------------------------------------------------------ #
     # Insertion dispatch.  The insertion-candidate merge tolerance
     # (self.ins_merge_tol, default 1e-2) is independent of the prune amplitude
     # gate (fit's amp_tol, used only in prune_small_weights).
     # ------------------------------------------------------------------ #
     def _insert(self, model, data_train, num_insertion: int, max_insert: int, verbose: bool):
-        """Return (W, b, c) where c is None for the profile strategy (needs warm-start)."""
+        """Return accepted atoms and their initialized outer weights."""
         # Sequential insertion admits the highest-ranked candidate returned by the
         # multistart search, one atom per outer iteration. The theorem's rate bound
         # additionally requires that this candidate be an exact global maximizer; a
@@ -323,17 +316,27 @@ class PDAP:
             use_sphere=self._use_sphere, existing_atoms=existing, verbose=verbose,
             lbfgs_lr=self.lbfgs_lr, lbfgs_steps=self.lbfgs_steps,
         )
-        radius = self._search_radius(model, data_train)
+        radius = self._search_radius(data_train, (res_v, res_dv))
         if self.insertion_kind == "profile":
-            return profile_threshold(
+            W, b, c = profile_threshold(
                 X, res_v, res_dv, two_sided=two_sided,
                 moment_beta=self.objective.moment_beta, moment_order=self.objective.moment_order,
                 normalized=self.objective.normalized, insert_init=self.insert_init,
                 radius=radius, **common,
             )
-        W, b, c = finite_step(
-            X, res_v, res_dv, radius=radius, **common,
-        )
+        else:
+            W, b, c = finite_step(
+                X, res_v, res_dv, radius=radius, **common,
+            )
+        if c is None and W.shape[0] > 0:
+            c = self._warm_start(
+                model,
+                data_train,
+                (res_v, res_dv),
+                torch.as_tensor(W, dtype=torch.float64),
+                torch.as_tensor(b, dtype=torch.float64),
+                verbose,
+            )
         return W, b, c
 
     def _correct(self, model, data_train, verbose: bool) -> None:
@@ -391,7 +394,7 @@ class PDAP:
         b_new = torch.as_tensor(b_np, dtype=torch.float64)
         if W_new.shape[0] == 0:
             return 0
-        c_new = self._initial_outer_weights(model, data_train, W_new, b_new, c_new, verbose)
+        c_new = torch.as_tensor(c_new, dtype=torch.float64).reshape(-1)
         if model.n_neurons > 0:
             W, b, c = model.get_atoms()
             W_new = torch.cat([W, W_new], dim=0)
@@ -452,7 +455,7 @@ class PDAP:
             if verbose:
                 logger.info("Initial insertion accepted no atoms; returning the zero measure")
             return history
-        c = self._initial_outer_weights(model, data_train, W, b, c, verbose)
+        c = torch.as_tensor(c, dtype=torch.float64).reshape(-1)
         model.set_atoms(W, b, c)
         if verbose:
             max_weight = float(c.abs().max().item()) if c.numel() else 0.0

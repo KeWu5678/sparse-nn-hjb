@@ -5,7 +5,14 @@ from __future__ import annotations
 import pytest
 import torch
 
-from src.PDAP.ssn_solve import nonconvex_penalty, warmstart_prox_scale
+from src.models import SignedModel
+from src.PDAP.ssn_solve import (
+    Objective,
+    SolverConfig,
+    nonconvex_penalty,
+    ssn_solve,
+    warmstart_prox_scale,
+)
 from src.SSN import SSN
 
 
@@ -36,6 +43,32 @@ def test_fractional_ssn_requires_an_explicit_proximal_scale() -> None:
 
     with pytest.raises(ValueError, match="prox_scale is required"):
         SSN([coefficient], alpha=1.0, gamma=0.0, power=3.0)
+
+
+def test_fractional_correction_reports_an_all_zero_warm_start() -> None:
+    model = SignedModel(activation=torch.relu, power=2.0, verbose=False)
+    model.set_atoms(
+        torch.tensor([[1.0]], dtype=torch.float64),
+        torch.tensor([0.0], dtype=torch.float64),
+        torch.tensor([0.0], dtype=torch.float64),
+    )
+    X = torch.tensor([[1.0]], dtype=torch.float64)
+    data = (
+        X,
+        torch.tensor([[1.0]], dtype=torch.float64),
+        torch.zeros_like(X),
+    )
+
+    with pytest.raises(
+        ValueError, match="warm-start proximal scaling requires a nonzero coefficient"
+    ):
+        ssn_solve(
+            model,
+            data,
+            Objective(alpha=1.0, gamma=0.0),
+            SolverConfig(),
+            iterations=1,
+        )
 
 
 def test_fractional_ssn_preserves_a_prox_consistent_warm_start() -> None:

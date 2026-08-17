@@ -72,10 +72,10 @@ def _generate_candidates(
     X, residual_v, residual_dv, *,
     activation, power, loss_weights, sample_sphere, N,
     merge_tol, two_sided, use_sphere, existing_atoms,
-    lbfgs_lr=1e-2, lbfgs_steps=200, moment_order=2.0,
+    lbfgs_lr=1e-2, lbfgs_steps=200, moment_beta=0.0, moment_order=2.0,
     normalized=False, radius=None,
 ) -> Tuple[torch.Tensor, torch.Tensor, int]:
-    """Return distinct locally refined derivative-profile maximizers.
+    """Return distinct locally refined maximizers of the configured search score.
 
     Homogeneous activations are searched on ``S^d``.  For nonhomogeneous
     activations, initial points are sampled inside ``radius`` and all components
@@ -94,7 +94,7 @@ def _generate_candidates(
     res_dv_n = residual_dv / res_norm
 
     def maximize_batch(a_batch, b_batch, steps=200, lr=1e-2, eps=1e-12):
-        """Locally maximize the derivative profile from each starting point.
+        """Locally maximize the configured profile score from each starting point.
 
         For a positively homogeneous activation the parameter is gauge-fixed to
         the sphere, so the profile is maximized over directions and the iterate
@@ -122,6 +122,13 @@ def _generate_candidates(
                                      w1, w2, Kx, res_v_n, res_dv_n, two_sided)
                 if joint and normalized:
                     obj = obj / moment_weight(w_s[:d_dim], w_s[d_dim], moment_order)
+                elif joint and moment_beta > 0.0:
+                    # Search the same margin used by the additive-moment
+                    # acceptance test.  The profile uses the normalized residual,
+                    # so beta is put in those units as well.
+                    obj = obj - (moment_beta / res_norm) * moment_weight(
+                        w_s[:d_dim], w_s[d_dim], moment_order
+                    )
                 (-obj).backward()
                 return -obj
 
@@ -137,17 +144,16 @@ def _generate_candidates(
         if n <= 1:
             return a_cands, b_cands
         U = torch.cat([a_cands, b_cands.reshape(-1, 1)], dim=1)
-        keep = torch.ones(n, dtype=torch.bool)
+        if use_sphere:
+            unit = U / U.norm(dim=1, keepdim=True).clamp_min(1e-12)
+            duplicate = unit @ unit.T > 1.0 - merge_tol
+        else:
+            duplicate = torch.cdist(U, U) <= merge_tol
+        keep = torch.ones(n, dtype=torch.bool, device=U.device)
         for i in range(n):
             if keep[i]:
                 for j in range(i + 1, n):
-                    if use_sphere:
-                        u_i = U[i] / U[i].norm().clamp_min(1e-12)
-                        u_j = U[j] / U[j].norm().clamp_min(1e-12)
-                        duplicate = bool(u_i.dot(u_j) > 1.0 - merge_tol)
-                    else:
-                        duplicate = bool(torch.linalg.vector_norm(U[i] - U[j]) <= merge_tol)
-                    if keep[j] and duplicate:
+                    if keep[j] and duplicate[i, j]:
                         keep[j] = False
         return a_cands[keep], b_cands[keep]
 
@@ -258,7 +264,7 @@ def profile_threshold(
         loss_weights=loss_weights, sample_sphere=sample_sphere, N=N,
         merge_tol=merge_tol, two_sided=two_sided, use_sphere=use_sphere,
         existing_atoms=existing_atoms, lbfgs_lr=lbfgs_lr, lbfgs_steps=lbfgs_steps,
-        moment_order=moment_order,
+        moment_beta=moment_beta, moment_order=moment_order,
         normalized=normalized, radius=radius,
     )
 

@@ -194,14 +194,14 @@ def ssn_solve(
     initial_nonzero = None
     minimum_nonzero = None
     if q < 1.0:
-        initial_magnitudes = theta.detach()[penalized].abs()
-        initial_active = initial_magnitudes[initial_magnitudes > 0]
-        initial_nonzero = int(initial_active.numel())
-        minimum_nonzero = float(initial_active.min())
         prox_scale = warmstart_prox_scale(
             theta.detach(), penalized,
             alpha=alpha, gamma=gamma, q=q, rho=ALGORITHM2_PROX_RHO,
         )
+        initial_magnitudes = theta.detach()[penalized].abs()
+        initial_active = initial_magnitudes[initial_magnitudes > 0]
+        initial_nonzero = int(initial_active.numel())
+        minimum_nonzero = float(initial_active.min())
 
     optimizer = SSN(
         [theta], alpha=alpha, gamma=gamma,
