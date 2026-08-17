@@ -123,8 +123,9 @@ class TrainingConfig:
     fit_outer_iterations: int = 20
     display_every: int = 2
     # insertion numeric constants (src/PDAP/insertion.py)
-    # Nonhomogeneous Algorithm 1: absolute Euclidean distance in omega=(a,b).
-    # Sphere searches: cosine-similarity gap.
+    # Candidate-to-candidate deduplication: Algorithm 1 uses absolute Euclidean
+    # distance in omega=(a,b); sphere searches use cosine-similarity gap.  The
+    # much tighter Algorithm 2 check against the existing support is internal.
     ins_merge_tol: float = 1e-2
     lbfgs_lr: float = 1e-2        # L-BFGS step size for dual-profile maximisation inside candidate search (both methods)
     lbfgs_steps: int = 200        # max L-BFGS iterations per candidate direction (both methods)

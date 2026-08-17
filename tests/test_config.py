@@ -132,6 +132,8 @@ def test_algorithm2_provenance_describes_search_and_coefficient_solver() -> None
     assert PDAP(fractional).algorithm_provenance == {
         "candidate_starts": "random_sphere_multistart",
         "coefficient_solver": "global_prox_warmstart_scale",
+        "existing_support_filter": "numerical_repeat_only",
+        "existing_support_cosine_gap_tol": 1e-8,
         "rho": 0.5,
     }
     assert PDAP(profile).algorithm_provenance == {}

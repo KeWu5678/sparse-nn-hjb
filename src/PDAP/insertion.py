@@ -33,9 +33,11 @@ from .moment import moment_weight
 logger = logging.getLogger(__name__)
 
 ALGORITHM2_CANDIDATE_STARTS = "random_sphere_multistart"
+ALGORITHM2_EXISTING_SUPPORT_COSINE_GAP_TOL = 1e-8
 
 __all__ = [
     "ALGORITHM2_CANDIDATE_STARTS",
+    "ALGORITHM2_EXISTING_SUPPORT_COSINE_GAP_TOL",
     "profile_threshold",
     "finite_step",
     "solve_insertion_weight",
@@ -213,12 +215,18 @@ def _generate_candidates(
             break
 
     # The fractional-power one-atom increment assumes a distinct new location.
-    # Drop final k>1 candidates that return to the current support.  The k=1
-    # ReLU--L1 baseline intentionally retains its established candidate behavior.
+    # Reject only numerical repetitions of the current support: nearby sphere
+    # points are distinct atoms and must remain admissible.  In particular, do
+    # not reuse the much wider candidate-to-candidate deduplication tolerance.
+    # The k=1 ReLU--L1 baseline retains its established candidate behavior.
     if use_sphere and power > 1.0 and existing_unit is not None and a_t.shape[0] > 0:
         U = torch.cat([a_t, b_t.reshape(-1, 1)], dim=1)
         U = U / U.norm(dim=1, keepdim=True).clamp_min(1e-12)
-        distinct = torch.all(U @ existing_unit.T <= 1.0 - merge_tol, dim=1)
+        distinct = torch.all(
+            U @ existing_unit.T
+            <= 1.0 - ALGORITHM2_EXISTING_SUPPORT_COSINE_GAP_TOL,
+            dim=1,
+        )
         a_t, b_t = a_t[distinct], b_t[distinct]
         n_after = a_t.shape[0]
 

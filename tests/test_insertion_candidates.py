@@ -181,6 +181,29 @@ def test_sphere_search_reports_when_only_existing_support_is_returned(
     assert "outside the search radius" not in caplog.text
 
 
+def test_algorithm2_keeps_distinct_candidate_near_existing_support(monkeypatch):
+    existing = (
+        torch.tensor([[1.0]], dtype=torch.float64),
+        torch.tensor([0.0], dtype=torch.float64),
+    )
+    cosine = 0.999
+    sine = math.sqrt(1.0 - cosine**2)
+
+    a, b, n, _, _ = _generate(
+        monkeypatch,
+        outputs=[[cosine, sine]],
+        starts=[[cosine, sine]],
+        radius=None,
+        existing_atoms=existing,
+        use_sphere=True,
+        power=2.0,
+    )
+
+    assert n == 1
+    assert a.item() == pytest.approx(cosine)
+    assert b.item() == pytest.approx(sine)
+
+
 def test_algorithm1_ignores_existing_atoms_as_search_starts(monkeypatch):
     existing = (
         torch.tensor([[3.0]], dtype=torch.float64),

@@ -35,7 +35,12 @@ import torch
 from ..config.activations import get_growth, get_use_sphere
 from ..SSN import SUPPORTED_ACTIVATION_POWERS
 from .history import History, objective_value
-from .insertion import ALGORITHM2_CANDIDATE_STARTS, finite_step, profile_threshold
+from .insertion import (
+    ALGORITHM2_CANDIDATE_STARTS,
+    ALGORITHM2_EXISTING_SUPPORT_COSINE_GAP_TOL,
+    finite_step,
+    profile_threshold,
+)
 from .radius import certificate_radius, sample_extent
 from .ssn_solve import (
     ALGORITHM2_COEFFICIENT_SOLVER,
@@ -117,6 +122,10 @@ class PDAP:
                 self.algorithm_provenance = {
                     "candidate_starts": ALGORITHM2_CANDIDATE_STARTS,
                     "coefficient_solver": ALGORITHM2_COEFFICIENT_SOLVER,
+                    "existing_support_filter": "numerical_repeat_only",
+                    "existing_support_cosine_gap_tol": (
+                        ALGORITHM2_EXISTING_SUPPORT_COSINE_GAP_TOL
+                    ),
                     "rho": ALGORITHM2_PROX_RHO,
                 }
 
