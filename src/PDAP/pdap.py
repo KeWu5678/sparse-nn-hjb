@@ -22,7 +22,7 @@ Two loop orders, selected by ``training.loop_order``:
 
   insertion_first (the paper's Algorithms 1 and 2)
     loop:  insert -> correct -> prune -> record, stopping as soon as no candidate
-    clears the insertion threshold.
+    is accepted.
 """
 
 from __future__ import annotations
@@ -85,6 +85,15 @@ class PDAP:
         self.radial_cap = t.radial_cap
         self.coefficient_solver_provenance: dict[str, str | float] = {}
 
+        # The coefficient correction uses closed-form proximal maps.  Reject an
+        # unsupported exponent here for every insertion strategy, rather than
+        # letting a profile run fail inside its first SSN correction.
+        if m.power not in (1.0, 2.0, 3.0):
+            raise ValueError(
+                "the coefficient correction supports activation powers 1, 2, or 3; "
+                f"got power={m.power}"
+            )
+
         if (
             m.insertion == "finite_step"
             and m.objective != "normalized_moment"
@@ -99,11 +108,6 @@ class PDAP:
                 raise ValueError(
                     "finite_step insertion is Algorithm 2 and requires a sphere activation; "
                     f"got activation={m.activation!r}"
-                )
-            if m.power not in (1.0, 2.0, 3.0):
-                raise ValueError(
-                    "finite_step insertion supports activation powers 1, 2, or 3; "
-                    f"got power={m.power}"
                 )
             if m.gamma != 0.0:
                 raise ValueError(
@@ -515,8 +519,8 @@ class PDAP:
         Every inserted batch is corrected before the loop ends, so ``final_neurons``
         describes the same network as the last recorded metrics -- unlike the
         preserved order, which ends on an uncorrected insertion.  The loop also
-        terminates when no candidate clears the insertion threshold, as the paper's
-        algorithms specify; the preserved order keeps iterating instead.
+        terminates when no candidate is accepted; the preserved order keeps
+        iterating instead.
         """
         if verbose:
             logger.info("Progress")
@@ -531,7 +535,7 @@ class PDAP:
             if added == 0:
                 if verbose:
                     logger.info(
-                        "No candidate clears the insertion threshold at iteration %d; stopping",
+                        "Insertion accepted no candidate at iteration %d; stopping",
                         i + 1,
                     )
                 break

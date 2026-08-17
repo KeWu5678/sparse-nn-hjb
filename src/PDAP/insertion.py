@@ -74,7 +74,7 @@ def _generate_candidates(
     merge_tol, two_sided, use_sphere, existing_atoms,
     lbfgs_lr=1e-2, lbfgs_steps=200, moment_beta=0.0, moment_order=2.0,
     normalized=False, radius=None,
-) -> Tuple[torch.Tensor, torch.Tensor, int]:
+) -> Tuple[torch.Tensor, torch.Tensor, int, int]:
     """Return distinct locally refined maximizers of the configured search score.
 
     Homogeneous activations are searched on ``S^d``.  For nonhomogeneous
@@ -196,6 +196,7 @@ def _generate_candidates(
     # filters and deduplicates once.  Algorithm 2 retains its repeated sphere
     # refinement after merges.
     n_after = a_t.shape[0]
+    discarded_outside = 0
     refinement_rounds = 5 if use_sphere else 1
     for _ in range(refinement_rounds):
         a_t, b_t = maximize_batch(a_t, b_t, steps=lbfgs_steps, lr=lbfgs_lr)
@@ -203,6 +204,7 @@ def _generate_candidates(
             U = torch.cat([a_t, b_t.reshape(-1, 1)], dim=1)
             r_max = float(radius) if radius is not None else math.exp(5.0)
             inside = torch.linalg.vector_norm(U, dim=1) <= r_max
+            discarded_outside += int((~inside).sum().item())
             a_t, b_t = a_t[inside], b_t[inside]
         n_before = a_t.shape[0]
         a_t, b_t = merge(a_t, b_t)
@@ -221,7 +223,7 @@ def _generate_candidates(
         a_t, b_t = a_t[distinct], b_t[distinct]
         n_after = a_t.shape[0]
 
-    return a_t, b_t, n_after
+    return a_t, b_t, n_after, discarded_outside
 
 
 # ---------------------------------------------------------------------------- #
@@ -259,7 +261,7 @@ def profile_threshold(
     Kx = K  # M, the sample count (empirical fidelity is 1/(2M) * sum_m)
     w1, w2 = loss_weights
 
-    a_t, b_t, n_after = _generate_candidates(
+    a_t, b_t, n_after, discarded_outside = _generate_candidates(
         X, residual_v, residual_dv, activation=activation, power=power,
         loss_weights=loss_weights, sample_sphere=sample_sphere, N=N,
         merge_tol=merge_tol, two_sided=two_sided, use_sphere=use_sphere,
@@ -341,6 +343,14 @@ def profile_threshold(
             "rule=%s (alpha=%.2e, moment_beta=%.2e, init=%s)",
             N, n_after, len(accepted_a), max_insert, rule, alpha, moment_beta, insert_init,
         )
+        if not accepted_a and discarded_outside == N:
+            logger.info(
+                "Candidate search discarded all %d refined candidates outside "
+                "the search radius",
+                discarded_outside,
+            )
+        elif not accepted_a and n_after > 0:
+            logger.info("No in-radius candidate clears the insertion threshold")
 
     if len(accepted_a) == 0:
         empty_c = np.empty((0,), dtype=np.float64) if guaranteed else None
@@ -400,7 +410,7 @@ def finite_step(
     w1, w2 = loss_weights
     q = 2.0 / (power + 1.0)
 
-    a_t, b_t, n_after = _generate_candidates(
+    a_t, b_t, n_after, _discarded_outside = _generate_candidates(
         X, residual_v, residual_dv, activation=activation, power=power,
         loss_weights=loss_weights, sample_sphere=sample_sphere, N=N,
         merge_tol=merge_tol, two_sided=True, use_sphere=use_sphere,

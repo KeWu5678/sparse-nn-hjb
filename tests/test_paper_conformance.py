@@ -328,6 +328,10 @@ def test_insertion_reuses_the_residual_for_the_theorem_radius() -> None:
             "powers 1, 2, or 3",
         ),
         (
+            dict(insertion="profile", activation="relu", power=5.0, gamma=0.0),
+            "powers 1, 2, or 3",
+        ),
+        (
             dict(insertion="finite_step", activation="relu", power=2.0, gamma=0.1),
             "gamma == 0",
         ),

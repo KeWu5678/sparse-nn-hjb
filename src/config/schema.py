@@ -40,6 +40,7 @@ class ModelConfig:
     insertion: str = "profile"    # "profile" | "finite_step"
     # structure
     activation: str = "relu"      # name resolved via src.config.activations
+    # Closed-form coefficient correction is implemented for powers 1, 2, and 3.
     power: float = 1.0
     # (w1, w2) = (value loss weight, gradient loss weight); l2 = (1, 0), h1 = (1, 1)
     loss_weights: Tuple[float, float] = (1.0, 1.0)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import math
 
 import pytest
@@ -64,7 +65,7 @@ def _generate(
         starts = [[1.0, 0.0] for _ in outputs]
     fake = _fake_lbfgs(monkeypatch, outputs)
     X, residual_v, residual_dv = _inputs()
-    a, b, n = insertion._generate_candidates(
+    a, b, n, discarded_outside = insertion._generate_candidates(
         X,
         residual_v,
         residual_dv,
@@ -80,7 +81,7 @@ def _generate(
         normalized=(not use_sphere) if normalized is None else normalized,
         radius=radius,
     )
-    return a, b, n, fake
+    return a, b, n, discarded_outside, fake
 
 
 @pytest.mark.parametrize(
@@ -90,12 +91,62 @@ def _generate(
 def test_algorithm1_discards_candidates_outside_sampling_radius(
     monkeypatch, radius, outside
 ):
-    a, b, n, _ = _generate(
+    a, b, n, discarded_outside, _ = _generate(
         monkeypatch, outputs=[[outside, 0.0]], radius=radius
     )
     assert n == 0
+    assert discarded_outside == 1
     assert a.shape == (0, 1)
     assert b.shape == (0,)
+
+
+def test_algorithm1_distinguishes_radius_search_failure_from_threshold_stop(
+    monkeypatch, caplog
+):
+    X, residual_v, residual_dv = _inputs()
+
+    _fake_lbfgs(monkeypatch, [[2.0, 0.0]])
+    with caplog.at_level(logging.INFO):
+        insertion.profile_threshold(
+            X,
+            residual_v,
+            residual_dv,
+            activation=torch.tanh,
+            power=1.0,
+            loss_weights=(1.0, 1.0),
+            alpha=1.0,
+            sample_sphere=_starts([[1.0, 0.0]]),
+            N=1,
+            max_insert=1,
+            use_sphere=False,
+            normalized=True,
+            radius=1.0,
+            verbose=True,
+        )
+    assert "discarded all 1 refined candidates outside the search radius" in caplog.text
+    assert "clears the insertion threshold" not in caplog.text
+
+    caplog.clear()
+    _fake_lbfgs(monkeypatch, [[0.0, 0.0]])
+    with caplog.at_level(logging.INFO):
+        insertion.profile_threshold(
+            X,
+            residual_v,
+            residual_dv,
+            activation=torch.tanh,
+            power=1.0,
+            loss_weights=(1.0, 1.0),
+            alpha=1.0,
+            sample_sphere=_starts([[1.0, 0.0]]),
+            N=1,
+            max_insert=1,
+            use_sphere=False,
+            normalized=True,
+            radius=1.0,
+            verbose=True,
+        )
+    assert "No in-radius candidate clears the insertion threshold" in caplog.text
+    assert "discarded all" not in caplog.text
 
 
 def test_algorithm1_ignores_existing_atoms_as_search_starts(monkeypatch):
@@ -103,7 +154,7 @@ def test_algorithm1_ignores_existing_atoms_as_search_starts(monkeypatch):
         torch.tensor([[3.0]], dtype=torch.float64),
         torch.tensor([4.0], dtype=torch.float64),
     )
-    _, _, n, fake = _generate(
+    _, _, n, _, fake = _generate(
         monkeypatch,
         outputs=[[1.0, 0.0], [0.0, 1.0]],
         starts=[[1.0, 0.0], [0.0, 1.0]],
@@ -114,7 +165,7 @@ def test_algorithm1_ignores_existing_atoms_as_search_starts(monkeypatch):
 
 
 def test_algorithm1_optimizes_each_random_start_once(monkeypatch):
-    _, _, n, fake = _generate(
+    _, _, n, _, fake = _generate(
         monkeypatch,
         outputs=[[1.0, 0.0], [1.0, 0.0]],
         starts=[[1.0, 0.0], [1.0, 0.0]],
@@ -124,7 +175,7 @@ def test_algorithm1_optimizes_each_random_start_once(monkeypatch):
 
 
 def test_all_nonhomogeneous_objectives_use_one_joint_solve_per_start(monkeypatch):
-    _, _, n, fake = _generate(
+    _, _, n, _, fake = _generate(
         monkeypatch,
         outputs=[[1.0, 0.0], [0.0, 1.0]],
         starts=[[1.0, 0.0], [0.0, 1.0]],
@@ -135,7 +186,7 @@ def test_all_nonhomogeneous_objectives_use_one_joint_solve_per_start(monkeypatch
 
 
 def test_algorithm1_deduplicates_by_absolute_parameter_distance(monkeypatch):
-    a, b, n, _ = _generate(
+    a, b, n, _, _ = _generate(
         monkeypatch,
         outputs=[[1.0, 0.0], [2.0, 0.0]],
     )
@@ -145,7 +196,7 @@ def test_algorithm1_deduplicates_by_absolute_parameter_distance(monkeypatch):
     )
     assert torch.allclose(b, torch.zeros(2, dtype=torch.float64))
 
-    a, _, n, _ = _generate(
+    a, _, n, _, _ = _generate(
         monkeypatch,
         outputs=[[1.0, 0.0], [1.005, 0.0]],
     )
@@ -154,7 +205,7 @@ def test_algorithm1_deduplicates_by_absolute_parameter_distance(monkeypatch):
 
 
 def test_algorithm1_filters_radius_before_first_kept_deduplication(monkeypatch):
-    a, _, n, _ = _generate(
+    a, _, n, _, _ = _generate(
         monkeypatch,
         outputs=[[1.005, 0.0], [0.999, 0.0]],
         radius=1.0,
@@ -168,7 +219,7 @@ def test_fractional_algorithm2_uses_existing_atoms_only_as_search_starts(monkeyp
         torch.tensor([[-1.0]], dtype=torch.float64),
         torch.tensor([0.0], dtype=torch.float64),
     )
-    a, b, n, fake = _generate(
+    a, b, n, _, fake = _generate(
         monkeypatch,
         outputs=[],
         starts=[[1.0, 0.0], [0.0, 1.0]],
@@ -193,7 +244,7 @@ def test_relu_l1_keeps_its_existing_support_candidate_behavior(monkeypatch):
         torch.tensor([[-1.0]], dtype=torch.float64),
         torch.tensor([0.0], dtype=torch.float64),
     )
-    a, b, n, _ = _generate(
+    a, b, n, _, _ = _generate(
         monkeypatch,
         outputs=[],
         starts=[[1.0, 0.0], [0.0, 1.0]],
