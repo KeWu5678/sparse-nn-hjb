@@ -31,6 +31,10 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+ALGORITHM2_COEFFICIENT_SOLVER = "global_prox_warmstart_scale"
+# Selected by the 24-cell VDP/pendulum pilot in experiments/algorithm2_rho_pilot.md.
+ALGORITHM2_PROX_RHO = 0.5
+
 
 @dataclass(frozen=True)
 class Objective:
@@ -77,6 +81,39 @@ class SolverConfig:
     sigmamax: float = 10.0
 
 
+def warmstart_prox_scale(
+    coefficients: torch.Tensor,
+    penalized: torch.Tensor,
+    *,
+    alpha: float,
+    gamma: float,
+    q: float,
+    rho: float,
+) -> float:
+    """Choose the fractional proximal scale from the current warm start.
+
+    The warm-start condition is an upper bound.  When the existing
+    ``alpha/(1+alpha*gamma)`` scale is already smaller, it is retained.  Zeros
+    and unpenalized coordinates do not constrain the bound.
+    """
+    if not 0.0 < q < 1.0:
+        raise ValueError(f"warm-start proximal scaling requires 0 < q < 1, got {q}")
+    if not 0.0 < rho < 1.0:
+        raise ValueError(f"rho must satisfy 0 < rho < 1, got {rho}")
+    if alpha <= 0.0:
+        raise ValueError(f"alpha must be positive, got {alpha}")
+
+    magnitudes = coefficients[penalized].abs()
+    nonzero = magnitudes[magnitudes > 0]
+    if nonzero.numel() == 0:
+        raise ValueError("warm-start proximal scaling requires a nonzero coefficient")
+
+    minimum = float(nonzero.min())
+    warmstart_bound = rho * minimum ** (2.0 - q) / (2.0 * (1.0 - q))
+    existing_scale = alpha / (1.0 + alpha * gamma)
+    return min(existing_scale, warmstart_bound)
+
+
 def nonconvex_penalty(
     theta: torch.Tensor, penalized: torch.Tensor, nonneg: torch.Tensor,
     *, alpha: float, th: float, gamma: float, q: float,
@@ -91,7 +128,15 @@ def nonconvex_penalty(
     if pen.numel() == 0:
         return theta.new_zeros(())
     base = torch.where(nonneg[penalized], pen.clamp_min(0.0), pen.abs())
-    arg = base if q == 1.0 else base.clamp_min(1e-30) ** q
+    arg = (
+        base
+        if q == 1.0
+        else torch.where(
+            base > 0,
+            base.clamp_min(1e-30) ** q,
+            torch.zeros_like(base),
+        )
+    )
     return alpha * torch.sum(_phi(arg, th, gamma))
 
 
@@ -145,13 +190,26 @@ def ssn_solve(
         W, b, _ = model.get_atoms()
         moment_vec = objective.moment_beta * moment_weight(W, b, objective.moment_order)
 
+    prox_scale = None
+    initial_nonzero = None
+    minimum_nonzero = None
+    if q < 1.0:
+        initial_magnitudes = theta.detach()[penalized].abs()
+        initial_active = initial_magnitudes[initial_magnitudes > 0]
+        initial_nonzero = int(initial_active.numel())
+        minimum_nonzero = float(initial_active.min())
+        prox_scale = warmstart_prox_scale(
+            theta.detach(), penalized,
+            alpha=alpha, gamma=gamma, q=q, rho=ALGORITHM2_PROX_RHO,
+        )
+
     optimizer = SSN(
         [theta], alpha=alpha, gamma=gamma,
         penalized_mask=penalized, nonneg_mask=nonneg,
         th=th, lr=solver.lr, power=model.power, method=solver.method,
         max_ls_iter=solver.max_ls_iter, tolerance_ls=solver.tolerance_ls,
         tolerance_grad=solver.tolerance_grad, sigmamax=solver.sigmamax,
-        moment_vec=moment_vec,
+        moment_vec=moment_vec, prox_scale=prox_scale,
     )
     optimizer.data_hessian = H
 
@@ -166,11 +224,30 @@ def ssn_solve(
         return data + penalty
 
     prev = float(closure().detach())
+    failed_steps = 0
     for _ in range(iterations):
         prev = float(optimizer.step(closure).detach())
+        failed_steps += int(not optimizer.last_step_success)
 
     solved = theta.detach() if scale is None else theta.detach() / scale
     vector_to_parameters(solved, params)
+    if verbose and q < 1.0:
+        final_nonzero = int((theta.detach()[penalized].abs() > 0).sum())
+        logger.info(
+            "Algorithm 2 correction  q=%.6g  rho=%.3g  min|c|=%.6e  "
+            "prox_scale=%.6e  inverse_step=%.6e  nonzero=%d->%d  "
+            "failed_steps=%d/%d  train_loss=%.6e",
+            q,
+            ALGORITHM2_PROX_RHO,
+            minimum_nonzero,
+            prox_scale,
+            alpha / prox_scale,
+            initial_nonzero,
+            final_nonzero,
+            failed_steps,
+            iterations,
+            prev,
+        )
     if verbose:
         logger.debug("Output-weight solve complete  train_loss=%.6e", prev)
     return prev

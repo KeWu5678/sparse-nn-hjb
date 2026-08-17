@@ -1,4 +1,5 @@
 import logging
+import math
 from typing import Callable, Iterable, Optional
 
 import torch
@@ -7,7 +8,7 @@ from torch.nn.utils import parameters_to_vector, vector_to_parameters
 from torch.optim import Optimizer
 
 from .penalty import _nonconvex_correction, _nonconvex_correction_dd, _penalty_grad
-from .prox import _compute_dprox, _compute_prox
+from .prox import power_prox, power_prox_derivative
 from .strategies import solve_levenberg_marquardt, solve_steihaug_cg
 
 logger = logging.getLogger(__name__)
@@ -38,7 +39,7 @@ class SSN(Optimizer):
       dq      Newton step,  solved from (DG + damping) dq = -Gq
       theta   damping parameter of the Levenberg-Marquardt strategy
       sigma   trust-region radius of the Steihaug-CG strategy
-      c       1 + alpha*gamma  (stable scaling of the scalar-map parameter)
+      inverse_step  normal-map inverse step; the prox scale is alpha/inverse_step
       alpha_vec  per-coordinate alpha (alpha on penalised coords, 0 on free)
 
     Args:
@@ -88,6 +89,7 @@ class SSN(Optimizer):
         penalized_mask: Optional[Tensor] = None,
         nonneg_mask: Optional[Tensor] = None,
         moment_vec: Optional[Tensor] = None,
+        prox_scale: Optional[float] = None,
     ) -> None:
         if method not in _STRATEGIES:
             raise ValueError(
@@ -117,6 +119,11 @@ class SSN(Optimizer):
 
         self._params = self.param_groups[0]["params"]
         self.q: float = 2.0 / (power + 1.0)  # power-transformed exponent
+        if self.q < 1.0 and prox_scale is None:
+            raise ValueError("prox_scale is required when q < 1")
+        if prox_scale is not None and (not math.isfinite(prox_scale) or prox_scale <= 0.0):
+            raise ValueError(f"prox_scale must be positive and finite, got {prox_scale}")
+        self.prox_scale = prox_scale
         self.data_hessian: Optional[Tensor] = None
         self.last_step_success: bool = True
 
@@ -160,24 +167,26 @@ class SSN(Optimizer):
     # Defaults (penalised everywhere, no nonneg coords) reduce these to the
     # plain signed soft-threshold prox and its diagonal Jacobian.
     # ------------------------------------------------------------------ #
-    def _mu(self, c: float) -> Tensor:
-        """Per-coordinate proximal parameter (alpha_vec [+ moment_vec]) / c.
+    def _mu(self, inverse_step: float) -> Tensor:
+        """Per-coordinate proximal scale divided by the normal-map inverse step.
 
         The moment weight is a convex per-atom L1 coefficient, so it rides the
         same proximal-threshold channel as ``alpha_vec``.  ``moment_vec is None``
-        recovers the plain ``alpha_vec / c``.
+        recovers the plain ``alpha_vec / inverse_step``.
         """
         if self.moment_vec is None:
-            return self.alpha_vec / c
-        return (self.alpha_vec + self.moment_vec) / c
+            return self.alpha_vec / inverse_step
+        return (self.alpha_vec + self.moment_vec) / inverse_step
 
-    def _prox(self, v: Tensor, c: float) -> Tensor:
-        out = _compute_prox(v, self._mu(c), q=self.q)
+    def _prox(self, v: Tensor, inverse_step: float) -> Tensor:
+        out = power_prox(v, self._mu(inverse_step), q=self.q)
         kill = self.nonneg_mask & (v < 0)
         return torch.where(kill, torch.zeros_like(out), out)
 
-    def _dprox(self, v: Tensor, c: float, prox_result: Tensor) -> Tensor:
-        DP = _compute_dprox(v, self._mu(c), q=self.q, prox_result=prox_result)
+    def _dprox(self, v: Tensor, inverse_step: float, prox_result: Tensor) -> Tensor:
+        DP = power_prox_derivative(
+            v, self._mu(inverse_step), q=self.q, prox_result=prox_result
+        )
         kill = self.nonneg_mask & (v < 0)
         diag = torch.where(kill, torch.zeros_like(prox_result), torch.diagonal(DP))
         return torch.diag(diag)
@@ -193,9 +202,11 @@ class SSN(Optimizer):
     def _set_flat(self, vec: Tensor) -> None:
         vector_to_parameters(vec, self._params)
 
-    def _trial(self, closure: Callable[[], Tensor], qnew: Tensor, c: float) -> tuple[Tensor, Tensor]:
+    def _trial(
+        self, closure: Callable[[], Tensor], qnew: Tensor, inverse_step: float
+    ) -> tuple[Tensor, Tensor]:
         """prox(qnew) -> set params -> evaluate.  Returns (unew, loss_new)."""
-        unew = self._prox(qnew, c)
+        unew = self._prox(qnew, inverse_step)
         self._set_flat(unew)
         return unew, closure()
 
@@ -203,7 +214,7 @@ class SSN(Optimizer):
         self,
         alpha: float,
         gamma: float,
-        c: float,
+        inverse_step: float,
         th: float,
         params: Tensor,
         loss: Tensor
@@ -249,7 +260,7 @@ class SSN(Optimizer):
                 base = base + self.moment_vec
             gf_u = torch.where(active, -base * sign_u, gf_u)
 
-        q_var = params - (1.0 / c) * gf_u
+        q_var = params - (1.0 / inverse_step) * gf_u
         # On free (unpenalised) coords the proximal is the identity, whose preimage
         # is the parameter itself; this makes G reduce to a plain Newton step there.
         q_var = torch.where(self.penalized_mask, q_var, params)
@@ -259,7 +270,7 @@ class SSN(Optimizer):
         self,
         alpha: float,
         gamma: float,
-        c: float,
+        inverse_step: float,
         th: float,
         q_var: Tensor,
         params: Tensor,
@@ -282,13 +293,13 @@ class SSN(Optimizer):
         if self.moment_vec is not None:
             grad_data = grad_data - self.moment_vec * sign_u
 
-        return c * (q_var - params) + self.alpha_vec * D_nc + grad_data
+        return inverse_step * (q_var - params) + self.alpha_vec * D_nc + grad_data
 
     def _DG(
         self,
         alpha: float,
         gamma: float,
-        c: float,
+        inverse_step: float,
         th: float,
         q_var: Tensor,
         params: Tensor
@@ -298,13 +309,13 @@ class SSN(Optimizer):
         DG * dq = -G(q).
         """
         qq = self.q
-        DPc: Tensor = self._dprox(q_var, c, prox_result=params)
+        DPc: Tensor = self._dprox(q_var, inverse_step, prox_result=params)
         I: Tensor = torch.eye(params.shape[0], device=params.device, dtype=params.dtype)
 
         corr_dd = _nonconvex_correction_dd(torch.abs(params), th, gamma, q=qq)
 
         return (
-            c * (I - DPc)
+            inverse_step * (I - DPc)
             + torch.diag(self.alpha_vec * corr_dd) @ DPc
             + self.data_hessian @ DPc  # type: ignore[union-attr]
         )
@@ -333,23 +344,33 @@ class SSN(Optimizer):
         lr = float(group.get("lr", 1.0))  # mixing factor for step size
         self.last_step_success = True
 
-        # c = alpha/gamma would make 1/c huge for small alpha and blow up
-        # q = u - (1/c)*g; the stable choice (matching the MATLAB reference) is:
-        c: float = 1.0 + alpha * gamma
+        if self.q < 1.0:
+            # ``prox_scale`` is capped by the warm-start condition in the PDAP
+            # trainer.  The normal map uses prox_{alpha/inverse_step}.
+            inverse_step = alpha / self.prox_scale  # type: ignore[operator]
+        else:
+            # Stable log-penalty scaling inherited from the MATLAB reference.
+            inverse_step = 1.0 + alpha * gamma
 
         loss: Tensor = closure()
         params: Tensor = self._clone_flat()
 
         # Build the SSN system: proximal preimage, residual G(q), Jacobian DG.
-        q: Tensor = self._initialize_q(alpha, gamma, c, th, params, loss)
-        Gq: Tensor = self._initialize_G(alpha, gamma, c, th, q, params, loss)
+        q: Tensor = self._initialize_q(
+            alpha, gamma, inverse_step, th, params, loss
+        )
+        Gq: Tensor = self._initialize_G(
+            alpha, gamma, inverse_step, th, q, params, loss
+        )
 
         # Optional first-order optimality early exit (disabled when tolerance_grad=0).
         tolerance_grad: float = group["tolerance_grad"]
         if tolerance_grad > 0.0 and torch.norm(Gq, p=float("inf")).item() <= tolerance_grad:
             return loss
 
-        DG: Tensor = self._DG(alpha, gamma, c, th, q, params)
+        DG: Tensor = self._DG(alpha, gamma, inverse_step, th, q, params)
 
         strategy = _STRATEGIES[group["method"]]
-        return strategy(self, closure, loss, params, q, Gq, DG, c, lr)
+        return strategy(
+            self, closure, loss, params, q, Gq, DG, inverse_step, lr
+        )

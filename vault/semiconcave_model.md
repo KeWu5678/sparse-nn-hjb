@@ -48,7 +48,7 @@ Its three differences from a signed SSN, all driven by the masks:
 - **per-coordinate `alpha`** (`alpha_vec`: `alpha` on the `c` block, `0` elsewhere)
   so only `c` is penalised; the prox/penalty kernels broadcast a tensor `alpha`/`mu`.
 - **nonnegative proximal** on `nonneg_mask` (the `c` block and `C`): the masked
-  `_prox` reuses the signed `_compute_prox` then zeros entries whose proximal
+  `_prox` reuses the signed `power_prox` then zeros entries whose proximal
   preimage is `<= 0`.
 - **unpenalised-coordinate fix**: for coords with no penalty the proximal is the
   identity, so the SSN preimage must be `q_var = params` (not

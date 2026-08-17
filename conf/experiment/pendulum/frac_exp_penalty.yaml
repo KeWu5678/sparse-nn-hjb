@@ -24,7 +24,7 @@ hydra:
     params:
       model: frac_exp_penalty
       model.activation: relu
-      model.power: 2.0,2.01,3.0,4.0,5.0
+      model.power: 2.0,3.0
       model.alpha: 1e-3,1e-4,1e-5,1e-6
       model.gamma: 0
       model.loss_weights: "[1.0,0.0],[1.0,1.0]"

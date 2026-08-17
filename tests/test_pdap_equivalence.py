@@ -43,9 +43,10 @@ SEED = 123
 RTOL, ATOL = 1e-5, 1e-7
 
 CONFIGS = {
-    "signed_profile": {"kind": "signed", "insertion": "profile"},
-    "semiconcave_profile": {"kind": "semiconcave", "insertion": "profile"},
-    "signed_finite_step": {"kind": "signed", "insertion": "finite_step"},
+    "signed_profile": {"kind": "signed", "insertion": "profile", "gamma": 0.1},
+    "semiconcave_profile": {"kind": "semiconcave", "insertion": "profile", "gamma": 0.1},
+    # Algorithm 2 at power 1 is the unchanged ReLU + L1 baseline.
+    "signed_finite_step": {"kind": "signed", "insertion": "finite_step", "gamma": 0.0},
 }
 
 
@@ -53,7 +54,7 @@ def _cfg(name: str) -> ExperimentConfig:
     c = CONFIGS[name]
     return ExperimentConfig(
         model=ModelConfig(kind=c["kind"], insertion=c["insertion"],
-                          power=1.0, alpha=1e-4, gamma=0.1),
+                          power=1.0, alpha=1e-4, gamma=c["gamma"]),
         training=TrainingConfig(),
         env=EnvConfig(verbose=False),
     )

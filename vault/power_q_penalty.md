@@ -1,76 +1,95 @@
-# Power-Transformed Penalty (general activation power p)
+# Fractional-power coefficient solver
 
-Sub-level disclosure for `../CLAUDE.md`. Technical detail of the `ReLU^p`
-penalty and the proximal dead-zone bug for `p != 1`.
+Algorithm 2 uses `ReLU^k` atoms on the unit sphere and the coefficient penalty
+`alpha * sum |c_i|^q`, where `q = 2/(k+1)`. The implemented fractional cases
+are:
 
-When the activation is `ReLU^p` with `p != 1`, the regularization uses
-`phi(|u|^q)` instead of `phi(|u|)`, where `q = 2/(p+1)`. For `p=1`, `q=1` and
-everything reduces to the standard case.
+| `k` | `q` | scalar solver |
+|---:|---:|---|
+| 2 | 2/3 | closed-form global prox |
+| 3 | 1/2 | closed-form global prox |
 
-**Files involved** (all changes backward-compatible for p=1):
-- `SSN/prox.py` + `SSN/penalty.py`: `_compute_prox(v, mu, q)`, `_compute_dprox(v, mu, q, prox_result)`, `_phi_prox(sigma, g, th, gamma, q)` — accept optional `q`. For `q != 1`, use Newton's method instead of closed form. (Re-exported from `utils.py` for backward compat.)
-- `SSN/optimizer.py`: stores `self.q = 2/(power+1)`. `_initialize_q`, `_initialize_G`, `_DG` use chain-rule derivatives with an `active` mask for the `|u|^{q-1}` singularity at `u=0`. `_prox`/`_dprox` pass `self.q` to the proximal operators.
-- `models/signed.py`: `_compute_loss` applies the `|u|^q` transform before `_phi`. `_setup_optimizer` passes `power` to `SSN` (and maps `optimizer_type` to `method=`). `warm_start` passes `q=2/(p+1)` to `_phi_prox`.
-- `models/semiconcave.py`: `warm_start` likewise passes `self.q` to `_phi_prox`.
+The `k=1`, `q=1` ReLU--L1 endpoint uses ordinary soft thresholding. Other
+powers are rejected at trainer construction.
 
-**Key math** (derivatives w.r.t. `t = |u|`, for `t > 0`):
-- Full penalty gradient: `q * t^{q-1} * dphi(t^q)`
-- Correction 2nd derivative: `q(q-1) * t^{q-2} * (dphi(t^q)-1) + q^2 * t^{2q-2} * ddphi(t^q)`
-- Proximal of `mu * |.|^q` for `q < 1`: Newton solve of `t + mu*q*t^{q-1} = |v|` with threshold `t* = [mu*q*(1-q)]^{1/(2-q)}`
+## Scalar global prox
 
-## SSN Proximal Dead Zone Bug (p != 1, OPEN)
+For input `v` and scale `mu > 0`, the selected proximal point minimizes
 
-**Status**: Diagnosed but NOT fixed. SSN currently broken for `power != 1` (q < 1).
-
-**Stashed fix attempt**: `git stash@{0}` contains a partial fix (DPc clamping +
-active-set preservation + dead-zone zeroing). Stashed because it also broke the
-regular `power=1` case. Apply with `git stash pop`, discard with `git stash drop`.
-
-**Symptom**: SSN line search fails on every step when `power != 1` (e.g.
-`power=2.1`, `q=0.645`). Train loss decreases only from the coordinate-descent
-warm-start; SSN contributes nothing.
-
-**Root cause 1 — proximal jump discontinuity (two-branch problem)**:
-The proximal of `mu * |.|^q` for `q < 1` has a jump discontinuity. The
-stationarity condition `t + mu*q*t^{q-1} = v` has **two roots** for
-`v > v_thresh`: `t_large` (local min, SOC > 0) and `t_small` (local max,
-SOC < 0). `_compute_prox` always returns `t_large`.
-SSN's `_initialize_q` inverts the FOC by plugging `t = |u_i|` to get `q_var_i`.
-For small weights (`|u_i| < t*`), `|u_i|` is the `t_small` root. Then
-`_compute_prox(q_var)` returns `t_large != |u_i|`, so `prox(q) != params` — the
-fundamental SSN consistency assumption breaks. For `q=1` the equation
-`t + mu = v` has a unique root (no ambiguity).
-
-**Root cause 2 — indefinite Jacobian DG**:
-For `q < 1`, the proximal Jacobian `DPc_i = 1/SOC_i` can exceed 1 when
-`SOC_i < 1` (weights near the dead-zone boundary), making the generalized
-Jacobian DG indefinite:
+```text
+0.5 * (t - v)^2 + mu * |t|^q.
 ```
-DG_{ii} = c + (H_data_{ii} - c) * DPc_i
+
+For `q < 1`, define
+
+```text
+t_switch = [2 * mu * (1-q)]^(1/(2-q))
+v_switch = (2-q) * t_switch / [2 * (1-q)].
 ```
-When `DPc_i > 1` and `H_data_{ii} < c`, `DG_{ii} < 0`. The Newton direction
-becomes an ascent direction, so line search can never succeed. For `q=1`,
-`DPc_i in {0, 1}` (a projection), so `DG` is always PSD.
 
-**Root cause 3 — inactive weight activation via proximal jump**:
-For inactive weights (`u_i = 0`), `_initialize_q` sets `q_i = -(1/c) * grad_flat_i`.
-If `|grad_flat_i| / c > v_thresh`, `prox(q_i)` jumps to a nonzero value,
-activating the neuron. For `q=1` this is smooth (continuous soft-thresholding);
-for `q<1` it is a discontinuous jump from 0 to `~t*`.
+The implementation returns zero when `|v| <= v_switch`, including the exact
+tie. Above the switch it returns `sign(v) * t`, where `t` is the largest
+positive solution of
 
-**Key threshold**: `t* = [mu*q*(1-q)]^{1/(2-q)}` where `mu = alpha/c`,
-`c = 1 + alpha*gamma`. For `alpha=1e-5, gamma=0, q=0.645`: `t* ~ 7e-5`. Weights
-below this are in the dead zone.
+```text
+t + mu * q * t^(q-1) = |v|.
+```
 
-**Stashed fix approach** (in `git stash@{0}`):
-1. Dead-zone zeroing: zero weights where SOC <= 0 before SSN, force `q[dead_zone] = 0`.
-2. DPc clamping: clamp `_compute_dprox` diagonal to `[0, 1]` in `_DG` to keep the Jacobian PSD.
-3. Active-set preservation: force `unew[inactive] = 0` after prox to prevent jump activation.
-4. Inactive q clamping: force `q[inactive] = 0` for all zero-weight entries.
+The `q=1/2` root is evaluated through a depressed cubic in `sqrt(t)`; the
+`q=2/3` root is evaluated through a depressed quartic in `t^(1/3)`. The
+implementation nondimensionalizes by `mu^(1/(2-q))` before evaluating either
+formula, which preserves scale covariance and avoids overflow at the scales
+covered by the tests.
 
-**Why the stashed fix failed**: the combined changes also broke the `power=1`
-(q=1) case — edits to `_initialize_q`, `_initilize_G`, `_DG` altered the code
-paths used by q=1 too. Ensure backward compatibility before re-applying.
+## One-atom insertion
 
-**Visualization**: `scripts/visualize_proximal_deadzone.py` produces a 4-panel
-figure (FOC, SOC, proximal objective, jump discontinuity).
+For a candidate node, let `P` be the fidelity profile and `A` its sampled
+feature curvature. The actual objective increment is
+
+```text
+Delta(c) = c * P + 0.5 * A * c^2 + alpha * |c|^q.
+```
+
+Completing the square gives the selected global minimizer
+
+```text
+c_star = prox_{(alpha/A)|.|^q}(-P/A).
+```
+
+The candidate is accepted only when `c_star` is nonzero and `Delta(c_star) < 0`.
+The accepted coefficient is also the warm start for the outer-weight
+correction.
+
+## Warm-start-scaled normal map
+
+For `q < 1`, let `m` be the smallest nonzero penalized coefficient at the start
+of a correction. The proximal scale is fixed for the whole SSN solve:
+
+```text
+prox_scale = min(
+    alpha / (1 + alpha * gamma),
+    rho * m^(2-q) / [2 * (1-q)],
+)
+```
+
+Algorithm 2 has `gamma=0` and uses `rho=0.5`, selected by the recorded 24-cell
+pilot in `experiments/algorithm2_rho_pilot.md`. The bound places every nonzero
+warm-start coefficient strictly above the global-prox output jump. The normal
+map uses `inverse_step = alpha / prox_scale`; the scale is not retuned during
+the inner SSN iterations.
+
+The global prox is discontinuous at its switching input. Consequently the
+semismooth Newton claim is local and conditional: proximal inputs must stay
+away from the switch and the selected generalized Jacobian must be nonsingular.
+The outer correction guard remains authoritative and rolls back a correction
+that increases the post-insertion objective.
+
+## Source and tests
+
+- `src/SSN/prox.py`: closed-form global prox and derivative.
+- `src/SSN/optimizer.py`: normal map and generalized Jacobian.
+- `src/PDAP/insertion.py`: actual one-atom increment and warm coefficient.
+- `src/PDAP/ssn_solve.py`: fixed warm-start scale and correction diagnostics.
+- `tests/test_power_prox.py`: switch, roots, derivatives, zero scale, and scaling.
+- `tests/test_algorithm2_insertion.py`: exact increment and tie rejection.
+- `tests/test_algorithm2_correction.py`: warm scale and SSN integration.

@@ -27,6 +27,7 @@ from typing import Callable, List, Optional, Tuple
 import numpy as np
 import torch
 
+from ..SSN.prox import power_prox
 from .moment import moment_weight
 
 logger = logging.getLogger(__name__)
@@ -165,6 +166,7 @@ def _generate_candidates(
     # cannot climb back.  Scale, not volume, is the meaningful spread for a
     # shape parameter that ranges over decades.
     a_t, b_t = sample_sphere(N)
+    existing_unit = None
     if not use_sphere:
         r_max = float(radius) if radius is not None else math.exp(5.0)
         lo, hi = math.log(math.exp(-3.0)), math.log(max(r_max, math.exp(-3.0) * 1.001))
@@ -177,6 +179,7 @@ def _generate_candidates(
         if W_exist.shape[0] > 0:
             U_exist = torch.cat([W_exist, b_exist.reshape(-1, 1)], dim=1)
             U_exist = U_exist / U_exist.norm(dim=1, keepdim=True).clamp_min(1e-12)
+            existing_unit = U_exist
             n_exist = U_exist.shape[0]
             if n_exist > N // 2:
                 U_exist = U_exist[torch.randperm(n_exist)[:N // 2]]
@@ -200,6 +203,17 @@ def _generate_candidates(
         n_after = a_t.shape[0]
         if n_before == n_after:
             break
+
+    # Existing atoms are useful L-BFGS starts for the fractional-power method,
+    # but its one-atom increment assumes a distinct new location.  Drop final
+    # k>1 candidates that return to the current support.  The k=1 ReLU--L1
+    # baseline intentionally retains its established candidate behavior.
+    if use_sphere and power > 1.0 and existing_unit is not None and a_t.shape[0] > 0:
+        U = torch.cat([a_t, b_t.reshape(-1, 1)], dim=1)
+        U = U / U.norm(dim=1, keepdim=True).clamp_min(1e-12)
+        distinct = torch.all(U @ existing_unit.T <= 1.0 - merge_tol, dim=1)
+        a_t, b_t = a_t[distinct], b_t[distinct]
+        n_after = a_t.shape[0]
 
     return a_t, b_t, n_after
 
@@ -341,15 +355,12 @@ def profile_threshold(
 # ---------------------------------------------------------------------------- #
 def solve_insertion_weight(
     p_omega: float, S_sq: float, alpha: float, q: float,
-    newton_tol: float = 1e-12, max_iter: int = 50,
 ) -> Optional[Tuple[float, float]]:
-    """Minimize the conservative insertion surrogate and return its best step.
+    """Minimize the actual one-atom objective increment.
 
-    The surrogate is
-    ``c*p_omega + (1/2)c^2*S_sq + (alpha/q)|c|^q``.  For ``q < 1`` its
-    penalty coefficient is larger than the ``alpha`` used by the corrected
-    objective, so a negative result is a sufficient decrease test.
-    For q >= 1 this reduces to the classical criterion |p| > alpha.
+    The increment is ``c*p_omega + S_sq*c^2/2 + alpha*|c|^q``.  After choosing
+    the sign opposite ``p_omega``, its magnitude is the global proximal point
+    at input ``|p_omega|/S_sq`` with proximal scale ``alpha/S_sq``.
     """
     if S_sq < 1e-30:
         return None
@@ -357,39 +368,16 @@ def solve_insertion_weight(
     if abs_p < 1e-30:
         return None
 
-    if q >= 1.0:
-        if abs_p <= alpha:
-            return None
-        c_opt = (abs_p - alpha) / S_sq
-        dJ = -abs_p * c_opt + 0.5 * S_sq * c_opt ** 2 + alpha * c_opt
-        sign = 1.0 if p_omega < 0 else -1.0
-        return (sign * c_opt, dJ)
-
-    # q < 1: finite-step.  h(c) = S^2 c + alpha c^{q-1} has a min at c_star.
-    c_star = (alpha * (1.0 - q) / S_sq) ** (1.0 / (2.0 - q))
-    h_min = S_sq * c_star + alpha * c_star ** (q - 1.0)
-    if abs_p < h_min:
+    prox_input = torch.tensor([abs_p / S_sq], dtype=torch.float64)
+    magnitude = float(power_prox(prox_input, alpha / S_sq, q=q)[0])
+    if magnitude <= 0.0:
         return None
 
-    # Newton on F(c) = S^2 c + alpha c^{q-1} - |p| = 0, right branch c > c_star.
-    c = max(abs_p / S_sq, 2.0 * c_star)
-    for _ in range(max_iter):
-        F = S_sq * c + alpha * c ** (q - 1.0) - abs_p
-        dF = S_sq + alpha * (q - 1.0) * c ** (q - 2.0)
-        if abs(dF) < 1e-30:
-            break
-        c_new = c - F / dF
-        if c_new <= c_star:
-            c_new = 0.5 * (c + c_star)
-        c = c_new
-        if abs(F) < newton_tol * (abs_p + 1e-30):
-            break
-
-    dJ = -abs_p * c + 0.5 * S_sq * c ** 2 + (alpha / q) * c ** q
-    if dJ >= 0:
+    dJ = -abs_p * magnitude + 0.5 * S_sq * magnitude ** 2 + alpha * magnitude ** q
+    if dJ >= 0.0:
         return None
     sign = 1.0 if p_omega < 0 else -1.0
-    return (sign * c, dJ)
+    return (sign * magnitude, dJ)
 
 
 def finite_step(
@@ -397,7 +385,7 @@ def finite_step(
     activation, power, loss_weights, alpha, sample_sphere, N,
     max_insert=15, merge_tol=1e-2, use_sphere=True,
     existing_atoms=None, verbose=True,
-    lbfgs_lr=1e-2, lbfgs_steps=200, newton_tol=1e-12, newton_max_iter=50,
+    lbfgs_lr=1e-2, lbfgs_steps=200,
     radius=None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Accept atoms with a profitable finite step (Delta J(c*) < 0); return c* too."""
@@ -428,10 +416,7 @@ def finite_step(
             S_grad = neuron_dv.detach().reshape(-1)
             p_omega = float((w1 / Kx) * S_val.dot(res_v_flat) + (w2 / Kx) * S_grad.dot(res_dv_flat))
             S_sq = float((w1 / Kx) * S_val.dot(S_val) + (w2 / Kx) * S_grad.dot(S_grad))
-            result = solve_insertion_weight(
-                p_omega, S_sq, alpha, q,
-                newton_tol=newton_tol, max_iter=newton_max_iter,
-            )
+            result = solve_insertion_weight(p_omega, S_sq, alpha, q)
             if result is not None:
                 c_star, dJ = result
                 accepted_a.append(a_i.detach())

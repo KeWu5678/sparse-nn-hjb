@@ -106,3 +106,25 @@ def test_use_sphere_derives_from_activation() -> None:
     # default activation is relu (homogeneous -> sphere); matern52 is not
     assert PDAP(default)._use_sphere is True
     assert PDAP(smooth)._use_sphere is False
+
+
+def test_algorithm2_provenance_describes_the_actual_coefficient_solver() -> None:
+    with initialize(version_base=None, config_path="../conf"):
+        l1 = compose(
+            config_name="config",
+            overrides=["model=frac_exp_penalty", "model.power=1", "env.verbose=false"],
+        )
+        fractional = compose(
+            config_name="config",
+            overrides=["model=frac_exp_penalty", "model.power=2", "env.verbose=false"],
+        )
+        profile = compose(config_name="config", overrides=["env.verbose=false"])
+
+    assert PDAP(l1).coefficient_solver_provenance == {
+        "coefficient_solver": "soft_threshold",
+    }
+    assert PDAP(fractional).coefficient_solver_provenance == {
+        "coefficient_solver": "global_prox_warmstart_scale",
+        "rho": 0.5,
+    }
+    assert PDAP(profile).coefficient_solver_provenance == {}

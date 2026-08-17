@@ -37,7 +37,13 @@ from ..models.signed import SignedModel
 from .history import History, objective_value
 from .insertion import finite_step, profile_threshold
 from .radius import certificate_radius, sample_extent
-from .ssn_solve import Objective, SolverConfig, ssn_solve
+from .ssn_solve import (
+    ALGORITHM2_COEFFICIENT_SOLVER,
+    ALGORITHM2_PROX_RHO,
+    Objective,
+    SolverConfig,
+    ssn_solve,
+)
 from .warmstart import warm_start
 
 logger = logging.getLogger(__name__)
@@ -77,6 +83,42 @@ class PDAP:
         self.correction_guard = bool(t.correction_guard)
         self.loop_order = t.loop_order
         self.radial_cap = t.radial_cap
+        self.coefficient_solver_provenance: dict[str, str | float] = {}
+
+        if (
+            m.insertion == "finite_step"
+            and m.objective != "normalized_moment"
+            and m.moment_beta == 0.0
+        ):
+            if m.kind != "signed":
+                raise ValueError(
+                    "finite_step insertion is Algorithm 2 and requires a signed model; "
+                    f"got kind={m.kind!r}"
+                )
+            if not self._use_sphere:
+                raise ValueError(
+                    "finite_step insertion is Algorithm 2 and requires a sphere activation; "
+                    f"got activation={m.activation!r}"
+                )
+            if m.power not in (1.0, 2.0, 3.0):
+                raise ValueError(
+                    "finite_step insertion supports activation powers 1, 2, or 3; "
+                    f"got power={m.power}"
+                )
+            if m.gamma != 0.0:
+                raise ValueError(
+                    "finite_step insertion minimizes the power penalty and requires "
+                    f"gamma == 0; got gamma={m.gamma}"
+                )
+            if m.power == 1.0:
+                self.coefficient_solver_provenance = {
+                    "coefficient_solver": "soft_threshold",
+                }
+            else:
+                self.coefficient_solver_provenance = {
+                    "coefficient_solver": ALGORITHM2_COEFFICIENT_SOLVER,
+                    "rho": ALGORITHM2_PROX_RHO,
+                }
 
         # The revised objective replaces the additive moment term by the moment
         # weight inside phi; carrying both would price the same distance twice and
@@ -158,8 +200,6 @@ class PDAP:
         self.ins_merge_tol = t.ins_merge_tol
         self.lbfgs_lr = t.lbfgs_lr
         self.lbfgs_steps = t.lbfgs_steps
-        self.newton_tol = t.newton_tol
-        self.newton_max_iter = t.newton_max_iter
 
     # ------------------------------------------------------------------ #
     # Shared helpers
@@ -292,8 +332,7 @@ class PDAP:
                 radius=radius, **common,
             )
         W, b, c = finite_step(
-            X, res_v, res_dv, radius=radius,
-            newton_tol=self.newton_tol, newton_max_iter=self.newton_max_iter, **common,
+            X, res_v, res_dv, radius=radius, **common,
         )
         return W, b, c
 
@@ -324,10 +363,17 @@ class PDAP:
         if after > before:
             model.load_state_dict(snapshot)
             if verbose:
-                logger.debug(
-                    "Correction rejected  objective %.6e -> %.6e; kept post-insertion "
-                    "coefficients", before, after,
+                logger.info(
+                    "Correction guard  objective=%.6e->%.6e  accepted=false",
+                    before,
+                    after,
                 )
+        elif verbose:
+            logger.info(
+                "Correction guard  objective=%.6e->%.6e  accepted=true",
+                before,
+                after,
+            )
 
     def _prune(self, model, amp_tol: float) -> int:
         """Drop atoms with ``|c_n| <= amp_tol``; return how many were removed."""

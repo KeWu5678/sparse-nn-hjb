@@ -272,6 +272,22 @@ def test_theorem_radius_binds_only_at_large_moment_order() -> None:
         (dict(objective="normalized_moment", insertion="finite_step"), "Algorithm 1"),
         (dict(objective="normalized_moment", power=2.0), "power == 1"),
         (dict(insert_init="guaranteed", kind="semiconcave"), "signed theorem step"),
+        (
+            dict(insertion="finite_step", activation="relu", power=4.0, gamma=0.0),
+            "powers 1, 2, or 3",
+        ),
+        (
+            dict(insertion="finite_step", activation="relu", power=2.0, gamma=0.1),
+            "gamma == 0",
+        ),
+        (
+            dict(insertion="finite_step", activation="softplus", power=2.0, gamma=0.0),
+            "sphere activation",
+        ),
+        (
+            dict(insertion="finite_step", kind="semiconcave", activation="relu"),
+            "signed model",
+        ),
         (dict(objective="nonsense"), "model.objective must be one of"),
         (dict(insert_mode="nonsense"), "training.insert_mode must be one of"),
     ],

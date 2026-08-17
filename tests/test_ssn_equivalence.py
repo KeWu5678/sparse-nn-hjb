@@ -103,10 +103,6 @@ def _configs() -> dict[str, dict]:
             kind="ssn", P=4, Nx=20, alpha=1e-2, gamma=1.0, th=0.5, power=1.0,
             seed=1, theta0=t4,
         ),
-        "ssn_signed_q_half": dict(
-            kind="ssn", P=4, Nx=20, alpha=1e-2, gamma=1.0, th=0.5, power=3.0,
-            seed=2, theta0=t4,
-        ),
         "ssn_tr_signed": dict(
             kind="ssn_tr", P=4, Nx=20, alpha=1e-2, gamma=1.0, th=0.5, power=1.0,
             seed=3, theta0=t4,

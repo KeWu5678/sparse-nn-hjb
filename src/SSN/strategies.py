@@ -29,7 +29,8 @@ __all__ = ["solve_levenberg_marquardt", "solve_steihaug_cg"]
 
 def solve_levenberg_marquardt(
     opt, closure: Callable[[], Tensor], loss: Tensor,
-    params: Tensor, q: Tensor, Gq: Tensor, DG: Tensor, c: float, lr: float,
+    params: Tensor, q: Tensor, Gq: Tensor, DG: Tensor,
+    inverse_step: float, lr: float,
 ) -> Tensor:
     """Damped-Newton step with backtracking on the damping ``theta``."""
     group = opt.param_groups[0]
@@ -50,7 +51,7 @@ def solve_levenberg_marquardt(
         return loss
 
     qnew: Tensor = q + dq
-    _, loss_new = opt._trial(closure, qnew, c)
+    _, loss_new = opt._trial(closure, qnew, inverse_step)
 
     # Initialize the damping parameter
     dq_norm: float = torch.norm(dq).item()
@@ -62,7 +63,7 @@ def solve_levenberg_marquardt(
         try:
             theta_safe = max(theta, min_theta)
             qnew = q - lr * torch.linalg.solve(DG + (1 / theta_safe) * I, Gq)
-            _, loss_new = opt._trial(closure, qnew, c)
+            _, loss_new = opt._trial(closure, qnew, inverse_step)
             theta = max(theta / 4.0, min_theta)
         except Exception as e:  # noqa: BLE001
             logger.error(f"Damped linear solve failed: {e}")
@@ -87,7 +88,8 @@ def solve_levenberg_marquardt(
 
 def solve_steihaug_cg(
     opt, closure: Callable[[], Tensor], loss: Tensor,
-    params: Tensor, q: Tensor, Gq: Tensor, DG: Tensor, c: float, lr: float,
+    params: Tensor, q: Tensor, Gq: Tensor, DG: Tensor,
+    inverse_step: float, lr: float,
 ) -> Tensor:
     """Trust-region step via a truncated/Steihaug CG solve (mpcg) with radius sigma."""
     group = opt.param_groups[0]
@@ -95,14 +97,14 @@ def solve_steihaug_cg(
     st = opt.state[opt._params[0]]
     sigma: float = st.setdefault("sigma", 0.01 * sigmamax)
 
-    DP: Tensor = opt._dprox(q, c, prox_result=params)
+    DP: Tensor = opt._dprox(q, inverse_step, prox_result=params)
     I_active: Tensor = torch.diag(DP) != 0
     kmaxit: int = max(1, int(2 * I_active.sum().item()))
 
     dq, tr_flag, pred, _, _ = mpcg(DG, -Gq, 1e-3, kmaxit, sigma, DP)
 
     qnew: Tensor = q + lr * dq
-    _, loss_new = opt._trial(closure, qnew, c)
+    _, loss_new = opt._trial(closure, qnew, inverse_step)
 
     if not torch.isfinite(loss_new) or (loss_new > loss + 1e-10 * torch.abs(loss)):
         # reject: shrink the trust region and restore params

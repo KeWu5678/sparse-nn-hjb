@@ -3,9 +3,9 @@
 # Algorithm 2 of paper/paper_0805.tex, on the pendulum swing-up value function
 # (two-sided switching-band data; data=pendulum auto-selects the region eval).
 #
-# As in the VDP counterpart, only the guarded correction and the paper loop order
-# apply; the sphere formulation carries no moment weight.  Axes match
-# conf/experiment/pendulum/frac_exp_penalty.yaml cell for cell.
+# The sphere formulation carries no moment weight or radial search radius. The
+# current solver minimizes the actual one-atom increment and uses the global-prox
+# correction with a guarded, insertion-first outer loop.
 defaults:
   - override /model: paper_frac_exp_penalty
   - override /data: pendulum
@@ -29,7 +29,7 @@ hydra:
     params:
       model: paper_frac_exp_penalty
       model.activation: relu
-      model.power: 2.0,2.01,3.0,4.0,5.0
+      model.power: 2.0,3.0
       model.alpha: 1e-3,1e-4,1e-5,1e-6
       model.gamma: 0
       model.loss_weights: "[1.0,0.0],[1.0,1.0]"

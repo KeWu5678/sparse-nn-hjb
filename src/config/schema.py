@@ -144,8 +144,6 @@ class TrainingConfig:
     ins_merge_tol: float = 1e-2
     lbfgs_lr: float = 1e-2        # L-BFGS step size for dual-profile maximisation inside candidate search (both methods)
     lbfgs_steps: int = 200        # max L-BFGS iterations per candidate direction (both methods)
-    newton_tol: float = 1e-12     # relative residual tolerance for the Newton solve in finite_step (finite_step only)
-    newton_max_iter: int = 50     # max Newton iterations for the finite-step insertion weight solve (finite_step only)
 
 
 @dataclass
