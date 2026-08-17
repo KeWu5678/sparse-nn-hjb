@@ -63,6 +63,22 @@ def _cell(record: preflight.Record) -> tuple[str]:
     return (str(record.model["activation"]),)
 
 
+def _make_algorithm2(record_path: Path, *, power: float, provenance: dict) -> None:
+    record = json.loads(record_path.read_text(encoding="utf-8"))
+    record["config"]["name"] = "pendulum_paper_frac_exp_penalty"
+    record["config"]["model"].update(
+        {
+            "insertion": "finite_step",
+            "activation": "relu",
+            "power": power,
+            "gamma": 0.0,
+        }
+    )
+    record["config"]["training"]["radial_cap"] = "fixed"
+    record["provenance"] = provenance
+    record_path.write_text(json.dumps(record), encoding="utf-8")
+
+
 def test_grid_validation_requires_region_sidecar(tmp_path, monkeypatch) -> None:
     data_dir = tmp_path / "data"
     data_dir.mkdir()
@@ -159,3 +175,71 @@ def test_provenance_rejects_another_search_version(tmp_path, monkeypatch) -> Non
     monkeypatch.setattr(preflight, "PROVENANCE_MANIFEST", manifest)
     with pytest.raises(ValueError, match="search_version"):
         preflight._validate_provenance()
+
+
+@pytest.mark.parametrize(
+    ("power", "provenance"),
+    [
+        (1.0, {"coefficient_solver": "soft_threshold"}),
+        (
+            2.0,
+            {
+                "coefficient_solver": "global_prox_warmstart_scale",
+                "rho": 0.5,
+            },
+        ),
+        (
+            3.0,
+            {
+                "coefficient_solver": "global_prox_warmstart_scale",
+                "rho": 0.5,
+            },
+        ),
+    ],
+)
+def test_algorithm2_record_requires_truthful_solver_provenance(
+    tmp_path, monkeypatch, power: float, provenance: dict
+) -> None:
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    (data_dir / "fixture.npz").touch()
+    monkeypatch.setattr(preflight, "DATA_DIR", data_dir)
+    monkeypatch.setitem(preflight.EXPECTED_DATA_PATHS, "pendulum", {"fixture.npz"})
+    record_path = _write_record(tmp_path / "records")
+    _make_algorithm2(record_path, power=power, provenance=provenance)
+
+    preflight._validate_record(
+        preflight.Record(record_path, json.loads(record_path.read_text(encoding="utf-8"))),
+        problem="pendulum",
+        algorithm=2,
+    )
+
+
+@pytest.mark.parametrize(
+    "provenance",
+    [
+        {},
+        {"coefficient_solver": "stationary_branch"},
+        {"coefficient_solver": "global_prox_warmstart_scale", "rho": 0.9},
+    ],
+)
+def test_fractional_algorithm2_record_rejects_stale_solver_provenance(
+    tmp_path, monkeypatch, provenance: dict
+) -> None:
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    (data_dir / "fixture.npz").touch()
+    monkeypatch.setattr(preflight, "DATA_DIR", data_dir)
+    monkeypatch.setitem(preflight.EXPECTED_DATA_PATHS, "pendulum", {"fixture.npz"})
+    record_path = _write_record(tmp_path / "records")
+    _make_algorithm2(record_path, power=2.0, provenance=provenance)
+
+    with pytest.raises(ValueError, match="coefficient solver provenance"):
+        preflight._validate_record(
+            preflight.Record(
+                record_path,
+                json.loads(record_path.read_text(encoding="utf-8")),
+            ),
+            problem="pendulum",
+            algorithm=2,
+        )

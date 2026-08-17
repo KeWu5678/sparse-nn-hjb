@@ -31,10 +31,6 @@ normalized parameter measure.
 Population value space and value-gradient Hilbert space, both formed with the
 population measure `ν`.
 
-**`𝓗`**
-Abstract Hilbert space used only in Theorem 5.1 before its population and
-empirical instantiations.
-
 **`Ω = ℝ^(d+1)`**
 Unbounded inner-parameter domain in the nonhomogeneous formulation.
 
@@ -49,8 +45,8 @@ One inner parameter, with slope `a ∈ ℝᵈ` and bias `b ∈ ℝ`.
 Unit sphere used only in the homogeneous formulation and its linking
 paragraph.
 
-**`C₀(Ω)`, `C₀(Ω;L²(D))`, `C₀(Ω;H¹(D))`, and `C₀(Ω;𝓗)`**
-The scalar- and Hilbert-valued continuous functions on `Ω` that vanish in
+**`C₀(Ω)`, `C₀(Ω;L²(D))`, and `C₀(Ω;H¹(D))`**
+The scalar- and function-valued continuous functions on `Ω` that vanish in
 absolute value or norm at infinity.
 
 **`C_c(U)`**
@@ -142,8 +138,7 @@ representation has distinct locations and nonzero coefficients; its width is
 Target value function.
 
 **`r_μ = 𝒩μ − V`**
-Population residual; Theorem 5.1 uses the same symbol for the corresponding
-residual in its abstract Hilbert space.
+Population residual.
 
 **`L(μ) = ½‖r_μ‖²H¹`**
 Population gradient-augmented fidelity, with value `+∞` when the network is
@@ -162,18 +157,9 @@ at samples where the value function is differentiable.
 **`lᴹ(μ)`**
 Empirical gradient-augmented fidelity.
 
-**`Kᴹ(ω)`**
-Empirical value-gradient feature vector whose Hilbert norm reproduces the
-sample average in `lᴹ`.
-
-**`Kᴹₚ(ω) = Kᴹ(ω)/wₚ(ω)`**
-Normalized empirical feature used in Theorem 5.1 and Algorithm 1.
-
 **value-only substitution — no separate symbol**
-When the gradient summand of the fidelity is dropped, the empirical
-specialization is read with `ℋ = ℝᴹ` and the gradient entries deleted from
-`Kᴹ` and from the target. No separate symbol is introduced for the truncated
-feature.
+When the gradient summand of the fidelity is dropped, the sampled norm is read
+with its gradient entries deleted. No separate symbol is introduced.
 
 **`s₀`**
 Polynomial growth exponent of `ρ`, and hence of `K` in `L²(D)`.
@@ -234,10 +220,6 @@ Adopted nonhomogeneous population objective.
 Reduced coefficient objective obtained by fixing distinct inner parameters
 and varying only their outer coefficients.
 
-**`J_𝓗(μ)`**
-Abstract normalized Hilbert-space objective in Theorem 5.1. Its population
-and empirical instances are `J` and `Jᴹ`.
-
 **`Jᴹ(ω⃗,c)`**
 Adopted empirical finite-network objective
 `lᴹ(μ_{ω⃗,c}) + αΣₙφγ(wₚ(ωₙ)|cₙ|)` in Algorithm 1.
@@ -263,10 +245,9 @@ Derivative of empirical fidelity at `μ` in the direction `δ_ω`.
 Weighted representative of the empirical fidelity derivative used by
 Theorem 5.1 and Algorithm 1.
 
-**`Pₚ,μ`**
-Function representing the weighted fidelity derivative in the abstract
-Hilbert formulation of Theorem 5.1. Its population and empirical instances
-are the two symbols above.
+**`Pₚ,μ(ω) = P_μ(ω)/wₚ(ω)`**
+Normalized population derivative profile defined in Section 3. At a fixed
+candidate `μ̄`, it is denoted by `P̄ₚ = Pₚ,μ̄`.
 
 **`T(μ) = φ⁻¹(J(μ)/α)`**
 Upper bound on every normalized atom magnitude of a positive-objective local
@@ -292,8 +273,9 @@ radius `r` needed to cover `A`.
 Cardinality of the atom set, bounded in the finite-support theorem and its
 global-minimizer corollary.
 
-**`Bₚ = supω ‖Kₚ(ω)‖𝓗`**
-Uniform normalized feature bound in Theorem 5.1.
+**`Bₚ = supω ‖Kₚ(ω)‖H¹(D)`**
+Uniform normalized feature bound defined in Section 3 and used in
+Theorem 5.1.
 
 **`Δ(μ,ω) = max{|Pₚ,μ(ω)| − αLφ,0}`**
 Nonnegative excess above the insertion threshold at a single candidate. It is
@@ -301,8 +283,8 @@ the quantity the one-step decrease of Theorem 5.1 is stated in, so the same
 estimate covers a candidate returned by a local search.
 
 **`Δ(μ) = sup_ω Δ(μ,ω) = max{‖Pₚ,μ‖∞ − αLφ,0}`**
-Its supremum, which drives the rate statement. The two-argument and
-one-argument forms are distinguished by arity.
+Its supremum, which drives the certificate-rate corollary. The two-argument
+and one-argument forms are distinguished by arity.
 
 **`ω*`**
 Parameter attaining the maximum of `|Pₚ,μ|` in Theorem 5.1, so that
@@ -327,36 +309,30 @@ Computable Euclidean search radius from Theorem 5.1.
 Algorithm 1 sampling and final-candidate filter radius. When `R(μ)` is
 unavailable, `R_search=e⁵`.
 
-**`Bᴹₚ = supω ‖Kᴹₚ(ω)‖`**
-Uniform empirical feature bound used by Algorithm 1.
-
-**`Aᴹₚ(ω) = ‖Kᴹₚ(ω)‖²`**
+**`Aᴹₚ(ω) = ‖K(ω)/wₚ(ω)‖²_M`**
 Candidate-specific empirical curvature used by Algorithm 1's warm start.
 
 **`κ_A(ω)`, `c_A(ω)`**
-Normalized inserted mass and physical outer coefficient obtained by replacing
-the global curvature bound `(Bᴹₚ)²` with `Aᴹₚ(ω)` in the one-candidate
-quadratic estimate.
+Normalized inserted mass and physical outer coefficient obtained from the
+candidate-specific one-atom quadratic estimate.
 
 **`μₖ`**
-Finite atomic iterate sequence in the rate statement of Theorem 5.1.
+Finite atomic iterate sequence in the certificate-rate corollary.
 
 **`‖K(ω)‖_M`**
 Empirical value-gradient seminorm,
-`‖K(ω)‖²_M = M⁻¹ Σₘ (|K(ω)(xᵐ)|² + |∇K(ω)(xᵐ)|²)`, used by the finite-step
-criterion. It coincides with the Euclidean norm of the scaled feature,
-`‖K(ω)‖_M = ‖Kᴹ(ω)‖`; the batch cross-term display uses the pairing
-`⟨Kᴹ(ω),Kᴹ(ω′)⟩` directly rather than a second `M`-subscripted symbol.
+`‖K(ω)‖²_M = M⁻¹ Σₘ (|K(ω)(xᵐ)|² + |∇K(ω)(xᵐ)|²)`, used by both insertion
+criteria.
 
-**`widehat ΔJᴹ_{ψₖ}(c;ω)`**
-Conservative single-atom insertion surrogate with penalty coefficient `α/q`.
-For `q<1` it upper-bounds the corresponding objective increment, whose penalty
-coefficient is `α`.
+**`ΔJᴹ_{ψₖ}(c;ω)`**
+Actual change caused by adding one atom with outer weight `c` at a new location
+`ω∉atom μ`:
+`cPᴹ_μ(ω) + (1/2)c²‖K(ω)‖²_M + α|c|ᑫ`.
 
-**`z_turn`, `z*`**
-Turning point of the left-hand side of the insertion-weight equation, and the
-larger of its positive roots, which is the accepted magnitude of the initial
-outer weight.
+**`c*(ω)`**
+Selected global minimizer of the one-atom increment,
+`prox_{(α/A)|·|ᑫ}(−P/A)`, where `P=Pᴹ_μ(ω)` and `A=‖K(ω)‖²_M`. A candidate is
+accepted only when `c*(ω)≠0` and its actual increment is negative.
 
 ## 7. Homogeneous link
 
@@ -470,10 +446,21 @@ Control space of the open-loop problem. The reduced objective is
 Normalized outer coefficient used by Algorithm 1's semismooth Newton
 correction. The physical coefficient is recovered as `cₙ=uₙ/wₚ(ωₙ)`.
 
-**`S_{ν,q}`**
-Algorithm 2 stationary-branch selector. For `q<1` it returns zero below the
-turning threshold and the larger positive stationary root above it; it is not
-the global proximal mapping. At `q=1` it is soft thresholding.
+**`prox_{λ|·|ᑫ}`**
+Selected global proximal map used by Algorithm 2. At the switching input, where
+zero and a nonzero point are both global minimizers, the implementation selects
+zero. Closed forms are used for `q=1/2` and `q=2/3`; `q=1` is soft thresholding.
+
+**`mₜ`, `λₜ`, `ρ_prox`**
+Smallest nonzero warm-start coefficient magnitude and the fixed proximal scale
+used during one Algorithm 2 correction:
+`λₜ=min{α,ρ_prox mₜ^(2−q)/(2(1−q))}`, with `ρ_prox=0.1` for `q<1`; for
+`q=1`, `λₜ=α`.
+
+**`Gₜ`**
+Algorithm 2 normal map in the proximal preimage. With
+`c(z)=prox_{λₜ|·|ᑫ}(z)`, it is
+`Gₜ(z)=(α/λₜ)(z−c(z))+∇₍c₎lᴹ(μ_{ω⃗,c(z)})`.
 
 **`T_out`**
 Number of outer insertion iterations.

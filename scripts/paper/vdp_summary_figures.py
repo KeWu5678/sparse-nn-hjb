@@ -50,7 +50,7 @@ ALGO1 = {
 _GOLD = "#C77F0A"
 ALGO2 = {
     "relu2": (r"$\mathrm{ReLU}^2$", PALETTE["violet"], "-.", 2.0),
-    "relu5": (r"$\mathrm{ReLU}^5$", _GOLD,             (0, (3, 1, 1, 1)), 5.0),
+    "relu3": (r"$\mathrm{ReLU}^3$", _GOLD,             (0, (3, 1, 1, 1)), 3.0),
 }
 
 
@@ -95,7 +95,7 @@ _FRONTIER_LABEL = {
     "softplus": frontier_penalty_label(r"\mathrm{softplus}", insertion="profile", subscript="1"),
     "gaussian": frontier_penalty_label(r"e^{-x^2}", insertion="profile", subscript="1"),
     "relu2":    frontier_penalty_label(r"\mathrm{ReLU}^2", insertion="finite_step", subscript="2"),
-    "relu5":    frontier_penalty_label(r"\mathrm{ReLU}^5", insertion="finite_step", subscript="5"),
+    "relu3":    frontier_penalty_label(r"\mathrm{ReLU}^3", insertion="finite_step", subscript="3"),
 }
 
 
@@ -103,7 +103,7 @@ def plot_frontier(ch) -> str:
     _apply_publication_style()
     fig, ax = plt.subplots(figsize=(8.5, 6))
     order = [("tanh", ALGO1), ("softplus", ALGO1), ("gaussian", ALGO1),
-             ("relu2", ALGO2), ("relu5", ALGO2)]
+             ("relu2", ALGO2), ("relu3", ALGO2)]
     for key, spec in order:
         label, color, ls = _FRONTIER_LABEL[key], spec[key][1], spec[key][2]
         ns, h1 = _trajectory(ch[key]["result_path"])
@@ -118,11 +118,11 @@ def plot_frontier(ch) -> str:
 
 
 # --------------------------------------------------------------------------- #
-# Figure 2 — closed-loop feedback (softplus, gaussian, ReLU^5, true).
+# Figure 2 — closed-loop feedback (softplus, gaussian, ReLU^3, true).
 # --------------------------------------------------------------------------- #
 _X0 = (2.0, 1.0)
 _ROLL_T, _ROLL_DT, _U_CLIP, _PLOT_T = 12.0, 0.01, 50.0, 3.0
-_FEEDBACK_KEYS = ["softplus", "gaussian", "relu5"]
+_FEEDBACK_KEYS = ["softplus", "gaussian", "relu3"]
 
 
 def _model_feedback(ch, key, norm):
@@ -177,9 +177,9 @@ def plot_feedback(ch, samples, norm) -> tuple[str, str, list[dict]]:
 
 
 # --------------------------------------------------------------------------- #
-# Figure 3 — weight portraits. Two variants (keep one). Choices: gaussian, softplus, ReLU^5.
+# Figure 3 — weight portraits. Two variants (keep one). Choices: gaussian, softplus, ReLU^3.
 # --------------------------------------------------------------------------- #
-_WEIGHT_KEYS = ["gaussian", "softplus", "relu5"]
+_WEIGHT_KEYS = ["gaussian", "softplus", "relu3"]
 # Bright blue / yellow (positive / negative outer weight), sampled from the reference figure.
 _SIGN_POS, _SIGN_NEG = "#001BF8", "#FFFD3A"
 

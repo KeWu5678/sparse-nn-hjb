@@ -4,19 +4,20 @@ This note restores the provenance log that used to live in `CLAUDE.md`. The
 curated experiment summaries are now the source of truth; the legacy
 `autoresearch/.../SUMMARY.md` files remain historical reference.
 
-1. Smooth VDP activation search.
-   Softplus is the best sparse compromise on the smooth VDP value-sample
-   benchmark; Matern 5/2 and Gaussian are more accurate on H1 but use many
-   more neurons, while tanh remains the weakest gradient-fitting choice.
-   Current curated readouts: [01_vdp/log_penalty/results.md](01_vdp/log_penalty/results.md)
-   and [02_pendulum/log_penalty/results.md](02_pendulum/log_penalty/results.md)
+1. Normalized-measure activation search.
+   Algorithm 1 compares nonhomogeneous activations under the normalized-moment
+   objective, using the joint candidate search and guarded coefficient
+   correction described in the manuscript.
+   Current readouts: [01_vdp/paper_log_penalty/results.md](01_vdp/paper_log_penalty/results.md)
+   and [02_pendulum/paper_log_penalty/results.md](02_pendulum/paper_log_penalty/results.md).
 
-2. Finite-step penalty powers.
-   The power sweep is non-monotone. Powers around 3-4 form the useful tradeoff
-   region; `p=5` stops improving the H1/sparsity balance and is the first clear
-   degradation case.
-   Current curated readouts: [01_vdp/frac_exp_penalty/results.md](01_vdp/frac_exp_penalty/results.md)
-   and [02_pendulum/frac_exp_penalty/results.md](02_pendulum/frac_exp_penalty/results.md)
+2. Finite-step fractional penalties.
+   Algorithm 2 currently supports `k=2,3`, hence `q=2/3,1/2`, plus the separate
+   `k=1` ReLU--L1 endpoint. Insertion minimizes the actual one-atom increment
+   through the selected global scalar prox; the correction uses the same global
+   prox with a warm-start-derived fixed scale.
+   Current readouts: [01_vdp/paper_frac_exp_penalty/results.md](01_vdp/paper_frac_exp_penalty/results.md)
+   and [02_pendulum/paper_frac_exp_penalty/results.md](02_pendulum/paper_frac_exp_penalty/results.md).
 
 3. Discontinuous-gradient activation search.
    On the analytic discontinuous-gradient study, the best near-jump behavior

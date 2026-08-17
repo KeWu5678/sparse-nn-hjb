@@ -14,6 +14,9 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 OUTPUT_DIR = ROOT / "experiments" / "02_pendulum" / "paper_log_penalty"
+HOMOGENEOUS_OUTPUT_DIR = (
+    ROOT / "experiments" / "02_pendulum" / "paper_frac_exp_penalty"
+)
 ALGORITHM1_ROOT = (
     ROOT / "rawdata" / "logs" / "multirun" / "pendulum" / "paper_log_penalty" / "sequential"
 )
@@ -164,13 +167,13 @@ def load_algorithm2_rows(figures: ModuleType) -> list[dict[str, Any]]:
     homogeneous = [
         row
         for row in figures.best_per_cell(rows)
-        if row["activation"] in {"relu^2", "relu^3", "relu^5"}
+        if row["activation"] in {"relu^2", "relu^3"}
         and row["kind"] == "signed"
         and row["loss"] == "h1"
     ]
     counts = {
         activation: sum(row["activation"] == activation for row in homogeneous)
-        for activation in ("relu^2", "relu^3", "relu^5")
+        for activation in ("relu^2", "relu^3")
     }
     if any(count != 1 for count in counts.values()):
         raise ValueError(f"expected one Algorithm 2 checkpoint per power: {counts}")
@@ -223,7 +226,6 @@ def _plot_frontier(
         "tanh": r"$\tanh$",
         "relu^2": r"ReLU$^2$",
         "relu^3": r"ReLU$^3$",
-        "relu^5": r"ReLU$^5$",
     }
     markers = {
         "traditional": "v",
@@ -232,7 +234,6 @@ def _plot_frontier(
         "tanh": "v",
         "relu^2": "^",
         "relu^3": "P",
-        "relu^5": "D",
     }
     styles = dict(figures._MODEL_STYLE)
     styles["traditional"] = (PALETTE["neutral"], "--")
@@ -296,6 +297,24 @@ def _fit_table(rows: list[dict[str, Any]]) -> str:
         )
     columns = ["activation", "alpha", "p", "gamma", "N", "switching H1", "rest H1"]
     return format_table(rendered, columns, title="Selected Algorithm 1 fits")
+
+
+def _algorithm2_fit_table(rows: list[dict[str, Any]]) -> str:
+    rendered = [
+        {
+            "activation": row["activation"],
+            "alpha": f"{row['alpha']:.0e}",
+            "N": row["neurons"],
+            "switching H1": f"{row['near_h1']:.3f}",
+            "rest H1": f"{row['far_h1']:.3f}",
+        }
+        for row in sorted(rows, key=lambda item: item["power"])
+    ]
+    return format_table(
+        rendered,
+        ["activation", "alpha", "N", "switching H1", "rest H1"],
+        title="Selected Algorithm 2 fits",
+    )
 
 
 def _oversampling_table(scored: list[dict[str, Any]], figures: ModuleType) -> str:
@@ -403,7 +422,6 @@ def main(argv: list[str] | None = None) -> int:
         "tanh": ("0.25", "-."),
         "relu^2": (PALETTE["red_strong"], "-"),
         "relu^3": (PALETTE["neutral"], "--"),
-        "relu^5": (PALETTE["teal"], "-"),
     }
     figures._DISPLAY = {
         "gaussian": "Gaussian",
@@ -411,7 +429,6 @@ def main(argv: list[str] | None = None) -> int:
         "tanh": "tanh",
         "relu^2": r"ReLU$^2$",
         "relu^3": r"ReLU$^3$",
-        "relu^5": r"ReLU$^5$",
     }
     figures._SURFACE_MODEL_ORDER = (
         "gaussian",
@@ -419,7 +436,6 @@ def main(argv: list[str] | None = None) -> int:
         "tanh",
         "relu^2",
         "relu^3",
-        "relu^5",
     )
 
     algorithm1, cache = load_algorithm1_rows()
@@ -433,7 +449,7 @@ def main(argv: list[str] | None = None) -> int:
     frontier = _plot_frontier(
         figures,
         rows,
-        ("gaussian", "softplus", "tanh", "relu^2", "relu^3", "relu^5"),
+        ("gaussian", "softplus", "tanh", "relu^2", "relu^3"),
         "frontier",
     )
     _plot_frontier(
@@ -480,7 +496,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     algorithm2_feedback = _feedback_table(
         costs,
-        {"relu2", "relu3", "relu5"},
+        {"relu2", "relu3"},
         (
             "Algorithm 2 feedback: closed-loop cost and stabilization "
             f"from A=({starts['A'][0]:.2f}, {starts['A'][1]:.2f}) and "
@@ -504,6 +520,7 @@ def main(argv: list[str] | None = None) -> int:
         f"{algorithm1_feedback}\n\n"
         f"Control trace: `{feedback['control_b_log']}`\n\n"
         "## Algorithm 2: homogeneous ReLU model\n\n"
+        f"{_algorithm2_fit_table(algorithm2)}\n\n"
         "### Synthesized feedback law\n\n"
         f"{algorithm2_feedback}\n\n"
         f"Control trace: `{feedback['control_b_relu']}`\n\n"
@@ -526,7 +543,20 @@ def main(argv: list[str] | None = None) -> int:
         f"Figure: `{oversampling_figure}`\n",
         encoding="utf-8",
     )
+    HOMOGENEOUS_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    homogeneous_out = HOMOGENEOUS_OUTPUT_DIR / "results.md"
+    homogeneous_out.write_text(
+        "# Algorithm 2 — pendulum swing-up\n\n"
+        "Fresh sequential runs using the actual one-atom increment and the "
+        "global-prox warm-start-scaled correction.\n\n"
+        f"{_algorithm2_fit_table(algorithm2)}\n\n"
+        "## Synthesized feedback law\n\n"
+        f"{algorithm2_feedback}\n\n"
+        f"Control trace: `{feedback['control_b_relu']}`\n",
+        encoding="utf-8",
+    )
     print(f"wrote {out}")
+    print(f"wrote {homogeneous_out}")
     return 0
 
 

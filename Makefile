@@ -49,7 +49,7 @@ MLFLOW_STOP_AFTER ?= true
 PAPER_MODE ?= both
 SEQ_ITERATIONS ?= 150
 
-.PHONY: help openloop sweep paper-sweep paper-p-study paper-radius-study paper-oversampling-study paper-l1-study paper-artifacts moment-sweep moment-refine moment-followup moment-oversampling region-split paper-figures mlflow-deploy mlflow-backfill
+.PHONY: help openloop sweep paper-sweep paper-p-study paper-radius-study paper-oversampling-study paper-l1-study paper-algorithm2-refresh paper-artifacts moment-sweep moment-refine moment-followup moment-oversampling region-split paper-figures mlflow-deploy mlflow-backfill
 
 help:  ## list targets
 	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -75,8 +75,8 @@ paper-figures:  ## refresh paper/plot/ from curated experiment figures (matched 
 	  else echo "  (no experiment source for $$b — left as-is)"; fi; \
 	done
 
-paper-artifacts:  ## regenerate current Algorithm 1 analyses and manuscript figures from completed records
-	./scripts/regenerate_algorithm1_paper_artifacts.sh
+paper-artifacts:  ## regenerate current manuscript analyses and figures from validated records
+	./scripts/regenerate_paper_artifacts.sh
 
 mlflow-deploy:  ## provision/update EC2 MLflow tracking server with Terraform
 	terraform -chdir=$(TF_DIR) init
@@ -96,6 +96,9 @@ sweep:  ## run Hydra multirun EXPERIMENT ({vdp,pendulum}/{log_penalty,frac_exp_p
 	  echo "Supported: vdp/log_penalty, vdp/frac_exp_penalty, pendulum/log_penalty, pendulum/frac_exp_penalty."; \
 	  exit 2; \
 	}
+	@if find "$(SWEEP_DIR)" -name '*.json' -print -quit 2>/dev/null | grep -q .; then \
+	  echo "$(SWEEP_DIR) already contains records; refusing to mix runs."; exit 2; \
+	fi
 	OMP_NUM_THREADS=1 $(PY) scripts/train.py -m +experiment=$(EXPERIMENT) \
 	  hydra/launcher=joblib hydra.launcher.n_jobs=$(JOBS) \
 	  hydra.sweep.dir=$(SWEEP_DIR) \
@@ -103,10 +106,10 @@ sweep:  ## run Hydra multirun EXPERIMENT ({vdp,pendulum}/{log_penalty,frac_exp_p
 	  env.seed=42
 	$(PY) "$(ANALYSIS_DIR)/analysis.py"
 
-paper-sweep:  ## run a paper-conforming sweep ({vdp,pendulum}/paper_{log,frac_exp}_penalty) in both insertion modes
+paper-sweep:  ## run an Algorithm 1 paper sweep ({vdp,pendulum}/paper_log_penalty) in both insertion modes
 	@case "$(EXPERIMENT)" in \
-	  */paper_log_penalty|*/paper_frac_exp_penalty) ;; \
-	  *) echo "Use EXPERIMENT={vdp,pendulum}/paper_{log,frac_exp}_penalty."; exit 2 ;; \
+	  */paper_log_penalty) ;; \
+	  *) echo "Use EXPERIMENT={vdp,pendulum}/paper_log_penalty; use paper-algorithm2-refresh for Algorithm 2."; exit 2 ;; \
 	esac
 	@case "$(PAPER_MODE)" in batch|sequential|both) ;; \
 	  *) echo "Use PAPER_MODE=batch, sequential, or both."; exit 2 ;; \
@@ -235,6 +238,10 @@ paper-l1-study:  ## run the current ReLU+l1 baselines used in both paper frontie
 	    model.alpha=1e-1,1e-2,1e-3,1e-4,1e-5,1e-6 \
 	    model.loss_weights='[1.0,1.0]'; \
 	done
+
+paper-algorithm2-refresh:  ## stage, validate, archive, and replace all current Algorithm 2 paper runs
+	JOBS=$(JOBS) VERBOSE=$(VERBOSE) SEQ_ITERATIONS=$(SEQ_ITERATIONS) \
+	  ./scripts/refresh_algorithm2_paper_runs.sh
 
 moment-sweep:  ## run the seed-42 moment screen; beta=0 baseline is deduplicated across p
 	@case "$(EXPERIMENT)" in \

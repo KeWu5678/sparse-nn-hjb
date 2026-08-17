@@ -68,6 +68,8 @@ PRODUCTION_DATA = {
     ),
 }
 REGION_SCORING_VERSION = "fixed_tube_common_pool_v1"
+ALGORITHM2_COEFFICIENT_SOLVER = "global_prox_warmstart_scale"
+ALGORITHM2_PROX_RHO = 0.5
 
 
 @dataclass(frozen=True)
@@ -86,6 +88,10 @@ class Record:
     @property
     def training(self) -> dict[str, Any]:
         return self.config["training"]
+
+    @property
+    def provenance(self) -> dict[str, Any]:
+        return self.payload.get("provenance", {})
 
 
 def _close(left: float, right: float) -> bool:
@@ -248,6 +254,25 @@ def _validate_record(record: Record, *, problem: str, algorithm: int) -> None:
             raise ValueError(f"record is not current Algorithm 2: {record.path}")
         if not _close(model["gamma"], 0.0):
             raise ValueError(f"Algorithm 2 record has nonzero gamma: {record.path}")
+        power = float(model["power"])
+        if power == 1.0:
+            valid_provenance = (
+                record.provenance.get("coefficient_solver") == "soft_threshold"
+                and "rho" not in record.provenance
+            )
+        elif power in (2.0, 3.0):
+            valid_provenance = (
+                record.provenance.get("coefficient_solver")
+                == ALGORITHM2_COEFFICIENT_SOLVER
+                and _close(record.provenance.get("rho", math.nan), ALGORITHM2_PROX_RHO)
+            )
+        else:
+            valid_provenance = False
+        if not valid_provenance:
+            raise ValueError(
+                f"Algorithm 2 coefficient solver provenance mismatch: {record.path}: "
+                f"{record.provenance}"
+            )
     _fit_history(record)
 
 
@@ -392,6 +417,71 @@ def _oversample_cell(record: Record) -> tuple[Any, ...]:
     )
 
 
+def validate_algorithm2(
+    *, multirun_root: Path | None = None, require_sidecars: bool = False
+) -> None:
+    """Validate the complete current Algorithm 2 record tree."""
+    multirun_root = MULTIRUN if multirun_root is None else multirun_root
+    for problem in ("vdp", "pendulum"):
+        root = multirun_root / problem / "paper_frac_exp_penalty"
+        for mode, iterations in (("batch", 10), ("sequential", 150)):
+            expected = itertools.product(
+                (2.0, 3.0),
+                (1e-3, 1e-4, 1e-5, 1e-6),
+                LOSSES,
+                (0.0,),
+                ("fixed",),
+                (mode,),
+                (iterations,),
+            )
+            _validate_grid(
+                root / mode,
+                problem=problem,
+                algorithm=2,
+                key=_algorithm2_cell,
+                expected=expected,
+                expected_data=PRODUCTION_DATA[problem],
+                require_sidecars=(
+                    require_sidecars and problem == "pendulum" and mode == "sequential"
+                ),
+            )
+        expected_l1 = itertools.product(
+            (1.0,),
+            (1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6),
+            ((1.0, 1.0),),
+            (0.0,),
+            ("fixed",),
+            ("sequential",),
+            (150,),
+        )
+        _validate_grid(
+            root / "relu_l1",
+            problem=problem,
+            algorithm=2,
+            key=_algorithm2_cell,
+            expected=expected_l1,
+            expected_data=PRODUCTION_DATA[problem],
+        )
+
+    pendulum_alg2 = (
+        multirun_root / "pendulum" / "paper_frac_exp_penalty" / "oversampling"
+    )
+    expected_alg2 = (
+        (variant, variant, alpha, "relu", 2.0, 0.0, (1.0, 1.0),
+         2.0, "fixed", "sequential", 150)
+        for variant in OVERSAMPLE_VARIANTS
+        for alpha in (1e-4, 1e-5, 1e-6)
+    )
+    _validate_grid(
+        pendulum_alg2,
+        problem="pendulum",
+        algorithm=2,
+        key=_oversample_cell,
+        expected=expected_alg2,
+        require_sidecars=False,
+    )
+
+
 def validate_all(*, require_sidecars: bool, require_provenance: bool = True) -> None:
     if require_provenance:
         _validate_provenance()
@@ -458,43 +548,7 @@ def validate_all(*, require_sidecars: bool, require_provenance: bool = True) -> 
             expected_data=PRODUCTION_DATA["vdp"],
         )
 
-    for problem in ("vdp", "pendulum"):
-        root = MULTIRUN / problem / "paper_frac_exp_penalty"
-        expected = itertools.product(
-            (2.0, 2.01, 3.0, 4.0, 5.0),
-            (1e-3, 1e-4, 1e-5, 1e-6),
-            LOSSES,
-            (0.0,),
-            ("fixed",),
-            ("sequential",),
-            (150,),
-        )
-        _validate_grid(
-            root / "sequential",
-            problem=problem,
-            algorithm=2,
-            key=_algorithm2_cell,
-            expected=expected,
-            expected_data=PRODUCTION_DATA[problem],
-            require_sidecars=require_sidecars and problem == "pendulum",
-        )
-        expected_l1 = itertools.product(
-            (1.0,),
-            (1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6),
-            ((1.0, 1.0),),
-            (0.0,),
-            ("fixed",),
-            ("sequential",),
-            (150,),
-        )
-        _validate_grid(
-            root / "relu_l1",
-            problem=problem,
-            algorithm=2,
-            key=_algorithm2_cell,
-            expected=expected_l1,
-            expected_data=PRODUCTION_DATA[problem],
-        )
+    validate_algorithm2(require_sidecars=require_sidecars)
 
     pendulum_alg1 = MULTIRUN / "pendulum" / "paper_log_penalty" / "oversampling"
     expected_alg1 = (
@@ -511,22 +565,6 @@ def validate_all(*, require_sidecars: bool, require_provenance: bool = True) -> 
         expected=expected_alg1,
         require_sidecars=False,
     )
-    pendulum_alg2 = MULTIRUN / "pendulum" / "paper_frac_exp_penalty" / "oversampling"
-    expected_alg2 = (
-        (variant, variant, alpha, "relu", 2.0, 0.0, (1.0, 1.0),
-         2.0, "fixed", "sequential", 150)
-        for variant in OVERSAMPLE_VARIANTS
-        for alpha in (1e-4, 1e-5, 1e-6)
-    )
-    _validate_grid(
-        pendulum_alg2,
-        problem="pendulum",
-        algorithm=2,
-        key=_oversample_cell,
-        expected=expected_alg2,
-        require_sidecars=False,
-    )
-
     # Oversampling fits are compared on one production out-of-sample pool,
     # not on per-variant pools (the variant directories contain no raw
     # trajectories from which such pools could be rebuilt).
@@ -554,7 +592,19 @@ def main() -> int:
         action="store_true",
         help="write record-tree digests after a fresh, reviewed Algorithm 1 sweep",
     )
+    parser.add_argument(
+        "--algorithm2-root",
+        type=Path,
+        help="validate only an Algorithm 2 staging tree rooted like rawdata/logs/multirun",
+    )
     args = parser.parse_args()
+    if args.algorithm2_root is not None:
+        validate_algorithm2(
+            multirun_root=args.algorithm2_root,
+            require_sidecars=args.require_sidecars,
+        )
+        print(f"validated current Algorithm 2 records under {args.algorithm2_root}")
+        return 0
     if args.write_provenance:
         validate_all(require_sidecars=False, require_provenance=False)
         PROVENANCE_MANIFEST.write_text(

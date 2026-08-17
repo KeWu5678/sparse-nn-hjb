@@ -36,6 +36,7 @@ pendulum_oversampling_alg2="$multirun/pendulum/paper_frac_exp_penalty/oversampli
 .venv/bin/python scripts/paper/vdp_full_scope.py \
   --records "$vdp_alg1" \
   --homogeneous-records "$vdp_alg2" \
+  --homogeneous-out experiments/01_vdp/paper_frac_exp_penalty \
   --traditional-records "$vdp_l1" \
   --out experiments/01_vdp/paper_log_penalty \
   --alpha 1e-4 \
@@ -52,4 +53,4 @@ pendulum_oversampling_alg2="$multirun/pendulum/paper_frac_exp_penalty/oversampli
   --out experiments/02_pendulum/paper_log_penalty \
   --operating-point 1e-4,10,2.01
 
-echo "Algorithm 1 paper artifacts regenerated."
+echo "Current paper artifacts regenerated."

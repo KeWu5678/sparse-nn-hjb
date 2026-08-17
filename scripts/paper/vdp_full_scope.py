@@ -20,6 +20,9 @@ ALGORITHM1_ROOT = (
 HOMOGENEOUS_ROOT = (
     ROOT / "rawdata" / "logs" / "multirun" / "vdp" / "paper_frac_exp_penalty" / "sequential"
 )
+HOMOGENEOUS_OUTPUT_DIR = (
+    ROOT / "experiments" / "01_vdp" / "paper_frac_exp_penalty"
+)
 TRADITIONAL_ROOT = (
     ROOT / "rawdata" / "logs" / "multirun" / "vdp" / "paper_frac_exp_penalty" / "relu_l1"
 )
@@ -39,6 +42,8 @@ REPRESENTATIVES = {
 SELECTED_GAMMA = 10.0
 # None => pick the lowest-H1 run at each power instead of pinning alpha.
 HOMOGENEOUS_ALPHA: float | None = 1e-5
+HOMOGENEOUS_POWERS = (2.0, 3.0)
+HOMOGENEOUS_TABLE_ALPHA = 1e-5
 
 
 def _load_module(name: str, path: Path) -> ModuleType:
@@ -155,29 +160,32 @@ def _selected(
     return matches[0]
 
 
-def _homogeneous_champion(power: float) -> dict[str, Any]:
-    matches: list[dict[str, Any]] = []
+def load_homogeneous_rows() -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
     for path in sorted(HOMOGENEOUS_ROOT.glob("**/*.json")):
         record = json.loads(path.read_text(encoding="utf-8"))
         cfg = record["config"]
         model = cfg["model"]
+        weights = tuple(float(value) for value in model["loss_weights"])
+        power = float(model["power"])
         if not (
             record.get("status") == "completed"
             and model["kind"] == "signed"
             and model["insertion"] == "finite_step"
             and model["activation"] == "relu"
-            and tuple(float(value) for value in model["loss_weights"])
-            == (1.0, 1.0)
-            and _close(float(model["power"]), power)
-            and (HOMOGENEOUS_ALPHA is None
-                 or _close(float(model["alpha"]), HOMOGENEOUS_ALPHA))
+            and weights in {(1.0, 0.0), (1.0, 1.0)}
+            and power in HOMOGENEOUS_POWERS
             and _close(float(model["gamma"]), 0.0)
             and int(cfg["env"]["seed"]) == 42
         ):
             continue
         values = record["metrics"][-1]["values"]
-        matches.append(
+        rows.append(
             {
+                "loss": {(1.0, 0.0): "l2", (1.0, 1.0): "h1"}[weights],
+                "alpha": float(model["alpha"]),
+                "neurons": int(values["best_neurons"]),
+                "rel_l2": float(values["rel_l2_val"]),
                 "rel_h1": float(values["rel_h1_val"]),
                 "result_path": str(_artifact_path(record, path)),
                 "activation": "relu",
@@ -185,12 +193,90 @@ def _homogeneous_champion(power: float) -> dict[str, Any]:
                 "data_file": cfg["data"]["path"],
             }
         )
+    return rows
+
+
+def _homogeneous_champion(
+    rows: list[dict[str, Any]], power: float
+) -> dict[str, Any]:
+    matches = [
+        row for row in rows
+        if row["loss"] == "h1"
+        and _close(row["power"], power)
+        and (HOMOGENEOUS_ALPHA is None
+             or _close(row["alpha"], HOMOGENEOUS_ALPHA))
+    ]
     if not matches:
         raise ValueError(f"no ReLU^{power:g} champion found under {HOMOGENEOUS_ROOT}")
     if HOMOGENEOUS_ALPHA is not None and len(matches) != 1:
         raise ValueError(f"expected one ReLU^{power:g} champion, got {len(matches)}")
     # With alpha unpinned, the champion is the lowest-H1 run at this power.
     return min(matches, key=lambda m: m["rel_h1"])
+
+
+def _homogeneous_table(rows: list[dict[str, Any]]) -> str:
+    lines = [
+        "| power | loss | alpha | N | rel L2 | rel H1 |",
+        "|---:|---|---:|---:|---:|---:|",
+    ]
+    for loss in ("l2", "h1"):
+        for power in HOMOGENEOUS_POWERS:
+            matches = [
+                row for row in rows
+                if row["loss"] == loss
+                and _close(row["power"], power)
+                and _close(row["alpha"], HOMOGENEOUS_TABLE_ALPHA)
+            ]
+            if len(matches) != 1:
+                raise ValueError(
+                    f"expected one ReLU^{power:g}/{loss} row at "
+                    f"alpha={HOMOGENEOUS_TABLE_ALPHA:g}, got {len(matches)}"
+                )
+            row = matches[0]
+            lines.append(
+                f"| {power:g} | {loss} | {row['alpha']:.0e} | "
+                f"{row['neurons']} | {row['rel_l2']:.4f} | {row['rel_h1']:.4f} |"
+            )
+    return "\n".join(lines)
+
+
+def _plot_homogeneous_surfaces(
+    rows: list[dict[str, Any]], samples: Any, norm: ValueSampleNormalizer
+) -> dict[float, Path]:
+    import matplotlib.pyplot as plt
+
+    from src.plots import plot_model_value_surface
+    from src.plotstyle import apply_publication_style
+
+    output = HOMOGENEOUS_OUTPUT_DIR / "figures"
+    output.mkdir(parents=True, exist_ok=True)
+    paths: dict[float, Path] = {}
+    for power in HOMOGENEOUS_POWERS:
+        matches = [
+            row for row in rows
+            if row["loss"] == "h1"
+            and _close(row["power"], power)
+            and _close(row["alpha"], HOMOGENEOUS_TABLE_ALPHA)
+        ]
+        if len(matches) != 1:
+            raise ValueError(
+                f"expected one ReLU^{power:g} surface row at "
+                f"alpha={HOMOGENEOUS_TABLE_ALPHA:g}, got {len(matches)}"
+            )
+        row = matches[0]
+        apply_publication_style()
+        fig = plt.figure(figsize=(4.2, 4.0), dpi=300)
+        ax = fig.add_subplot(1, 1, 1, projection="3d")
+        plot_model_value_surface(
+            row["result_path"], activation="relu", power=power,
+            x_scale=norm.x_scale, v_scale=norm.v_scale, dataset=samples,
+            ax=ax, show=False, vmax=20.0, zticks=[0, 10, 20],
+        )
+        path = output / f"value_surface_p{int(power)}.png"
+        fig.savefig(path, dpi=300, bbox_inches="tight", pad_inches=0.05)
+        plt.close(fig)
+        paths[power] = path
+    return paths
 
 
 def _traditional_relu_champion(data_file: str) -> dict[str, Any]:
@@ -305,6 +391,8 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                         help="Algorithm 1 sequential run-record root")
     parser.add_argument("--homogeneous-records", type=Path, default=None,
                         help="Algorithm 2 sequential run-record root")
+    parser.add_argument("--homogeneous-out", type=Path, default=None,
+                        help="Algorithm 2 study directory for its manuscript surfaces")
     parser.add_argument("--traditional-records", type=Path, default=None,
                         help="ReLU plus l1 run-record root")
     parser.add_argument("--out", type=Path, default=None,
@@ -325,13 +413,16 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def _apply_overrides(args: argparse.Namespace) -> None:
     """Repoint the module-level roots/selection; globals resolve at call time."""
-    global ALGORITHM1_ROOT, HOMOGENEOUS_ROOT, TRADITIONAL_ROOT, OUTPUT_DIR, REPRESENTATIVES
+    global ALGORITHM1_ROOT, HOMOGENEOUS_ROOT, HOMOGENEOUS_OUTPUT_DIR
+    global TRADITIONAL_ROOT, OUTPUT_DIR, REPRESENTATIVES
     global SELECTED_GAMMA, HOMOGENEOUS_ALPHA
 
     if args.records is not None:
         ALGORITHM1_ROOT = args.records.resolve()
     if args.homogeneous_records is not None:
         HOMOGENEOUS_ROOT = args.homogeneous_records.resolve()
+    if args.homogeneous_out is not None:
+        HOMOGENEOUS_OUTPUT_DIR = args.homogeneous_out.resolve()
     if args.traditional_records is not None:
         TRADITIONAL_ROOT = args.traditional_records.resolve()
     if args.out is not None:
@@ -372,6 +463,10 @@ def main(argv: list[str] | None = None) -> int:
     data_file = _selected(rows, "softplus")["data_file"]
     samples = load_value_samples(data_file)
     norm = ValueSampleNormalizer.fit(samples)
+    homogeneous_rows = load_homogeneous_rows()
+    homogeneous_surfaces = _plot_homogeneous_surfaces(
+        homogeneous_rows, samples, norm
+    )
 
     activation_shape = figures.plot_activation_shapes()
     surfaces = figures.plot_value_surfaces(rows, samples, norm)
@@ -405,7 +500,7 @@ def main(argv: list[str] | None = None) -> int:
             "softplus": "softplus",
             "gaussian": "Gaussian",
             "relu2": r"ReLU$^2$",
-            "relu5": r"ReLU$^5$",
+            "relu3": r"ReLU$^3$",
         }
     )
     champions = {
@@ -418,8 +513,8 @@ def main(argv: list[str] | None = None) -> int:
         }
         for activation in REPRESENTATIVES
     }
-    champions["relu2"] = _homogeneous_champion(2.0)
-    champions["relu5"] = _homogeneous_champion(5.0)
+    champions["relu2"] = _homogeneous_champion(homogeneous_rows, 2.0)
+    champions["relu3"] = _homogeneous_champion(homogeneous_rows, 3.0)
 
     _plot_intro_frontier(summary, champions, data_file)
     frontier = summary.plot_frontier(champions)
@@ -439,7 +534,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     raw_weight_row = " | ".join(
         f"![{key}]({raw_weights[key]})"
-        for key in ("gaussian", "softplus", "relu5")
+        for key in ("gaussian", "softplus", "relu3")
     )
     spec = next(iter(REPRESENTATIVES.values()))
     selection_note = (
@@ -477,6 +572,13 @@ Algorithm 2 rows use the sphere formulation.
 
 ## Algorithm 1 versus Algorithm 2
 
+### Algorithm 2 power comparison
+
+{_homogeneous_table(homogeneous_rows)}
+
+Fixed-alpha surfaces:
+`{homogeneous_surfaces[2.0]}` and `{homogeneous_surfaces[3.0]}`.
+
 ![error-support frontier]({frontier})
 
 | state norm | control magnitude |
@@ -485,13 +587,25 @@ Algorithm 2 rows use the sphere formulation.
 
 {_cost_table(summary_costs)}
 
-| gaussian | softplus | ReLU5 |
+| gaussian | softplus | ReLU3 |
 |---|---|---|
 | {raw_weight_row} |
 """
     output = OUTPUT_DIR / "full_scope.md"
     output.write_text(report, encoding="utf-8")
+    homogeneous_report = HOMOGENEOUS_OUTPUT_DIR / "results.md"
+    homogeneous_report.write_text(
+        "# Algorithm 2 — Van der Pol\n\n"
+        "Fresh sequential runs using the actual one-atom increment and the "
+        "global-prox warm-start-scaled correction.\n\n"
+        f"{_homogeneous_table(homogeneous_rows)}\n\n"
+        "## Fixed-alpha value surfaces\n\n"
+        f"- ReLU squared: `{homogeneous_surfaces[2.0]}`\n"
+        f"- ReLU cubed: `{homogeneous_surfaces[3.0]}`\n",
+        encoding="utf-8",
+    )
     print(f"wrote {output}")
+    print(f"wrote {homogeneous_report}")
     print(f"Algorithm 1 feedback: {algorithm1_feedback}")
     for row in algorithm1_costs:
         print(

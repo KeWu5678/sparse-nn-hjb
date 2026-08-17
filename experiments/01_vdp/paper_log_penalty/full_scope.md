@@ -41,6 +41,18 @@ Each outer iteration retains at most one candidate satisfying `|P_p(ω)| > α L_
 
 ## Algorithm 1 versus Algorithm 2
 
+### Algorithm 2 power comparison
+
+| power | loss | alpha | N | rel L2 | rel H1 |
+|---:|---|---:|---:|---:|---:|
+| 2 | l2 | 1e-05 | 13 | 0.0278 | 0.4087 |
+| 3 | l2 | 1e-05 | 12 | 0.0367 | 0.4526 |
+| 2 | h1 | 1e-05 | 45 | 0.4172 | 0.0996 |
+| 3 | h1 | 1e-05 | 27 | 0.4150 | 0.0987 |
+
+Fixed-alpha surfaces:
+`/Users/chaoruiz/Documents/Repos/SparseNNforHJB/experiments/01_vdp/paper_frac_exp_penalty/figures/value_surface_p2.png` and `/Users/chaoruiz/Documents/Repos/SparseNNforHJB/experiments/01_vdp/paper_frac_exp_penalty/figures/value_surface_p3.png`.
+
 ![error-support frontier](figures/frontier.png)
 
 | state norm | control magnitude |
@@ -52,8 +64,8 @@ Each outer iteration retains at most one candidate satisfying `|P_p(ω)| > α L_
 | true | — | yes | 6.48 |
 | softplus | 16 | yes | 6.48 |
 | gaussian | 34 | yes | 6.50 |
-| relu5 | 29 | yes | 6.50 |
+| relu3 | 40 | yes | 6.50 |
 
-| gaussian | softplus | ReLU5 |
+| gaussian | softplus | ReLU3 |
 |---|---|---|
-| ![gaussian](figures/weights_raw3d_gaussian.png) | ![softplus](figures/weights_raw3d_softplus.png) | ![relu5](figures/weights_raw3d_relu5.png) |
+| ![gaussian](figures/weights_raw3d_gaussian.png) | ![softplus](figures/weights_raw3d_softplus.png) | ![relu3](figures/weights_raw3d_relu3.png) |

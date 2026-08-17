@@ -67,6 +67,7 @@ def _record_row(record: dict[str, Any], rs: dict | None, *, source: str) -> dict
         "insertion": model["insertion"],
         "activation": activation,
         "loss": loss,
+        "alpha": float(model["alpha"]),
         "gamma": float(model["gamma"]),
         "neurons": int(m["best_neurons"]),
         "near_l1": float(rs["switching_l1_h1"]),
@@ -86,8 +87,8 @@ def load_rows() -> tuple[list[dict[str, Any]], str | None]:
 
     Read both current algorithm families from their completed record roots.
     """
-    relu_records = sorted(ALGORITHM2_ROOT.glob("*/*.json"))
-    act_records = sorted(ALGORITHM1_ROOT.glob("*/*.json"))
+    relu_records = sorted(ALGORITHM2_ROOT.glob("**/*.json"))
+    act_records = sorted(ALGORITHM1_ROOT.glob("**/*.json"))
     if not act_records:
         raise FileNotFoundError(
             f"no run records under {ALGORITHM1_ROOT}"
@@ -238,13 +239,13 @@ _MODEL_STYLE = {
     "softplus": (PALETTE["violet"], "-"),
     "leaky_relu": ("0.25", "-."),
     "relu^2": (PALETTE["red_strong"], "-"),
-    "relu^5": (PALETTE["teal"], "-"),
+    "relu^3": (PALETTE["teal"], "--"),
 }
 _TRUE_COLOR = "0.0"
-_DISPLAY = {"relu^2": r"ReLU$^2$", "relu^5": r"ReLU$^5$",
+_DISPLAY = {"relu^2": r"ReLU$^2$", "relu^3": r"ReLU$^3$",
             "gaussian": "gaussian", "softplus": "softplus",
             "leaky_relu": "leaky ReLU"}
-_SURFACE_MODEL_ORDER = ("gaussian", "softplus", "leaky_relu", "relu^2", "relu^5")
+_SURFACE_MODEL_ORDER = ("gaussian", "softplus", "leaky_relu", "relu^2", "relu^3")
 FIG_DIR = OUTPUT_DIR / "figures"
 
 
@@ -914,7 +915,7 @@ def fig_feedback_split(models: dict[str, dict[str, Any]], nets: dict[str, Any], 
 
     # One small phase panel per feedback law (house subfigure rule): the two
     # starts are the series (A = data side, blue; B = beyond the curve, red), so
-    # no trajectory ever hides another — in the composite overplot, ReLU^5's
+    # no trajectory ever hides another — in the composite overplot, a ReLU curve's
     # dashed line was drawn underneath four near-identical trajectories, which
     # made it look disconnected from its start.
     out: dict[str, str] = {}
@@ -942,7 +943,7 @@ def fig_feedback_split(models: dict[str, dict[str, Any]], nets: dict[str, Any], 
     # _MODEL_STYLE linestyle since none of them overlap the true-PMP curve.
     # Each panel's y-range is set from its own members' full excursion (plus a
     # margin) so softplus's saturation swings are shown in full rather than
-    # clipped — the ReLU^p panel stays tight since ReLU^2/^5 never saturate.
+    # clipped — the ReLU^p panel stays tight since its members never saturate.
     nonhomogeneous = tuple(name for name in models if not name.startswith("relu^"))
     homogeneous = tuple(name for name in models if name.startswith("relu^"))
     panels = {
@@ -1112,7 +1113,6 @@ def fig_frontier(best: list[dict[str, Any]]) -> str:
         "leaky_relu": "v",
         "relu^2": "^",
         "relu^3": "P",
-        "relu^5": "D",
     }
     tex_names = {
         "gaussian": r"\mathrm{gaussian}",
@@ -1121,7 +1121,6 @@ def fig_frontier(best: list[dict[str, Any]]) -> str:
         "leaky_relu": r"\mathrm{leaky\,ReLU}",
         "relu^2": r"\mathrm{ReLU}^2",
         "relu^3": r"\mathrm{ReLU}^3",
-        "relu^5": r"\mathrm{ReLU}^5",
     }
     labels = {}
     for name in _SURFACE_MODEL_ORDER:
