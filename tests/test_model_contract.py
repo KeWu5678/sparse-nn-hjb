@@ -1,9 +1,8 @@
-"""Both models satisfy the PDAPModel contract the trainer depends on."""
+"""The signed model satisfies the PDAPModel contract the trainer depends on."""
 
 import torch
 
 from src.models.base import PDAPModel
-from src.models.semiconcave import SemiconcaveModel
 from src.models.signed import SignedModel
 
 
@@ -22,19 +21,13 @@ def test_signed_model_is_pdap_model():
     assert isinstance(m, PDAPModel)
 
 
-def test_semiconcave_model_is_pdap_model():
-    m = SemiconcaveModel(power=1.0, verbose=False)
-    m.input_dim = 2
-    m.set_atoms(*_atoms())
-    assert isinstance(m, PDAPModel)
-
-
-def test_both_models_predict_to_numpy():
-    """predict() returns numpy (V, dV) for both — the gap SignedModel had filled."""
+def test_signed_model_predicts_to_numpy():
     x = torch.randn(6, 2, dtype=torch.float64).numpy()
-    for cls in (SignedModel, SemiconcaveModel):
-        m = cls(power=1.0, verbose=False)
-        m.input_dim = 2
-        m.set_atoms(*_atoms())
-        V, dV = m.predict(x)
-        assert V.shape == (6, 1) and dV.shape == (6, 2)
+    model = SignedModel(power=1.0, verbose=False)
+    model.input_dim = 2
+    model.set_atoms(*_atoms())
+
+    value, gradient = model.predict(x)
+
+    assert value.shape == (6, 1)
+    assert gradient.shape == (6, 2)

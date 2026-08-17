@@ -29,6 +29,7 @@ class ExperimentRun:
     run_id: str
     config: dict[str, Any] = field(default_factory=dict)
     hydra: dict[str, Any] = field(default_factory=dict)
+    provenance: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         self.output_dir = Path(self.output_dir)
@@ -85,6 +86,8 @@ class ExperimentRun:
             record["error"] = error
         if self.hydra:
             record["hydra"] = self.hydra
+        if self.provenance:
+            record["provenance"] = self.provenance
         if summary is not None and "elapsed_s" in summary:
             record["elapsed_s"] = summary["elapsed_s"]
         path.write_text(json.dumps(record, indent=2, default=str) + "\n", encoding="utf-8")
@@ -114,6 +117,8 @@ def publish_record_to_mlflow(
         for key, value in _flatten(record.get("config", {})):
             mlflow.log_param(key, _format_param(value))
         for key, value in _hydra_params(record.get("hydra", {})):
+            mlflow.log_param(key, _format_param(value))
+        for key, value in _flatten(record.get("provenance", {}), "provenance"):
             mlflow.log_param(key, _format_param(value))
 
         for key, value, step in _metric_events(record):
@@ -188,6 +193,7 @@ def _summary_metrics(record: dict[str, Any]) -> list[tuple[str, Real]]:
         "elapsed_s",
         "error",
         "hydra",
+        "provenance",
     }
     return [
         (key, value)

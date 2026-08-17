@@ -28,22 +28,22 @@ from typing import Optional, Tuple
 class ModelConfig:
     """A registered model = structure + insertion rule + hyperparameters.
 
-    ``kind`` and ``insertion`` form the model identity (the ``conf/model/*.yaml``
-    config group: signed/profile, semiconcave/profile, signed/finite_step).
+    ``kind`` is retained as the run-record model-family label and must be
+    ``"signed"``. ``insertion`` selects profile or finite-step insertion.
     ``activation`` is a registry name resolved to a callable at build time; its
     sphere geometry is bundled with the activation in the registry (see
     ``src.config.activations``), not configured here.
     """
 
     # identity
-    kind: str = "signed"          # "signed" | "semiconcave"
+    kind: str = "signed"          # the only active model family
     insertion: str = "profile"    # "profile" | "finite_step"
     # structure
     activation: str = "relu"      # name resolved via src.config.activations
+    # Closed-form coefficient correction is implemented for powers 1, 2, and 3.
     power: float = 1.0
     # (w1, w2) = (value loss weight, gradient loss weight); l2 = (1, 0), h1 = (1, 1)
     loss_weights: Tuple[float, float] = (1.0, 1.0)
-    c_init: float = 1.0           # semiconcave only
     # Regularization.  The penalty on the atom weights is  alpha * sum_i phi(|c_i|^q),
     # with q = 2/(power+1) (power is the activation exponent set above).  The two
     # penalties this project uses are selected by how you set power and gamma:
@@ -54,15 +54,11 @@ class ModelConfig:
     alpha: float = 1e-5
     gamma: float = 0.0   # 0 => log term off (power penalty); > 0 => log penalty
     th: float = 0.5      # L1 (th=1) <-> non-convex log (th=0); only acts when gamma > 0
-    # Parameter-moment axis (paper/paper_0805.tex, Section 3): adds, on top
-    # of alpha*Phi_1, the weighted-TV term  beta * sum_j (1 + |omega_j|^p) |c_j|
-    # with omega_j = (a_j, b_j).  It prices distant neurons out and supplies the
-    # tightness Phi_1 lacks (existence by narrow compactness; confined support).
-    # moment_beta = 0 turns it off (default => today's behavior).  When on it is
-    # confined to its meaningful regime -- a non-sphere activation (|omega| is a
-    # free scale, not gauge-fixed to the sphere), the q=1 log family (power == 1),
-    # signed kind, and profile insertion -- and PDAP raises otherwise.
-    moment_beta: float = 0.0    # 0 => moment axis off; > 0 => on
+    # Algorithm 1 evaluates the penalty on the normalized measure
+    # mu_p = w_p*mu, with w_p(omega) = 1 + |omega|^p.  For a signed profile model
+    # with a nonhomogeneous activation this is the only supported objective; PDAP
+    # applies it automatically.  Algorithm 2 is sphere-normalized and does not use
+    # this parameter.
     moment_order: float = 2.0   # p in the weight w_p(omega) = 1 + |omega|^p
 
 
@@ -71,10 +67,52 @@ class TrainingConfig:
     """How the model is fit: outer PDAP loop + SSN solver + insertion constants."""
 
     # outer PDAP loop
-    num_iterations: int = 10
-    num_insertion: int = 50
-    max_insert: int = 15
-    prune_amp_tol: float = 1e-8
+    num_iterations: int = 10      # T_out
+    num_insertion: int = 50       # N_trial, candidates sampled per iteration
+    max_insert: int = 15          # N_ins, cap on atoms inserted per iteration (batch mode)
+    prune_amp_tol: float = 1e-8   # eps_prune: drop atoms with |c_n| <= this
+    # --- paper-conformance axes (paper/paper_0805.tex, Section 5) --------------
+    # Defaults retain the general-purpose training behavior; the Algorithm 1
+    # experiment preset selects the paper-specific values explicitly.
+    #
+    # insert_init -- initial outer weight of a freshly inserted atom.
+    #   "warm_start"  -- the coordinate-descent batch warm start: one combined
+    #                    descent direction, one scalar prox step, so the best atom
+    #                    gets a real coefficient and the rest ~sqrt(eps).
+    #   "guaranteed"  -- the theorem's per-atom coefficient
+    #                    c(omega) = -Delta(mu,omega)/(w_p(omega)*||K_p(omega)||^2)
+    #                              * sign(P_p(omega)),
+    #                    which decreases the objective by at least
+    #                    Delta^2/(2||K_p||^2).  Ignored by finite_step insertion,
+    #                    whose c* is already the paper's initialization.
+    insert_init: str = "warm_start"
+    # insert_mode -- how many atoms enter per outer iteration.
+    #   "batch"       -- up to max_insert candidates at once, against one frozen
+    #                    residual.  Algorithm 1/2 as printed; the paper states that
+    #                    the per-step guarantees do not survive the cross terms.
+    #   "sequential"  -- exactly one selected atom per iteration. This removes the
+    #                    batch cross terms; the rate bound additionally requires an
+    #                    exact global maximizer. Raise num_iterations to match width.
+    insert_mode: str = "batch"
+    # correction_guard -- accept the SSN correction only if it did not increase the
+    # objective, otherwise keep the post-insertion coefficients.  SSN is a local
+    # method on a nonconvex penalty with no descent guarantee (and for q < 1 the
+    # penalty is not locally Lipschitz at 0), so this is what makes the outer loop
+    # monotone.
+    correction_guard: bool = False
+    # loop_order -- where the correction sits relative to the insertion.
+    #   "correction_first"  -- insert once up front, then per iteration
+    #                          correct -> prune -> record -> insert.  Leaves the
+    #                          final batch uncorrected and counted in final_neurons.
+    #   "insertion_first"   -- per iteration insert -> correct -> prune -> record,
+    #                          the order of Algorithms 1 and 2.
+    loop_order: str = "correction_first"
+    # radial_cap -- upper bound on the radial candidate search (non-sphere only).
+    #   "fixed"     -- the exp(5) clamp (see docs/adr/0006).
+    #   "theorem"   -- min(R(mu_t), exp(5)) with R from the quantitative insertion
+    #                  theorem; requires growth data for the activation, and falls
+    #                  back to the clamp when the activation declares none.
+    radial_cap: str = "fixed"
     # SSN solver (src/SSN/optimizer.py defaults + the hardcoded iterations=20)
     lr: float = 1.0
     method: str = "levenberg_marquardt"   # "levenberg_marquardt" | "steihaug_cg"
@@ -85,11 +123,11 @@ class TrainingConfig:
     fit_outer_iterations: int = 20
     display_every: int = 2
     # insertion numeric constants (src/PDAP/insertion.py)
-    ins_merge_tol: float = 1e-2    # cosine-similarity threshold for merging near-duplicate candidates (both methods)
+    # Nonhomogeneous Algorithm 1: absolute Euclidean distance in omega=(a,b).
+    # Sphere searches: cosine-similarity gap.
+    ins_merge_tol: float = 1e-2
     lbfgs_lr: float = 1e-2        # L-BFGS step size for dual-profile maximisation inside candidate search (both methods)
     lbfgs_steps: int = 200        # max L-BFGS iterations per candidate direction (both methods)
-    newton_tol: float = 1e-12     # relative residual tolerance for the Newton solve in finite_step (finite_step only)
-    newton_max_iter: int = 50     # max Newton iterations for the finite-step insertion weight solve (finite_step only)
 
 
 @dataclass

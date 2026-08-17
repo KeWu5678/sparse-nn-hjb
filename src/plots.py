@@ -804,8 +804,6 @@ def plot_model_value_surface(
     explicit tick positions; pass ``x_range``/``y_range`` to set the displayed extent
     (and re-evaluate the surface over it).
 
-    Note: ``semiconcave`` models do not round-trip through ``History`` faithfully
-    (the lossy atom record drops structure — issue #19); use a ``signed`` run here.
     """
     import pickle
 
@@ -925,19 +923,33 @@ def plot_neuron_h1_frontier(
       ``ls``     -- (optional) line style, default ``"-."``.
 
     Empty series (``ns`` of length 0) are skipped. Returns ``(fig, ax)``.
+
+    Markers are *subsampled*, not drawn at every point.  A frontier traced by
+    single-atom insertion has one point per neuron, so marking every point
+    would put well over a hundred glyphs on a curve: they overlap into a solid
+    band and hide the line they are meant to label.  ``markevery`` is given as
+    a fraction of the axes diagonal, which spaces the glyphs evenly in display
+    space rather than in data space -- the frontiers are dense at small neuron
+    counts, where even spacing in ``ns`` would still pile them up.  Each series
+    gets a different phase so glyphs from different curves do not align into
+    false columns.
     """
+    _MARKER_STRIDE = 0.09          # ~11 markers per curve along its own length
     with plt.rc_context(_FRONTIER_RC):
         fig, ax = plt.subplots(figsize=(8.5, 5.2), dpi=150)
         drawn = 0
-        for s in series:
+        n_series = max(len(series), 1)
+        for index, s in enumerate(series):
             ns = np.asarray(s["ns"])
             h1 = np.asarray(s["h1"])
             if ns.size == 0:
                 logger.warning("frontier: no points for %r — skipping", s.get("label"))
                 continue
+            phase = _MARKER_STRIDE * index / n_series
             ax.plot(ns, h1, ls=s.get("ls", "-."), lw=1.6, color=s["color"],
                     marker=s["marker"], ms=7.5, mfc=s["color"], mec="0.15",
-                    mew=0.8, label=s["label"], zorder=3)
+                    mew=0.8, markevery=(phase, _MARKER_STRIDE),
+                    label=s["label"], zorder=3)
             drawn += 1
         ax.set_yscale("log")
         ax.set_xlabel(xlabel)

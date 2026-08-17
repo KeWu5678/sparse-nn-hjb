@@ -1,14 +1,14 @@
 """Insertion strategies for the PDAP outer loop.
 
 An insertion strategy proposes new atoms (inner weights/biases) to add to the
-current support, given the data and the current residual.  Both strategies share
-the same candidate generation (sample S^d, L-BFGS-maximize the dual profile,
-iterative cosine-merge dedup, optional per-direction rescale); they differ only
-in the *acceptance* test:
+current support, given the data and the current residual.  Both strategies use
+multistart L-BFGS on the fidelity derivative, but their parameter domains and
+acceptance tests differ:
 
-  * ``profile_threshold`` — accept candidates whose dual profile exceeds ``alpha``.
-    Signed networks use the two-sided test ``|p|>alpha``; convex (semiconcave)
-    models use the one-sided ``p>alpha`` (convex atoms carry nonnegative mass).
+  * ``profile_threshold`` — for a nonhomogeneous dictionary, sample inside the
+    theorem/numerical radius, jointly refine ``omega=(a,b)``, discard final
+    points outside that radius, remove Euclidean near-duplicates, and apply the
+    configured profile threshold.  There is no direction-then-radius code path.
   * ``finite_step`` — accept candidates with a profitable finite step, i.e. where
     min_c Delta J(c; omega) < 0 (see :func:`solve_insertion_weight`); returns the
     optimal outer weight c* alongside each atom.  Used for the q<1 penalty.
@@ -21,11 +21,13 @@ configuration.
 from __future__ import annotations
 
 import logging
+import math
 from typing import Callable, List, Optional, Tuple
 
 import numpy as np
 import torch
 
+from ..SSN.prox import power_prox
 from .moment import moment_weight
 
 logger = logging.getLogger(__name__)
@@ -55,7 +57,7 @@ def _neuron_value_grad(
 def _profile_value(
     X, a, b, activation, power, w1, w2, Kx, res_v, res_dv, two_sided: bool,
 ) -> torch.Tensor:
-    """Dual profile p_t(omega) = w1/Kx <S,res_v> + w2/Kx <dS,res_dv> (abs if two_sided)."""
+    """Empirical fidelity derivative P_mu^M(omega), absolute when two-sided."""
     neuron_v, neuron_dv = _neuron_value_grad(X, a, b, activation, power)
     val_part = (neuron_v * res_v).sum() / Kx
     grad_part = (neuron_dv * res_dv).sum() / Kx
@@ -64,17 +66,30 @@ def _profile_value(
 
 
 # ---------------------------------------------------------------------------- #
-# Shared candidate generation: sample -> (maximize -> merge) x5 -> rescale
+# Shared candidate generation
 # ---------------------------------------------------------------------------- #
 def _generate_candidates(
     X, residual_v, residual_dv, *,
     activation, power, loss_weights, sample_sphere, N,
     merge_tol, two_sided, use_sphere, existing_atoms,
-    lbfgs_lr=1e-2, lbfgs_steps=200, moment_beta=0.0, moment_order=2.0,
-) -> Tuple[torch.Tensor, torch.Tensor, int]:
-    """Return (a_t, b_t, n_after_merge): distinct dual-profile maximisers on S^d."""
+    lbfgs_lr=1e-2, lbfgs_steps=200, moment_order=2.0,
+    normalized=False, radius=None,
+) -> Tuple[torch.Tensor, torch.Tensor, int, int]:
+    """Return distinct locally refined maximizers of the configured search score.
+
+    Homogeneous activations are searched on ``S^d``.  For nonhomogeneous
+    activations, initial points are sampled inside ``radius`` and all components
+    of ``omega=(a,b)`` are then optimized jointly without a constraint.  When
+    optimized nonhomogeneous points outside the sampling radius are discarded
+    rather than projected back.  Homogeneous activations retain the normalized
+    sphere search used by Algorithm 2.
+    """
+    if not use_sphere and not normalized:
+        raise ValueError(
+            "nonhomogeneous candidate search requires normalized Algorithm 1"
+        )
     K, d_dim = X.shape
-    Kx = K * d_dim  # MATLAB: numel(xhat) = d * N_points
+    Kx = K  # M, the sample count: the empirical fidelity is 1/(2M) * sum_m
     w1, w2 = loss_weights
 
     # Normalize residual for the L-BFGS direction search (MATLAB find_max:385).
@@ -83,6 +98,21 @@ def _generate_candidates(
     res_dv_n = residual_dv / res_norm
 
     def maximize_batch(a_batch, b_batch, steps=200, lr=1e-2, eps=1e-12):
+        """Locally maximize the configured profile score from each starting point.
+
+        For a positively homogeneous activation the parameter is gauge-fixed to
+        the sphere, so the profile is maximized over directions and the iterate
+        is renormalized after every step.  For a nonhomogeneous activation the
+        radial variable is a genuine shape parameter and is optimized *jointly*
+        with the direction: maximizing over directions at |omega| = 1 and then
+        over the radius along the winning direction is a strictly weaker search,
+        because the profile does not factor into radial and directional parts,
+        so the best direction at unit radius need not be the direction of a
+        joint maximizer.
+
+        The nonhomogeneous solve is unconstrained.  Its caller may subsequently
+        discard a final point outside the radius used to sample its start.
+        """
         results_a, results_b = [], []
         for a0, b0 in zip(a_batch, b_batch):
             w = torch.cat([a0.reshape(-1), b0.reshape(-1)]).detach().clone().requires_grad_(True)
@@ -90,14 +120,18 @@ def _generate_candidates(
 
             def closure():
                 opt.zero_grad()
-                w_s = w / w.norm().clamp_min(eps)
+                joint = not use_sphere
+                w_s = w if joint else w / w.norm().clamp_min(eps)
                 obj = _profile_value(X, w_s[:d_dim], w_s[d_dim], activation, power,
                                      w1, w2, Kx, res_v_n, res_dv_n, two_sided)
+                if joint and normalized:
+                    obj = obj / moment_weight(w_s[:d_dim], w_s[d_dim], moment_order)
                 (-obj).backward()
                 return -obj
 
             opt.step(closure)
-            w_s = (w / w.norm().clamp_min(eps)).detach()
+            joint = not use_sphere
+            w_s = w.detach() if joint else (w / w.norm().clamp_min(eps)).detach()
             results_a.append(w_s[:d_dim])
             results_b.append(w_s[d_dim:d_dim + 1])
         return torch.stack(results_a), torch.stack(results_b).reshape(-1)
@@ -107,72 +141,86 @@ def _generate_candidates(
         if n <= 1:
             return a_cands, b_cands
         U = torch.cat([a_cands, b_cands.reshape(-1, 1)], dim=1)
-        U = U / U.norm(dim=1, keepdim=True).clamp_min(1e-12)
-        sim = U @ U.T
-        keep = torch.ones(n, dtype=torch.bool)
+        if use_sphere:
+            unit = U / U.norm(dim=1, keepdim=True).clamp_min(1e-12)
+            duplicate = unit @ unit.T > 1.0 - merge_tol
+        else:
+            duplicate = torch.cdist(U, U) <= merge_tol
+        keep = torch.ones(n, dtype=torch.bool, device=U.device)
         for i in range(n):
             if keep[i]:
                 for j in range(i + 1, n):
-                    if keep[j] and sim[i, j] > 1.0 - merge_tol:
+                    if keep[j] and duplicate[i, j]:
                         keep[j] = False
         return a_cands[keep], b_cands[keep]
 
-    # Step 1: candidates = random samples + existing support.
+    # Step 1: random starts.  Only the homogeneous sphere search injects the
+    # existing support.
+    #
+    # The homogeneous search is posed on the sphere, so its starting points live
+    # there.  The nonhomogeneous search ranges over the ball of radius
+    # ``radius``, and its starting points carry a radius too -- starting every
+    # trajectory at |omega| = 1 would bias the search toward that shell.
+    #
+    # The radius is drawn log-uniformly, not uniformly in volume.  Uniform in
+    # the ball puts r = R * U^(1/(d+1)), whose median already sits at ~0.79 R;
+    # with R = e^5 nearly every start lands in the far field, where the
+    # normalized profile |P|/w_p is flat and vanishing, and the local solve
+    # cannot climb back.  Scale, not volume, is the meaningful spread for a
+    # shape parameter that ranges over decades.
     a_t, b_t = sample_sphere(N)
-    if existing_atoms is not None:
+    existing_unit = None
+    if not use_sphere:
+        r_max = float(radius) if radius is not None else math.exp(5.0)
+        lo, hi = math.log(math.exp(-3.0)), math.log(max(r_max, math.exp(-3.0) * 1.001))
+        u = torch.rand(a_t.shape[0], dtype=torch.float64)
+        r = torch.exp(lo + (hi - lo) * u)
+        a_t = a_t * r.unsqueeze(1)
+        b_t = b_t * r
+    if use_sphere and existing_atoms is not None:
         W_exist, b_exist = existing_atoms
         if W_exist.shape[0] > 0:
             U_exist = torch.cat([W_exist, b_exist.reshape(-1, 1)], dim=1)
             U_exist = U_exist / U_exist.norm(dim=1, keepdim=True).clamp_min(1e-12)
+            existing_unit = U_exist
             n_exist = U_exist.shape[0]
             if n_exist > N // 2:
                 U_exist = U_exist[torch.randperm(n_exist)[:N // 2]]
             a_t = torch.cat([a_t, U_exist[:, :d_dim]], dim=0)
             b_t = torch.cat([b_t, U_exist[:, d_dim]], dim=0)
 
-    # Step 2: iterative optimize + merge (MATLAB find_max:390-414).
+    # A nonhomogeneous search uses one joint solve from each random start, then
+    # filters and deduplicates once.  Algorithm 2 retains its repeated sphere
+    # refinement after merges.
     n_after = a_t.shape[0]
-    for _ in range(5):
+    discarded_outside = 0
+    refinement_rounds = 5 if use_sphere else 1
+    for _ in range(refinement_rounds):
         a_t, b_t = maximize_batch(a_t, b_t, steps=lbfgs_steps, lr=lbfgs_lr)
+        if not use_sphere:
+            U = torch.cat([a_t, b_t.reshape(-1, 1)], dim=1)
+            r_max = float(radius) if radius is not None else math.exp(5.0)
+            inside = torch.linalg.vector_norm(U, dim=1) <= r_max
+            discarded_outside += int((~inside).sum().item())
+            a_t, b_t = a_t[inside], b_t[inside]
         n_before = a_t.shape[0]
         a_t, b_t = merge(a_t, b_t)
         n_after = a_t.shape[0]
         if n_before == n_after:
             break
 
-    # Step 2.5: non-sphere activations also optimise a per-direction scale r>0.
-    # With the moment axis on, the scale search maximises the net margin
-    # |P(r*d)| - beta*w_p(r*d) rather than the raw profile, so a real
-    # fidelity-vs-moment tradeoff confines r (replacing the ad-hoc exp(5) clamp,
-    # which is kept only as a numeric safety rail).  The profile here is against
-    # the *normalized* residual, so the moment cost is divided by res_norm to
-    # share units with it; argmax is unchanged relative to the raw-unit tradeoff.
-    if not use_sphere:
-        moment_scale = float(moment_beta) / float(res_norm) if moment_beta > 0.0 else 0.0
-        scaled_a, scaled_b = [], []
-        for a_hat, b_hat in zip(a_t, b_t):
-            s = torch.tensor([0.0], dtype=torch.float64, requires_grad=True)
-            opt_s = torch.optim.LBFGS([s], lr=0.1, max_iter=20, line_search_fn="strong_wolfe")
-            a_h, b_h = a_hat.detach(), b_hat.detach()
+    # Existing atoms are useful L-BFGS starts for the fractional-power method,
+    # but its one-atom increment assumes a distinct new location.  Drop final
+    # k>1 candidates that return to the current support.  The k=1 ReLU--L1
+    # baseline intentionally retains its established candidate behavior.
+    if use_sphere and power > 1.0 and existing_unit is not None and a_t.shape[0] > 0:
+        U = torch.cat([a_t, b_t.reshape(-1, 1)], dim=1)
+        U = U / U.norm(dim=1, keepdim=True).clamp_min(1e-12)
+        distinct = torch.all(U @ existing_unit.T <= 1.0 - merge_tol, dim=1)
+        a_t, b_t = a_t[distinct], b_t[distinct]
+        n_after = a_t.shape[0]
 
-            def closure_s():
-                opt_s.zero_grad()
-                r = torch.exp(s.clamp(-3, 5))
-                obj = _profile_value(X, r * a_h, r * b_h, activation, power,
-                                     w1, w2, Kx, res_v_n, res_dv_n, two_sided)
-                if moment_scale > 0.0:
-                    obj = obj - moment_scale * moment_weight(r * a_h, r * b_h, moment_order)
-                (-obj).backward()
-                return -obj
-
-            opt_s.step(closure_s)
-            best_r = torch.exp(s.clamp(-3, 5)).detach()
-            scaled_a.append((best_r * a_hat).detach())
-            scaled_b.append((best_r * b_hat).detach())
-        a_t = torch.stack(scaled_a)
-        b_t = torch.stack(scaled_b).reshape(-1)
-
-    return a_t, b_t, n_after
+    return a_t, b_t, n_after, discarded_outside
 
 
 # ---------------------------------------------------------------------------- #
@@ -183,71 +231,146 @@ def profile_threshold(
     activation, power, loss_weights, alpha, sample_sphere, N,
     max_insert=15, merge_tol=1e-2, two_sided=True, use_sphere=True,
     existing_atoms=None, verbose=True,
-    lbfgs_lr=1e-2, lbfgs_steps=200, moment_beta=0.0, moment_order=2.0,
-) -> Tuple[np.ndarray, np.ndarray]:
-    """Accept atoms whose (unnormalised) dual profile exceeds the threshold.
+    lbfgs_lr=1e-2, lbfgs_steps=200, moment_order=2.0,
+    normalized=False, insert_init="warm_start", radius=None,
+) -> Tuple[np.ndarray, np.ndarray, Optional[np.ndarray]]:
+    """Accept atoms whose derivative magnitude clears the insertion threshold.
 
-    Without the moment axis the threshold is ``alpha`` (the classical rule).  With
-    it (``moment_beta > 0``) the threshold is the draft's insertion condition
-    ``alpha + beta*w_p(omega)`` -- a distant candidate must clear a higher bar --
-    and candidates are ranked by the margin above it.
+    Two model families use this search:
+
+      * normalized Algorithm 1 uses
+        ``|P_p(omega)| > alpha*L_phi`` with ``P_p = P/w_p``.  ``L_phi = phi'(0+) = 1``
+        for the whole log family, so the threshold is just ``alpha``.
+      * an unnormalized profile model uses the classical ``|P(omega)| > alpha``.
+
+    Candidates are ranked by their margin above the threshold, which in the
+    normalized case is the certificate violation
+    ``Delta(mu,omega) = max{|P_p(omega)| - alpha*L_phi, 0}``.
+
+    Returns ``(W, b, c)``; ``c`` is ``None`` unless ``insert_init="guaranteed"``,
+    in which case it carries the theorem's per-atom coefficient.
     """
     K, d_dim = X.shape
-    Kx = K * d_dim
+    Kx = K  # M, the sample count (empirical fidelity is 1/(2M) * sum_m)
     w1, w2 = loss_weights
 
-    a_t, b_t, n_after = _generate_candidates(
+    a_t, b_t, n_after, discarded_outside = _generate_candidates(
         X, residual_v, residual_dv, activation=activation, power=power,
         loss_weights=loss_weights, sample_sphere=sample_sphere, N=N,
         merge_tol=merge_tol, two_sided=two_sided, use_sphere=use_sphere,
         existing_atoms=existing_atoms, lbfgs_lr=lbfgs_lr, lbfgs_steps=lbfgs_steps,
-        moment_beta=moment_beta, moment_order=moment_order,
+        moment_order=moment_order, normalized=normalized, radius=radius,
     )
+
+    guaranteed = insert_init == "guaranteed"
+    if guaranteed and not two_sided:
+        raise ValueError(
+            "insert_init='guaranteed' requires a two-sided signed coefficient"
+        )
+
+    res_v_flat = residual_v.reshape(-1)
+    res_dv_flat = residual_dv.reshape(-1)
 
     accepted_a: List[torch.Tensor] = []
     accepted_b: List[torch.Tensor] = []
     accepted_scores: List[float] = []
+    accepted_c: List[float] = []
     with torch.enable_grad():
         for a_i, b_i in zip(a_t, b_t):
-            v = float(_profile_value(X, a_i, b_i, activation, power,
-                                     w1, w2, Kx, residual_v, residual_dv, two_sided).item())
-            moment_cost = moment_beta * float(moment_weight(a_i, b_i, moment_order)) if moment_beta > 0.0 else 0.0
-            if v > alpha + moment_cost:
-                accepted_a.append(a_i.detach())
-                accepted_b.append(b_i.detach())
-                accepted_scores.append(v - moment_cost)  # margin above alpha; ranks candidates
+            neuron_v, neuron_dv = _neuron_value_grad(X, a_i, b_i, activation, power)
+            S_val = neuron_v.detach().reshape(-1)
+            S_grad = neuron_dv.detach().reshape(-1)
+            # P(omega): the Gateaux derivative of the fidelity in the direction
+            # delta_omega, in unnormalized (physical-coefficient) units.
+            p_signed = float(
+                (w1 / Kx) * S_val.dot(res_v_flat) + (w2 / Kx) * S_grad.dot(res_dv_flat)
+            )
+            v = abs(p_signed) if two_sided else p_signed
+            w_p = float(moment_weight(a_i, b_i, moment_order))
+
+            # Express the normalized condition in physical-profile units:
+            # |P|/w_p > alpha*L_phi with L_phi = phi'(0+) = 1.
+            if normalized:
+                threshold = alpha * w_p
+                score = v / w_p - alpha          # Delta(mu, omega)
+            else:
+                threshold = alpha
+                score = v - threshold
+            if v <= threshold:
+                continue
+
+            accepted_a.append(a_i.detach())
+            accepted_b.append(b_i.detach())
+            accepted_scores.append(score)
+            if guaranteed:
+                # Exact minimizer of the increment bound
+                #   c*P + c^2*||K||^2/2 + (threshold)|c|,
+                # i.e. the theorem's step with the per-neuron curvature
+                # A_p = ||K_p||^2 in place of the uniform B_p^2.
+                S_sq = float(
+                    (w1 / Kx) * S_val.dot(S_val) + (w2 / Kx) * S_grad.dot(S_grad)
+                )
+                if S_sq < 1e-30:
+                    accepted_a.pop(); accepted_b.pop(); accepted_scores.pop()
+                    continue
+                magnitude = (v - threshold) / S_sq
+                accepted_c.append(-magnitude if p_signed > 0 else magnitude)
 
     if len(accepted_scores) > max_insert:
         order = sorted(range(len(accepted_scores)), key=lambda i: accepted_scores[i], reverse=True)[:max_insert]
         accepted_a = [accepted_a[i] for i in order]
         accepted_b = [accepted_b[i] for i in order]
+        if guaranteed:
+            accepted_c = [accepted_c[i] for i in order]
 
     if verbose:
+        rule = (
+            "|P|/w_p above alpha*L_phi" if normalized
+            else "|P| above alpha"
+        )
         logger.debug(
             "Candidate search  sampled=%d  unique=%d  accepted=%d/%d  "
-            "rule=residual correlation above alpha+beta*w_p (alpha=%.2e, moment_beta=%.2e)",
-            N, n_after, len(accepted_a), max_insert, alpha, moment_beta,
+            "rule=%s (alpha=%.2e, init=%s)",
+            N, n_after, len(accepted_a), max_insert, rule, alpha, insert_init,
         )
+        if discarded_outside:
+            logger.debug(
+                "Candidate search discarded %d refined candidate(s) outside the "
+                "search radius",
+                discarded_outside,
+            )
+        if not accepted_a and n_after == 0:
+            logger.debug(
+                "Candidate search retained no distinct candidate after geometric filters"
+            )
+        elif not accepted_a:
+            logger.debug("No retained candidate clears the insertion threshold")
 
     if len(accepted_a) == 0:
-        return np.empty((0, d_dim), dtype=np.float64), np.empty((0,), dtype=np.float64)
+        empty_c = np.empty((0,), dtype=np.float64) if guaranteed else None
+        return (
+            np.empty((0, d_dim), dtype=np.float64),
+            np.empty((0,), dtype=np.float64),
+            empty_c,
+        )
     return (
         torch.stack(accepted_a, dim=0).detach().cpu().numpy(),
         torch.stack(accepted_b, dim=0).detach().cpu().numpy(),
+        np.array(accepted_c, dtype=np.float64) if guaranteed else None,
     )
 
 
 # ---------------------------------------------------------------------------- #
-# Strategy 2: finite-step acceptance (q < 1)
+# Strategy 2: finite-step acceptance
 # ---------------------------------------------------------------------------- #
 def solve_insertion_weight(
     p_omega: float, S_sq: float, alpha: float, q: float,
-    newton_tol: float = 1e-12, max_iter: int = 50,
 ) -> Optional[Tuple[float, float]]:
-    """Solve min_c Delta J(c; omega) and return (c*, Delta J(c*)), or None.
+    """Minimize the actual one-atom objective increment.
 
-    Delta J(c; omega) = c * p_omega + (1/2) c^2 S_sq + (alpha/q) |c|^q.
-    For q >= 1 this reduces to the classical criterion |p| > alpha.
+    The increment is ``c*p_omega + S_sq*c^2/2 + alpha*|c|^q``.  After choosing
+    the sign opposite ``p_omega``, its magnitude is the global proximal point
+    at input ``|p_omega|/S_sq`` with proximal scale ``alpha/S_sq``.
     """
     if S_sq < 1e-30:
         return None
@@ -255,39 +378,16 @@ def solve_insertion_weight(
     if abs_p < 1e-30:
         return None
 
-    if q >= 1.0:
-        if abs_p <= alpha:
-            return None
-        c_opt = (abs_p - alpha) / S_sq
-        dJ = -abs_p * c_opt + 0.5 * S_sq * c_opt ** 2 + alpha * c_opt
-        sign = 1.0 if p_omega < 0 else -1.0
-        return (sign * c_opt, dJ)
-
-    # q < 1: finite-step.  h(c) = S^2 c + alpha c^{q-1} has a min at c_star.
-    c_star = (alpha * (1.0 - q) / S_sq) ** (1.0 / (2.0 - q))
-    h_min = S_sq * c_star + alpha * c_star ** (q - 1.0)
-    if abs_p < h_min:
+    prox_input = torch.tensor([abs_p / S_sq], dtype=torch.float64)
+    magnitude = float(power_prox(prox_input, alpha / S_sq, q=q)[0])
+    if magnitude <= 0.0:
         return None
 
-    # Newton on F(c) = S^2 c + alpha c^{q-1} - |p| = 0, right branch c > c_star.
-    c = max(abs_p / S_sq, 2.0 * c_star)
-    for _ in range(max_iter):
-        F = S_sq * c + alpha * c ** (q - 1.0) - abs_p
-        dF = S_sq + alpha * (q - 1.0) * c ** (q - 2.0)
-        if abs(dF) < 1e-30:
-            break
-        c_new = c - F / dF
-        if c_new <= c_star:
-            c_new = 0.5 * (c + c_star)
-        c = c_new
-        if abs(F) < newton_tol * (abs_p + 1e-30):
-            break
-
-    dJ = -abs_p * c + 0.5 * S_sq * c ** 2 + (alpha / q) * c ** q
-    if dJ >= 0:
+    dJ = -abs_p * magnitude + 0.5 * S_sq * magnitude ** 2 + alpha * magnitude ** q
+    if dJ >= 0.0:
         return None
     sign = 1.0 if p_omega < 0 else -1.0
-    return (sign * c, dJ)
+    return (sign * magnitude, dJ)
 
 
 def finite_step(
@@ -295,19 +395,21 @@ def finite_step(
     activation, power, loss_weights, alpha, sample_sphere, N,
     max_insert=15, merge_tol=1e-2, use_sphere=True,
     existing_atoms=None, verbose=True,
-    lbfgs_lr=1e-2, lbfgs_steps=200, newton_tol=1e-12, newton_max_iter=50,
+    lbfgs_lr=1e-2, lbfgs_steps=200,
+    radius=None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Accept atoms with a profitable finite step (Delta J(c*) < 0); return c* too."""
     K, d_dim = X.shape
-    Kx = K * d_dim
+    Kx = K  # M, the sample count (empirical fidelity is 1/(2M) * sum_m)
     w1, w2 = loss_weights
     q = 2.0 / (power + 1.0)
 
-    a_t, b_t, n_after = _generate_candidates(
+    a_t, b_t, n_after, _discarded_outside = _generate_candidates(
         X, residual_v, residual_dv, activation=activation, power=power,
         loss_weights=loss_weights, sample_sphere=sample_sphere, N=N,
         merge_tol=merge_tol, two_sided=True, use_sphere=use_sphere,
         existing_atoms=existing_atoms, lbfgs_lr=lbfgs_lr, lbfgs_steps=lbfgs_steps,
+        radius=radius,
     )
 
     res_v_flat = residual_v.reshape(-1)
@@ -324,10 +426,7 @@ def finite_step(
             S_grad = neuron_dv.detach().reshape(-1)
             p_omega = float((w1 / Kx) * S_val.dot(res_v_flat) + (w2 / Kx) * S_grad.dot(res_dv_flat))
             S_sq = float((w1 / Kx) * S_val.dot(S_val) + (w2 / Kx) * S_grad.dot(S_grad))
-            result = solve_insertion_weight(
-                p_omega, S_sq, alpha, q,
-                newton_tol=newton_tol, max_iter=newton_max_iter,
-            )
+            result = solve_insertion_weight(p_omega, S_sq, alpha, q)
             if result is not None:
                 c_star, dJ = result
                 accepted_a.append(a_i.detach())

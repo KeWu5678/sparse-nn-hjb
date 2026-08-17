@@ -10,11 +10,16 @@ Golden values: ``tests/fixtures/pdap_golden.npz``.  Regenerate from a known-good
 tree with ``PDAP_UPDATE_GOLDEN=1 pytest tests/test_pdap_equivalence.py``.
 
 Notes:
-- the semiconcave baseline was deliberately re-captured when its insertion was
-  unified onto the shared ``profile_threshold`` strategy.
 - the finite-step baseline was re-captured when PDAP pruning changed from
   duplicate-merge pruning to amplitude-only pruning; this keeps one additional
   atom in the short characterization run.
+- all three were re-captured when the empirical fidelity dropped the MATLAB
+  ``Nx = M*d`` divisor for the paper's ``1/(2M)``.  That is an exact
+  reparametrization of the objective (``alpha_paper = d * alpha_legacy``), so
+  the minimizer is unchanged, but it does not reproduce the old *run*: the
+  candidate L-BFGS (``insertion.py``) keeps torch's absolute
+  ``tolerance_grad=1e-7``, so scaling the profile by ``d`` shifts each refined
+  argmax by ~1e-6 and the trajectories separate.
 """
 
 from __future__ import annotations
@@ -36,9 +41,9 @@ SEED = 123
 RTOL, ATOL = 1e-5, 1e-7
 
 CONFIGS = {
-    "signed_profile": {"kind": "signed", "insertion": "profile"},
-    "semiconcave_profile": {"kind": "semiconcave", "insertion": "profile"},
-    "signed_finite_step": {"kind": "signed", "insertion": "finite_step"},
+    "signed_profile": {"kind": "signed", "insertion": "profile", "gamma": 0.1},
+    # Algorithm 2 at power 1 is the unchanged ReLU + L1 baseline.
+    "signed_finite_step": {"kind": "signed", "insertion": "finite_step", "gamma": 0.0},
 }
 
 
@@ -46,7 +51,7 @@ def _cfg(name: str) -> ExperimentConfig:
     c = CONFIGS[name]
     return ExperimentConfig(
         model=ModelConfig(kind=c["kind"], insertion=c["insertion"],
-                          power=1.0, alpha=1e-4, gamma=0.1),
+                          power=1.0, alpha=1e-4, gamma=c["gamma"]),
         training=TrainingConfig(),
         env=EnvConfig(verbose=False),
     )
@@ -55,8 +60,7 @@ def _cfg(name: str) -> ExperimentConfig:
 def _make_data(n: int = 60, seed: int = 0) -> dict:
     """Synthetic target V = log(1 + ||x||^2), dV = 2x/(1+||x||^2).
 
-    Genuinely nonlinear so all three variants insert atoms non-trivially (a pure
-    convex quadratic is degenerate for the semiconcave configuration: it fits with g=0).
+    Genuinely nonlinear so both variants insert atoms non-trivially.
     """
     g = torch.Generator().manual_seed(seed)
     x = torch.rand(n, 2, generator=g, dtype=torch.float64) * 3 - 1.5

@@ -2,7 +2,6 @@ import math
 
 import torch
 
-from src.models.semiconcave import SemiconcaveModel
 from src.models.signed import SignedModel
 from src.PDAP.history import History
 from src.PDAP.ssn_solve import Objective
@@ -34,36 +33,9 @@ def test_history_summary_metrics_uses_best_iteration() -> None:
         "best_iteration": 1,
         "best_neurons": 5,
         "final_neurons": 6,
+        # This fixture records no losses, so no outer iteration ran.
+        "iterations": 0,
     }
-
-
-def test_history_records_full_semiconcave_state_for_reconstruction() -> None:
-    W = torch.tensor([[1.0, 0.0], [0.0, 1.0]], dtype=torch.float64)
-    b = torch.tensor([0.1, -0.2], dtype=torch.float64)
-    c = torch.tensor([0.3, 0.4], dtype=torch.float64)
-    x = torch.tensor([[0.2, -0.3], [0.5, 0.7], [-0.4, 0.1]], dtype=torch.float64)
-
-    model = SemiconcaveModel(power=1.0, activation=torch.relu, verbose=False)
-    model.set_atoms(W, b, c)
-    with torch.no_grad():
-        model.C.fill_(2.5)
-        model.affine_w.copy_(torch.tensor([0.6, -0.8], dtype=torch.float64))
-        model.affine_b.fill_(1.2)
-
-    data = (*model.predict_tensors(x),)
-    samples = (x, data[0], data[1])
-    history = History()
-    history.record(model, Objective(), samples, samples)
-
-    restored = SemiconcaveModel(power=1.0, activation=torch.relu, verbose=False)
-    history.restore_model(restored)
-
-    assert torch.allclose(restored.C, model.C)
-    assert torch.allclose(restored.affine_w, model.affine_w)
-    assert torch.allclose(restored.affine_b, model.affine_b)
-    restored_v, restored_dv = restored.predict_tensors(x)
-    assert torch.allclose(restored_v, data[0])
-    assert torch.allclose(restored_dv, data[1])
 
 
 def test_restoring_a_zero_measure_snapshot_empties_an_initialized_model() -> None:
@@ -99,7 +71,7 @@ def test_restoring_a_zero_measure_snapshot_empties_an_initialized_model() -> Non
     assert torch.allclose(gradient, torch.zeros_like(gradient))
 
 
-def test_history_summary_records_moment_objective_decomposition() -> None:
+def test_history_summary_records_normalized_objective_decomposition() -> None:
     W = torch.tensor([[1.0, 0.0], [0.0, 2.0], [3.0, 4.0]], dtype=torch.float64)
     b = torch.zeros(3, dtype=torch.float64)
     c = torch.tensor([50.0, -45.0, 5.0], dtype=torch.float64)
@@ -113,34 +85,32 @@ def test_history_summary_records_moment_objective_decomposition() -> None:
         alpha=0.1,
         gamma=0.0,
         loss_weights=(1.0, 1.0),
-        moment_beta=0.01,
         moment_order=2.0,
+        normalized=True,
     )
 
     history = History()
     history.record(model, objective, samples, samples)
     metrics = history.summary_metrics()
 
-    # gamma=0 gives Phi_1 = sum |c| = 100.
-    # Psi_2 = 50*(1+1) + 45*(1+4) + 5*(1+25) = 455.
-    assert math.isclose(metrics["phi_1"], 100.0, rel_tol=1e-12)
+    # gamma=0 gives Phi_1(mu_p) = Psi_2(mu)
+    # = 50*(1+1) + 45*(1+4) + 5*(1+25) = 455.
+    assert math.isclose(metrics["phi_1"], 455.0, rel_tol=1e-12)
     assert math.isclose(metrics["psi_p"], 455.0, rel_tol=1e-12)
-    assert math.isclose(metrics["alpha_phi_1"], 10.0, rel_tol=1e-12)
-    assert math.isclose(metrics["beta_psi_p"], 4.55, rel_tol=1e-12)
+    assert math.isclose(metrics["alpha_phi_1"], 45.5, rel_tol=1e-12)
     assert math.isclose(metrics["radius_r95"], 2.0, rel_tol=1e-12)
     assert math.isclose(metrics["radius_max"], 5.0, rel_tol=1e-12)
     assert math.isclose(metrics["total_variation"], 100.0, rel_tol=1e-12)
 
     # Targets equal predictions, so both fidelity channels vanish and the
-    # complete objective is exactly the two regularizer terms.
+    # complete objective is exactly the normalized-measure penalty.
     assert metrics["data_value_term_train"] == 0.0
     assert metrics["data_gradient_term_train"] == 0.0
-    assert math.isclose(metrics["objective_train"], 14.55, rel_tol=1e-12)
+    assert math.isclose(metrics["objective_train"], 45.5, rel_tol=1e-12)
     assert math.isclose(
         metrics["objective_train"],
         metrics["data_value_term_train"]
         + metrics["data_gradient_term_train"]
-        + metrics["alpha_phi_1"]
-        + metrics["beta_psi_p"],
+        + metrics["alpha_phi_1"],
         rel_tol=1e-12,
     )

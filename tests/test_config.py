@@ -22,6 +22,7 @@ def test_compose_defaults() -> None:
     assert cfg.model.activation == "relu"
     assert cfg.model.power == 1.0
     assert cfg.model.alpha == 1e-5
+    assert "c_init" not in cfg.model
     assert cfg.training.num_iterations == 10
     assert cfg.training.max_ls_iter == 500
     assert cfg.training.ins_merge_tol == 1e-2
@@ -32,13 +33,17 @@ def test_compose_defaults() -> None:
 
 def test_model_groups() -> None:
     with initialize(version_base=None, config_path="../conf"):
-        sc = compose(config_name="config", overrides=["model=semiconcave"])
         fs = compose(config_name="config", overrides=["model=frac_exp_penalty"])
-    assert sc.model.kind == "semiconcave"
-    assert sc.model.insertion == "profile"
+        alg1 = compose(config_name="config", overrides=[
+            "model=paper_log_penalty",
+            "model.activation=softplus",
+        ])
     # frac_exp_penalty config group = signed + finite_step
     assert fs.model.kind == "signed"
     assert fs.model.insertion == "finite_step"
+    assert PDAP(alg1).objective.normalized
+    assert "objective" not in alg1.model
+    assert "moment_beta" not in alg1.model
 
 
 def test_curated_experiment_configs_compose() -> None:
@@ -106,3 +111,25 @@ def test_use_sphere_derives_from_activation() -> None:
     # default activation is relu (homogeneous -> sphere); matern52 is not
     assert PDAP(default)._use_sphere is True
     assert PDAP(smooth)._use_sphere is False
+
+
+def test_algorithm2_provenance_describes_the_actual_coefficient_solver() -> None:
+    with initialize(version_base=None, config_path="../conf"):
+        l1 = compose(
+            config_name="config",
+            overrides=["model=frac_exp_penalty", "model.power=1", "env.verbose=false"],
+        )
+        fractional = compose(
+            config_name="config",
+            overrides=["model=frac_exp_penalty", "model.power=2", "env.verbose=false"],
+        )
+        profile = compose(config_name="config", overrides=["env.verbose=false"])
+
+    assert PDAP(l1).coefficient_solver_provenance == {
+        "coefficient_solver": "soft_threshold",
+    }
+    assert PDAP(fractional).coefficient_solver_provenance == {
+        "coefficient_solver": "global_prox_warmstart_scale",
+        "rho": 0.5,
+    }
+    assert PDAP(profile).coefficient_solver_provenance == {}

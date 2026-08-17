@@ -16,6 +16,7 @@ activation names here instead of carrying local dictionaries.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Callable
 
 import torch
@@ -340,6 +341,61 @@ ACTIVATIONS: dict[str, tuple[Callable, bool]] = {
 
 
 # ---------------------------------------------------------------------------- #
+# Polynomial growth data (paper/paper_0805.tex, Assumption "Regularity and
+# polynomial growth of rho")
+# ---------------------------------------------------------------------------- #
+@dataclass(frozen=True)
+class Growth:
+    """Constants of the activation's polynomial growth bound.
+
+        |rho(z)|  <= C_rho (1 + |z|)^s0
+        |rho'(z)| <= C_rho (1 + |z|)^(s1 - 1)
+
+    ``s0`` bounds the value atom in ``L^2(D)`` and ``s1`` the full atom in
+    ``H^1(D)``; the assumption forces ``s1 >= max(s0, 1)``.  The sufficient
+    conditions on the moment order are ``p > s0`` for existence and ``p > s1``
+    for bounded support, and ``s1`` is the exponent appearing in the theorem's
+    search radius.
+
+    These are properties of the activation alone.  The data-dependent part of the
+    radius constant is supplied separately from the sample extent
+    (:func:`src.PDAP.radius.certificate_radius`).
+    """
+
+    C_rho: float
+    s0: float
+    s1: float
+
+
+# Derived by hand and checked numerically by
+# ``tests/test_paper_conformance.py::test_declared_growth_constants_are_upper_bounds``.
+# Kept in its own table rather than as a third slot in ``ACTIVATIONS`` because
+# only the swept activations have derived constants; a third tuple element would
+# force an explicit ``None`` onto all 300+ registry lines.  An activation absent
+# here simply has no theorem radius and keeps the fixed comparison bound.
+GROWTH: dict[str, Growth] = {
+    # |relu(z)| <= |z|, |relu'| <= 1.  (s1 = 1 is the assumption's floor.)
+    "relu": Growth(1.0, 1.0, 1.0),
+    "leaky_relu": Growth(1.0, 1.0, 1.0),
+    # softplus(z) = log(1+e^z) <= log2 + max(z,0); sigma' = sigmoid in (0,1).
+    "softplus": Growth(1.0, 1.0, 1.0),
+    # bounded activations: |rho| <= 1, |rho'| <= 1.
+    "tanh": Growth(1.0, 0.0, 1.0),
+    "gaussian": Growth(1.0, 0.0, 1.0),
+    "gausscent_1": Growth(1.0, 0.0, 1.0),
+    "matern52": Growth(1.0, 0.0, 1.0),
+    # gelu(z) = z*Phi(z) with Phi in (0,1), so gelu(z)^2 <= z^2 and
+    # (gelu^2)' = 2*gelu*gelu' grows linearly.
+    "gelu_squared": Growth(2.26, 2.0, 2.0),
+}
+
+
+def get_growth(name: str) -> Growth | None:
+    """Growth constants for an activation, or ``None`` when none are declared."""
+    return GROWTH.get(name)
+
+
+# ---------------------------------------------------------------------------- #
 # Resolver
 # ---------------------------------------------------------------------------- #
 def _lookup(name: str) -> tuple[Callable, bool]:
@@ -365,4 +421,12 @@ def get_use_sphere(name: str) -> bool:
     return _lookup(name)[1]
 
 
-__all__ = ["ACTIVATIONS", "get_activation", "get_use_sphere", "matern52"]
+__all__ = [
+    "ACTIVATIONS",
+    "GROWTH",
+    "Growth",
+    "get_activation",
+    "get_growth",
+    "get_use_sphere",
+    "matern52",
+]

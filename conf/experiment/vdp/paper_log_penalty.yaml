@@ -1,0 +1,36 @@
+# @package _global_
+# vdp/paper_log_penalty: Algorithm 1 on the Van der Pol value function, using
+# the normalized-measure objective, candidate-specific insertion coefficient,
+# guarded correction, insertion-first loop, and computable search radius.
+# `moment_order` is fixed at 2.01 here; `make paper-p-study` varies it separately.
+# The manuscript reports sequential insertion with one candidate per iteration
+# and a 150-iteration neuron budget.  The main study also records batch insertion
+# as a numerical variant.
+defaults:
+  - override /model: paper_log_penalty
+  - override /data: vdp
+
+name: vdp_paper_log_penalty
+
+model:
+  power: 1.0
+  alpha: 1e-5
+  moment_order: 2.01
+
+training:
+  insert_init: guaranteed
+  correction_guard: true
+  loop_order: insertion_first
+  radial_cap: theorem
+
+data:
+  normalize: true
+
+hydra:
+  sweeper:
+    params:
+      model: paper_log_penalty
+      model.activation: leaky_relu,softplus,tanh,gaussian,gausscent_1,matern52,gelu_squared
+      model.alpha: 1e-2,1e-3,1e-4,1e-5
+      model.gamma: 0,0.1,1,10
+      model.loss_weights: "[1.0,0.0],[1.0,1.0]"

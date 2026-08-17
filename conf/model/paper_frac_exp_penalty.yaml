@@ -1,0 +1,21 @@
+# Registered model: the model half of Algorithm 2 in paper/paper_0805.tex.
+#
+# Identical to `frac_exp_penalty` (signed network, finite-step insertion, penalty
+# |c|^q with q = 2/(k+1), gamma = 0 by design).  The k-homogeneous formulation
+# normalizes the inner parameters onto the sphere and absorbs the radial scale
+# into the outer coefficient, so it carries no moment weight w_p. `insert_init`
+# and `radial_cap` are inert for it and stay at their defaults.
+# Finite-step insertion minimizes the actual one-atom objective increment with
+# the exact scalar proximal map.  The outer-weight correction uses the same
+# global map with a warm-start-derived internal scale; run records identify that
+# solver and its selected rho.  Closed forms are implemented for k=2 and k=3;
+# k=1 remains the separate ReLU + L1 baseline.  The search runs on the compact
+# sphere, so there is no radial cap to bound.
+#
+# The axes that do apply to it -- correction_guard and loop_order, plus
+# insert_mode -- live under `training` and are set by the experiment configs in
+# conf/experiment/*/paper_frac_exp_penalty.yaml.  This preset exists so the two
+# paper-conforming families are named symmetrically.
+kind: signed
+insertion: finite_step
+gamma: 0.0

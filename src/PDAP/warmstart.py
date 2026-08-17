@@ -1,15 +1,9 @@
-"""Coordinate-descent warm start for newly inserted atoms.
+"""Coordinate-descent warm start for newly inserted signed atoms.
 
 One 1-D proximal step (MATLAB PDAPmultisemidiscrete.m:104-147): pick the new
 candidate whose descent profile against the current residual is largest, take the
 nonconvex prox step along that combined direction, and return initial outer
 weights for all new atoms.
-
-The signed and semiconcave models share this computation exactly. They differ
-only in how an atom enters the value function: the signed network *adds* it
-(two-sided weights, descend along -profile), while the semiconcave model
-*subtracts* a convex ``g`` (nonnegative weights, ascend along +profile then clamp
-at zero). That single difference is the ``nonneg`` flag.
 """
 
 from __future__ import annotations
@@ -38,17 +32,14 @@ def warm_start(
     th: float,
     gamma: float,
     use_sphere: bool = True,
-    nonneg: bool = False,
-    moment_beta: float = 0.0,
     moment_order: float = 2.0,
+    normalized: bool = False,
     verbose: bool = False,
 ) -> torch.Tensor:
     """Return initial outer weights ``(n_new,)`` for the new atoms.
 
     ``residual = (res_v, res_dv)`` is ``prediction - target`` from the current
     model (the trainer owns the no-atoms case, where it is ``-target``).
-    ``nonneg`` selects the semiconcave convention: nonnegative weights for an atom
-    that enters the value function with a minus sign.
     """
     n_new = W_new.shape[0]
     if n_new == 0:
@@ -58,8 +49,7 @@ def warm_start(
     res_v = res_v.detach().reshape(-1)
     res_dv = res_dv.detach().reshape(-1)
     X_det = X.detach()
-    N, d = X_det.shape[0], X_det.shape[1]
-    Nx = N * d
+    Nx = X_det.shape[0]  # M, the sample count (empirical fidelity is 1/(2M) * sum_m)
     w1, w2 = loss_weights
     p = power
 
@@ -77,6 +67,16 @@ def warm_start(
         dS_dz = act_deriv if p == 1.0 else p * act ** (p - 1) * act_deriv
         S_grad = (dS_dz.unsqueeze(2) * W_new.unsqueeze(0)).permute(0, 2, 1).reshape(-1, n_new)
 
+        # Normalized objective: run the whole warm start on the normalized
+        # dictionary K_p = K/w_p, so ``out`` is the normalized coefficient u and the
+        # penalty seen by the prox is the ordinary phi(|u|).  Converted back to the
+        # physical c = u/w_p on return.
+        w_p_atoms = None
+        if normalized:
+            w_p_atoms = moment_weight(W_new, b_new, moment_order).reshape(-1)
+            S_val = S_val / w_p_atoms
+            S_grad = S_grad / w_p_atoms
+
         profiles = (w1 / Nx) * (S_val.T @ res_v) + (w2 / Nx) * (S_grad.T @ res_dv)
         abs_profiles = profiles.abs()
         best = int(abs_profiles.argmax().item())
@@ -85,32 +85,20 @@ def warm_start(
         # Largest profile gets a unit step; the rest a tiny eps step (same sign).
         base = eps_sqrt * profiles / safe
         base[best] = profiles[best] / safe[best]
-        coeff = base if nonneg else -base
+        coeff = -base
 
         Kv = S_val @ coeff
         Kg = S_grad @ coeff
         phat = float((w1 / Nx) * Kv.dot(res_v) + (w2 / Nx) * Kg.dot(res_dv))
-        if nonneg:
-            phat = -phat
         what = float((w1 / Nx) * Kv.dot(Kv) + (w2 / Nx) * Kg.dot(Kg))
 
-        # Moment axis: the descent direction carries a linear moment cost
-        # kappa_dir = beta * sum_j w_p(omega_j) * |coeff_j| (per unit step), which
-        # shifts the proximal center by kappa_dir/what.  This is an initialization;
-        # the (fully moment-aware) SSN solve refines it.  kappa_dir = 0 when off,
-        # recovering the plain center -phat/what and the guard phat <= -alpha.
-        kappa_dir = 0.0
-        if moment_beta > 0.0:
-            w_p_new = moment_weight(W_new, b_new, moment_order)
-            kappa_dir = float(moment_beta * (w_p_new * coeff.abs()).sum())
-
-        if (-phat - kappa_dir) >= alpha and what > 1e-30:
-            tau = _phi_prox(alpha / what, (-phat - kappa_dir) / what, th, gamma, q=2.0 / (p + 1.0))
+        if -phat >= alpha and what > 1e-30:
+            tau = _phi_prox(alpha / what, -phat / what, th, gamma, q=2.0 / (p + 1.0))
         else:
             tau = 0.0
         out = tau * coeff
-        if nonneg:
-            out = out.clamp_min(0.0)
+        if w_p_atoms is not None:
+            out = out / w_p_atoms          # u -> physical coefficient c
         if verbose:
             logger.debug(
                 "Warm start        initialized %d new output weights  max |weight|=%.2e",

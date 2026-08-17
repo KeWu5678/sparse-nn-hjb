@@ -102,7 +102,7 @@ class SignedModel(ShallowNetwork):
         return V.detach(), dV.detach()
 
     def predict(self, x):
-        """Value/gradient as numpy arrays (uniform with SemiconcaveModel.predict)."""
+        """Return value and gradient as NumPy arrays."""
         xt = torch.as_tensor(x, dtype=torch.float64)
         V, dV = self.predict_tensors(xt)
         return V.cpu().numpy(), dV.cpu().numpy()

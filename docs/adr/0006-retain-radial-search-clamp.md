@@ -1,79 +1,90 @@
-# 6. Retain the radial search clamp under the moment penalty
+# 6. Combine the theorem radius with a numerical search bound
 
 Date: 2026-07-25
 
 ## Status
 
-Accepted
+Accepted. Rewritten 2026-08-13 for the normalized-measure Algorithm 1.
 
 ## Context
 
-The greedy insertion step searches candidate atoms over the parameter domain.
-For positively homogeneous activations the atom is determined by its direction,
-so the search runs on the compact sphere `S^d`. For non-homogeneous activations
-(tanh, softplus, Gaussian, Matérn) the radial scale is a genuine shape
-parameter, so the search must also range over `r > 0`.
+For a nonhomogeneous activation, the radial scale of an inner parameter is a
+genuine shape parameter. Algorithm 1 therefore searches over the full
+parameter `omega=(a,b)`, rather than quotienting the parameter onto the unit
+sphere as Algorithm 2 does.
 
-Without a location-coercive penalty that search need not attain its maximum:
-`sup_r |P_t(r·ω̂)|` can stay bounded away from zero as `r → ∞`, which is the
-escape mechanism the paper's Example 3.x isolates. The implementation therefore
-clamps the log-scale to `s ∈ [-3, 5]`, i.e. `r ∈ [e^-3, e^5] ≈ [0.05, 148]`
-(`src/PDAP/insertion.py:160`), which truncates the computational dictionary to
-a compact set and makes the subproblem well posed.
+The quantitative insertion theorem confines every point that can violate the
+insertion condition to the radius
 
-The parameter-moment penalty `β·Ψ_p` changes this. The insertion objective
-becomes `|P_t(r·ω̂)| − β·w_p(r·ω̂)`, which tends to `−∞` as `r → ∞` whenever
-`p > s_1`, so the subproblem is coercive on its own and the clamp is
-unnecessary in principle. Removing it would make theory and implementation
-agree exactly.
+```
+R(mu) = max{1, (2^(s1+1) C ||r_mu|| / (alpha L_phi))^(1/(p-s1))}.
+```
 
-Against that: the confinement lemma bounds the support radius by
-`R_* = (2^{s_1}·C_P/β)^{1/(p−s_1)}`, which is finite but scales like
-`β^{−1/(p−s_1)}`. For softplus at `p = 2.01` this is of order `10^10` at
-`β = 1e-10` — ten orders of magnitude beyond the clamp. So at the small `β`
-where the best accuracy sits, the guarantee is numerically vacuous and the
-clamp is load-bearing. Removing it there would send atoms to large finite
-radii, not to infinity, and would change those cells materially.
+The activation registry supplies `C_rho`, `s0`, and `s1`. The samples determine
+the remaining factor
+
+```
+C = C_rho (A_M^s0 + A_M^(s1-1)).
+```
+
+Thus `R(mu)` is computed before candidate generation; it is not fitted from the
+candidate locations or from the experiment results.
+
+For small `alpha` and `p` close to `s1`, the theorem radius can be extremely
+large. Searching over that entire range is numerically unhelpful. The
+implementation therefore also retains the fixed numerical upper bound `exp(5)`.
 
 ## Decision
 
-Keep the clamp at `s ∈ [-3, 5]` for all cells of the sweeps, including `β > 0`.
+Algorithm 1 uses
 
-Report it in the paper for what it is: the compactness substitute that the
-`β = 0` model requires, retained under `β > 0` so that every cell — including
-the `β = 0` baselines, which have no confinement of their own — is searched
-over one common dictionary.
+```
+R_search = min(R(mu), exp(5)).
+```
 
-Cells in which at least 95% of the amplitude mass sits at the ceiling
-`r = e^5` are recorded in the raw grid but excluded from model selection, on
-the stated grounds that there the clamp rather than `β` confines the support.
+If the theorem does not apply or an activation has no declared growth data,
+`R_search=exp(5)`.
+
+The radius is used in two precise places:
+
+1. Draw each random start with a log-uniform radius between `exp(-3)` and
+   `R_search` and a uniform direction on the unit sphere.
+2. After one unconstrained joint L-BFGS solve over `omega`, discard the final
+   point if `|omega| > R_search`.
+
+The optimizer itself is not ball-constrained. A trajectory that leaves the
+radius is not clipped or projected back, because a projected boundary point is
+not the local maximizer produced by that trajectory. Radius filtering occurs
+before Euclidean near-duplicate removal and before the insertion test.
+
+Algorithm 2 is unaffected: positive homogeneity absorbs the radial scale into
+the outer coefficient, so its candidate search remains on the unit sphere.
 
 ## Consequences
 
-- The `β = 0` versus `β > 0` comparison is over a single dictionary, so
-  differences are attributable to the objective rather than to the search
-  space. This is what makes the matched control study
-  (`experiments/02_pendulum/moment_penalty/control.py`) interpretable.
-- No re-runs. The 272-cell screen, the refinement, and the follow-up stages
-  remain valid.
-- The paper cannot claim that the moment term is demonstrated to make the
-  greedy step well posed — only that it is proved to. The demonstration would
-  require dropping the clamp for `β > 0` and re-running both benchmarks.
-- `R95` at or near 148 is a diagnostic, not a defect: it marks cells where the
-  clamp binds. The censoring rule depends on it, so the ceiling value must not
-  be changed without re-deriving the affected tables.
-- The `p` axis becomes the reportable confinement evidence, since
-  `1/(p − s_1)` controls how fast the guarantee degrades as `β → 0`.
+- At large `p`, the theorem radius can tighten the accepted search region below
+  `exp(5)`, making the theoretical confinement operational.
+- Elsewhere, `exp(5)` remains a documented numerical restriction. The paper
+  must not present it as a consequence of the theorem.
+- Candidate generation is reproducible across scales because starts are
+  log-uniform in radius. Uniform-in-volume sampling would concentrate almost
+  every start near the outer boundary, where the normalized profile can be
+  nearly flat.
+- The final filter may reject an L-BFGS trajectory. It never manufactures an
+  accepted candidate by moving that trajectory back onto the boundary.
+- Changing either bound changes the candidate distribution and requires the
+  affected Algorithm 1 experiments to be rerun.
 
 ## Alternatives considered
 
-**Drop the upper clamp for `β > 0` and re-run.** Theory and implementation
-would agree exactly and the fits would go wherever the moment term puts them.
-Rejected for now: a full re-run of screen, refinement, and follow-up on both
-benchmarks, and the `β = 0` baselines would still need the clamp, so the
-comparison would no longer be over a common dictionary.
+**Constrained optimization inside the ball.** Rejected. The implementation uses
+standard L-BFGS without a reliable ball constraint, and parameterizing the ball
+would change the geometry and conditioning of the local search.
 
-**Drop it everywhere, `β = 0` included.** Maximally consistent, and the `β = 0`
-rows would exhibit the escape directly instead of having it suppressed.
-Rejected: the `β = 0` runs on tanh/softplus may not terminate usefully, which
-would cost the accuracy baselines that anchor the tables.
+**Project the final iterate onto the boundary.** Rejected. Projection changes
+the point after optimization and can turn a failed trajectory into a candidate
+that was never locally optimized.
+
+**Use only the theorem radius.** Rejected for the current experiments. Near the
+admissibility threshold `p>s1`, the certified radius is finite but can be too
+large to define a useful numerical search.

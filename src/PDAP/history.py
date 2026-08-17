@@ -16,7 +16,11 @@ import torch
 from torch.nn.utils import parameters_to_vector
 
 from ..eval import data_loss_terms, relative_errors
-from .moment import amplitude_mass_radius, moment_penalty, moment_weight
+from .moment import (
+    amplitude_mass_radius,
+    atom_normalizer,
+    moment_weight,
+)
 from .ssn_solve import Objective, nonconvex_penalty
 
 
@@ -27,6 +31,17 @@ def _regularizer_terms(model, objective: Objective) -> dict[str, float]:
     if params:
         theta = parameters_to_vector(params).detach()
         penalized, nonneg = model.penalty_masks()
+        # Normalized objective: the penalty is evaluated at the normalized measure,
+        # phi(w_p(omega_n)|c_n|) = phi(|u_n|), so score it on u = w_p * c -- the same
+        # quantity ssn_solve minimizes, so the recorded objective cannot drift from it.
+        if objective.normalized:
+            scale = atom_normalizer(W, b, p=objective.moment_order)
+            if scale.numel() != theta.numel():
+                raise RuntimeError(
+                    "normalized Algorithm 1 expects one trainable coordinate per atom "
+                    f"(got {theta.numel()} for {scale.numel()} atoms)"
+                )
+            theta = theta * scale
         phi = nonconvex_penalty(
             theta,
             penalized,
@@ -51,9 +66,6 @@ def _regularizer_terms(model, objective: Objective) -> dict[str, float]:
         "sparsity_functional": float(phi.detach()),
         "psi_p": float(psi.detach()),
         "alpha_phi": float((objective.alpha * phi).detach()),
-        "beta_psi_p": float(
-            moment_penalty(c, weights, objective.moment_beta).detach()
-        ),
         "total_variation": float(total_variation.detach()),
         "radius_r95": float(amplitude_mass_radius(W, b, c).detach()),
         "radius_max": float(radius_max.detach()),
@@ -61,16 +73,12 @@ def _regularizer_terms(model, objective: Objective) -> dict[str, float]:
 
 
 def objective_value(model, objective: Objective, data) -> float:
-    """The training objective (data fidelity + nonconvex penalty [+ moment]) at ``model``."""
+    """Return data fidelity plus the configured model-family penalty."""
     X, V, dV = data
     Vp, dVp = model.predict_tensors(X)
     data_loss = data_loss_terms(Vp, dVp, V, dV, objective.loss_weights)[0]
     regularizer = _regularizer_terms(model, objective)
-    return (
-        float(data_loss.detach())
-        + regularizer["alpha_phi"]
-        + regularizer["beta_psi_p"]
-    )
+    return float(data_loss.detach()) + regularizer["alpha_phi"]
 
 
 @dataclass
@@ -94,7 +102,6 @@ class History:
     sparsity_functional: List[float] = field(default_factory=list)
     psi_p: List[float] = field(default_factory=list)
     alpha_phi: List[float] = field(default_factory=list)
-    beta_psi_p: List[float] = field(default_factory=list)
     total_variation: List[float] = field(default_factory=list)
     radius_r95: List[float] = field(default_factory=list)
     radius_max: List[float] = field(default_factory=list)
@@ -118,16 +125,8 @@ class History:
             *valid_pred, *data_valid[1:], objective.loss_weights
         )
         regularizer = _regularizer_terms(model, objective)
-        tl = (
-            float(train_terms[0].detach())
-            + regularizer["alpha_phi"]
-            + regularizer["beta_psi_p"]
-        )
-        vl = (
-            float(valid_terms[0].detach())
-            + regularizer["alpha_phi"]
-            + regularizer["beta_psi_p"]
-        )
+        tl = float(train_terms[0].detach()) + regularizer["alpha_phi"]
+        vl = float(valid_terms[0].detach()) + regularizer["alpha_phi"]
         self.train_loss.append(tl)
         self.val_loss.append(vl)
         self.data_loss_train.append(float(train_terms[0].detach()))
@@ -139,7 +138,6 @@ class History:
         self.sparsity_functional.append(regularizer["sparsity_functional"])
         self.psi_p.append(regularizer["psi_p"])
         self.alpha_phi.append(regularizer["alpha_phi"])
-        self.beta_psi_p.append(regularizer["beta_psi_p"])
         self.total_variation.append(regularizer["total_variation"])
         self.radius_r95.append(regularizer["radius_r95"])
         self.radius_max.append(regularizer["radius_max"])
@@ -203,6 +201,12 @@ class History:
             "best_iteration": i,
             "best_neurons": int(self.best_neurons),
             "final_neurons": int(self.final_neurons),
+            # How many outer iterations were actually recorded.  Under the paper's
+            # loop order this is less than the configured T_out exactly when the
+            # run stopped on its own rule -- no candidate cleared the insertion
+            # threshold -- which is the difference between converging in the
+            # algorithm's terms and merely exhausting the budget.
+            "iterations": int(len(self.train_loss)),
         }
         if getattr(self, "data_loss_train", []):
             w1, w2 = getattr(self, "loss_weights", (1.0, 1.0))
@@ -223,7 +227,6 @@ class History:
                     "sparsity_functional": float(self.sparsity_functional[i]),
                     "psi_p": float(self.psi_p[i]),
                     "alpha_phi": float(self.alpha_phi[i]),
-                    "beta_psi_p": float(self.beta_psi_p[i]),
                     "total_variation": float(self.total_variation[i]),
                     "radius_r95": float(self.radius_r95[i]),
                     "radius_max": float(self.radius_max[i]),

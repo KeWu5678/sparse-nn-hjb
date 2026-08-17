@@ -1,4 +1,8 @@
-# Semiconcave Model (PDAP model="semiconcave")
+# Archived Semiconcave Model
+
+> **Retired:** ADR 0012 removed this implementation from the active codebase.
+> The material below records the former parametrization and its historical
+> empirical results; paths and APIs are not current.
 
 Sub-level disclosure for `../CLAUDE.md`. The semiconcave parametric model, its
 SSN optimiser, the augmented Hessian, and the main empirical finding.
@@ -48,7 +52,7 @@ Its three differences from a signed SSN, all driven by the masks:
 - **per-coordinate `alpha`** (`alpha_vec`: `alpha` on the `c` block, `0` elsewhere)
   so only `c` is penalised; the prox/penalty kernels broadcast a tensor `alpha`/`mu`.
 - **nonnegative proximal** on `nonneg_mask` (the `c` block and `C`): the masked
-  `_prox` reuses the signed `_compute_prox` then zeros entries whose proximal
+  `_prox` reuses the signed `power_prox` then zeros entries whose proximal
   preimage is `<= 0`.
 - **unpenalised-coordinate fix**: for coords with no penalty the proximal is the
   identity, so the SSN preimage must be `q_var = params` (not
@@ -87,8 +91,3 @@ matched to the geometry, so `C` stays O(1) and there is no cancellation. This is
 an envelope-only change; the convex network, insertion, SSN, and nonneg
 constraint are unchanged. It still will not sharpen the jump itself, but removes
 the structural penalty so the comparison is fair.
-
-## Tests
-`tests/test_semiconcave_model.py`: SSN nonneg/sparse recovery with a free
-unpenalised coord; `predict == linear features`; augmented Hessian == autograd
-Hessian; recovery of a synthetic semiconcave target.

@@ -2,8 +2,7 @@
 
 Historically this module collected unrelated numerical utilities. Those helpers
 are no longer used by the project; the active implementations live in
-``src.SSN``. Keep these re-exports so older notebooks or scripts importing from
-``src.utils`` continue to work.
+``src.SSN``. Keep the still-supported re-exports here for notebooks and scripts.
 """
 
 from __future__ import annotations
@@ -17,16 +16,16 @@ from src.SSN.penalty import (
     _phi,
 )
 from src.SSN.prox import (
-    _compute_dprox,
-    _compute_prox,
     _compute_prox_q_half,
     _compute_prox_q_twothirds,
     _phi_prox,
+    power_prox,
+    power_prox_derivative,
 )
 
 __all__ = [
-    "_compute_dprox",
-    "_compute_prox",
+    "power_prox",
+    "power_prox_derivative",
     "_compute_prox_q_half",
     "_compute_prox_q_twothirds",
     "_ddphi",

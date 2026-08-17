@@ -7,8 +7,8 @@ packing, and the penalty masks. It owns no training algorithm: the warm start
 (:mod:`src.PDAP.warmstart`), the SSN solve (:mod:`src.PDAP.ssn_solve`), and the
 evaluation (:mod:`src.eval`) live in the trainer.
 
-``SignedModel`` and ``SemiconcaveModel`` both satisfy this structurally, so it is
-a :class:`typing.Protocol` (no inheritance required). ``@runtime_checkable`` lets
+``SignedModel`` satisfies this structurally, so it is a
+:class:`typing.Protocol` (no inheritance required). ``@runtime_checkable`` lets
 tests assert conformance with ``isinstance``.
 """
 

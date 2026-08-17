@@ -1,11 +1,7 @@
-"""Golden characterization tests locking the behaviour of the SSN optimizers.
+"""Golden characterization tests locking the behaviour of the SSN optimizer.
 
-These tests pin the *current* step-by-step iterates of every SSN variant so the
-planned merge (SSN + SSN_TR + SSN_semiconcave -> one configurable ``SSN``) can be
-verified to leave behaviour bit-for-bit unchanged.  Each phase of the refactor
-must keep these green; the construction calls may be re-pointed to the new API
-as classes are folded together, but the golden trajectories (the invariant) do
-not change.
+These tests pin step-by-step iterates for both globalization strategies and the
+generic masked-coordinate API.
 
 Golden values live in ``tests/fixtures/ssn_golden.npz``.  Regenerate them only
 from a known-good tree:  ``SSN_UPDATE_GOLDEN=1 pytest tests/test_ssn_equivalence.py``.
@@ -68,13 +64,15 @@ def _run_trajectory(config: dict) -> np.ndarray:
 
     kind = config["kind"]
     if kind == "ssn":
-        opt = SSN([theta], alpha=alpha, gamma=gamma, th=th, lr=1.0, power=power)
+        opt = SSN(
+            [theta], alpha=alpha, gamma=gamma, th=th, lr=1.0, power=power,
+            prox_scale=config.get("prox_scale"),
+        )
     elif kind == "ssn_tr":
         # folded into the base SSN: trust-region (Steihaug-CG) globalization
         opt = SSN([theta], alpha=alpha, gamma=gamma, th=th, lr=1.0, power=power,
                   method="steihaug_cg")
-    elif kind == "ssn_semiconcave":
-        # folded into the base SSN: masked-penalty + nonnegative-prox configuration
+    elif kind == "ssn_masked":
         opt = SSN(
             [theta], alpha=alpha, gamma=gamma, th=th, lr=1.0, power=power,
             penalized_mask=pen_mask, nonneg_mask=config["nonneg_mask"],
@@ -104,15 +102,15 @@ def _configs() -> dict[str, dict]:
             seed=1, theta0=t4,
         ),
         "ssn_signed_q_half": dict(
-            kind="ssn", P=4, Nx=20, alpha=1e-2, gamma=1.0, th=0.5, power=3.0,
-            seed=2, theta0=t4,
+            kind="ssn", P=4, Nx=20, alpha=1e-2, gamma=0.0, th=0.5, power=3.0,
+            prox_scale=1e-2, seed=2, theta0=t4,
         ),
         "ssn_tr_signed": dict(
             kind="ssn_tr", P=4, Nx=20, alpha=1e-2, gamma=1.0, th=0.5, power=1.0,
             seed=3, theta0=t4,
         ),
-        "ssn_semiconcave_free_coord": dict(
-            kind="ssn_semiconcave", P=4, Nx=20, alpha=1e-2, gamma=1.0, th=0.5,
+        "ssn_masked_free_coord": dict(
+            kind="ssn_masked", P=4, Nx=20, alpha=1e-2, gamma=1.0, th=0.5,
             power=1.0, seed=4, theta0=torch.tensor([0.5, 0.5, 0.3, 0.0], dtype=torch.float64),
             penalized_mask=torch.tensor([True, True, False, False]),
             nonneg_mask=torch.tensor([True, True, True, False]),

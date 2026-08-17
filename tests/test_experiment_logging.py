@@ -74,6 +74,10 @@ def test_experiment_run_writes_completed_run_record(tmp_path):
         name="activation_search",
         run_id="relu_seed42",
         config={"activation": "relu", "seed": 42},
+        provenance={
+            "coefficient_solver": "global_prox_warmstart_scale",
+            "rho": 0.9,
+        },
     )
 
     run.log_metrics({"h1": 0.12, "neurons": 78}, step=0)
@@ -84,6 +88,10 @@ def test_experiment_run_writes_completed_run_record(tmp_path):
     assert record["run_id"] == "relu_seed42"
     assert record["status"] == "completed"
     assert record["config"] == {"activation": "relu", "seed": 42}
+    assert record["provenance"] == {
+        "coefficient_solver": "global_prox_warmstart_scale",
+        "rho": 0.9,
+    }
     assert record["metrics"] == [{"step": 0, "values": {"h1": 0.12, "neurons": 78}}]
     assert path == tmp_path / "relu_seed42.json"
 
@@ -153,6 +161,10 @@ def test_experiment_run_projects_completed_record_to_mlflow(tmp_path, monkeypatc
         name="activationsearch",
         run_id="activationsearch_pendulum_20260611_a3f9",
         config={"model": {"gamma": 1.0}, "data": {"path": "pendulum.npz"}},
+        provenance={
+            "coefficient_solver": "global_prox_warmstart_scale",
+            "rho": 0.9,
+        },
         hydra={
             "output_dir": str(tmp_path),
             "job": {"name": "train", "id": "7", "num": 0},
@@ -172,6 +184,8 @@ def test_experiment_run_projects_completed_record_to_mlflow(tmp_path, monkeypatc
     assert calls["params"]["model.gamma"] == 1.0
     assert calls["params"]["data.path"] == "pendulum.npz"
     assert calls["params"]["hydra.choice.data"] == "pendulum"
+    assert calls["params"]["provenance.coefficient_solver"] == "global_prox_warmstart_scale"
+    assert calls["params"]["provenance.rho"] == 0.9
     assert ("rel_h1_val", 0.12, 3) in calls["metrics"]
     assert ("best_neurons", 78.0, 3) in calls["metrics"]
     assert ("best_score", 18.3, None) in calls["metrics"]

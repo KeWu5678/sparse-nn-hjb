@@ -1,8 +1,8 @@
-"""Proximal operators for the SSN splitting: prox of mu * |.|^q and its Jacobian.
+"""Scalar proximal maps for the SSN splitting and their derivatives.
 
-Closed-form solvers for q in {1, 1/2, 2/3} and a Newton fallback for other q<1.
-``_phi_prox`` is the scalar proximal of sigma * phi(t^q) used by the PDAP
-insertion step.
+The supported exponents are ``q`` in ``{1, 2/3, 1/2}``.  The fractional maps
+use closed-form stationary roots together with the global objective-switching
+threshold; at an exact tie they return zero.
 """
 
 import math
@@ -11,35 +11,45 @@ import torch
 
 from .penalty import _ddphi, _dphi
 
+# Activation powers whose induced exponents q=2/(power+1) have verified global
+# scalar proximal maps below.  PDAP imports this tuple for configuration
+# validation so adding a closed form has one authority.
+SUPPORTED_ACTIVATION_POWERS = (1.0, 2.0, 3.0)
+
 
 def _compute_prox_q_half(v, mu):
-    """Closed-form proximal for mu * |.|^{1/2}.
+    """Closed-form global proximal map for ``mu*|.|^(1/2)``.
 
     FOC: t + (mu/2)*t^{-1/2} = |v|.  Substitute s = sqrt(t):
       s^3 - |v|*s + mu/2 = 0  (depressed cubic)
     Solved via trigonometric method (three real roots when |v| > v_thresh).
     """
-    abs_v = torch.abs(v)
     q = 0.5
-    t_star = (mu * q * (1.0 - q)) ** (1.0 / (2.0 - q))  # = (mu/4)^{2/3}
-    v_thresh = t_star + mu * q * t_star ** (q - 1)
-    active = abs_v > v_thresh
+    scale = torch.as_tensor(mu, dtype=v.dtype, device=v.device)
+    positive_scale = scale > 0
+    safe_scale = torch.where(positive_scale, scale, torch.ones_like(scale))
+    normalization = safe_scale ** (1.0 / (2.0 - q))
+    normalized_v = v / normalization
+    abs_v = torch.abs(normalized_v)
+    active = abs_v > 1.5
 
-    av = abs_v.clamp(min=1e-30)
+    # Evaluate the closed form only in its active regime.  The inactive values
+    # are replaced before the algebra, then masked back to zero below.
+    av = torch.where(active, abs_v, torch.full_like(abs_v, 1.5))
     # Depressed cubic s^3 - A*s + B = 0 with A = |v|, B = mu/2
     # Trigonometric solution: s = 2*sqrt(A/3)*cos(theta/3)
     # where theta = arccos(-3*B*sqrt(3) / (2*A^{3/2}))
-    cos_arg = (-3.0 * mu * math.sqrt(3.0) / (4.0 * av ** 1.5)).clamp(-1.0, 1.0)
+    cos_arg = (-3.0 * math.sqrt(3.0) / (4.0 * av ** 1.5)).clamp(-1.0, 1.0)
     theta = torch.acos(cos_arg) / 3.0
     s = 2.0 * torch.sqrt(av / 3.0) * torch.cos(theta)
     t = s ** 2
 
-    t = torch.where(active, t, torch.zeros_like(t))
-    return torch.sign(v) * t
+    t = torch.where(active, normalization * t, torch.zeros_like(t))
+    return torch.where(positive_scale, torch.sign(v) * t, v)
 
 
 def _compute_prox_q_twothirds(v, mu):
-    """Closed-form proximal for mu * |.|^{2/3}.
+    """Closed-form global proximal map for ``mu*|.|^(2/3)``.
 
     FOC: t + (2mu/3)*t^{-1/3} = |v|.  Substitute s = t^{1/3}:
       s^4 - |v|*s + 2mu/3 = 0  (depressed quartic)
@@ -48,65 +58,50 @@ def _compute_prox_q_twothirds(v, mu):
       2. Factor quartic into two quadratics using y
       3. Take largest positive root from the quadratic with real roots
     """
-    abs_v = torch.abs(v)
     q = 2.0 / 3.0
-    t_star = (mu * q * (1.0 - q)) ** (1.0 / (2.0 - q))  # = (2mu/9)^{3/4}
-    v_thresh = t_star + mu * q * t_star ** (q - 1)
-    active = abs_v > v_thresh
+    scale = torch.as_tensor(mu, dtype=v.dtype, device=v.device)
+    positive_scale = scale > 0
+    safe_scale = torch.where(positive_scale, scale, torch.ones_like(scale))
+    normalization = safe_scale ** (1.0 / (2.0 - q))
+    normalized_v = v / normalization
+    abs_v = torch.abs(normalized_v)
+    switch_output = (2.0 / 3.0) ** (3.0 / 4.0)
+    switch_input = 2.0 * switch_output
+    active = abs_v > switch_input
+    av = torch.where(active, abs_v, torch.full_like(abs_v, switch_input))
 
-    av = abs_v.clamp(min=1e-30)
-
-    # Resolvent cubic: y^3 + p_rc*y + q_rc = 0
-    p_rc = -2.0 * mu / 3.0
-    q_rc = -(av ** 2) / 8.0
-    # Cardano discriminant: delta_c = (q_rc/2)^2 + (p_rc/3)^3
-    delta_c = (q_rc / 2.0) ** 2 + (p_rc / 3.0) ** 3
-    use_cardano = delta_c >= 0
-
-    # Branch 1: Cardano (delta_c >= 0, one real root — typical case)
-    sqrt_delta = torch.sqrt(delta_c.clamp(min=0))
-    u_plus = -q_rc / 2.0 + sqrt_delta
-    u_minus = -q_rc / 2.0 - sqrt_delta
-    y_cardano = (torch.sign(u_plus) * torch.abs(u_plus).clamp(min=1e-300) ** (1.0 / 3.0)
-               + torch.sign(u_minus) * torch.abs(u_minus).clamp(min=1e-300) ** (1.0 / 3.0))
-
-    # Branch 2: Trigonometric (delta_c < 0, three real roots — rare)
-    sqrt_neg_p3 = torch.sqrt((-p_rc / 3.0) * torch.ones_like(av))  # scalar p_rc
-    cos_arg_rc_denom = (2.0 * (-p_rc) * sqrt_neg_p3).clamp(min=1e-30)
-    cos_arg_rc = (3.0 * q_rc / cos_arg_rc_denom).clamp(-1.0, 1.0)
-    theta_rc = torch.acos(cos_arg_rc) / 3.0
-    y_trig = 2.0 * sqrt_neg_p3 * torch.cos(theta_rc)
-
-    y = torch.where(use_cardano, y_cardano, y_trig)
-    y = y.clamp(min=1e-30)
+    # On the global active branch the Ferrari resolvent has one real root.  Its
+    # Cardano pair has product 2/9; recovering the smaller term from that product
+    # avoids subtracting two nearly equal numbers.
+    cardano_base = av.square() / 16.0
+    discriminant_ratio = (8.0 / 729.0) / cardano_base / cardano_base
+    sqrt_delta = cardano_base * torch.sqrt((1.0 - discriminant_ratio).clamp_min(0.0))
+    large_cube = torch.pow(cardano_base + sqrt_delta, 1.0 / 3.0)
+    small_cube = (2.0 / 9.0) / large_cube
+    y = large_cube + small_cube
 
     # Factor quartic: x^2 - r*x + (y - |v|/(2r)) = 0
     r = torch.sqrt(2.0 * y)
-    disc = (-2.0 * y + 2.0 * av / r.clamp(min=1e-30)).clamp(min=0)
+    disc = (-2.0 * y + 2.0 * av / r).clamp_min(0.0)
     x = (r + torch.sqrt(disc)) / 2.0
     t = x ** 3  # s = t^{1/3}, so t = s^3
 
-    t = torch.where(active, t, torch.zeros_like(t))
-    return torch.sign(v) * t
+    t = torch.where(active, normalization * t, torch.zeros_like(t))
+    return torch.where(positive_scale, torch.sign(v) * t, v)
 
 
-def _compute_prox(v, mu, q=1.0):
-    """Proximal operator for mu * |·|^q (the simple part of the SSN splitting).
-
-    Solves: argmin_t { mu * t^q + (1/2) * (t - |v|)^2 } for t >= 0,
-    then returns sign(v) * t_opt.
+def power_prox(v, mu, q=1.0):
+    """Return the global proximal map of ``mu*|.|^q``.
 
     For q=1: soft thresholding, prox(v) = sign(v) * max(|v| - mu, 0).
     For q=1/2: closed-form via depressed cubic (trigonometric method).
     For q=2/3: closed-form via depressed quartic (Ferrari's method).
-    For other q<1: Newton's method on the optimality condition t + mu*q*t^{q-1} = |v|.
-
     Args:
         v: input tensor
-        mu: proximal parameter (typically alpha / c in SSN)
+        mu: proximal scale (typically alpha / inverse_step in SSN)
         q: power exponent, q = 2/(p+1) where p is the activation power
     Returns:
-        vprox: proximal operator result
+        vprox: global minimizer, with zero selected at an exact tie
     """
     if q == 1.0:
         normsv = torch.abs(v)
@@ -121,26 +116,11 @@ def _compute_prox(v, mu, q=1.0):
     if abs(q - 2.0 / 3.0) < 1e-12:
         return _compute_prox_q_twothirds(v, mu)
 
-    # General q != 1: Newton's method fallback
-    abs_v = torch.abs(v)
-    t_star = (mu * q * (1.0 - q)) ** (1.0 / (2.0 - q))
-    v_thresh = t_star + mu * q * t_star ** (q - 1)
-    active = abs_v > v_thresh
-
-    t = abs_v.clone()
-    for _ in range(20):
-        t_safe = t.clamp(min=1e-30)
-        h = t_safe + mu * q * t_safe ** (q - 1) - abs_v
-        hp = 1.0 + mu * q * (q - 1) * t_safe ** (q - 2)
-        t = torch.where(active, t - h / hp, torch.zeros_like(t))
-        t = t.clamp(min=0.0)
-
-    t = torch.where(active, t, torch.zeros_like(t))
-    return torch.sign(v) * t
+    raise ValueError(f"q must be one of {{1, 2/3, 1/2}}, got {q}")
 
 
-def _compute_dprox(v, mu, q=1.0, prox_result=None):
-    """Jacobian of the proximal operator prox_{mu*|·|^q}(v).
+def power_prox_derivative(v, mu, q=1.0, prox_result=None):
+    """Generalized derivative of the scalar proximal map away from its switch.
 
     Ported from MATLAB computeDProx.m. With N=1 (scalar outer weights),
     each neuron's Jacobian block reduces to a scalar diagonal entry.
@@ -149,16 +129,16 @@ def _compute_dprox(v, mu, q=1.0, prox_result=None):
         d prox/dv = 1 for active (|v| > mu), 0 for inactive.
         (Computed via MATLAB's general N-dim formula specialized to N=1.)
 
-    For q<1 (prox from Newton solve of t + mu*q*t^{q-1} = |v|):
+    For q<1 (active global branch from t + mu*q*t^{q-1} = |v|):
         d prox/dv = 1 / (1 + mu*q*(q-1)*|prox|^{q-2}) for active, 0 for inactive.
         Requires prox_result to avoid recomputing the Newton loop.
 
     Used in SSN's _DG to form the generalized Jacobian:
-        DG = c*(I - DPc) + alpha*diag(correction_dd)*DPc + H_data*DPc
+        DG = inverse_step*(I - DPc) + alpha*diag(correction_dd)*DPc + H_data*DPc
 
     Args:
         v: proximal preimage tensor (the SSN variable q_var)
-        mu: proximal parameter (typically alpha / c)
+        mu: proximal scale (typically alpha / inverse_step)
         q: power exponent, q = 2/(p+1)
         prox_result: precomputed prox(v) — required for q != 1
 
@@ -186,17 +166,24 @@ def _compute_dprox(v, mu, q=1.0, prox_result=None):
         outer_product_term = mask.float() * mu / (normsv_safe ** 3) * (v ** 2)
         return torch.diag(diagonal_term + outer_product_term)
 
-    # General q != 1: implicit differentiation of t + mu*q*t^{q-1} = |v|
-    abs_v = torch.abs(v)
-    t_star = (mu * q * (1.0 - q)) ** (1.0 / (2.0 - q))
-    v_thresh = t_star + mu * q * t_star ** (q - 1)
-    active = abs_v > v_thresh
-
+    scale = torch.as_tensor(mu, dtype=v.dtype, device=v.device)
+    positive_scale = scale > 0
+    safe_scale = torch.where(positive_scale, scale, torch.ones_like(scale))
+    normalization = safe_scale ** (1.0 / (2.0 - q))
     prox_abs = torch.abs(prox_result)
-    prox_safe = prox_abs.clamp(min=1e-30)
+    active = prox_abs > 0
+    normalized_prox = torch.where(
+        active,
+        prox_abs / normalization,
+        torch.ones_like(prox_abs),
+    )
 
-    denom = 1.0 + mu * q * (q - 1) * prox_safe ** (q - 2)
-    diag = torch.where(active, 1.0 / denom, torch.zeros_like(v))
+    denom = 1.0 + q * (q - 1) * normalized_prox ** (q - 2)
+    diag = torch.where(
+        ~positive_scale,
+        torch.ones_like(v),
+        torch.where(active, 1.0 / denom, torch.zeros_like(v)),
+    )
 
     return torch.diag(diag.reshape(-1))
 
@@ -239,7 +226,7 @@ def _phi_prox(sigma: float, g: float, th: float, gamma: float, q: float = 1.0) -
     # Reduces to the simple proximal of sigma * |.|^q.
     if gamma == 0 or th >= 1.0:
         v_tensor = torch.tensor([g], dtype=torch.float64)
-        result = _compute_prox(v_tensor, sigma, q=q)
+        result = power_prox(v_tensor, sigma, q=q)
         return max(float(result[0].item()), 0.0)
 
     # Newton's method for general phi(t^q) with gamma > 0

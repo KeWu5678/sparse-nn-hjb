@@ -3,7 +3,7 @@
 
 A run = pick a registered model + a data source, override the rest::
 
-    python scripts/train.py model=semiconcave model.gamma=10
+    python scripts/train.py model=log_penalty model.activation=softplus model.gamma=10
     python scripts/train.py -m model.gamma=0,1e-2,1e-1,1,10 env.seed=42,43,44
 
 This entry is domain-agnostic — it loads a ``.npy``/``.npz`` with keys ``x, v, dv`` and
@@ -174,6 +174,7 @@ def main(cfg: DictConfig) -> None:
     log_file = cfg.env.log_file or (run_dir / "run.log")
     configure_logging(verbose=cfg.env.verbose, level=cfg.env.log_level, log_file=log_file)
     set_seed(cfg.env.seed)
+    trainer = PDAP(cfg)
 
     # Create the run record before model construction/training so elapsed_s covers
     # the actual run, not only JSON serialization.
@@ -183,6 +184,7 @@ def main(cfg: DictConfig) -> None:
         run_id=run_id_from_config(cfg, hydra_cfg=hydra_cfg),
         config=OmegaConf.to_container(cfg, resolve=True),
         hydra=hydra_metadata(hydra_cfg),
+        provenance=trainer.coefficient_solver_provenance,
     )
 
     # Data preprocessing lives in the script: load, normalize, split.  The model
@@ -196,7 +198,7 @@ def main(cfg: DictConfig) -> None:
     train_data, valid_data = split_value_samples(data, cfg.data.train_fraction)
     model = build_model(cfg, input_dim)
 
-    history = PDAP(cfg).fit(
+    history = trainer.fit(
         model, train_data, valid_data,
         num_iterations=cfg.training.num_iterations,
         num_insertion=cfg.training.num_insertion,
