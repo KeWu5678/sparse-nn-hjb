@@ -312,7 +312,7 @@ def test_insertion_reuses_the_residual_for_the_theorem_radius() -> None:
     "over, message",
     [
         (dict(activation="softplus", power=2.0), "Algorithm 1.*power == 1"),
-        (dict(insert_init="guaranteed", kind="semiconcave"), "signed theorem step"),
+        (dict(kind="semiconcave"), "only supports kind='signed'"),
         (
             dict(insertion="finite_step", activation="relu", power=4.0, gamma=0.0),
             "powers 1, 2, 3",
@@ -328,10 +328,6 @@ def test_insertion_reuses_the_residual_for_the_theorem_radius() -> None:
         (
             dict(insertion="finite_step", activation="softplus", power=2.0, gamma=0.0),
             "sphere activation",
-        ),
-        (
-            dict(insertion="finite_step", kind="semiconcave", activation="relu"),
-            "signed model",
         ),
         (dict(insert_mode="nonsense"), "training.insert_mode must be one of"),
     ],

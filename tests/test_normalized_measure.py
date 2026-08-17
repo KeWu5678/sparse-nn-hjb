@@ -83,14 +83,10 @@ def test_nonhomogeneous_signed_profile_is_normalized_automatically() -> None:
     assert trainer.objective.normalized
 
 
-def test_sphere_profile_and_semiconcave_models_are_not_moment_normalized() -> None:
+def test_sphere_profile_model_is_not_moment_normalized() -> None:
     sphere = PDAP(_cfg(activation="relu", power=1.0, insertion="profile"))
-    semiconcave = PDAP(
-        _cfg(kind="semiconcave", activation="softplus", power=1.0, insertion="profile")
-    )
 
     assert not sphere.objective.normalized
-    assert not semiconcave.objective.normalized
 
 
 def test_algorithm1_rejects_nonunit_activation_power() -> None:

@@ -1,4 +1,8 @@
-# Semiconcave Model (PDAP model="semiconcave")
+# Archived Semiconcave Model
+
+> **Retired:** ADR 0012 removed this implementation from the active codebase.
+> The material below records the former parametrization and its historical
+> empirical results; paths and APIs are not current.
 
 Sub-level disclosure for `../CLAUDE.md`. The semiconcave parametric model, its
 SSN optimiser, the augmented Hessian, and the main empirical finding.
@@ -87,8 +91,3 @@ matched to the geometry, so `C` stays O(1) and there is no cancellation. This is
 an envelope-only change; the convex network, insertion, SSN, and nonneg
 constraint are unchanged. It still will not sharpen the jump itself, but removes
 the structural penalty so the comparison is fair.
-
-## Tests
-`tests/test_semiconcave_model.py`: SSN nonneg/sparse recovery with a free
-unpenalised coord; `predict == linear features`; augmented Hessian == autograd
-Hessian; recovery of a synthetic semiconcave target.

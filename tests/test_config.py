@@ -22,6 +22,7 @@ def test_compose_defaults() -> None:
     assert cfg.model.activation == "relu"
     assert cfg.model.power == 1.0
     assert cfg.model.alpha == 1e-5
+    assert "c_init" not in cfg.model
     assert cfg.training.num_iterations == 10
     assert cfg.training.max_ls_iter == 500
     assert cfg.training.ins_merge_tol == 1e-2
@@ -32,14 +33,11 @@ def test_compose_defaults() -> None:
 
 def test_model_groups() -> None:
     with initialize(version_base=None, config_path="../conf"):
-        sc = compose(config_name="config", overrides=["model=semiconcave"])
         fs = compose(config_name="config", overrides=["model=frac_exp_penalty"])
         alg1 = compose(config_name="config", overrides=[
             "model=paper_log_penalty",
             "model.activation=softplus",
         ])
-    assert sc.model.kind == "semiconcave"
-    assert sc.model.insertion == "profile"
     # frac_exp_penalty config group = signed + finite_step
     assert fs.model.kind == "signed"
     assert fs.model.insertion == "finite_step"

@@ -804,8 +804,6 @@ def plot_model_value_surface(
     explicit tick positions; pass ``x_range``/``y_range`` to set the displayed extent
     (and re-evaluate the surface over it).
 
-    Note: ``semiconcave`` models do not round-trip through ``History`` faithfully
-    (the lossy atom record drops structure — issue #19); use a ``signed`` run here.
     """
     import pickle
 

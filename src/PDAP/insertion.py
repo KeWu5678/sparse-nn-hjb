@@ -84,6 +84,10 @@ def _generate_candidates(
     rather than projected back.  Homogeneous activations retain the normalized
     sphere search used by Algorithm 2.
     """
+    if not use_sphere and not normalized:
+        raise ValueError(
+            "nonhomogeneous candidate search requires normalized Algorithm 1"
+        )
     K, d_dim = X.shape
     Kx = K  # M, the sample count: the empirical fidelity is 1/(2M) * sum_m
     w1, w2 = loss_weights
@@ -261,8 +265,7 @@ def profile_threshold(
     guaranteed = insert_init == "guaranteed"
     if guaranteed and not two_sided:
         raise ValueError(
-            "insert_init='guaranteed' is the signed theorem step; the one-sided "
-            "(semiconcave) convention has no counterpart in the paper"
+            "insert_init='guaranteed' requires a two-sided signed coefficient"
         )
 
     res_v_flat = residual_v.reshape(-1)

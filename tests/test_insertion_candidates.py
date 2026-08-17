@@ -206,15 +206,14 @@ def test_algorithm1_optimizes_each_random_start_once(monkeypatch):
     assert len(fake.instances) == 2
 
 
-def test_all_nonhomogeneous_objectives_use_one_joint_solve_per_start(monkeypatch):
-    _, _, n, _, fake = _generate(
-        monkeypatch,
-        outputs=[[1.0, 0.0], [0.0, 1.0]],
-        starts=[[1.0, 0.0], [0.0, 1.0]],
-        normalized=False,
-    )
-    assert n == 2
-    assert len(fake.instances) == 2
+def test_unnormalized_nonhomogeneous_search_is_not_supported(monkeypatch):
+    with pytest.raises(ValueError, match="requires normalized Algorithm 1"):
+        _generate(
+            monkeypatch,
+            outputs=[[1.0, 0.0], [0.0, 1.0]],
+            starts=[[1.0, 0.0], [0.0, 1.0]],
+            normalized=False,
+        )
 
 
 def test_algorithm1_deduplicates_by_absolute_parameter_distance(monkeypatch):

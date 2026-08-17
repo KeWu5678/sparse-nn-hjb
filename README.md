@@ -83,7 +83,7 @@ paths.
 
 | Path | Contents |
 | --- | --- |
-| `src/` | Library code: `models/` (signed/semiconcave nets), `PDAP/`, `SSN/`, data/eval/plotting |
+| `src/` | Library code: signed shallow networks, `PDAP/`, `SSN/`, data/eval/plotting |
 | `conf/` | Hydra configs: data, model, eval, experiment sweeps |
 | `scripts/` | Training entrypoint (`train.py`), dataset generators, MLflow backfill |
 | `experiments/` | Experiment definitions and legacy curated studies; current paper outputs stay local |

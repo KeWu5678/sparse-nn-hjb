@@ -3,7 +3,7 @@
 
 A run = pick a registered model + a data source, override the rest::
 
-    python scripts/train.py model=semiconcave model.gamma=10
+    python scripts/train.py model=log_penalty model.activation=softplus model.gamma=10
     python scripts/train.py -m model.gamma=0,1e-2,1e-1,1,10 env.seed=42,43,44
 
 This entry is domain-agnostic — it loads a ``.npy``/``.npz`` with keys ``x, v, dv`` and

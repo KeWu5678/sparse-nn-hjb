@@ -24,13 +24,10 @@ for older curated studies already present in the repository.
    and preserve the expected near/far localization pattern.
    Legacy summary: [docs/research/D3_harmonic_analysis/refs/legacy-analytical-search.md](../docs/research/D3_harmonic_analysis/refs/legacy-analytical-search.md)
 
-4. Semiconcave versus signed comparison.
-   Semiconcavity-aware modeling is competitive on the VDP reference data, but
-   it is not a universal win across problems. The pendulum comparison is mixed:
-   one dataset favors the signed model, another favors the semiconcave model by
-   score, and the later semiconcave-labeled rerun is split again. This belongs
-   in the curated research log because the conclusion is about model choice, not
-   a single benchmark score.
+4. Archived semiconcave-versus-signed comparison.
+   This historical study found no consistent advantage from the semiconcave
+   parametrization. The implementation was retired by ADR 0012 because it is
+   unused by the manuscript and current experiments; Git history preserves it.
    Legacy summary: [docs/research/D4_max_plus/refs/legacy-semiconcave-comparison.md](../docs/research/D4_max_plus/refs/legacy-semiconcave-comparison.md)
 
 ## Migration Note

@@ -3,8 +3,8 @@
 A model is linear in its outer parameters ``theta`` for this solve. ``theta`` is
 just the model's trainable ``nn.Module`` parameters, read and written with torch's
 ``parameters_to_vector`` / ``vector_to_parameters``; the model only has to supply
-the feature maps (``jacobians`` -> ``(Phi_v, Phi_g)``) and the penalized /
-nonnegative coordinate masks (``penalty_masks``). The data Hessian is the
+the feature maps (``jacobians`` -> ``(Phi_v, Phi_g)``) and coordinate masks
+(``penalty_masks``). The data Hessian is the
 Gauss-Newton form ``(1/M)(w1 Phi_v'Phi_v + w2 Phi_g'Phi_g)``; the closure is the
 data loss on ``Phi @ theta`` plus the nonconvex penalty on the penalized block.
 :class:`src.SSN.SSN` owns the semismooth-Newton step.
@@ -146,8 +146,7 @@ def ssn_solve(
 
     H = (w1 / Nx) * (Phi_v.T @ Phi_v) + (w2 / Nx) * (Phi_g.T @ Phi_g)
 
-    # theta is the model's trainable parameters flattened (output weights for the
-    # signed net; [c | C | a | b0] for the semiconcave model).  SSN solves the
+    # theta is the signed model's trainable output weights. SSN solves the
     # linear-in-theta subproblem on a standalone copy, then writes it back.
     params = [p for p in model.parameters() if p.requires_grad]
     theta = torch.nn.Parameter(parameters_to_vector(params).detach().clone())

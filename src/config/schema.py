@@ -28,15 +28,15 @@ from typing import Optional, Tuple
 class ModelConfig:
     """A registered model = structure + insertion rule + hyperparameters.
 
-    ``kind`` and ``insertion`` form the model identity (the ``conf/model/*.yaml``
-    config group: signed/profile, semiconcave/profile, signed/finite_step).
+    ``kind`` is retained as the run-record model-family label and must be
+    ``"signed"``. ``insertion`` selects profile or finite-step insertion.
     ``activation`` is a registry name resolved to a callable at build time; its
     sphere geometry is bundled with the activation in the registry (see
     ``src.config.activations``), not configured here.
     """
 
     # identity
-    kind: str = "signed"          # "signed" | "semiconcave"
+    kind: str = "signed"          # the only active model family
     insertion: str = "profile"    # "profile" | "finite_step"
     # structure
     activation: str = "relu"      # name resolved via src.config.activations
@@ -44,7 +44,6 @@ class ModelConfig:
     power: float = 1.0
     # (w1, w2) = (value loss weight, gradient loss weight); l2 = (1, 0), h1 = (1, 1)
     loss_weights: Tuple[float, float] = (1.0, 1.0)
-    c_init: float = 1.0           # semiconcave only
     # Regularization.  The penalty on the atom weights is  alpha * sum_i phi(|c_i|^q),
     # with q = 2/(power+1) (power is the activation exponent set above).  The two
     # penalties this project uses are selected by how you set power and gamma:

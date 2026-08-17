@@ -27,12 +27,11 @@ PDAP.fit() outer iteration:
   4. Prune coefficients at or below the amplitude tolerance.
 ```
 
-The single `PDAP` loop is model-agnostic: it drives the model via the uniform
-interface (`set_atoms`/`get_atoms`/`warm_start`/`fit_outer_weights`/`predict_tensors`)
-and the insertion strategy from `src/PDAP/insertion.py`.  Aliases `from_alias("v2")`
-= signed+profile, `"v1"` = semiconcave+profile, `"v3"` = signed+finite_step.  See
-`semiconcave_model.md` for the semiconcave model.  Note: the insertion-candidate
-merge tolerance (1e-2) is distinct from the prune tolerance (`fit`'s `merge_tol`).
+The single `PDAP` loop drives the signed model via its uniform interface and the
+insertion strategy from `src/PDAP/insertion.py`. The historical semiconcave
+parametrization was retired by ADR 0012; its archived design and empirical notes
+remain in `semiconcave_model.md`. The insertion-candidate merge tolerance
+(1e-2) is distinct from the prune amplitude tolerance.
 
 ## MATLAB reference
 
@@ -87,22 +86,19 @@ Reference implementation: `/Users/ruizhechao/Documents/NonConvexSparseNN/`
 
 - `PDAP/` — the unified outer-loop package:
   - `pdap.py` — `PDAP` class + `fit()` (matches `PDAPmultisemidiscrete.m`); configured
-    by `model=` ("signed"|"semiconcave") and `insertion=` ("profile"|"finite_step").
+    by `insertion=` ("profile"|"finite_step").
     Holds the shared `sample_uniform_sphere_points` / `prune_small_weights` /
     `check_linearity_neurons` helpers.
   - `insertion.py` — `profile_threshold` / `finite_step` strategies, their
     distinct nonhomogeneous/sphere candidate searches, and
     `solve_insertion_weight` for the actual Algorithm 2 increment.
-  - `registry.py` — `v1/v2/v3` (and descriptive) aliases -> (model, insertion) + `from_alias`.
-- `models/` — parametric value-function models behind a `Model` protocol (`base.py`):
+- `models/` — the signed parametric value-function model behind the protocol in `base.py`:
   - `signed.py` — `SignedModel` (pure network; matches `setup_problem_NN_2d_from_xhat.m`).
-  - `semiconcave.py` — `SemiconcaveModel` ansatz + augmented data Hessian. See `semiconcave_model.md`.
-  Both expose `set_atoms`/`get_atoms`/`warm_start`/`fit_outer_weights`/`predict_tensors`.
 - `net.py` — `ShallowNetwork`: `input -> hidden (ReLU^p) -> output`; `forward_network_matrix()` and `forward_gradient_kernel()` build the SSN data Hessian.
 - `SSN/` — the semismooth-Newton optimizer package (one configurable class):
   - `optimizer.py` — `SSN`. Stores `q=2/(p+1)` and implements the proximal
     normal map using the supplied fractional proximal scale.
-    Signed (default masks) and semiconcave (`penalized_mask`/`nonneg_mask`) configs.
+    Optional masks remain part of the optimizer's generic coordinate API.
   - `strategies.py` — `levenberg_marquardt` (damped Newton) and `steihaug_cg`
     (trust-region MPCG) globalizations, selected by `method=`.
   - `prox.py`, `penalty.py` — proximal / penalty kernels (re-exported by `utils.py`).
@@ -126,7 +122,6 @@ Reference implementation: `/Users/ruizhechao/Documents/NonConvexSparseNN/`
 | `run_activation_experiment.py` | base activation registry + VDP-HJB activation search |
 | `run_discontinuous_activation_experiment.py` | discontinuous-gradient activation search (extends `ACTIVATIONS`, `set_seed`) |
 | `run_pendulum_pmp_openloop_example.py` | generate PMP backward-sampler pendulum dataset (infinite-horizon) |
-| `run_pendulum_model_comparison.py` | PDAP semiconcave vs signed model on pendulum data |
 | `visualize_proximal_deadzone.py` | 3-panel global-prox switching diagnostic (see `power_q_penalty.md`) |
 | `append_pendulum_pilot_plots.py` | plotting helper |
 

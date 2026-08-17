@@ -1,15 +1,9 @@
-"""Coordinate-descent warm start for newly inserted atoms.
+"""Coordinate-descent warm start for newly inserted signed atoms.
 
 One 1-D proximal step (MATLAB PDAPmultisemidiscrete.m:104-147): pick the new
 candidate whose descent profile against the current residual is largest, take the
 nonconvex prox step along that combined direction, and return initial outer
 weights for all new atoms.
-
-The signed and semiconcave models share this computation exactly. They differ
-only in how an atom enters the value function: the signed network *adds* it
-(two-sided weights, descend along -profile), while the semiconcave model
-*subtracts* a convex ``g`` (nonnegative weights, ascend along +profile then clamp
-at zero). That single difference is the ``nonneg`` flag.
 """
 
 from __future__ import annotations
@@ -38,7 +32,6 @@ def warm_start(
     th: float,
     gamma: float,
     use_sphere: bool = True,
-    nonneg: bool = False,
     moment_order: float = 2.0,
     normalized: bool = False,
     verbose: bool = False,
@@ -47,8 +40,6 @@ def warm_start(
 
     ``residual = (res_v, res_dv)`` is ``prediction - target`` from the current
     model (the trainer owns the no-atoms case, where it is ``-target``).
-    ``nonneg`` selects the semiconcave convention: nonnegative weights for an atom
-    that enters the value function with a minus sign.
     """
     n_new = W_new.shape[0]
     if n_new == 0:
@@ -94,13 +85,11 @@ def warm_start(
         # Largest profile gets a unit step; the rest a tiny eps step (same sign).
         base = eps_sqrt * profiles / safe
         base[best] = profiles[best] / safe[best]
-        coeff = base if nonneg else -base
+        coeff = -base
 
         Kv = S_val @ coeff
         Kg = S_grad @ coeff
         phat = float((w1 / Nx) * Kv.dot(res_v) + (w2 / Nx) * Kg.dot(res_dv))
-        if nonneg:
-            phat = -phat
         what = float((w1 / Nx) * Kv.dot(Kv) + (w2 / Nx) * Kg.dot(Kg))
 
         if -phat >= alpha and what > 1e-30:
@@ -110,8 +99,6 @@ def warm_start(
         out = tau * coeff
         if w_p_atoms is not None:
             out = out / w_p_atoms          # u -> physical coefficient c
-        if nonneg:
-            out = out.clamp_min(0.0)
         if verbose:
             logger.debug(
                 "Warm start        initialized %d new output weights  max |weight|=%.2e",

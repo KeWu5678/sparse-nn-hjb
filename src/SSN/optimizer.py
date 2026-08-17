@@ -26,11 +26,10 @@ class SSN(Optimizer):
 
     Solves   min_u  (1/2)||S u - ref||^2 + alpha * phi(|u|^q)   on the outer
     weights, with a semismooth Newton reformulation.  Based on the MATLAB
-    NonConvexSparseNN reference.  One class now covers what used to be three:
+    NonConvexSparseNN reference. One class supports two globalization methods:
 
-      * signed network        -> default masks (penalise all, no nonneg)
-      * semiconcave model      -> ``penalized_mask`` / ``nonneg_mask``
-      * trust-region variant   -> ``method="steihaug_cg"``
+      * Levenberg--Marquardt   -> ``method="levenberg_marquardt"``
+      * trust-region variant  -> ``method="steihaug_cg"``
 
     Symbol table (kept verbatim from the paper / MATLAB for traceability):
       q       scalar-map preimage (the SSN working variable)
@@ -60,8 +59,7 @@ class SSN(Optimizer):
         ``data_hessian`` (the Gauss-Newton Hessian of the data term) must be set
         by the caller on the instance before each ``step`` — an API wart inherited
         from the original design: it really is a per-step input that would be
-        cleaner to pass through the closure, but callers (models/signed.py,
-        models/semiconcave.py) currently poke it as an attribute.
+        cleaner to pass through the closure.
     """
 
     def __init__(
@@ -120,8 +118,8 @@ class SSN(Optimizer):
         # --- proximal structure (problem-fixed, not tunable) ---
         # Defaults recover the signed network exactly: every coordinate is
         # penalised with scalar ``alpha`` and there is no nonnegativity
-        # constraint.  A semiconcave model passes masks to penalise only the
-        # convex ``c`` block and to clamp it nonnegative.
+        # constraint. Optional masks retain the optimizer's generic mixed-
+        # coordinate capability.
         flat = parameters_to_vector(self.param_groups[0]["params"])
         P = flat.shape[0]
         if penalized_mask is None:

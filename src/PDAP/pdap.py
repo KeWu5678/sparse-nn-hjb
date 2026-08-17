@@ -33,7 +33,6 @@ from typing import Tuple
 import torch
 
 from ..config.activations import get_growth, get_use_sphere
-from ..models.signed import SignedModel
 from ..SSN import SUPPORTED_ACTIVATION_POWERS
 from .history import History, objective_value
 from .insertion import finite_step, profile_threshold
@@ -59,6 +58,10 @@ class PDAP:
         data — both owned by the caller.
         """
         m, t = cfg.model, cfg.training
+        if m.kind != "signed":
+            raise ValueError(
+                f"the active implementation only supports kind='signed'; got {m.kind!r}"
+            )
         if m.insertion not in ("profile", "finite_step"):
             raise ValueError(f"model.insertion must be 'profile' or 'finite_step', got {m.insertion!r}")
 
@@ -95,11 +98,6 @@ class PDAP:
             )
 
         if m.insertion == "finite_step":
-            if m.kind != "signed":
-                raise ValueError(
-                    "finite_step insertion is Algorithm 2 and requires a signed model; "
-                    f"got kind={m.kind!r}"
-                )
             if not self._use_sphere:
                 raise ValueError(
                     "finite_step insertion is Algorithm 2 and requires a sphere activation; "
@@ -124,8 +122,7 @@ class PDAP:
         # Its normalized-measure objective is determined by that identity rather
         # than exposed as a second configurable formulation.
         normalized = (
-            m.kind == "signed"
-            and m.insertion == "profile"
+            m.insertion == "profile"
             and not self._use_sphere
         )
         if normalized and m.power != 1.0:
@@ -133,12 +130,6 @@ class PDAP:
                 "nonhomogeneous signed profile insertion is Algorithm 1 and requires "
                 f"power == 1; got power={m.power}"
             )
-        if t.insert_init == "guaranteed" and m.kind != "signed":
-            raise ValueError(
-                "training.insert_init='guaranteed' is the signed theorem step; "
-                f"got kind={m.kind!r}"
-            )
-
         if not m.moment_order > 0.0:
             raise ValueError(
                 f"moment_order must be positive; got moment_order={m.moment_order}"
@@ -199,8 +190,8 @@ class PDAP:
     def _residual(self, model, data) -> Tuple[torch.Tensor, torch.Tensor]:
         """Return ``(prediction - target)`` for value and gradient.
 
-        Both models predict with no atoms — the semiconcave envelope, or the
-        signed zero network (V = 0) — so the first insertion sees ``-target``.
+        With no atoms the signed network is zero, so the first insertion sees
+        ``-target``.
         """
         X, V, dV = data
         Vp, dVp = model.predict_tensors(X)
@@ -239,7 +230,7 @@ class PDAP:
             W, b, residual, data_train[0],
             activation=model.activation, power=model.power,
             loss_weights=o.loss_weights, alpha=o.alpha, th=o.th, gamma=o.gamma,
-            use_sphere=self._use_sphere, nonneg=not isinstance(model, SignedModel),
+            use_sphere=self._use_sphere,
             moment_order=o.moment_order, normalized=o.normalized, verbose=verbose,
         )
 
@@ -264,7 +255,6 @@ class PDAP:
             existing = (Wc, bc) if Wc.shape[0] > 0 else None
 
         d = int(model.input_dim)
-        two_sided = isinstance(model, SignedModel)
         common = dict(
             activation=model.activation, power=model.power,
             loss_weights=self.objective.loss_weights, alpha=self.objective.alpha,
@@ -276,7 +266,7 @@ class PDAP:
         radius = self._search_radius(data_train, (res_v, res_dv))
         if self.insertion_kind == "profile":
             W, b, c = profile_threshold(
-                X, res_v, res_dv, two_sided=two_sided,
+                X, res_v, res_dv, two_sided=True,
                 moment_order=self.objective.moment_order,
                 normalized=self.objective.normalized, insert_init=self.insert_init,
                 radius=radius, **common,
