@@ -72,7 +72,7 @@ def _generate_candidates(
     X, residual_v, residual_dv, *,
     activation, power, loss_weights, sample_sphere, N,
     merge_tol, two_sided, use_sphere, existing_atoms,
-    lbfgs_lr=1e-2, lbfgs_steps=200, moment_beta=0.0, moment_order=2.0,
+    lbfgs_lr=1e-2, lbfgs_steps=200, moment_order=2.0,
     normalized=False, radius=None,
 ) -> Tuple[torch.Tensor, torch.Tensor, int, int]:
     """Return distinct locally refined maximizers of the configured search score.
@@ -122,13 +122,6 @@ def _generate_candidates(
                                      w1, w2, Kx, res_v_n, res_dv_n, two_sided)
                 if joint and normalized:
                     obj = obj / moment_weight(w_s[:d_dim], w_s[d_dim], moment_order)
-                elif joint and moment_beta > 0.0:
-                    # Search the same margin used by the additive-moment
-                    # acceptance test.  The profile uses the normalized residual,
-                    # so beta is put in those units as well.
-                    obj = obj - (moment_beta / res_norm) * moment_weight(
-                        w_s[:d_dim], w_s[d_dim], moment_order
-                    )
                 (-obj).backward()
                 return -obj
 
@@ -234,21 +227,17 @@ def profile_threshold(
     activation, power, loss_weights, alpha, sample_sphere, N,
     max_insert=15, merge_tol=1e-2, two_sided=True, use_sphere=True,
     existing_atoms=None, verbose=True,
-    lbfgs_lr=1e-2, lbfgs_steps=200, moment_beta=0.0, moment_order=2.0,
+    lbfgs_lr=1e-2, lbfgs_steps=200, moment_order=2.0,
     normalized=False, insert_init="warm_start", radius=None,
 ) -> Tuple[np.ndarray, np.ndarray, Optional[np.ndarray]]:
     """Accept atoms whose derivative magnitude clears the insertion threshold.
 
-    Three acceptance rules, selected by the objective in force:
+    Two model families use this search:
 
-      * plain (``moment_beta = 0``, not normalized) -- the classical
-        ``|P(omega)| > alpha``.
-      * additive moment (``moment_beta > 0``) -- the optional rule
-        ``|P(omega)| > alpha + beta*w_p(omega)``, so a distant candidate must clear
-        a higher bar.
-      * normalized (``normalized=True``) -- the revised paper's
+      * normalized Algorithm 1 uses
         ``|P_p(omega)| > alpha*L_phi`` with ``P_p = P/w_p``.  ``L_phi = phi'(0+) = 1``
         for the whole log family, so the threshold is just ``alpha``.
+      * an unnormalized profile model uses the classical ``|P(omega)| > alpha``.
 
     Candidates are ranked by their margin above the threshold, which in the
     normalized case is the certificate violation
@@ -266,8 +255,7 @@ def profile_threshold(
         loss_weights=loss_weights, sample_sphere=sample_sphere, N=N,
         merge_tol=merge_tol, two_sided=two_sided, use_sphere=use_sphere,
         existing_atoms=existing_atoms, lbfgs_lr=lbfgs_lr, lbfgs_steps=lbfgs_steps,
-        moment_beta=moment_beta, moment_order=moment_order,
-        normalized=normalized, radius=radius,
+        moment_order=moment_order, normalized=normalized, radius=radius,
     )
 
     guaranteed = insert_init == "guaranteed"
@@ -297,14 +285,13 @@ def profile_threshold(
             v = abs(p_signed) if two_sided else p_signed
             w_p = float(moment_weight(a_i, b_i, moment_order))
 
-            # The acceptance threshold, expressed on the unnormalized profile so the
-            # three rules share one comparison.  Normalized: |P|/w_p > alpha*L_phi
-            # with L_phi = phi'(0+) = 1.  Additive: |P| > alpha + beta*w_p.
+            # Express the normalized condition in physical-profile units:
+            # |P|/w_p > alpha*L_phi with L_phi = phi'(0+) = 1.
             if normalized:
                 threshold = alpha * w_p
                 score = v / w_p - alpha          # Delta(mu, omega)
             else:
-                threshold = alpha + (moment_beta * w_p if moment_beta > 0.0 else 0.0)
+                threshold = alpha
                 score = v - threshold
             if v <= threshold:
                 continue
@@ -336,12 +323,12 @@ def profile_threshold(
     if verbose:
         rule = (
             "|P|/w_p above alpha*L_phi" if normalized
-            else "|P| above alpha+beta*w_p"
+            else "|P| above alpha"
         )
         logger.debug(
             "Candidate search  sampled=%d  unique=%d  accepted=%d/%d  "
-            "rule=%s (alpha=%.2e, moment_beta=%.2e, init=%s)",
-            N, n_after, len(accepted_a), max_insert, rule, alpha, moment_beta, insert_init,
+            "rule=%s (alpha=%.2e, init=%s)",
+            N, n_after, len(accepted_a), max_insert, rule, alpha, insert_init,
         )
         if not accepted_a and discarded_outside == N:
             logger.info(

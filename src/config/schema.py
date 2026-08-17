@@ -55,28 +55,12 @@ class ModelConfig:
     alpha: float = 1e-5
     gamma: float = 0.0   # 0 => log term off (power penalty); > 0 => log penalty
     th: float = 0.5      # L1 (th=1) <-> non-convex log (th=0); only acts when gamma > 0
-    # Parameter-moment axis (paper/paper_0805.tex, Section 3): adds, on top
-    # of alpha*Phi_1, the weighted-TV term  beta * sum_j (1 + |omega_j|^p) |c_j|
-    # with omega_j = (a_j, b_j).  It prices distant neurons out and supplies the
-    # tightness Phi_1 lacks (existence by narrow compactness; confined support).
-    # moment_beta = 0 turns it off (default => today's behavior).  When on it is
-    # confined to its meaningful regime -- a non-sphere activation (|omega| is a
-    # free scale, not gauge-fixed to the sphere), the q=1 log family (power == 1),
-    # signed kind, and profile insertion -- and PDAP raises otherwise.
-    moment_beta: float = 0.0    # 0 => moment axis off; > 0 => on
+    # Algorithm 1 evaluates the penalty on the normalized measure
+    # mu_p = w_p*mu, with w_p(omega) = 1 + |omega|^p.  For a signed profile model
+    # with a nonhomogeneous activation this is the only supported objective; PDAP
+    # applies it automatically.  Algorithm 2 is sphere-normalized and does not use
+    # this parameter.
     moment_order: float = 2.0   # p in the weight w_p(omega) = 1 + |omega|^p
-    # How the moment weight w_p enters the objective (paper/paper_0805.tex).
-    #   "additive_moment"   -- optional additive weighted-L1 objective
-    #                          J = l^M + alpha*sum phi(|c_n|) + beta*sum w_p|c_n|,
-    #                          i.e. the moment norm as a separate weighted-L1 term.
-    #   "normalized_moment" -- the revised paper objective (Section 3),
-    #                          J = l^M + alpha*sum phi(w_p(omega_n)*|c_n|),
-    #                          the penalty of the *normalized* measure mu_p = w_p*mu.
-    #                          moment_beta plays no role and must be 0; moment_order
-    #                          p is active here even at beta = 0.
-    # Implemented by the substitution u = w_p*c, which turns the normalized problem
-    # into the ordinary one with the dictionary K replaced by K_p = K/w_p.
-    objective: str = "additive_moment"
 
 
 @dataclass

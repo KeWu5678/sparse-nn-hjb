@@ -34,11 +34,18 @@ def test_model_groups() -> None:
     with initialize(version_base=None, config_path="../conf"):
         sc = compose(config_name="config", overrides=["model=semiconcave"])
         fs = compose(config_name="config", overrides=["model=frac_exp_penalty"])
+        alg1 = compose(config_name="config", overrides=[
+            "model=paper_log_penalty",
+            "model.activation=softplus",
+        ])
     assert sc.model.kind == "semiconcave"
     assert sc.model.insertion == "profile"
     # frac_exp_penalty config group = signed + finite_step
     assert fs.model.kind == "signed"
     assert fs.model.insertion == "finite_step"
+    assert PDAP(alg1).objective.normalized
+    assert "objective" not in alg1.model
+    assert "moment_beta" not in alg1.model
 
 
 def test_curated_experiment_configs_compose() -> None:

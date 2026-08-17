@@ -22,9 +22,8 @@ VERBOSE ?= false
 # e.g. `make sweep JOBS=10`; JOBS=1 is effectively serial.
 JOBS ?= 8
 # Experiments are named <problem>/<model-family>, matching conf/experiment/:
-#   vdp/log_penalty, vdp/frac_exp_penalty, vdp/moment_penalty,
-#   pendulum/log_penalty, pendulum/frac_exp_penalty,
-#   pendulum/moment_penalty
+#   vdp/log_penalty, vdp/frac_exp_penalty,
+#   pendulum/log_penalty, pendulum/frac_exp_penalty
 # Each config pins its own data, so there is no DATA variable.
 EXPERIMENT ?= vdp/log_penalty
 # Curated sweeps use convention-based paths:
@@ -41,14 +40,14 @@ MLFLOW_RECORDS ?= $(SWEEP_DIR)
 MLFLOW_LATEST ?= true
 MLFLOW_DRY_RUN ?= false
 MLFLOW_STOP_AFTER ?= true
-.PHONY: help openloop sweep moment-sweep moment-refine moment-followup moment-oversampling region-split paper-figures mlflow-deploy mlflow-backfill
+.PHONY: help openloop sweep region-split paper-figures mlflow-deploy mlflow-backfill
 
 help:  ## list targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
 	  awk 'BEGIN {FS = ":.*?## "} {printf "  %-20s %s\n", $$1, $$2}'
 	@printf "\n  %-20s %s\n" "VERBOSE=true" "also stream PDAP tables to console (always in per-run run.log)"
 	@printf "  %-20s %s\n" "JOBS=N" "parallel sweep workers (default 8)"
-	@printf "  %-20s %s\n" "EXPERIMENT=name" "sweep to run: {vdp,pendulum}/{log_penalty,frac_exp_penalty,moment_penalty}"
+	@printf "  %-20s %s\n" "EXPERIMENT=name" "sweep to run: {vdp,pendulum}/{log_penalty,frac_exp_penalty}"
 	@printf "  %-20s %s\n" "MLFLOW_RECORDS=PATH" "JSON record file/dir for backfill (default current sweep dir)"
 	@printf "  %-20s %s\n" "MLFLOW_LATEST=false" "backfill all records under MLFLOW_RECORDS instead of the latest full sweep"
 	@printf "  %-20s %s\n" "MLFLOW_DRY_RUN=true" "preview MLflow backfill records without starting EC2 or uploading"
@@ -97,147 +96,6 @@ sweep:  ## run Hydra multirun EXPERIMENT ({vdp,pendulum}/{log_penalty,frac_exp_p
 	  env.verbose=$(VERBOSE) \
 	  env.seed=42
 	$(PY) "$(ANALYSIS_DIR)/analysis.py"
-
-moment-sweep:  ## run the seed-42 moment screen; beta=0 baseline is deduplicated across p
-	@case "$(EXPERIMENT)" in \
-	  vdp/moment_penalty|pendulum/moment_penalty) ;; \
-	  *) echo "Use EXPERIMENT=vdp/moment_penalty or pendulum/moment_penalty."; exit 2 ;; \
-	esac
-	@$(PY) -c "from src.config.schema import ModelConfig; assert 'moment_beta' in ModelConfig.__dataclass_fields__, 'merge or check out the moment-penalty implementation before running this sweep'"
-	@test -f "$(ANALYSIS_DIR)/analysis.py" || { \
-	  echo "Missing $(ANALYSIS_DIR)/analysis.py, which this target runs on the"; \
-	  echo "records once the sweep finishes.  Per-study analysis.py files are"; \
-	  echo "gitignored (see .gitignore), so a clean checkout does not carry them."; \
-	  echo "Checked here rather than after the sweep, which costs hours."; \
-	  exit 2; \
-	}
-	@if find "$(SWEEP_DIR)/baseline" "$(SWEEP_DIR)/screen" -name '*.json' -print -quit 2>/dev/null | grep -q .; then \
-	  echo "$(SWEEP_DIR) already contains first-pass records; refusing to overwrite or duplicate them."; \
-	  exit 2; \
-	fi
-	@mkdir -p "$(SWEEP_DIR)/baseline" "$(SWEEP_DIR)/screen"
-	OMP_NUM_THREADS=1 $(PY) scripts/train.py -m +experiment=$(EXPERIMENT) \
-	  hydra/launcher=joblib hydra.launcher.n_jobs=$(JOBS) \
-	  hydra.sweep.dir=$(SWEEP_DIR)/baseline \
-	  env.verbose=$(VERBOSE) env.seed=42 \
-	  model.activation=tanh,softplus,gaussian,gelu_squared \
-	  model.alpha=1e-2,1e-3,1e-4,1e-5 \
-	  model.gamma=1 model.loss_weights='[1.0,1.0]' \
-	  model.moment_beta=0 model.moment_order=2.01
-	OMP_NUM_THREADS=1 $(PY) scripts/train.py -m +experiment=$(EXPERIMENT) \
-	  hydra/launcher=joblib hydra.launcher.n_jobs=$(JOBS) \
-	  hydra.sweep.dir=$(SWEEP_DIR)/screen \
-	  env.verbose=$(VERBOSE) env.seed=42 \
-	  model.activation=tanh,softplus,gaussian,gelu_squared \
-	  model.alpha=1e-2,1e-3,1e-4,1e-5 \
-	  model.gamma=1 model.loss_weights='[1.0,1.0]' \
-	  model.moment_beta=1e-10,1e-5,1e-2,1e-1 \
-	  model.moment_order=2.01,2.5,3,4
-	$(PY) "$(ANALYSIS_DIR)/analysis.py"
-
-moment-refine:  ## fill selected beta gaps and add Matern-5/2 at seed 42
-	@case "$(EXPERIMENT)" in \
-	  vdp/moment_penalty|pendulum/moment_penalty) ;; \
-	  *) echo "Use EXPERIMENT=vdp/moment_penalty or pendulum/moment_penalty."; exit 2 ;; \
-	esac
-	@if find "$(SWEEP_DIR)/refine" -name '*.json' -print -quit 2>/dev/null | grep -q .; then \
-	  echo "$(SWEEP_DIR)/refine already contains records; refusing to overwrite or duplicate them."; \
-	  exit 2; \
-	fi
-	@mkdir -p "$(SWEEP_DIR)/refine"
-	@set -e; if [ "$(EXPERIMENT)" = "vdp/moment_penalty" ]; then \
-	  OMP_NUM_THREADS=1 $(PY) scripts/train.py -m +experiment=$(EXPERIMENT) \
-	    hydra/launcher=joblib hydra.launcher.n_jobs=$(JOBS) \
-	    hydra.sweep.dir=$(SWEEP_DIR)/refine/tanh_early \
-	    env.verbose=$(VERBOSE) env.seed=42 model.activation=tanh \
-	    model.alpha=1e-5 model.gamma=1 model.loss_weights='[1.0,1.0]' \
-	    model.moment_beta=1e-9,1e-8,1e-7,1e-6 model.moment_order=2.01; \
-	  OMP_NUM_THREADS=1 $(PY) scripts/train.py -m +experiment=$(EXPERIMENT) \
-	    hydra/launcher=joblib hydra.launcher.n_jobs=$(JOBS) \
-	    hydra.sweep.dir=$(SWEEP_DIR)/refine/softplus_early \
-	    env.verbose=$(VERBOSE) env.seed=42 model.activation=softplus \
-	    model.alpha=1e-5 model.gamma=1 model.loss_weights='[1.0,1.0]' \
-	    model.moment_beta=1e-9,1e-8,1e-7,1e-6 model.moment_order=2.01; \
-	  OMP_NUM_THREADS=1 $(PY) scripts/train.py -m +experiment=$(EXPERIMENT) \
-	    hydra/launcher=joblib hydra.launcher.n_jobs=$(JOBS) \
-	    hydra.sweep.dir=$(SWEEP_DIR)/refine/gaussian_late \
-	    env.verbose=$(VERBOSE) env.seed=42 model.activation=gaussian \
-	    model.alpha=1e-5 model.gamma=1 model.loss_weights='[1.0,1.0]' \
-	    model.moment_beta=1e-4,1e-3 model.moment_order=3; \
-	  OMP_NUM_THREADS=1 $(PY) scripts/train.py -m +experiment=$(EXPERIMENT) \
-	    hydra/launcher=joblib hydra.launcher.n_jobs=$(JOBS) \
-	    hydra.sweep.dir=$(SWEEP_DIR)/refine/gelu_late \
-	    env.verbose=$(VERBOSE) env.seed=42 model.activation=gelu_squared \
-	    model.alpha=1e-3 model.gamma=1 model.loss_weights='[1.0,1.0]' \
-	    model.moment_beta=1e-4,1e-3 model.moment_order=2.01; \
-	else \
-	  OMP_NUM_THREADS=1 $(PY) scripts/train.py -m +experiment=$(EXPERIMENT) \
-	    hydra/launcher=joblib hydra.launcher.n_jobs=$(JOBS) \
-	    hydra.sweep.dir=$(SWEEP_DIR)/refine/softplus_early \
-	    env.verbose=$(VERBOSE) env.seed=42 model.activation=softplus \
-	    model.alpha=1e-4 model.gamma=1 model.loss_weights='[1.0,1.0]' \
-	    model.moment_beta=1e-9,1e-8,1e-7,1e-6 model.moment_order=2.01; \
-	  OMP_NUM_THREADS=1 $(PY) scripts/train.py -m +experiment=$(EXPERIMENT) \
-	    hydra/launcher=joblib hydra.launcher.n_jobs=$(JOBS) \
-	    hydra.sweep.dir=$(SWEEP_DIR)/refine/gelu_early \
-	    env.verbose=$(VERBOSE) env.seed=42 model.activation=gelu_squared \
-	    model.alpha=1e-5 model.gamma=1 model.loss_weights='[1.0,1.0]' \
-	    model.moment_beta=1e-9,1e-8,1e-7,1e-6 model.moment_order=2.01; \
-	  OMP_NUM_THREADS=1 $(PY) scripts/train.py -m +experiment=$(EXPERIMENT) \
-	    hydra/launcher=joblib hydra.launcher.n_jobs=$(JOBS) \
-	    hydra.sweep.dir=$(SWEEP_DIR)/refine/tanh_late \
-	    env.verbose=$(VERBOSE) env.seed=42 model.activation=tanh \
-	    model.alpha=1e-4 model.gamma=1 model.loss_weights='[1.0,1.0]' \
-	    model.moment_beta=1e-4,1e-3 model.moment_order=3; \
-	  OMP_NUM_THREADS=1 $(PY) scripts/train.py -m +experiment=$(EXPERIMENT) \
-	    hydra/launcher=joblib hydra.launcher.n_jobs=$(JOBS) \
-	    hydra.sweep.dir=$(SWEEP_DIR)/refine/gaussian_late \
-	    env.verbose=$(VERBOSE) env.seed=42 model.activation=gaussian \
-	    model.alpha=1e-4 model.gamma=1 model.loss_weights='[1.0,1.0]' \
-	    model.moment_beta=1e-4,1e-3 model.moment_order=2.01; \
-	fi
-	OMP_NUM_THREADS=1 $(PY) scripts/train.py -m +experiment=$(EXPERIMENT) \
-	  hydra/launcher=joblib hydra.launcher.n_jobs=$(JOBS) \
-	  hydra.sweep.dir=$(SWEEP_DIR)/refine/matern_baseline \
-	  env.verbose=$(VERBOSE) env.seed=42 model.activation=matern52 \
-	  model.alpha=1e-4,1e-5 model.gamma=1 model.loss_weights='[1.0,1.0]' \
-	  model.moment_beta=0 model.moment_order=2.01
-	OMP_NUM_THREADS=1 $(PY) scripts/train.py -m +experiment=$(EXPERIMENT) \
-	  hydra/launcher=joblib hydra.launcher.n_jobs=$(JOBS) \
-	  hydra.sweep.dir=$(SWEEP_DIR)/refine/matern_positive \
-	  env.verbose=$(VERBOSE) env.seed=42 model.activation=matern52 \
-	  model.alpha=1e-4,1e-5 model.gamma=1 model.loss_weights='[1.0,1.0]' \
-	  model.moment_beta=1e-10,1e-9,1e-8,1e-7,1e-6,1e-5,1e-4,1e-3,1e-2,1e-1 \
-	  model.moment_order=2.01
-	$(PY) "$(ANALYSIS_DIR)/refinement.py"
-
-moment-followup:  ## compare gamma and value-only/H1 losses at selected moment cells
-	@case "$(EXPERIMENT)" in \
-	  vdp/moment_penalty|pendulum/moment_penalty) ;; \
-	  *) echo "Use EXPERIMENT=vdp/moment_penalty or pendulum/moment_penalty."; exit 2 ;; \
-	esac
-	JOBS=$(JOBS) VERBOSE=$(VERBOSE) bash "$(ANALYSIS_DIR)/followup.sh"
-
-moment-oversampling:  ## rerun the pendulum Gaussian arm on the four switching-band datasets
-	@test "$(EXPERIMENT)" = "pendulum/moment_penalty" || { \
-	  echo "Use EXPERIMENT=pendulum/moment_penalty."; exit 2; \
-	}
-	@if find "$(SWEEP_DIR)/oversampling" -name '*.json' -print -quit 2>/dev/null | grep -q .; then \
-	  echo "$(SWEEP_DIR)/oversampling already contains records; refusing to overwrite or duplicate them."; \
-	  exit 2; \
-	fi
-	@set -e; for variant in base6k band40 band60 add2k; do \
-	  OMP_NUM_THREADS=1 $(PY) scripts/train.py -m +experiment=$(EXPERIMENT) \
-	    hydra/launcher=joblib hydra.launcher.n_jobs=$(JOBS) \
-	    hydra.sweep.dir=$(SWEEP_DIR)/oversampling/$$variant \
-	    env.verbose=$(VERBOSE) env.seed=42 \
-	    data.path=Pendulum_2sided_oversample_20260704/$$variant.npz \
-	    eval.distance_cache=Pendulum_2sided_oversample_20260704/$${variant}_region_distances.npz \
-	    model.kind=signed model.insertion=profile model.activation=gaussian \
-	    model.alpha=1e-3,1e-4,1e-5 model.gamma=0 \
-	    model.loss_weights='[1.0,1.0]' \
-	    model.moment_beta=1e-4 model.moment_order=2.01; \
-	done
 
 region-split:  ## regenerate the pendulum region-split analysis (no sweep of its own; reads the pendulum/* records)
 	$(PY) experiments/02_pendulum/region_split/analysis.py

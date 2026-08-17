@@ -101,7 +101,7 @@ def test_restoring_a_zero_measure_snapshot_empties_an_initialized_model() -> Non
     assert torch.allclose(gradient, torch.zeros_like(gradient))
 
 
-def test_history_summary_records_moment_objective_decomposition() -> None:
+def test_history_summary_records_normalized_objective_decomposition() -> None:
     W = torch.tensor([[1.0, 0.0], [0.0, 2.0], [3.0, 4.0]], dtype=torch.float64)
     b = torch.zeros(3, dtype=torch.float64)
     c = torch.tensor([50.0, -45.0, 5.0], dtype=torch.float64)
@@ -115,34 +115,32 @@ def test_history_summary_records_moment_objective_decomposition() -> None:
         alpha=0.1,
         gamma=0.0,
         loss_weights=(1.0, 1.0),
-        moment_beta=0.01,
         moment_order=2.0,
+        normalized=True,
     )
 
     history = History()
     history.record(model, objective, samples, samples)
     metrics = history.summary_metrics()
 
-    # gamma=0 gives Phi_1 = sum |c| = 100.
-    # Psi_2 = 50*(1+1) + 45*(1+4) + 5*(1+25) = 455.
-    assert math.isclose(metrics["phi_1"], 100.0, rel_tol=1e-12)
+    # gamma=0 gives Phi_1(mu_p) = Psi_2(mu)
+    # = 50*(1+1) + 45*(1+4) + 5*(1+25) = 455.
+    assert math.isclose(metrics["phi_1"], 455.0, rel_tol=1e-12)
     assert math.isclose(metrics["psi_p"], 455.0, rel_tol=1e-12)
-    assert math.isclose(metrics["alpha_phi_1"], 10.0, rel_tol=1e-12)
-    assert math.isclose(metrics["beta_psi_p"], 4.55, rel_tol=1e-12)
+    assert math.isclose(metrics["alpha_phi_1"], 45.5, rel_tol=1e-12)
     assert math.isclose(metrics["radius_r95"], 2.0, rel_tol=1e-12)
     assert math.isclose(metrics["radius_max"], 5.0, rel_tol=1e-12)
     assert math.isclose(metrics["total_variation"], 100.0, rel_tol=1e-12)
 
     # Targets equal predictions, so both fidelity channels vanish and the
-    # complete objective is exactly the two regularizer terms.
+    # complete objective is exactly the normalized-measure penalty.
     assert metrics["data_value_term_train"] == 0.0
     assert metrics["data_gradient_term_train"] == 0.0
-    assert math.isclose(metrics["objective_train"], 14.55, rel_tol=1e-12)
+    assert math.isclose(metrics["objective_train"], 45.5, rel_tol=1e-12)
     assert math.isclose(
         metrics["objective_train"],
         metrics["data_value_term_train"]
         + metrics["data_gradient_term_train"]
-        + metrics["alpha_phi_1"]
-        + metrics["beta_psi_p"],
+        + metrics["alpha_phi_1"],
         rel_tol=1e-12,
     )

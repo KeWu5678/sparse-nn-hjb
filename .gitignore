@@ -55,6 +55,7 @@ outdated/
 rawdata/
 reference/
 plan.md
+prompt.md
 
 # ---- autoresearch outputs (scoreboards + per-run JSON/logs) ----
 autoresearch/results.tsv
@@ -69,6 +70,10 @@ docs/research/
 
 # ---- Untracked locally: analysis scripts and experiment artifacts ----
 experiments/**/analysis.py
+# The retired additive-moment study remains available from Git history; local
+# copies may be kept for comparison without being part of the current version.
+experiments/*/moment_penalty/
+experiments/moment_refinement_common.py
 experiments/*/paper_log_penalty/
 experiments/*/paper_frac_exp_penalty/
 experiments/algorithm2_rho_pilot.md

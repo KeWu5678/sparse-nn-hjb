@@ -11,8 +11,9 @@
 # insert_init, insert_mode, correction_guard, loop_order, radial_cap -- live
 # under `training` and are set by the experiment configs in
 # conf/experiment/*/paper_log_penalty.yaml.
+# The normalized objective is implied by this signed, nonhomogeneous profile
+# model; there is no separate objective selector.
 kind: signed
 insertion: profile
 power: 1.0
-objective: normalized_moment
 moment_order: 2.01

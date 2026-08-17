@@ -24,7 +24,7 @@ from torch.nn.utils import parameters_to_vector, vector_to_parameters
 
 from ..SSN import SSN
 from ..SSN.penalty import _phi
-from .moment import atom_normalizer, moment_weight
+from .moment import atom_normalizer
 
 if TYPE_CHECKING:
     from ..models.base import PDAPModel
@@ -44,29 +44,18 @@ class Objective:
     the model's activation power (the prox closed-forms depend on it), so it lives
     on the model.
 
-    ``moment_beta`` / ``moment_order`` carry the parameter-moment axis:
-    ``beta * sum_j (1 + |omega_j|^p) |c_j|``.  ``moment_beta = 0`` (default) means
-    the axis is off; when on it is validated in :class:`src.PDAP.PDAP`.
-
-    ``kind`` selects how the moment weight enters (see ``model.objective``):
-    ``"additive_moment"`` keeps the separate ``beta`` term, ``"normalized_moment"``
-    is the revised paper objective ``l^M + alpha * sum phi(w_p(omega_n)|c_n|)``,
-    realized by the ``u = w_p c`` substitution of
-    :func:`src.PDAP.moment.atom_normalizer`.
+    ``normalized`` is an internal model-family property, not a configurable
+    objective choice.  It is true only for nonhomogeneous Algorithm 1, whose
+    objective ``l^M + alpha * sum phi(w_p(omega_n)|c_n|)`` is realized by the
+    substitution ``u = w_p c``.
     """
 
     alpha: float = 1e-5
     gamma: float = 0.0
     th: float = 0.5
     loss_weights: Tuple[float, float] = (1.0, 1.0)
-    moment_beta: float = 0.0
     moment_order: float = 2.0
-    kind: str = "additive_moment"
-
-    @property
-    def normalized(self) -> bool:
-        """True when the penalty is evaluated at the normalized measure ``mu_p``."""
-        return self.kind == "normalized_moment"
+    normalized: bool = False
 
 
 @dataclass(frozen=True)
@@ -171,24 +160,16 @@ def ssn_solve(
     scale = None
     if objective.normalized:
         W, b, _ = model.get_atoms()
-        scale = atom_normalizer(W, b, normalized=True, p=objective.moment_order)
+        scale = atom_normalizer(W, b, p=objective.moment_order)
         if scale.numel() != theta.numel():
             raise RuntimeError(
-                "normalized_moment expects one trainable coordinate per atom "
+                "normalized Algorithm 1 expects one trainable coordinate per atom "
                 f"(got {theta.numel()} for {scale.numel()} atoms)"
             )
         Phi_v = Phi_v / scale
         Phi_g = Phi_g / scale
         H = (w1 / Nx) * (Phi_v.T @ Phi_v) + (w2 / Nx) * (Phi_g.T @ Phi_g)
         theta = torch.nn.Parameter((theta.detach() * scale).clone())
-
-    # Parameter-moment axis: per-coordinate L1 weight beta * w_p(omega_j) aligned
-    # to theta (theta is the atom outer weights for the signed model, the only
-    # model the axis is enabled for).  None (beta == 0) reproduces the plain solve.
-    moment_vec = None
-    if objective.moment_beta > 0.0:
-        W, b, _ = model.get_atoms()
-        moment_vec = objective.moment_beta * moment_weight(W, b, objective.moment_order)
 
     prox_scale = None
     initial_nonzero = None
@@ -209,7 +190,7 @@ def ssn_solve(
         th=th, lr=solver.lr, power=model.power, method=solver.method,
         max_ls_iter=solver.max_ls_iter, tolerance_ls=solver.tolerance_ls,
         tolerance_grad=solver.tolerance_grad, sigmamax=solver.sigmamax,
-        moment_vec=moment_vec, prox_scale=prox_scale,
+        prox_scale=prox_scale,
     )
     optimizer.data_hessian = H
 
@@ -219,8 +200,6 @@ def ssn_solve(
         rg = Phi_g @ theta - dVt
         data = (w1 / (2 * Nx)) * (rv @ rv) + (w2 / (2 * Nx)) * (rg @ rg)
         penalty = nonconvex_penalty(theta, penalized, nonneg, alpha=alpha, th=th, gamma=gamma, q=q)
-        if moment_vec is not None:
-            penalty = penalty + torch.sum(moment_vec * theta.abs())
         return data + penalty
 
     prev = float(closure().detach())

@@ -68,7 +68,6 @@ class PDAP:
         # Paper-conformance axes.  Each is validated here rather than at use, so a
         # typo fails at construction instead of midway through a sweep.
         for field, value, allowed in (
-            ("model.objective", m.objective, ("additive_moment", "normalized_moment")),
             ("training.insert_init", t.insert_init, ("warm_start", "guaranteed")),
             ("training.insert_mode", t.insert_mode, ("batch", "sequential")),
             ("training.loop_order", t.loop_order, ("correction_first", "insertion_first")),
@@ -77,7 +76,6 @@ class PDAP:
             if value not in allowed:
                 raise ValueError(f"{field} must be one of {allowed}, got {value!r}")
 
-        self.objective_kind = m.objective
         self.insert_init = t.insert_init
         self.insert_mode = t.insert_mode
         self.correction_guard = bool(t.correction_guard)
@@ -94,11 +92,7 @@ class PDAP:
                 f"got power={m.power}"
             )
 
-        if (
-            m.insertion == "finite_step"
-            and m.objective != "normalized_moment"
-            and m.moment_beta == 0.0
-        ):
+        if m.insertion == "finite_step":
             if m.kind != "signed":
                 raise ValueError(
                     "finite_step insertion is Algorithm 2 and requires a signed model; "
@@ -124,76 +118,34 @@ class PDAP:
                     "rho": ALGORITHM2_PROX_RHO,
                 }
 
-        # The revised objective replaces the additive moment term by the moment
-        # weight inside phi; carrying both would price the same distance twice and
-        # make the comparator meaningless.
-        if m.objective == "normalized_moment":
-            if m.moment_beta > 0.0:
-                raise ValueError(
-                    "model.objective='normalized_moment' is the revised paper objective "
-                    "J = l^M + alpha*sum phi(w_p(omega)|c|), in which the moment norm is "
-                    f"not an additive term; it requires moment_beta == 0, got {m.moment_beta}"
-                )
-            # The u = w_p*c substitution needs theta to be exactly the per-atom outer
-            # weight, and Algorithm 1's penalty is the q=1 log family phi_gamma.
-            if m.kind != "signed":
-                raise ValueError(
-                    f"model.objective='normalized_moment' requires a signed model; got kind={m.kind!r}"
-                )
-            if m.insertion != "profile":
-                raise ValueError(
-                    "model.objective='normalized_moment' is Algorithm 1 (profile insertion); "
-                    f"got insertion={m.insertion!r}.  The k-homogeneous formulation behind "
-                    "finite_step normalizes to the sphere instead and carries no w_p."
-                )
-            if m.power != 1.0:
-                raise ValueError(
-                    "model.objective='normalized_moment' requires power == 1 (the q=1 log "
-                    f"penalty family of Algorithm 1); got power={m.power}"
-                )
+        # A signed profile model with a nonhomogeneous activation is Algorithm 1.
+        # Its normalized-measure objective is determined by that identity rather
+        # than exposed as a second configurable formulation.
+        normalized = (
+            m.kind == "signed"
+            and m.insertion == "profile"
+            and not self._use_sphere
+        )
+        if normalized and m.power != 1.0:
+            raise ValueError(
+                "nonhomogeneous signed profile insertion is Algorithm 1 and requires "
+                f"power == 1; got power={m.power}"
+            )
         if t.insert_init == "guaranteed" and m.kind != "signed":
             raise ValueError(
                 "training.insert_init='guaranteed' is the signed theorem step; "
                 f"got kind={m.kind!r}"
             )
 
-        # Parameter-moment axis validation: confine it to the regime where it is
-        # meaningful (|omega| is a free scale, not sphere-gauge-fixed) and where it
-        # is implemented (signed kind, q=1 log family, profile insertion).  When
-        # off (moment_beta == 0) nothing is checked -- today's behavior.
-        if not m.moment_beta >= 0.0:
-            raise ValueError(
-                f"moment_beta must be nonnegative; got moment_beta={m.moment_beta}"
-            )
         if not m.moment_order > 0.0:
             raise ValueError(
                 f"moment_order must be positive; got moment_order={m.moment_order}"
             )
-        if m.moment_beta > 0.0:
-            if m.kind != "signed":
-                raise ValueError(
-                    f"moment_beta > 0 requires a signed model (kind='signed'); got kind={m.kind!r}"
-                )
-            if self._use_sphere:
-                raise ValueError(
-                    f"moment_beta > 0 requires a non-sphere activation (|omega| a free scale); "
-                    f"activation {m.activation!r} is sphere-gauge-fixed (|omega|=1), so the "
-                    f"moment term is a degenerate constant"
-                )
-            if m.power != 1.0:
-                raise ValueError(
-                    f"moment_beta > 0 requires power == 1 (the q=1 log penalty family); "
-                    f"got power={m.power}"
-                )
-            if m.insertion != "profile":
-                raise ValueError(
-                    f"moment_beta > 0 requires profile insertion; got insertion={m.insertion!r}"
-                )
 
         # The objective (what is minimized) and the SSN solver settings.
         self.objective = Objective(
             alpha=m.alpha, gamma=m.gamma, th=m.th, loss_weights=tuple(m.loss_weights),
-            moment_beta=m.moment_beta, moment_order=m.moment_order, kind=m.objective,
+            moment_order=m.moment_order, normalized=normalized,
         )
         self.solver = SolverConfig(
             lr=t.lr, method=t.method, max_ls_iter=t.max_ls_iter,
@@ -286,8 +238,7 @@ class PDAP:
             activation=model.activation, power=model.power,
             loss_weights=o.loss_weights, alpha=o.alpha, th=o.th, gamma=o.gamma,
             use_sphere=self._use_sphere, nonneg=not isinstance(model, SignedModel),
-            moment_beta=o.moment_beta, moment_order=o.moment_order,
-            normalized=o.normalized, verbose=verbose,
+            moment_order=o.moment_order, normalized=o.normalized, verbose=verbose,
         )
 
     # ------------------------------------------------------------------ #
@@ -324,7 +275,7 @@ class PDAP:
         if self.insertion_kind == "profile":
             W, b, c = profile_threshold(
                 X, res_v, res_dv, two_sided=two_sided,
-                moment_beta=self.objective.moment_beta, moment_order=self.objective.moment_order,
+                moment_order=self.objective.moment_order,
                 normalized=self.objective.normalized, insert_init=self.insert_init,
                 radius=radius, **common,
             )

@@ -1,14 +1,4 @@
-"""The paper-conformance axes of ``PDAP`` (paper/paper_0805.tex, Sections 3 and 5).
-
-Each axis defaults to the preserved comparator, so the checks here are about the
-*opted-in* behaviour: that the normalized objective is the one the paper writes,
-that the inserted coefficient delivers the decrease the theorem promises, that
-the correction guard makes the loop monotone, and that the growth constants the
-search radius is built from are actually upper bounds.
-
-``tests/test_pdap_equivalence.py`` covers the other side: that the defaults still
-reproduce the recorded behaviour.
-"""
+"""Paper-conformance checks for ``PDAP`` (paper Sections 3 and 5)."""
 
 from __future__ import annotations
 
@@ -42,7 +32,7 @@ def _data(n: int = 60, seed: int = 0) -> dict:
 def _cfg(**over) -> ExperimentConfig:
     model_keys = {
         "kind", "insertion", "activation", "power", "alpha", "gamma", "th",
-        "objective", "moment_beta", "moment_order", "loss_weights",
+        "moment_order", "loss_weights",
     }
     train_keys = {
         "insert_init", "insert_mode", "correction_guard", "loop_order", "radial_cap",
@@ -105,7 +95,7 @@ def test_declared_growth_constants_are_upper_bounds(name: str) -> None:
 # --------------------------------------------------------------------------- #
 def test_normalized_objective_is_phi_of_the_scaled_coefficient() -> None:
     """The recorded objective equals l^M + alpha * sum phi(w_p(omega_n)|c_n|)."""
-    cfg = _cfg(objective="normalized_moment", moment_order=2.01)
+    cfg = _cfg(moment_order=2.01)
     model, _, train = _fit(cfg)
     objective = PDAP(cfg).objective
 
@@ -120,7 +110,7 @@ def test_normalized_objective_is_phi_of_the_scaled_coefficient() -> None:
 
 def test_normalized_dictionary_reproduces_the_network() -> None:
     """K_p @ u == K @ c, which is what makes the substitution legitimate."""
-    cfg = _cfg(objective="normalized_moment", moment_order=2.01)
+    cfg = _cfg(moment_order=2.01)
     model, _, train = _fit(cfg)
     W, b, c = model.get_atoms()
     w_p = moment_weight(W, b, 2.01).reshape(-1)
@@ -138,7 +128,7 @@ def test_guaranteed_insertion_delivers_the_promised_decrease() -> None:
     per-neuron curvature A = ||K_p(omega)||^2 in place of the uniform B_p^2 (the
     sharper of the two, and it implies the printed bound since A <= B_p^2).
     """
-    cfg = _cfg(objective="normalized_moment", moment_order=2.01,
+    cfg = _cfg(moment_order=2.01,
                insert_init="guaranteed", loop_order="insertion_first")
     model, _, train = _fit(cfg, iterations=3)
     objective = PDAP(cfg).objective
@@ -195,7 +185,7 @@ def test_guaranteed_insertion_delivers_the_promised_decrease() -> None:
 
 
 def test_correction_guard_keeps_the_objective_monotone() -> None:
-    cfg = _cfg(objective="normalized_moment", moment_order=2.01,
+    cfg = _cfg(moment_order=2.01,
                insert_init="guaranteed", correction_guard=True,
                loop_order="insertion_first")
     _, history, _ = _fit(cfg, iterations=6)
@@ -219,7 +209,7 @@ def test_insertion_first_ends_on_a_corrected_network() -> None:
 
 
 def test_sequential_adds_at_most_one_atom_per_iteration() -> None:
-    cfg = _cfg(objective="normalized_moment", moment_order=2.01,
+    cfg = _cfg(moment_order=2.01,
                insert_init="guaranteed", insert_mode="sequential",
                loop_order="insertion_first")
     _, history, _ = _fit(cfg, iterations=6)
@@ -275,7 +265,6 @@ def test_theorem_radius_binds_only_at_large_moment_order() -> None:
 
 def test_insertion_reuses_the_residual_for_the_theorem_radius() -> None:
     cfg = _cfg(
-        objective="normalized_moment",
         alpha=1e6,
         moment_order=2.01,
         insert_init="guaranteed",
@@ -318,10 +307,7 @@ def test_insertion_reuses_the_residual_for_the_theorem_radius() -> None:
 @pytest.mark.parametrize(
     "over, message",
     [
-        (dict(objective="normalized_moment", moment_beta=1e-5), "moment_beta == 0"),
-        (dict(objective="normalized_moment", kind="semiconcave"), "signed model"),
-        (dict(objective="normalized_moment", insertion="finite_step"), "Algorithm 1"),
-        (dict(objective="normalized_moment", power=2.0), "power == 1"),
+        (dict(activation="softplus", power=2.0), "Algorithm 1.*power == 1"),
         (dict(insert_init="guaranteed", kind="semiconcave"), "signed theorem step"),
         (
             dict(insertion="finite_step", activation="relu", power=4.0, gamma=0.0),
@@ -343,7 +329,6 @@ def test_insertion_reuses_the_residual_for_the_theorem_radius() -> None:
             dict(insertion="finite_step", kind="semiconcave", activation="relu"),
             "signed model",
         ),
-        (dict(objective="nonsense"), "model.objective must be one of"),
         (dict(insert_mode="nonsense"), "training.insert_mode must be one of"),
     ],
 )
