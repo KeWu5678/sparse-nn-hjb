@@ -184,7 +184,7 @@ def main(cfg: DictConfig) -> None:
         run_id=run_id_from_config(cfg, hydra_cfg=hydra_cfg),
         config=OmegaConf.to_container(cfg, resolve=True),
         hydra=hydra_metadata(hydra_cfg),
-        provenance=trainer.coefficient_solver_provenance,
+        provenance=trainer.algorithm_provenance,
     )
 
     # Data preprocessing lives in the script: load, normalize, split.  The model

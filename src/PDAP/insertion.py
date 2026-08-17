@@ -32,7 +32,14 @@ from .moment import moment_weight
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["profile_threshold", "finite_step", "solve_insertion_weight"]
+ALGORITHM2_CANDIDATE_STARTS = "random_sphere_multistart"
+
+__all__ = [
+    "ALGORITHM2_CANDIDATE_STARTS",
+    "profile_threshold",
+    "finite_step",
+    "solve_insertion_weight",
+]
 
 
 # ---------------------------------------------------------------------------- #
@@ -154,8 +161,9 @@ def _generate_candidates(
                         keep[j] = False
         return a_cands[keep], b_cands[keep]
 
-    # Step 1: random starts.  Only the homogeneous sphere search injects the
-    # existing support.
+    # Step 1: random starts.  Existing support points are not injected into the
+    # multistart search; for Algorithm 2 they are retained only to reject final
+    # candidates that return to the current support.
     #
     # The homogeneous search is posed on the sphere, so its starting points live
     # there.  The nonhomogeneous search ranges over the ball of radius
@@ -183,11 +191,6 @@ def _generate_candidates(
             U_exist = torch.cat([W_exist, b_exist.reshape(-1, 1)], dim=1)
             U_exist = U_exist / U_exist.norm(dim=1, keepdim=True).clamp_min(1e-12)
             existing_unit = U_exist
-            n_exist = U_exist.shape[0]
-            if n_exist > N // 2:
-                U_exist = U_exist[torch.randperm(n_exist)[:N // 2]]
-            a_t = torch.cat([a_t, U_exist[:, :d_dim]], dim=0)
-            b_t = torch.cat([b_t, U_exist[:, d_dim]], dim=0)
 
     # A nonhomogeneous search uses one joint solve from each random start, then
     # filters and deduplicates once.  Algorithm 2 retains its repeated sphere
@@ -209,10 +212,9 @@ def _generate_candidates(
         if n_before == n_after:
             break
 
-    # Existing atoms are useful L-BFGS starts for the fractional-power method,
-    # but its one-atom increment assumes a distinct new location.  Drop final
-    # k>1 candidates that return to the current support.  The k=1 ReLU--L1
-    # baseline intentionally retains its established candidate behavior.
+    # The fractional-power one-atom increment assumes a distinct new location.
+    # Drop final k>1 candidates that return to the current support.  The k=1
+    # ReLU--L1 baseline intentionally retains its established candidate behavior.
     if use_sphere and power > 1.0 and existing_unit is not None and a_t.shape[0] > 0:
         U = torch.cat([a_t, b_t.reshape(-1, 1)], dim=1)
         U = U / U.norm(dim=1, keepdim=True).clamp_min(1e-12)

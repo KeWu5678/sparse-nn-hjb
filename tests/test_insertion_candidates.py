@@ -245,7 +245,7 @@ def test_algorithm1_filters_radius_before_first_kept_deduplication(monkeypatch):
     assert a.item() == pytest.approx(0.999)
 
 
-def test_fractional_algorithm2_uses_existing_atoms_only_as_search_starts(monkeypatch):
+def test_fractional_algorithm2_uses_only_random_search_starts(monkeypatch):
     existing = (
         torch.tensor([[-1.0]], dtype=torch.float64),
         torch.tensor([0.0], dtype=torch.float64),
@@ -261,7 +261,7 @@ def test_fractional_algorithm2_uses_existing_atoms_only_as_search_starts(monkeyp
     )
     omega = torch.cat([a, b.reshape(-1, 1)], dim=1)
     assert n == 2
-    assert len(fake.instances) == 3
+    assert len(fake.instances) == 2
     existing_point = torch.tensor([-1.0, 0.0], dtype=torch.float64)
     assert not torch.any(torch.all(torch.isclose(omega, existing_point), dim=1))
     assert torch.allclose(
@@ -270,12 +270,12 @@ def test_fractional_algorithm2_uses_existing_atoms_only_as_search_starts(monkeyp
     )
 
 
-def test_relu_l1_keeps_its_existing_support_candidate_behavior(monkeypatch):
+def test_relu_l1_uses_only_random_search_starts(monkeypatch):
     existing = (
         torch.tensor([[-1.0]], dtype=torch.float64),
         torch.tensor([0.0], dtype=torch.float64),
     )
-    a, b, n, _, _ = _generate(
+    a, b, n, _, fake = _generate(
         monkeypatch,
         outputs=[],
         starts=[[1.0, 0.0], [0.0, 1.0]],
@@ -286,13 +286,7 @@ def test_relu_l1_keeps_its_existing_support_candidate_behavior(monkeypatch):
     )
     omega = torch.cat([a, b.reshape(-1, 1)], dim=1)
 
-    assert n == 3
-    assert torch.any(
-        torch.all(
-            torch.isclose(
-                omega,
-                torch.tensor([-1.0, 0.0], dtype=torch.float64),
-            ),
-            dim=1,
-        )
-    )
+    assert n == 2
+    assert len(fake.instances) == 2
+    existing_point = torch.tensor([-1.0, 0.0], dtype=torch.float64)
+    assert not torch.any(torch.all(torch.isclose(omega, existing_point), dim=1))
