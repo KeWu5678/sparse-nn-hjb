@@ -57,8 +57,10 @@ curated experiment summaries are now the source of truth; the legacy
    [01_vdp/paper_frac_exp_penalty/results.md](01_vdp/paper_frac_exp_penalty/results.md)
    and [02_pendulum/paper_frac_exp_penalty/results.md](02_pendulum/paper_frac_exp_penalty/results.md).
    Decisions behind them: [docs/adr/0007](../docs/adr/0007-per-neuron-curvature-in-the-insertion-step.md),
-   [docs/adr/0008](../docs/adr/0008-sequential-insertion-budget.md), and the
-   amendment to [docs/adr/0006](../docs/adr/0006-retain-radial-search-clamp.md).
+   [docs/adr/0008](../docs/adr/0008-sequential-insertion-budget.md),
+   [docs/adr/0009](../docs/adr/0009-use-verified-closed-form-global-proximal-maps.md),
+   and the amendment to
+   [docs/adr/0006](../docs/adr/0006-retain-radial-search-clamp.md).
 
 ## Migration Note
 

@@ -135,9 +135,10 @@ make paper-artifacts
 - **`src/SSN/` — a semismooth Newton optimizer in PyTorch**: a
   `torch.optim.Optimizer` subclass with matrix-free CG for the Newton system
   and proximal handling of the non-convex penalties. Algorithm 2 uses the
-  closed-form global scalar proximal maps for q in {1/2, 2/3, 1}, while the
-  outer acceptance guard prevents a local coefficient correction from
-  increasing the objective
+  closed-form global scalar proximal maps for q in {1/2, 2/3, 1}
+  ([ADR-0009](docs/adr/0009-use-verified-closed-form-global-proximal-maps.md)),
+  while the outer acceptance guard prevents a local coefficient correction
+  from increasing the objective
   ([ADR-0004](docs/adr/0004-model-trainer-eval-separation.md)).
 - **Golden-output tests** guard the PDAP solver: refactors of the numerical
   core are checked against stored reference solutions, not just unit
