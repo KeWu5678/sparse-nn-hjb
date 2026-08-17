@@ -325,12 +325,15 @@ The contributions are the following.
 	quantitatively separated, and its width is bounded by a covering number
 	(Theorem~\ref{thm:finite_support}). Corollary~\ref{cor:finite-global-minimizer}
 	gives an attained finite-network problem and an a priori neuron bound.
-	The normalized optimality system is Theorem~\ref{opt_cdt}, while
-	Theorem~\ref{thm:quantitative-insertion} gives squared descent and an
-	$n^{-1/2}$ best-iterate rate for the excess above the insertion threshold.
-	\item \emph{The $k$-homogeneous formulation.} For positively
-	$k$-homogeneous activations, minimizing a separable penalty on the inner
-	and outer parameters over radial representations induces the
+	The normalized optimality system is Theorem~\ref{opt_cdt}.
+	Theorem~\ref{thm:quantitative-insertion} gives squared one-step descent,
+	and Corollary~\ref{cor:certificate-rate} gives an $n^{-1/2}$ best-iterate
+	rate for the excess above the insertion threshold.
+	\item \emph{The $k$-homogeneous formulation.} Extending the degree-one
+	ReLU rescaling equivalence of Pieper and Petrosyan
+	\cite[Appendix~F, Proposition~3]{pieper2022nonconvex}, we show that for
+	positively $k$-homogeneous activations, minimizing a separable penalty on
+	the inner and outer parameters over radial representations induces the
 	fractional-power penalty $|c|^{2/(k+1)}$ on the unit sphere
 	(Lemma~\ref{lem:homogeneous-penalty}), and the resulting problem is posed
 	over all of $\mathcal M(\mathbb S^d)$. Finite atomic truncations show that
@@ -363,11 +366,10 @@ against $1.00\times10^{-1}$ at twenty atoms --- and overtakes the sparse
 penalties only past that width, where it eventually reaches
 $7.4\times10^{-2}$. The nonconvex penalties therefore buy accuracy per neuron,
 not a lower floor. On the pendulum, where the value gradient jumps across the
-switching set, $\mathrm{ReLU}^{2}$ gives the smallest regional error and the
-feedback law closest to the reference; softplus also reaches an upright from
-both tested starts, but at a higher cost from the harder start.
-$\mathrm{ReLU}^{5}$ reaches an upright from both as well, but with substantially
-higher costs from both starts.
+switching set, the Gaussian gives the smallest regional errors, while
+$\mathrm{ReLU}^{2}$ gives the feedback law closest to the reference.
+Softplus also reaches an upright from both tested starts, but at a higher cost
+from the harder start.
 
 \begin{figure}[htbp]
 \centering
@@ -1216,16 +1218,19 @@ support points, this becomes
 	+\alpha\sum_{n=1}^N
 	\phi\bigl(w_p(\omega_n)|c_n|\bigr).
 \end{equation*}
+Throughout, finite-network representations are understood after repeated
+locations are merged and zero coefficients are discarded; their width is
+therefore $\#\atom\mu$.
 
 \begin{definition}[Local minimizer]
 \label{def:local_min}
 A measure $\bar\mu\in\mathcal M_p(\Omega)$ is a local minimizer of $J$ if
-there is $\varepsilon>0$ such that
+$J(\bar\mu)<\infty$ and there is $\varepsilon>0$ such that
 \begin{equation*}
 	J(\bar\mu)\le J(\mu)
 	\qquad\text{for all}\qquad
 	\mu\in\mathcal M_p(\Omega),\quad
-		\|\mu-\bar\mu\|_{\mathcal M_p(\Omega)}\le\varepsilon.
+		\|\mu-\bar\mu\|_{\mathcal M_p(\Omega)}<\varepsilon.
 \end{equation*}
 \end{definition}
 By Theorem~\ref{thm:normalization}, this is exactly total-variation local
@@ -1400,16 +1405,20 @@ an admissible direction $\mu'$, the G\^ateaux derivative is
 	:=\lim_{t\to0}\frac{L(\mu+t\mu')-L(\mu)}{t}
 		=\langle r_\mu,\mathcal N\mu'\rangle_{H^1(D)}.
 \end{equation*}
-At such a local minimizer, define
+The corresponding derivative profile is
 \begin{equation*}
-	\bar P(\omega):=D L(\bar\mu)[\delta_\omega]
-	=\langle r_{\bar\mu},K(\omega)\rangle_{H^1(D)}.
+	P_\mu(\omega):=DL(\mu)[\delta_\omega]
+	=\langle r_\mu,K(\omega)\rangle_{H^1(D)}.
 \end{equation*}
-Its weighted form is
+Define its normalized form and the uniform normalized feature bound by
 \begin{equation*}
-	\bar P_p(\omega):=\frac{\bar P(\omega)}{w_p(\omega)}
-	=\langle r_{\bar\mu},K_p(\omega)\rangle_{H^1(D)}.
+	P_{p,\mu}(\omega):=\frac{P_\mu(\omega)}{w_p(\omega)}
+	=\langle r_\mu,K_p(\omega)\rangle_{H^1(D)},
+	\qquad
+	B_p:=\sup_{\omega\in\Omega}\|K_p(\omega)\|_{H^1(D)}.
 \end{equation*}
+At the local minimizer write
+$\bar P:=P_{\bar\mu}$ and $\bar P_p:=P_{p,\bar\mu}$.
 Thus $\bar P$ is the function representing the G\^ateaux derivative. For
 differentiable $\rho$,
 \begin{equation*}
@@ -1654,8 +1663,8 @@ balls of radius $r$ needed to cover $A$.
 \begin{proof}
 We use the isometry of Theorem~\ref{thm:normalization}, the first-order
 identities of Theorem~\ref{opt_cdt}, and local
-coefficient variations to prove the assertions.  Concavity, coercivity, and
-$L_\phi>0$ imply that $\phi(t)>0$ for $t>0$.  
+coefficient variations to prove the assertions. Concavity, coercivity, and
+$L_\phi>0$ imply that $\phi(t)>0$ for $t>0$.
 
 The zero-objective branch is immediate:
 \begin{equation*}
@@ -2069,8 +2078,6 @@ Choose $\varepsilon_1>0$ such that
 $\widehat J(z)\ge\widehat J(\bar z)$ whenever
 $\|z-\bar z\|_{\ell^1}\le\varepsilon_1$. Put
 \begin{equation*}
-	B:=\sup_{\omega\in\Omega}\|K_p(\omega)\|_{H^1(D)},
-	\qquad
 	B_{\bar\omega}:=\max_{1\le n\le N}\|K_p(\bar\omega_n)\|_{H^1(D)}.
 \end{equation*}
 Choose $\varepsilon>0$ so that
@@ -2079,7 +2086,7 @@ Choose $\varepsilon>0$ so that
 	\qquad
 	\varepsilon\le\hat z_1,
 	\qquad
-	B\,B_{\bar\omega}\varepsilon\le\frac m2,
+	B_pB_{\bar\omega}\varepsilon\le\frac m2,
 	\qquad
 	\frac{\alpha\gamma_1\varepsilon}{2}\le\frac m4.
 \end{equation*}
@@ -2118,7 +2125,7 @@ Then
 	&\le B_{\bar\omega}\|z-\bar z\|_{\ell^1}
 	\le B_{\bar\omega}\varepsilon,\\
 	|Q_p(\omega)|
-	&\le B\,B_{\bar\omega}\varepsilon
+	&\le B_pB_{\bar\omega}\varepsilon
 	\le\frac m2.
 \end{align*}
 Combining this with \eqref{eq:uniform-normalized-gap} gives
@@ -2188,7 +2195,7 @@ Thus $\bar\mu$ is an $\mathcal M_p(\Omega)$-local minimizer.
 
 
 
-\subsection{Admissible activations}
+\subsubsection*{Admissible activations}
 \label{sec:admissible}
 The two exponents in Assumption~\ref{ass:value-growth} play different roles:
 $s_0$ controls the value atom in
@@ -2229,8 +2236,15 @@ homogeneous formulation of Section~4.
 
 
 \section{The \texorpdfstring{$k$}{k}-homogeneous formulation}
-This section treats activations for which radial scaling can be absorbed into
-the outer coefficient. Positive homogeneity makes the radial part of an inner
+
+The $\reluk$ activation function is of particular interest since it is widely used in the Sobolev training \cite{li2024twolayer,heeringa2024embeddings}.
+For gradient fitting with $\reluk$ we use $k\ge2$, so that
+$K(\omega)\in C^1(\overline D)$.
+As we will see in this section, the induced penalty is $\psi_k(t)=t^q$ with
+$q=2/(k+1)<1$, so it has infinite right slope at zero. It does not
+extend the result in Section~3.
+
+On the other hand, $k$-homogeneity makes the radial part of an inner
 parameter redundant: every atom can be moved onto the unit sphere
 $\mathbb S^d\subset\mathbb R^{d+1}$ at the cost of rescaling its outer
 coefficient. The parameter domain of the resulting problem is compact, so the
@@ -2239,35 +2253,7 @@ weighted space $\mathcal M_p(\Omega)$ of Section~3 is required. Throughout
 this section we work on $\mathcal M(\mathbb S^d)$ with the total-variation
 norm $\|\cdot\|_{\mathcal M(\mathbb S^d)}$, which we identify with the
 subspace of $\mathcal M(\Omega)$ of measures vanishing outside
-$\mathbb S^d$; the value operator $\mathcal N$, the residual
-$r_\mu=\mathcal N\mu-V$, and the fidelities $L$ and $l^M$ are those of
-Section~3. Whenever $K:\mathbb S^d\to H^1(D)$ is continuous, set
-$C_S:=\sup_{\omega\in\mathbb S^d}\|K(\omega)\|_{H^1(D)}<\infty$.
-Continuity on the compact sphere makes $K$ bounded and strongly measurable,
-so the Bochner integral $\mathcal N\mu:=\int_{\mathbb S^d}K\,d\mu$ defines a
-bounded linear map from $\mathcal M(\mathbb S^d)$ to $H^1(D)$ satisfying
-$\|\mathcal N\mu\|_{H^1(D)}\le C_S\|\mu\|_{\mathcal M(\mathbb S^d)}$.
-For $\mu=\sum_jc_j\delta_{\omega_j}$ with $\sum_j|c_j|<\infty$, this integral
-is the absolutely convergent series $\sum_jc_jK(\omega_j)$ and agrees with the
-pointwise definition of Section~3 whenever both are defined. We use the inner
-product
-$\langle u,v\rangle_{H^1(D)}
-=\langle u,v\rangle_{L^2(D)}+\langle\nabla u,\nabla v\rangle_{L^2(D)}$, so
-that $L(\mu)=\tfrac12\|r_\mu\|_{H^1(D)}^2$ whenever
-$\mathcal N\mu\in H^1(D)$.
-
-For the $k\ge2$
-gradient-fitting case below, the induced exponent is
-$q=2/(k+1)<1$, so $\psi_k(t)=t^q$ has infinite right slope at zero. The
-homogeneous formulation is therefore the infinite-slope endpoint of the same
-structural penalty picture. It does not
-extend the finite-slope results: Theorem~\ref{thm:phi-lsc},
-Theorem~\ref{thm:existence}, Theorem~\ref{opt_cdt},
-Theorem~\ref{thm:finite_support}, Theorem~\ref{thm:quantitative-insertion},
-and Theorem~\ref{sc_opt} cannot be invoked by substituting $L_\phi=\infty$ in
-their hypotheses. The measure penalty of this section is instead constructed
-directly in Definition~\ref{def:homogeneous-penalty}, and every result below
-is proved from that definition.
+$\mathbb S^d$.
 
 \begin{assumption}[$k$-homogeneity]
 \label{ass:k-homogeneous}
@@ -2277,152 +2263,6 @@ For some $k\ge1$,
 	\qquad(\lambda>0,\ \omega\in\mathbb R^{d+1}).
 \end{equation*}
 \end{assumption}
-\begin{remark}
-The algebraic rescaling result below holds for every $k\ge1$. For gradient
-fitting with $\reluk$ we use $k\ge2$, so that
-$K(\omega)\in C^1(\overline D)$ and the induced exponent
-$q=2/(k+1)$ lies strictly between $0$ and $1$. The derivative of
-$K(\omega)$ is, up to the factor $k$, a $\relu^{k-1}$ ridge function: the
-value term contains powers of order $k$, whereas the gradient term contains
-powers of order $k-1$. When $k=2$, the gradient is continuous but is not
-differentiable on the hyperplane $a\cdot x+b=0$.
-\end{remark}
-
-\subsection{Radial rescaling and the induced exponent}
-\begin{lemma}[Rescaling of a $k$-homogeneous network]
-\label{lem:homogeneous-penalty}
-Let Assumption~\ref{ass:k-homogeneous} hold, and let $\xi,\zeta>0$.
-For a fixed nonzero represented coefficient $\widetilde c$ and a unit direction
-$\widehat\omega\in\mathbb S^d$ with $K(\widehat\omega)\ne0$, minimize
-\begin{equation*}
-	\frac{|c|^\xi}{\xi}+\frac{|\omega|^\zeta}{\zeta}
-\end{equation*}
-over radial representations
-\begin{equation*}
-	\omega=\lambda\widehat\omega,\qquad \lambda>0,\qquad
-	c\,K(\omega)=\widetilde c\,K(\widehat\omega).
-\end{equation*}
-The minimum equals
-\begin{equation}
-\label{eq:homogeneous-induced-penalty}
-	C_{k,\xi,\zeta}|\widetilde c|^q,
-	\qquad
-	q:=\frac{\xi\zeta}{k\xi+\zeta},
-	\qquad
-	C_{k,\xi,\zeta}:=
-	\frac1q\,k^{-k\xi/(k\xi+\zeta)}.
-\end{equation}
-Consequently, after zero-function neurons are omitted, radial minimization
-identifies $((\mathbb R\setminus\{0\})\times
-(\mathbb R^{d+1}\setminus\{0\}))^N$ with
-$((\mathbb R\setminus\{0\})\times\mathbb S^d)^N$ carrying the induced penalty
-$C_{k,\xi,\zeta}\sum_n|c_n|^q$ at the level of infima and attained minimizers,
-for each $N$ and over all finite $N$.
-\end{lemma}
-\begin{proof}
-Write $\omega=\lambda\widehat\omega$, where
-$\lambda=|\omega|>0$ and $\widehat\omega\in\mathbb S^d$. By
-$k$-homogeneity,
-\begin{equation*}
-	c\,K(\omega)=c\lambda^k K(\widehat\omega)
-	=\widetilde c\,K(\widehat\omega).
-\end{equation*}
-Since $K(\widehat\omega)\ne0$, the representation constraint is equivalent to
-$c\lambda^k=\widetilde c$.
-For fixed $\widetilde c$, the penalty becomes
-\begin{equation*}
-	g(\lambda)
-	=\frac{|\widetilde c|^\xi}{\xi\lambda^{k\xi}}
-	+\frac{\lambda^\zeta}{\zeta}.
-\end{equation*}
-The function $g$ tends to $+\infty$ as $\lambda\downarrow0$ and as
-$\lambda\to\infty$. Moreover,
-\begin{equation*}
-	g'(\lambda)
-	=-k|\widetilde c|^\xi\lambda^{-k\xi-1}
-	+\lambda^{\zeta-1},
-\end{equation*}
-so
-\begin{equation*}
-	g'(\lambda)=0
-	\quad\Longleftrightarrow\quad
-		\lambda^{k\xi+\zeta}=k|\widetilde c|^\xi.
-\end{equation*}
-This equation has the unique solution
-\begin{equation*}
-	\lambda_*=
-	\bigl(k|\widetilde c|^\xi\bigr)^{1/(k\xi+\zeta)}.
-\end{equation*}
-The derivative is negative before $\lambda_*$ and positive after
-$\lambda_*$, so this point is the global minimizer. The first term at
-$\lambda_*$ is
-\begin{align*}
-	\frac{|\widetilde c|^\xi}
-	     {\xi\lambda_*^{k\xi}}
-	&=\frac1\xi|\widetilde c|^\xi
-		\bigl(k|\widetilde c|^\xi\bigr)^{-k\xi/(k\xi+\zeta)}\\
-	&=\frac1\xi k^{-k\xi/(k\xi+\zeta)}
-		|\widetilde c|^{
-			\xi-k\xi^2/(k\xi+\zeta)}\\
-	&=\frac1\xi k^{-k\xi/(k\xi+\zeta)}
-		|\widetilde c|^{\xi\zeta/(k\xi+\zeta)}.
-\end{align*}
-The second term is
-\begin{align*}
-	\frac{\lambda_*^\zeta}{\zeta}
-	&=\frac1\zeta
-		\bigl(k|\widetilde c|^\xi\bigr)^{\zeta/(k\xi+\zeta)}\\
-	&=\frac{k}{\zeta}
-		k^{-k\xi/(k\xi+\zeta)}
-		|\widetilde c|^{\xi\zeta/(k\xi+\zeta)}.
-\end{align*}
-Since
-\begin{equation*}
-	q=\frac{\xi\zeta}{k\xi+\zeta},
-	\qquad
-	\frac1\xi+\frac{k}{\zeta}
-	=\frac{k\xi+\zeta}{\xi\zeta}
-	=\frac1q,
-\end{equation*}
-adding the two terms gives
-\begin{align*}
-	g(\lambda_*)
-	&=k^{-k\xi/(k\xi+\zeta)}
-	\left(\frac1\xi+\frac{k}{\zeta}\right)
-	|\widetilde c|^q\\
-	&=\frac1q\,k^{-k\xi/(k\xi+\zeta)}
-		|\widetilde c|^q
-	=C_{k,\xi,\zeta}|\widetilde c|^q.
-\end{align*}
-This calculation is performed independently for every neuron. Zero-coefficient
-neurons and neurons representing the zero function are omitted. For every
-remaining neuron the rescaling preserves $c_nK(\omega_n)$, hence the network
-and either the population fidelity $L$ or the empirical fidelity $l^M$.
-Summing the minimum costs proves the claim.
-\end{proof}
-
-\begin{remark}[The quadratic case and the meaning of $\alpha$]
-\label{rem:homogeneous-effective-alpha}
-For $\xi=\zeta=2$,
-\begin{equation*}
-	q=\frac{2}{k+1},
-	\qquad
-	C_k:=C_{k,2,2}
-	=\frac{k+1}{2}\,k^{-k/(k+1)}.
-\end{equation*}
-In particular $C_1=1$ and $C_2=\tfrac32\,2^{-2/3}$. If the separable penalty
-of Lemma~\ref{lem:homogeneous-penalty} carries a coefficient
-$\alpha_{\mathrm{orig}}>0$, the induced sphere-normalized penalty is
-$\alpha\sum_n|c_n|^q$ with the effective coefficient
-\begin{equation*}
-	\alpha:=C_k\,\alpha_{\mathrm{orig}}.
-\end{equation*}
-From here on $\alpha$ always denotes this effective coefficient, which is also
-the coefficient used by the numerical implementation. Since $C_k$ depends on
-$k$, equal nominal values of $\alpha$ for different powers $k$ do
-\emph{not} correspond to equal coefficients of the original separable
-penalty.
-\end{remark}
 
 \begin{lemma}[The $\reluk$ dictionary]
 \label{lem:reluk-dictionary}
@@ -2492,7 +2332,111 @@ In the remainder of the section $K:\mathbb S^d\to H^1(D)$ is continuous and
 Lemma~\ref{lem:reluk-dictionary} verifies this assumption and $C_S>0$ for
 $\reluk$ with $k\ge2$, the range used for the gradient-augmented problem.
 
-\subsection{The measure problem on the sphere}
+The following lemma extends the degree-one ReLU rescaling result
+\cite[Appendix~F, Proposition~3]{pieper2022nonconvex} to a
+$k$-homogeneous dictionary. We retain general positive exponents to make
+explicit how the homogeneity degree changes both the induced exponent and its
+coefficient.
+
+\begin{lemma}[Rescaling of a $k$-homogeneous network]
+\label{lem:homogeneous-penalty}
+Let Assumption~\ref{ass:k-homogeneous} hold, and let $\xi,\zeta>0$.
+For a fixed nonzero represented coefficient $\widetilde c$ and a unit direction
+$\widehat\omega\in\mathbb S^d$ with $K(\widehat\omega)\ne0$, minimize
+\begin{equation*}
+	\frac{|c|^\xi}{\xi}+\frac{|\omega|^\zeta}{\zeta}
+\end{equation*}
+over radial representations
+\begin{equation*}
+	\omega=\lambda\widehat\omega,\qquad \lambda>0,\qquad
+	c\,K(\omega)=\widetilde c\,K(\widehat\omega).
+\end{equation*}
+The minimum equals
+\begin{equation}
+\label{eq:homogeneous-induced-penalty}
+	C_{k,\xi,\zeta}|\widetilde c|^q,
+	\qquad
+	q:=\frac{\xi\zeta}{k\xi+\zeta},
+	\qquad
+	C_{k,\xi,\zeta}:=
+	\frac1q\,k^{-k\xi/(k\xi+\zeta)}.
+\end{equation}
+Consequently, consider any finite representation without zero-function
+neurons and set
+\begin{equation*}
+	\widehat\omega_n:=\frac{\omega_n}{|\omega_n|},
+	\qquad
+	\widetilde c_n:=c_n|\omega_n|^k.
+\end{equation*}
+Among all independent radial rescalings that preserve each function
+$c_nK(\omega_n)$, the minimum total penalty is
+$C_{k,\xi,\zeta}\sum_n|\widetilde c_n|^q$.
+\end{lemma}
+\begin{proof}
+We reduce the rescaling constraint to a scalar minimization and solve it
+explicitly. Write $\omega=\lambda\widehat\omega$, where
+$\lambda=|\omega|>0$. Since $K(\widehat\omega)\ne0$, $k$-homogeneity makes
+the representation constraint equivalent to
+$c\lambda^k=\widetilde c$. Hence, for fixed $\widetilde c$, the radial
+penalty is
+\begin{equation*}
+	g(\lambda)
+	=\frac{|\widetilde c|^\xi}{\xi\lambda^{k\xi}}
+	+\frac{\lambda^\zeta}{\zeta}.
+\end{equation*}
+It tends to $+\infty$ at both endpoints, and
+\begin{equation*}
+	g'(\lambda)
+	=\lambda^{-k\xi-1}
+		\left(\lambda^{k\xi+\zeta}-k|\widetilde c|^\xi\right).
+\end{equation*}
+Thus $g'$ changes sign exactly once, at
+\begin{equation*}
+	\lambda_*=
+	\bigl(k|\widetilde c|^\xi\bigr)^{1/(k\xi+\zeta)}.
+\end{equation*}
+It is therefore the unique global minimizer. The stationarity identity gives
+$|\widetilde c|^\xi\lambda_*^{-k\xi}=\lambda_*^\zeta/k$;
+using the definition of $q$ in
+\eqref{eq:homogeneous-induced-penalty}, we obtain
+\begin{align*}
+	g(\lambda_*)
+	&=\left(\frac1{k\xi}+\frac1\zeta\right)\lambda_*^\zeta\\
+	&=\frac1q\,k^{-k\xi/(k\xi+\zeta)}
+		|\widetilde c|^q\\
+	&=C_{k,\xi,\zeta}|\widetilde c|^q.
+\end{align*}
+For each normalized neuron $(\widetilde c_n,\widehat\omega_n)$, set
+\begin{equation*}
+	\lambda_n
+	=\bigl(k|\widetilde c_n|^\xi\bigr)^{1/(k\xi+\zeta)},
+	\qquad
+	\omega_n=\lambda_n\widehat\omega_n,
+	\qquad
+	c_n=\widetilde c_n\lambda_n^{-k}.
+\end{equation*}
+By $k$-homogeneity,
+$c_nK(\omega_n)=\widetilde c_nK(\widehat\omega_n)$, and the displayed
+rescaling preserves this function. The radial variables are independent, so
+applying the scalar minimum to each neuron and summing proves the final
+assertion.
+\end{proof}
+
+\begin{remark}[The quadratic case and the meaning of $\alpha$]
+\label{rem:homogeneous-effective-alpha}
+For $\xi=\zeta=2$,
+\begin{equation*}
+	q=\frac{2}{k+1},
+	\qquad
+	C_k:=C_{k,2,2}
+	=\frac{k+1}{2}\,k^{-k/(k+1)}.
+\end{equation*}
+In particular $C_1=1$ and $C_2=\tfrac32\,2^{-2/3}$.
+Since $C_k$ depends on
+$k$, equal nominal values of $\alpha$ in the penalty $\alpha\sum_n|c_n|^q$ for different powers $k$ do
+\emph{not} correspond to equal coefficients of the original separable
+penalty.
+\end{remark}
 
 For $k\ge2$ define the scalar penalty
 \begin{equation*}
@@ -2524,7 +2468,9 @@ numbers,
 \begin{definition}[Homogeneous measure penalty]
 \label{def:homogeneous-penalty}
 For $\mu\in\mathcal M(\mathbb S^d)$ with atomic and continuous parts
-$\mu_{\atom}$ and $\mu_{\cont}$ as in Section~2.1, set
+$\mu_{\atom}$ and $\mu_{\cont}$ as in Section~2.1, the atom set is at most
+countable. Hence the following sum of nonnegative terms is well defined in
+$[0,+\infty]$ and independent of its enumeration. Set
 \begin{equation*}
 	\Phi_{\psi_k}(\mu):=
 	\begin{cases}
@@ -2536,64 +2482,22 @@ $\mu_{\atom}$ and $\mu_{\cont}$ as in Section~2.1, set
 \end{equation*}
 \end{definition}
 
-\begin{lemma}[Elementary properties of $\Phi_{\psi_k}$]
-\label{lem:homogeneous-penalty-properties}
-Let $\mu\in\mathcal M(\mathbb S^d)$. Then
-\begin{enumerate}
-	\item the sum in Definition~\ref{def:homogeneous-penalty} has at most
-	countably many nonnegative terms and is therefore independent of the
-	enumeration and well defined in $[0,+\infty]$;
-	\item $\Phi_{\psi_k}(0)=0$, and $\Phi_{\psi_k}(\mu)>0$ for every
-	$\mu\ne0$ with $\Phi_{\psi_k}(\mu)<\infty$;
-	\item $\Phi_{\psi_k}(\mu)\ge\|\mu\|_{\mathcal M(\mathbb S^d)}^{\,q}$
-	whenever $\Phi_{\psi_k}(\mu)<\infty$; and
-	\item if $\mu=\mu_{\boldsymbol\omega,c}=\sum_{n=1}^Nc_n\delta_{\omega_n}$
-	with arbitrary, possibly repeated, locations $\omega_n\in\mathbb S^d$,
-	then
-	\begin{equation*}
-		\Phi_{\psi_k}(\mu)\le\sum_{n=1}^N\psi_k(|c_n|),
-	\end{equation*}
-	with equality whenever the $\omega_n$ are distinct.
-\end{enumerate}
-\end{lemma}
-\begin{proof}
-(1) The atom set of a finite signed Radon measure is at most countable
-(Section~2.1), and every summand $\psi_k(|\mu(\{\omega\})|)$ is nonnegative.
-A series of nonnegative terms has a value in $[0,+\infty]$ that does not
-depend on the order of summation.
+The functional is nonnegative, vanishes only at the zero measure, and, whenever
+$\Phi_{\psi_k}(\mu)<\infty$, countable subadditivity gives
+\begin{equation}
+\label{eq:homogeneous-penalty-tv-bound}
+	\Phi_{\psi_k}(\mu)
+	\ge\psi_k\bigl(\|\mu\|_{\mathcal M(\mathbb S^d)}\bigr)
+	=\|\mu\|_{\mathcal M(\mathbb S^d)}^{\,q}.
+\end{equation}
+For a finite representation
+$\mu=\sum_{n=1}^Nc_n\delta_{\omega_n}$, repeated locations are merged.
+The triangle inequality and \eqref{eq:psi-subadditive} show that merging cannot
+increase $\sum_n\psi_k(|c_n|)$.
 
-(2) $\atom 0=\emptyset$, so the empty sum gives $\Phi_{\psi_k}(0)=0$. If
-$\Phi_{\psi_k}(\mu)<\infty$ then $\mu_{\cont}=0$ and hence
-$\mu=\mu_{\atom}$; if in addition $\mu\ne0$, then $\atom\mu\ne\emptyset$ and
-at least one summand $\psi_k(|\mu(\{\omega\})|)$ is strictly positive.
 
-(3) If $\Phi_{\psi_k}(\mu)<\infty$ then $\mu=\mu_{\atom}$ and
-$\|\mu\|_{\mathcal M(\mathbb S^d)}=\sum_{\omega\in\atom\mu}|\mu(\{\omega\})|$.
-Applying \eqref{eq:psi-countable-subadditive} to this sum gives
-$\psi_k(\|\mu\|_{\mathcal M(\mathbb S^d)})\le\Phi_{\psi_k}(\mu)$, which is
-the assertion.
 
-(4) The measure $\mu$ is purely atomic, its atoms are the distinct locations
-carrying nonzero total mass, and the mass at such a location $\omega$ is
-$\mu(\{\omega\})=\sum_{n:\,\omega_n=\omega}c_n$. Since $\psi_k$ is
-nondecreasing and satisfies \eqref{eq:psi-subadditive},
-\begin{equation*}
-	\psi_k\bigl(|\mu(\{\omega\})|\bigr)
-	\le\psi_k\Bigl(\sum_{n:\,\omega_n=\omega}|c_n|\Bigr)
-	\le\sum_{n:\,\omega_n=\omega}\psi_k(|c_n|).
-\end{equation*}
-Summing over the distinct locations and adding the nonnegative terms
-$\psi_k(|c_n|)$ that belong to locations with vanishing total mass gives the
-inequality. If the $\omega_n$ are distinct, every location carries exactly one
-term and both inequalities above are equalities; the indices with $c_n=0$
-contribute $\psi_k(0)=0$ to the right-hand side and do not belong to
-$\atom\mu$, so the two sides still agree.
-\end{proof}
-
-Property~(4) is the exact counterpart of the merging of repeated nodes: two
-atoms at one location may always be replaced by their sum without increasing
-the penalty, and with a strict decrease unless one of them vanishes.
-
+\subsection{The measure problem on the sphere}
 For $\mu\in\mathcal M(\mathbb S^d)$ we now set
 \begin{align}
 	J_{\psi_k}(\mu)
@@ -2603,8 +2507,11 @@ For $\mu\in\mathcal M(\mathbb S^d)$ we now set
 	&:=l^M(\mu)+\alpha\Phi_{\psi_k}(\mu),
 	\label{eq:homogeneous-empirical-objective}
 \end{align}
-with the convention that a sum containing $+\infty$ equals $+\infty$. The
-empirical fidelity \eqref{eq:empirical-fidelity} was introduced for finite
+with the convention that a sum containing $+\infty$ equals $+\infty$. Since
+the empirical fidelity is also one half of a squared Hilbert-space norm and
+its dictionary is continuous on the compact sphere, all results below hold
+for the empirical objective as well. The empirical fidelity
+\eqref{eq:empirical-fidelity} was introduced for finite
 networks; for $\reluk$ with $k\ge2$ it is defined on all of
 $\{\mu\in\mathcal M(\mathbb S^d):\Phi_{\psi_k}(\mu)<\infty\}$, provided the
 sampled data $V(x^m)$ and $g^m$ are given. Indeed, such a $\mu$ is
@@ -2621,8 +2528,7 @@ study the minimization problem
 	\min_{\mu\in\mathcal M(\mathbb S^d)}J_{\psi_k}(\mu).
 \end{equation*}
 For a finite network with distinct locations
-$\omega_n\in\mathbb S^d$,
-Lemma~\ref{lem:homogeneous-penalty-properties}(4) gives
+$\omega_n\in\mathbb S^d$, the definition of $\Phi_{\psi_k}$ gives
 \begin{equation*}
 	J_{\psi_k}(\mu_{\boldsymbol\omega,c})
 	=L(\mu_{\boldsymbol\omega,c})+\alpha\sum_{n=1}^N|c_n|^q,
@@ -2631,41 +2537,11 @@ which is the objective minimized by the finite-dimensional solver in
 Algorithm~\ref{alg:q}; the empirical objective
 \eqref{eq:homogeneous-empirical-objective} restricts in the same way.
 
-\begin{definition}[Local minimizer in total variation and reduced width]
-\label{def:tv-local-minimizer}
-A measure $\bar\mu\in\mathcal M(\mathbb S^d)$ is a \emph{local minimizer of
-\eqref{prob:homogeneous} in total variation} if
-$J_{\psi_k}(\bar\mu)<\infty$ and there is $\varepsilon>0$ with
-\begin{equation*}
-	J_{\psi_k}(\bar\mu)\le J_{\psi_k}(\mu)
-	\qquad\text{for all }\mu\in\mathcal M(\mathbb S^d)
-	\text{ with }\|\mu-\bar\mu\|_{\mathcal M(\mathbb S^d)}<\varepsilon.
-\end{equation*}
-For $\mu$ with $\Phi_{\psi_k}(\mu)<\infty$ we call
-$N:=\#\atom\mu\in\mathbb N_0\cup\{\infty\}$ the \emph{reduced width} of
-$\mu$: it counts the distinct locations carrying nonzero mass, that is, the
-width of the representation obtained after exact repeated locations are
-merged and zero coefficients are discarded.
-\end{definition}
+Local minimizers of \eqref{prob:homogeneous} are understood as in
+Definition~\ref{def:local_min}, with $\mathcal M_p(\Omega)$ replaced by
+$\mathcal M(\mathbb S^d)$, $J$ by $J_{\psi_k}$, and the weighted measure norm
+by the total-variation norm.
 
-\begin{remark}[A finite penalty does not bound the support]
-\label{rem:finite-penalty-infinite-support}
-Let $(\omega_j)_{j\ge1}$ be distinct points of $\mathbb S^d$ and
-$\mu:=\sum_{j\ge1}2^{-j}\delta_{\omega_j}$. Then
-$\|\mu\|_{\mathcal M(\mathbb S^d)}=1$ and
-\begin{equation*}
-	\Phi_{\psi_k}(\mu)=\sum_{j\ge1}2^{-jq}
-	=\frac{2^{-q}}{1-2^{-q}}<\infty,
-\end{equation*}
-while $\atom\mu$ is infinite. A finite value of $\Phi_{\psi_k}$ therefore does
-not by itself imply finite support, and no argument below attributes finite
-support to the penalty alone. Finiteness of the support is obtained in
-Theorem~\ref{thm:homogeneous_optimality} and
-Corollary~\ref{cor:homogeneous_local_support} from a uniform positive lower
-bound on the atom weights of a stationary measure.
-\end{remark}
-
-\subsection{Atomwise optimality}
 
 \begin{proposition}[Finite truncations and equality of the infima]
 \label{prop:homogeneous_reduction}
@@ -2678,16 +2554,16 @@ $c_j:=\mu(\{\omega_j\})\ne0$, and set
 	\mu_m:=\sum_{j\in\mathcal I,\ j\le m}c_j\delta_{\omega_j}.
 \end{equation*}
 Then
-\begin{enumerate}
-	\item $\|\mu_m-\mu\|_{\mathcal M(\mathbb S^d)}\to0$;
-	\item $\mathcal N\mu\in H^1(D)$ with
-	$\|\mathcal N\mu\|_{H^1(D)}\le C_S\|\mu\|_{\mathcal M(\mathbb S^d)}$, and
-	$\|\mathcal N\mu_m-\mathcal N\mu\|_{H^1(D)}
-	\le C_S\|\mu_m-\mu\|_{\mathcal M(\mathbb S^d)}\to0$;
-	\item $L(\mu_m)\to L(\mu)<\infty$;
-	\item $\Phi_{\psi_k}(\mu_m)\uparrow\Phi_{\psi_k}(\mu)$; and
-	\item $J_{\psi_k}(\mu_m)\to J_{\psi_k}(\mu)$.
-\end{enumerate}
+\begin{equation*}
+	\begin{aligned}
+	&\mathcal N\mu\in H^1(D),\qquad
+	\|\mathcal N\mu\|_{H^1(D)}
+	\le C_S\|\mu\|_{\mathcal M(\mathbb S^d)},\\
+	&\|\mathcal N\mu_m-\mathcal N\mu\|_{H^1(D)}
+	\le C_S\|\mu_m-\mu\|_{\mathcal M(\mathbb S^d)}\longrightarrow0.
+	\end{aligned}
+\end{equation*}
+Moreover, $J_{\psi_k}(\mu_m)\to J_{\psi_k}(\mu)$.
 Consequently the all-measures infimum and the finite-network infimum coincide:
 \begin{equation}
 \label{eq:homogeneous-infima}
@@ -2700,8 +2576,6 @@ Consequently the all-measures infimum and the finite-network infimum coincide:
 \end{equation}
 \end{proposition}
 \begin{proof}
-We prove the five limits and then compare the two infima.
-
 Since $\Phi_{\psi_k}(\mu)<\infty$, Definition~\ref{def:homogeneous-penalty}
 gives $\mu_{\cont}=0$, so $\mu=\sum_{j\in\mathcal I}c_j\delta_{\omega_j}$ with
 distinct $\omega_j$ and $c_j\ne0$. Since
@@ -2710,48 +2584,35 @@ tail identity
 \begin{equation*}
 	\|\mu_m-\mu\|_{\mathcal M(\mathbb S^d)}
 	=\sum_{j\in\mathcal I,\,j>m}|c_j|
+	\longrightarrow0.
 \end{equation*}
-proves (1). Bounded linearity of $\mathcal N$ gives $\mathcal N\mu\in H^1(D)$
-and
-\begin{equation*}
-	\|\mathcal N\mu\|_{H^1(D)}
-	\le C_S\|\mu\|_{\mathcal M(\mathbb S^d)},
-	\qquad
-	\|\mathcal N\mu_m-\mathcal N\mu\|_{H^1(D)}
-	\le C_S\|\mu_m-\mu\|_{\mathcal M(\mathbb S^d)}\to0,
-\end{equation*}
-which proves (2). Continuity of
-$u\mapsto\frac12\|u-V\|_{H^1(D)}^2$ gives (3). Finally,
+Bounded linearity of $\mathcal N$ therefore gives $\mathcal N\mu\in H^1(D)$
+and the stated norm bounds. Continuity of
+$u\mapsto\frac12\|u-V\|_{H^1(D)}^2$ gives
+$L(\mu_m)\to L(\mu)$, while
 \begin{equation*}
 	\Phi_{\psi_k}(\mu_m)
 	=\sum_{j\in\mathcal I,\,j\le m}\psi_k(|c_j|)
 	\longrightarrow\Phi_{\psi_k}(\mu)
 \end{equation*}
-by monotone convergence of the nonnegative partial sums. This proves (4),
-and combining this limit with (3) proves (5).
+by monotone convergence. Combining these two limits proves
+$J_{\psi_k}(\mu_m)\to J_{\psi_k}(\mu)$.
 
 It remains to compare the infima; call them $i_{\mathrm{meas}}$ and
 $i_{\mathrm{disc}}$, in the order in which they appear in
-\eqref{eq:homogeneous-infima}. For every finite family
-$(\boldsymbol\omega,c)$, Lemma~\ref{lem:homogeneous-penalty-properties}(4)
-gives
-\begin{equation*}
-	J_{\psi_k}(\mu_{\boldsymbol\omega,c})
-	\le L(\mu_{\boldsymbol\omega,c})+\alpha\sum_{n=1}^N\psi_k(|c_n|),
-\end{equation*}
-and $\mu_{\boldsymbol\omega,c}\in\mathcal M(\mathbb S^d)$; taking the infimum
-over all finite families yields $i_{\mathrm{meas}}\le i_{\mathrm{disc}}$.
-Conversely, let $\mu\in\mathcal M(\mathbb S^d)$. If $J_{\psi_k}(\mu)=\infty$
-then trivially $i_{\mathrm{disc}}\le J_{\psi_k}(\mu)$. If
-$J_{\psi_k}(\mu)<\infty$, each truncation $\mu_m$ is a finite family with
-distinct locations and nonzero coefficients, so
-$i_{\mathrm{disc}}\le J_{\psi_k}(\mu_m)$ for every $m$, and letting
-$m\to\infty$ in (5) gives $i_{\mathrm{disc}}\le J_{\psi_k}(\mu)$. Taking the
-infimum over $\mu$ yields $i_{\mathrm{disc}}\le i_{\mathrm{meas}}$.
+\eqref{eq:homogeneous-infima}. Every finite network defines an admissible
+measure, and its finite-dimensional objective equals the corresponding
+measure objective. Hence $i_{\mathrm{meas}}\le i_{\mathrm{disc}}$.
+Conversely, let $\mu$ satisfy $J_{\psi_k}(\mu)<\infty$. Its truncations
+$\mu_m$ are finite networks and satisfy
+$J_{\psi_k}(\mu_m)\to J_{\psi_k}(\mu)$. Therefore
+$i_{\mathrm{disc}}\le J_{\psi_k}(\mu)$. Taking the infimum over such $\mu$
+gives $i_{\mathrm{disc}}\le i_{\mathrm{meas}}$.
 \end{proof}
 
-Parts~(2) and~(3) show that a measure of finite penalty automatically has
-finite fidelity. Since conversely $J_{\psi_k}(\mu)<\infty$ contains
+Proposition~\ref{prop:homogeneous_reduction} shows that a measure of finite
+penalty automatically has finite fidelity. Since conversely
+$J_{\psi_k}(\mu)<\infty$ contains
 $\alpha\Phi_{\psi_k}(\mu)<\infty$, the two conditions agree:
 \begin{equation*}
 	J_{\psi_k}(\mu)<\infty
@@ -2767,7 +2628,7 @@ infima; attainment is established in
 Theorem~\ref{thm:homogeneous_existence} from the finite-dimensional argument
 and is not claimed here.
 
-\begin{theorem}[Atomwise optimality and minimum atom weight]
+\begin{theorem}
 \label{thm:homogeneous_optimality}
 Let $k\ge2$, $q=2/(k+1)\in(0,1)$, $\alpha>0$, $V\in H^1(D)$, and let
 $K:\mathbb S^d\to H^1(D)$ be continuous. Let
@@ -2782,17 +2643,13 @@ $\varepsilon>0$ such that
 \end{equation}
 Set
 \begin{equation*}
-	r_{\bar\mu}:=\mathcal N\bar\mu-V,
-	\qquad
-	\bar P(\omega):=\langle r_{\bar\mu},K(\omega)\rangle_{H^1(D)},
-	\qquad
-	B(\bar\mu):=\|\bar P\|_{C(\mathbb S^d)}.
+	B(\bar\mu):=\|P_{\bar\mu}\|_{C(\mathbb S^d)}.
 \end{equation*}
 Then $\bar\mu$ is purely atomic, $B(\bar\mu)<\infty$, and every atom
 $\omega_n\in\atom\bar\mu$ with weight $c_n:=\bar\mu(\{\omega_n\})$ satisfies
 \begin{equation}
 \label{eq:homogeneous-stationarity}
-	\bar P(\omega_n)
+	P_{\bar\mu}(\omega_n)
 	+\alpha q|c_n|^{q-1}\sign(c_n)=0.
 \end{equation}
 If $B(\bar\mu)=0$, then $\bar\mu=0$. If $B(\bar\mu)>0$, then
@@ -2804,9 +2661,7 @@ If $B(\bar\mu)=0$, then $\bar\mu=0$. If $B(\bar\mu)>0$, then
 \end{equation}
 Hypothesis \eqref{eq:atomwise-optimality-hypothesis} holds in particular if
 $\bar\mu$ is a local minimizer of \eqref{prob:homogeneous} in total variation
-in the sense of Definition~\ref{def:tv-local-minimizer}, or if $\bar\mu$
-is a minimizer of the finite-network objective at a fixed width whose
-locations are distinct.
+in the sense specified above.
 \end{theorem}
 \begin{proof}
 We derive \eqref{eq:homogeneous-stationarity} from a two-sided perturbation
@@ -2815,10 +2670,10 @@ of a single atom weight, and then convert it into the lower bound
 
 Since $J_{\psi_k}(\bar\mu)<\infty$ we have $\Phi_{\psi_k}(\bar\mu)<\infty$,
 so $\bar\mu_{\cont}=0$ and $\bar\mu$ is purely atomic. By
-Proposition~\ref{prop:homogeneous_reduction}(2), applied to $\bar\mu$,
+Proposition~\ref{prop:homogeneous_reduction}, applied to $\bar\mu$,
 $\mathcal N\bar\mu\in H^1(D)$, so $r_{\bar\mu}\in H^1(D)$ is well defined.
-The map $\bar P$ is continuous on $\mathbb S^d$, being the composition of the
-continuous map $K$ with the continuous linear functional
+The map $P_{\bar\mu}$ is continuous on $\mathbb S^d$, being the composition
+of the continuous map $K$ with the continuous linear functional
 $\langle r_{\bar\mu},\cdot\rangle_{H^1(D)}$, and $\mathbb S^d$ is compact, so
 $B(\bar\mu)<\infty$.
 
@@ -2838,7 +2693,7 @@ $r_{\bar\mu}+tsK(\omega_n)$ and expanding the square gives the exact identity
 	L(\mu_t)-L(\bar\mu)
 	&=ts\langle r_{\bar\mu},K(\omega_n)\rangle_{H^1(D)}
 	+\frac{t^2}{2}\|K(\omega_n)\|^2_{H^1(D)}\\
-	&=ts\bar P(\omega_n)
+	&=tsP_{\bar\mu}(\omega_n)
 	+\frac{t^2}{2}\|K(\omega_n)\|^2_{H^1(D)}.
 \end{align*}
 Because $c_n\ne0$, the map $z\mapsto|z|^q$ is differentiable at $c_n$ with
@@ -2847,11 +2702,12 @@ derivative $q|c_n|^{q-1}\sign(c_n)$. Hypothesis
 $J_{\psi_k}(\mu_t)-J_{\psi_k}(\bar\mu)\ge0$; dividing by $t>0$ and letting
 $t\downarrow0$ yields
 \begin{equation*}
-	0\le s\Bigl[\bar P(\omega_n)+\alpha q|c_n|^{q-1}\sign(c_n)\Bigr].
+	0\le s\Bigl[P_{\bar\mu}(\omega_n)
+	+\alpha q|c_n|^{q-1}\sign(c_n)\Bigr].
 \end{equation*}
 Choosing $s=1$ and $s=-1$ gives \eqref{eq:homogeneous-stationarity}.
 
-Suppose $B(\bar\mu)=0$, that is, $\bar P\equiv0$ on $\mathbb S^d$. If
+Suppose $B(\bar\mu)=0$, that is, $P_{\bar\mu}\equiv0$ on $\mathbb S^d$. If
 $\bar\mu$ had an atom $\omega_n$, then \eqref{eq:homogeneous-stationarity}
 would read $\alpha q|c_n|^{q-1}\sign(c_n)=0$, which is impossible because
 $\alpha>0$, $q>0$, and $|c_n|^{q-1}\in(0,\infty)$ for $c_n\ne0$. Hence
@@ -2860,43 +2716,24 @@ $\atom\bar\mu=\emptyset$, and since $\bar\mu$ is purely atomic, $\bar\mu=0$.
 Suppose $B(\bar\mu)>0$. Taking absolute values in
 \eqref{eq:homogeneous-stationarity} gives
 \begin{equation*}
-	\alpha q|c_n|^{q-1}=|\bar P(\omega_n)|\le B(\bar\mu).
+	\alpha q|c_n|^{q-1}=|P_{\bar\mu}(\omega_n)|\le B(\bar\mu).
 \end{equation*}
 Since $q-1=-(1-q)<0$, this reads
 $|c_n|^{-(1-q)}\le B(\bar\mu)/(\alpha q)$, hence
 $|c_n|^{1-q}\ge\alpha q/B(\bar\mu)$; raising both sides to the positive power
 $1/(1-q)$ preserves the inequality and gives \eqref{eq:homogeneous-cmin}.
-
-Finally we check the two sufficient conditions for
-\eqref{eq:atomwise-optimality-hypothesis}. If $\bar\mu$ is a local minimizer
-in total variation with radius $\varepsilon$, then
-$\|(\bar\mu+t\delta_\omega)-\bar\mu\|_{\mathcal M(\mathbb S^d)}=|t|<\varepsilon$
-for $|t|<\varepsilon$, so the competitor is admissible. If
-$\bar\mu=\mu_{\boldsymbol\omega,c}$ minimizes
-$L(\mu_{\boldsymbol\omega,c})+\alpha\sum_n\psi_k(|c_n|)$ over
-$(\mathbb S^d)^N\times\mathbb R^N$ and its locations are distinct, then
-$\bar\mu+t\delta_{\omega_n}=\mu_{\boldsymbol\omega,c+te_n}$, where $e_n$ is
-the $n$th coordinate vector in $\mathbb R^N$, is a competitor
-of the same width for every $t\in\mathbb R$, and by
-Lemma~\ref{lem:homogeneous-penalty-properties}(4) the value of $J_{\psi_k}$
-at each of the two measures equals the corresponding coefficient objective,
-because both have distinct locations; the hypothesis therefore holds with
-every $\varepsilon>0$.
 \end{proof}
 
-\begin{remark}[Consequences of the singular slope]
+\begin{remark}
 \label{rem:homogeneous_singular_slope}
-The identity $\psi_k'(0^+)=+\infty$ has three consequences.
+The identity $\psi_k'(0^+)=+\infty$ has the following consequences.
 \begin{enumerate}
 	\item Inserting a new atom at $\omega\notin\atom\bar\mu$ with weight
 	$ts$, $s\in\{-1,1\}$, changes the penalty by $\alpha t^q$. Since
 	$t^q/t=t^{q-1}\to\infty$ as $t\downarrow0$, division by $t$ produces no
-	finite limit, and hence no pointwise condition on $\bar P(\omega)$ away
+	finite limit, and hence no pointwise condition on $P_{\bar\mu}(\omega)$ away
 	from $\atom\bar\mu$. Theorem~\ref{thm:homogeneous_optimality} is
 	restricted to existing atoms for this reason.
-	\item At a nonzero atom weight, the same singularity produces the positive
-	lower bound \eqref{eq:homogeneous-cmin}. Combined with an upper bound on
-	the objective it yields the width estimates below.
 	\item The zero measure is a local minimizer of \eqref{prob:homogeneous} in
 	total variation. Indeed, $J_{\psi_k}(\mu)=\infty$ whenever
 	$\Phi_{\psi_k}(\mu)=\infty$, while for $\mu$ with
@@ -2909,18 +2746,20 @@ The identity $\psi_k'(0^+)=+\infty$ has three consequences.
 		+\alpha\Phi_{\psi_k}(\mu)\\
 		&\ge-\|V\|_{H^1(D)}C_S\,\varepsilon+\alpha\varepsilon^q,
 	\end{align*}
-	by Lemma~\ref{lem:homogeneous-penalty-properties}(3), the bound
+	by \eqref{eq:homogeneous-penalty-tv-bound}, the bound
 	$\|\mathcal N\mu\|_{H^1(D)}\le C_S\varepsilon$ of
-	Proposition~\ref{prop:homogeneous_reduction}(2), and the Cauchy--Schwarz
+	Proposition~\ref{prop:homogeneous_reduction}, and the Cauchy--Schwarz
 	inequality. Since $q<1$, the right-hand side is positive for every
-	sufficiently small $\varepsilon>0$. An insertion
-	criterion based on an infinitesimal weight perturbation is therefore
-	unavailable for this penalty, and Algorithm~\ref{alg:q} uses a
-	finite-step decrease test instead.
+	sufficiently small $\varepsilon>0$.
 \end{enumerate}
+
+An insertion criterion based on an infinitesimal weight perturbation is therefore
+unavailable for this penalty, and Algorithm~\ref{alg:q} uses a
+finite-step decrease test instead.
 \end{remark}
 
 \subsection{Global existence and a uniform width bound}
+
 
 \begin{theorem}[Existence and width bound]
 \label{thm:homogeneous_existence}
@@ -2931,9 +2770,9 @@ for $\reluk$ by Lemma~\ref{lem:reluk-dictionary}(4). Then
 \eqref{prob:homogeneous} admits a global minimizer, and its minimum value
 equals the finite-network infimum on the right-hand side of
 \eqref{eq:homogeneous-infima}. Every global minimizer $\bar\mu$ is a finite
-atomic measure whose reduced width satisfies
+atomic measure satisfying
 \begin{equation*}
-	N\le N_{\max}:=
+	\#\atom\bar\mu\le N_{\max}:=
 	\frac{\|V\|^2_{H^1(D)}}{2\alpha\,c_{\min,\mathrm{glob}}^{\,q}},
 	\qquad
 	c_{\min,\mathrm{glob}}:=
@@ -2943,12 +2782,15 @@ atomic measure whose reduced width satisfies
 \end{equation*}
 \end{theorem}
 
-If $V=0$ or $C_S=0$ the problem degenerates: the fidelity is then either
-minimized at $\mathcal N\mu=0$ or, since $K\equiv0$ forces $\mathcal N\mu=0$,
-constant, so by Lemma~\ref{lem:homogeneous-penalty-properties}(2) the measure
-$\bar\mu=0$ is the unique global minimizer, of reduced width $0$. Under the
-hypotheses of the theorem $c_{\min,\mathrm{glob}}\in(0,\infty)$ and
-$N_{\max}<\infty$ are well defined.
+\begin{remark}
+The excluded cases are immediate. If $V=0$, then $\mu=0$ is the unique global
+minimizer by the nonnegativity of the fidelity and the strict positivity of
+$\Phi_{\psi_k}$ away from zero. If $C_S=0$, then $K\equiv0$, so the fidelity
+is constant and the same penalty argument again makes $\mu=0$ the unique
+global minimizer. Thus the atom bound is zero in both cases. The assumptions
+$V\ne0$ and $C_S>0$ are needed only to ensure that
+$c_{\min,\mathrm{glob}}\in(0,\infty)$ and $N_{\max}<\infty$ are well defined.
+\end{remark}
 
 \begin{proof}
 We first obtain minimizers at each fixed width by compactness, then derive one
@@ -2961,7 +2803,7 @@ For $N\in\mathbb N_0$, set
 	:=L(\mu_{\boldsymbol\omega,c})+\alpha\sum_{n=1}^N|c_n|^q,
 	\qquad m_N:=\inf F_N,
 \end{equation*}
-with the empty-family convention $F_0=m_0=\frac12\|V\|_{H^1(D)}^2$.
+with $F_0=m_0=\frac12\|V\|_{H^1(D)}^2$.
 For $N\ge1$, continuity of $K$, scalar multiplication, and finite addition
 show that
 $(\boldsymbol\omega,c)\mapsto\sum_{n=1}^Nc_nK(\omega_n)$ is continuous into
@@ -2975,7 +2817,7 @@ sublevel satisfies
 It therefore lies in the compact set
 $(\mathbb S^d)^N\times[-R,R]^N$. Compactness gives a convergent subsequence,
 and continuity shows that its limit attains $m_N$. The case $N=0$ is
-immediate, and zero-padding gives $m_{N+1}\le m_N$.
+immediate, and we have $m_{N+1}\le m_N$.
 
 We use the following estimate twice. Suppose that a measure $\mu$ satisfies
 $J_{\psi_k}(\mu)\le m_0$ and the atomwise optimality hypothesis
@@ -3005,44 +2847,18 @@ An infinite atom set would contain finite subsets of arbitrarily large
 cardinality. Thus $\atom\mu$ is finite and its cardinality is at most
 $N_{\max}$; the same conclusion is immediate when $\mu=0$.
 
-Now fix $N$ and reduce a minimizer of $F_N$ by merging coincident atoms and
-discarding zero coefficients. If $(\widehat{\boldsymbol\omega},\widehat c)$
-is the resulting family of width $N'\le N$, then
-Lemma~\ref{lem:homogeneous-penalty-properties}(4) and zero-padding give
+Set $N_{\mathrm{cut}}:=\lfloor N_{\max}\rfloor$. The estimate above applies
+to every minimizer defining $m_N$, since each coefficient can be varied
+independently. Thus, for $N\ge N_{\mathrm{cut}}$, that minimizer has width at
+most $N_{\mathrm{cut}}$, so $m_{N_{\mathrm{cut}}}\le m_N$. The reverse
+inequality follows from the monotonicity of $(m_N)$. Hence
 \begin{equation*}
-	m_{N'}
-	\le F_{N'}(\widehat{\boldsymbol\omega},\widehat c)
-	\le m_N
-	\le m_{N'}.
+	\inf_{N\in\mathbb N_0}m_N=m_{N_{\mathrm{cut}}}.
 \end{equation*}
-Hence this family is a reduced minimizer at width $N'$ with value $m_N$.
-Its measure $\widehat\mu$ satisfies
-$J_{\psi_k}(\widehat\mu)=m_N\le m_0$ and, by the last assertion of
-Theorem~\ref{thm:homogeneous_optimality}, the atomwise optimality hypothesis.
-The estimate above therefore yields $N'\le N_{\max}$.
-
-Set $N_{\mathrm{cut}}:=\lfloor N_{\max}\rfloor$. Every $m_N$ thus equals
-some $m_{N'}$ with $N'\le N_{\mathrm{cut}}$. Since $(m_N)$ is nonincreasing,
-\begin{equation*}
-	\inf_{N\in\mathbb N_0}m_N
-	=\min_{0\le N\le N_{\mathrm{cut}}}m_N
-	=m_{N_{\mathrm{cut}}}.
-\end{equation*}
-Reducing a minimizer of $F_{N_{\mathrm{cut}}}$ gives a reduced family of
-width $N_*\le N_{\mathrm{cut}}$ whose objective value is
-$m_{N_{\mathrm{cut}}}$. Denote its measure by
-$\bar\mu^*=\mu_{\boldsymbol\omega^*,c^*}$. By
-Lemma~\ref{lem:homogeneous-penalty-properties}(4),
-$J_{\psi_k}(\bar\mu^*)=m_{N_{\mathrm{cut}}}$;
-Proposition~\ref{prop:homogeneous_reduction} then shows that $\bar\mu^*$ is
-a global minimizer of \eqref{prob:homogeneous} and that its value equals the
-finite-network infimum.
-
-Finally, any global minimizer $\bar\mu$ satisfies
-$J_{\psi_k}(\bar\mu)\le J_{\psi_k}(0)=m_0$ and is a local minimizer in total
-variation. It therefore satisfies the hypotheses of the common estimate,
-which proves that $\bar\mu$ is finite atomic and has reduced width at most
-$N_{\max}$.
+Since $m_{N_{\mathrm{cut}}}$ is attained, Proposition~\ref{prop:homogeneous_reduction}
+gives a global minimizer of \eqref{prob:homogeneous} with the same value.
+Every global minimizer satisfies the hypotheses of the estimate above and
+therefore has at most $N_{\max}$ atoms.
 \end{proof}
 
 \begin{corollary}[Finite support of total-variation local minimizers]
@@ -3050,9 +2866,9 @@ $N_{\max}$.
 Let the hypotheses of Theorem~\ref{thm:homogeneous_optimality} on
 $k,q,\alpha,V,K$ hold and let $\bar\mu\ne0$ be a local minimizer of
 \eqref{prob:homogeneous} in total variation. Then $B(\bar\mu)>0$, the measure
-$\bar\mu$ is finite atomic, and its reduced width satisfies
+$\bar\mu$ is finite atomic, and
 \begin{equation*}
-	N\le\frac{J_{\psi_k}(\bar\mu)}
+	\#\atom\bar\mu\le\frac{J_{\psi_k}(\bar\mu)}
 	         {\alpha\,c_{\min}(\bar\mu)^{\,q}} .
 \end{equation*}
 \end{corollary}
@@ -3080,55 +2896,13 @@ and the a posteriori bound is the sharper one, since
 $J_{\psi_k}(\bar\mu)\le\frac12\|V\|^2_{H^1(D)}$ and
 $c_{\min}(\bar\mu)\ge c_{\min,\mathrm{glob}}$ there.
 
-\begin{remark}[The empirical problem]
-\label{rem:homogeneous_empirical}
-Let $\reluk$ with $k\ge2$ be the activation and let the sampled data
-$V(x^m)$ and $g^m$ be given. Then
-Proposition~\ref{prop:homogeneous_reduction},
-Theorem~\ref{thm:homogeneous_optimality},
-Theorem~\ref{thm:homogeneous_existence} and
-Corollary~\ref{cor:homogeneous_local_support} hold for the empirical
-objective \eqref{eq:homogeneous-empirical-objective} as well. Their proofs
-use only two properties: the fidelity is one half of the squared norm of
-$\mathcal N\mu-V$ in a Hilbert space, and the dictionary is continuous and
-bounded on the compact sphere. The empirical fidelity
-\eqref{eq:empirical-fidelity} has the first property with
-$\mathbb R^{M(d+1)}$ carrying its Euclidean inner product, the target being
-the scaled family $M^{-1/2}\bigl(V(x^m),g^m\bigr)_{m=1}^M$ of sampled value
-and gradient-channel data, and the dictionary being the
-value-gradient feature map $K^M$ of Section~5 defined in
-\eqref{eq:empirical-feature}.
-This map is continuous on $\mathbb S^d$ by
-Lemma~\ref{lem:reluk-dictionary}(2)--(3) and hence bounded there, which is
-the second property. Substituting these data for $H^1(D)$, $V$ and $K$
-throughout replaces $C_S$ and $\|V\|_{H^1(D)}$ by the corresponding empirical
-quantities and leaves every argument unchanged; the population proofs are not
-repeated. The nondegeneracy hypotheses of
-Theorem~\ref{thm:homogeneous_existence} become the requirements that the
-empirical dictionary bound be positive, which holds because
-$\widehat\omega=(0,1)\in\mathbb S^d$ has
-$[K(\widehat\omega)](x)=1$ and $\nabla K(\widehat\omega)(x)=0$ on $D$, and
-that the sampled data not vanish identically. Lemma~\ref{lem:homogeneous-penalty} and
-Lemma~\ref{lem:reluk-dictionary} concern the radial calculus and the
-dictionary alone and are independent of which fidelity is used.
-\end{remark}
-
-Because $q<1$, an infinitesimal insertion at a new location yields no
-first-order condition (Remark~\ref{rem:homogeneous_singular_slope}). The
-greedy scheme of Section~5 therefore replaces the infinitesimal test used for
-the finite-slope penalty by a finite-step decrease criterion, evaluated with
-a conservative surrogate coefficient; this is the content of
-Algorithm~\ref{alg:q}.
-
-
-
 \section{Algorithms}
 This section describes the computational pipeline: the training data are
 generated via the open-loop problem, candidate neurons are inserted greedily,
 and insertion alternates with finite-dimensional optimization of the current
 network.
 
-\subsection*{Data generation via the open-loop problem}
+\subsubsection*{Data generation via the open-loop problem}
 
 Set $U:=L^2(t_0,T;\mathbb R^{m_u})$ and assume that for every $u\in U$ the
 state equation in \eqref{opt} has a unique solution $y(u)$ on $[t_0,T]$ and
@@ -3155,8 +2929,7 @@ returns a stationary control rather than a certified global minimizer; the
 converged initial costate supplies $g^j$, subject to that reservation and the
 differentiability qualification of Section~1.
 
-\subsection*{The two insertion algorithms}
-
+\subsubsection*{The two insertion algorithms}
 We use two greedy insertion algorithms of primal--dual active point (PDAP)
 type, in the sense of the accelerated conditional-gradient method for measure
 spaces of \cite{pieper2021linear}. Algorithm~\ref{alg:log} follows the
@@ -3172,22 +2945,20 @@ coefficient coordinates and different scalar maps, so they are specified in
 their respective subsections below. In either case the method is local and its
 output is retained only when it does not increase the post-insertion objective.
 
-Both algorithms evaluate every candidate of one iteration against the same
-residual $r_{\mu_t}$ and insert up to a prescribed number
-$N_{\mathrm{ins}}\ge1$ of them together. The decrease estimates below are
-one-candidate statements: for a joint insertion
+For the sampled fidelity, write
+$P^M_\mu(\omega):=D l^M(\mu)[\delta_\omega]$, and let
+$\|K(\omega)\|_M$ denote the sampled value--gradient norm associated with
+$l^M$.
+
+For a joint insertion
 $\sum_{i=1}^rc_i\delta_{\omega_i}$ at distinct new locations the penalty is
-additive, but the fidelity change carries the additional cross terms
-\begin{equation*}
-	\sum_{i<j}c_ic_j
-	\bigl\langle K^M(\omega_i),K^M(\omega_j)
-	\bigr\rangle_{\mathbb R^{M(d+1)}},
-\end{equation*}
-which no individual test controls. For $N_{\mathrm{ins}}=1$ the individual
-decrease statement applies to every accepted candidate, while the rate in
-Theorem~\ref{thm:quantitative-insertion} additionally requires an exact global
+additive, but the fidelity change contains pairwise cross terms between the
+inserted features, which no individual test controls. For
+$N_{\mathrm{ins}}=1$ the individual
+decrease statement applies to every accepted candidate, while
+Corollary~\ref{cor:certificate-rate} additionally requires an exact global
 maximizer. For $N_{\mathrm{ins}}>1$ the individual estimates do not compose,
-and neither a decrease per outer iteration nor monotonicity of $J^M$ along the
+and neither a decrease per outer iteration nor monotonicity of the objective along the
 iterates is claimed. Restoring a batch decrease guarantee requires recomputing
 the residual after each insertion, or testing the joint increment of the whole
 batch.
@@ -3196,32 +2967,31 @@ batch.
 
 \begin{theorem}
 \label{thm:quantitative-insertion}
-Let $\mathcal H$ be a real Hilbert space, let $V\in\mathcal H$, and let
-$K_p\in C_0(\Omega;\mathcal H)$.  For $\mu\in\mathcal M_p(\Omega)$, set
-\begin{equation}
-\label{eq:abstract-hilbert-objective}
-	J_{\mathcal H}(\mu)
-	:=\frac12\left\|\int_\Omega K_p(\omega)\,d\mu_p(\omega)-V
-	\right\|_{\mathcal H}^2+\alpha\Phi_\phi(\mu_p)
-\end{equation}
-and define
+Suppose that Assumption~\ref{ass:value-growth} holds, $p>s_1$, and
+$\alpha>0$. Let $\phi$ satisfy Assumptions~\ref{pen1} and~\ref{pen2}. For
+$\mu\in\mathcal M_p(\Omega)$ define
 \begin{align*}
-	r_\mu
-	&:=\int_\Omega K_p(\omega)\,d\mu_p(\omega)-V,\\
-	P_{p,\mu}(\omega)
-	&:=\langle r_\mu,K_p(\omega)\rangle_{\mathcal H},\\
-	B_p
-	&:=\sup_{\omega\in\Omega}\|K_p(\omega)\|_{\mathcal H},\\
 	\Delta(\mu,\omega)
 	&:=\max\bigl\{|P_{p,\mu}(\omega)|-\alpha L_\phi,0\bigr\},\\
 	\Delta(\mu)
 	&:=\sup_{\omega\in\Omega}\Delta(\mu,\omega)
 	=\max\bigl\{\|P_{p,\mu}\|_\infty-\alpha L_\phi,0\bigr\}.
 \end{align*}
-Suppose that $\alpha>0$ and that $\phi$ satisfies
-Assumptions~\ref{pen1} and~\ref{pen2}.  Let $\mu$ be finite atomic and
-$J_{\mathcal H}(\mu)<\infty$, and assume $\Delta(\mu)>0$.  Then $B_p>0$, and
-for every $\omega\in\Omega$ the insertion
+For a finite atomic $\mu$, define
+\begin{equation}
+\label{eq:explicit-certificate-radius}
+	R(\mu)
+	:=\max\left\{1,
+	\left(
+	\frac{2^{s_1+1}C_K\|r_\mu\|_{H^1(D)}}{\alpha L_\phi}
+	\right)^{\!1/(p-s_1)}\right\}.
+\end{equation}
+Every $\omega$ with $\Delta(\mu,\omega)>0$ belongs to
+$\overline B_{R(\mu)}$. If $\Delta(\mu)>0$, then $B_p>0$ and
+$|P_{p,\mu}|$ attains its maximum at some
+$\omega^*\in\overline B_{R(\mu)}$, with
+$\Delta(\mu,\omega^*)=\Delta(\mu)$.
+For every $\omega$ with $\Delta(\mu,\omega)>0$, the insertion
 \begin{equation}
 \label{eq:normalized-inserted-mass}
 	\kappa(\omega):=-\frac{\Delta(\mu,\omega)}{B_p^2}
@@ -3232,82 +3002,21 @@ for every $\omega\in\Omega$ the insertion
 satisfies
 \begin{equation}
 \label{eq:quantitative-insertion-decrease}
-	J_{\mathcal H}\bigl(\mu+c(\omega)\delta_{\omega}\bigr)
-	\le J_{\mathcal H}(\mu)
+	J\bigl(\mu+c(\omega)\delta_{\omega}\bigr)
+	\le J(\mu)
 	-\frac{\Delta(\mu,\omega)^2}{2B_p^2}.
 \end{equation}
-The condition $\Delta(\mu,\omega)>0$ is sufficient for a strict decrease but
-not necessary: at $|P_{p,\mu}(\omega)|=\alpha L_\phi$ the first-order terms
-cancel and the second-order terms decide. The supremum defining $\Delta(\mu)$ is
-attained, at any $\omega^*\in\Omega$ with
-\begin{equation}
-\label{eq:certificate-maximizer}
-	|P_{p,\mu}(\omega^*)|=\|P_{p,\mu}\|_\infty,
-	\qquad\text{so that }\Delta(\mu,\omega^*)=\Delta(\mu).
-\end{equation}
-
-Let $(\mu_k)_{k\ge0}$ be finite atomic iterates with
-$J_{\mathcal H}(\mu_0)<\infty$, and put $\Delta_k:=\Delta(\mu_k)$.  Whenever
-$\Delta_k>0$, choose an exact global maximizer as in
-\eqref{eq:certificate-maximizer}, make the insertion
-\eqref{eq:normalized-inserted-mass} at $\omega^*$, and then apply a
-finite-dimensional correction whose objective is no larger than the
-post-insertion objective.
-When $\Delta_k=0$, require only that the correction not increase the
-objective.  Then
-\begin{align}
-	\sum_{k=0}^{\infty}\Delta_k^2
-	&\le 2B_p^2J_{\mathcal H}(\mu_0),
-	\label{eq:certificate-violation-sum}\\
-	\Delta_k&\longrightarrow0,
-	\label{eq:certificate-violation-limit}\\
-	\min_{0\le k<n}\Delta_k
-	&\le B_p\sqrt{\frac{2J_{\mathcal H}(\mu_0)}{n}}
-	\qquad(n\ge1).
-	\label{eq:certificate-violation-rate}
-\end{align}
-Beyond \eqref{eq:certificate-violation-sum}--
-\eqref{eq:certificate-violation-rate}, these conclusions do not assert
-convergence of $(\mu_k)$ to a global minimizer or an objective-gap rate.
-
-There is also an explicit bounded search region.  Suppose, in addition, that
-there are $C>0$ and $0\le s<p$ such that
-\begin{equation}
-\label{eq:abstract-feature-growth}
-	w_p(\omega)\|K_p(\omega)\|_{\mathcal H}
-	\le C(1+|\omega|)^s
-	\qquad(\omega\in\Omega).
-\end{equation}
-Define
-\begin{equation}
-\label{eq:explicit-certificate-radius}
-	R(\mu)
-	:=\max\left\{1,
-	\left(
-	\frac{2^{s+1}C\|r_\mu\|_{\mathcal H}}{\alpha L_\phi}
-	\right)^{\!1/(p-s)}\right\}.
-\end{equation}
-Then
-\begin{equation}
-\label{eq:certificate-outside-radius}
-	|P_{p,\mu}(\omega)|<\frac{\alpha L_\phi}{2}
-	\qquad\text{whenever }|\omega|>R(\mu).
-\end{equation}
-Consequently, every point satisfying
-$|P_{p,\mu}(\omega)|>\alpha L_\phi$, and every maximizer in
-\eqref{eq:certificate-maximizer} when $\Delta(\mu)>0$, belongs to
-$\overline B_{R(\mu)}$.
 \end{theorem}
 
 \begin{proof}
 We first establish attainment of the certificate maximum.
-$K_p\in C_0(\Omega;\mathcal H)$ gives $B_p<\infty$ and
+$p>s_1$ and \eqref{eq:H1-growth} give
+$K_p\in C_0(\Omega;H^1(D))$, hence $B_p<\infty$ and
 $P_{p,\mu}\in C_0(\Omega)$.  If $\Delta(\mu)>0$, then
 $\|P_{p,\mu}\|_\infty>\alpha L_\phi>0$. Choose a closed ball outside which
 $|P_{p,\mu}|<\|P_{p,\mu}\|_\infty/2$; this is possible because
 $P_{p,\mu}$ vanishes at infinity. The continuous function $|P_{p,\mu}|$
-attains its maximum on that compact ball, proving
-\eqref{eq:certificate-maximizer}. Moreover, $B_p=0$ would imply
+attains its maximum on that compact ball. Moreover, $B_p=0$ would imply
 $P_{p,\mu}=0$, so $B_p>0$.
 
 We now bound the change caused by an arbitrary normalized insertion
@@ -3326,11 +3035,11 @@ Lemma~\ref{firstorderestimate} give
 Since $(\mu+\kappa w_p(\omega)^{-1}\delta_\omega)_p
 =\mu_p+\kappa\delta_\omega$, the quadratic fidelity has the exact expansion
 \begin{align}
-	&J_{\mathcal H}\left(\mu+\frac{\kappa}{w_p(\omega)}\delta_\omega\right)
-	-J_{\mathcal H}(\mu)\notag\\
+	&J\left(\mu+\frac{\kappa}{w_p(\omega)}\delta_\omega\right)
+	-J(\mu)\notag\\
 	&\quad\le
 	\kappa P_{p,\mu}(\omega)
-	+\frac{\kappa^2}{2}\|K_p(\omega)\|_{\mathcal H}^2
+	+\frac{\kappa^2}{2}\|K_p(\omega)\|_{H^1(D)}^2
 	+\alpha L_\phi|\kappa|
 	&&\text{by \eqref{eq:normalized-penalty-increment}}\notag\\
 	&\quad\le
@@ -3339,14 +3048,13 @@ Since $(\mu+\kappa w_p(\omega)^{-1}\delta_\omega)_p
 	&&\text{by the definition of $B_p$}.
 \label{eq:normalized-objective-increment}
 \end{align}
-Fix $\omega\in\Omega$. If $\Delta(\mu,\omega)=0$, then $\kappa(\omega)=0$ and
-\eqref{eq:quantitative-insertion-decrease} is trivial. Otherwise
+Fix $\omega\in\Omega$ with $\Delta(\mu,\omega)>0$. Then
 $|P_{p,\mu}(\omega)|=\alpha L_\phi+\Delta(\mu,\omega)$, and substitution of
 $\kappa=\kappa(\omega)$ from \eqref{eq:normalized-inserted-mass} into
 \eqref{eq:normalized-objective-increment} yields
 \begin{align*}
-	&J_{\mathcal H}\bigl(\mu+c(\omega)\delta_{\omega}\bigr)
-	-J_{\mathcal H}(\mu)\\
+	&J\bigl(\mu+c(\omega)\delta_{\omega}\bigr)
+	-J(\mu)\\
 	&\quad\le
 	-|\kappa(\omega)|\bigl(\alpha L_\phi+\Delta(\mu,\omega)\bigr)
 	+\frac{B_p^2|\kappa(\omega)|^2}{2}
@@ -3359,157 +3067,63 @@ $\kappa=\kappa(\omega)$ from \eqref{eq:normalized-inserted-mass} into
 	&&\text{by the choice of $\kappa(\omega)$}.
 \end{align*}
 This proves \eqref{eq:quantitative-insertion-decrease}; at $\omega=\omega^*$
-it gives the decrease $\Delta(\mu)^2/(2B_p^2)$. Sufficiency is the strict
-negativity of that right-hand side. Necessity fails because at a new location
-$\omega$ with $|P_{p,\mu}(\omega)|=\alpha L_\phi$ and
-$\sign\kappa=-\sign P_{p,\mu}(\omega)$ the increment is exactly
-\begin{equation*}
-	\frac{\|K_p(\omega)\|_{\mathcal H}^2}{2}\kappa^2
-	-\alpha\bigl(L_\phi|\kappa|-\phi(|\kappa|)\bigr),
-\end{equation*}
-which is negative whenever the concavity gain $L_\phi z-\phi(z)$ exceeds
-$\|K_p(\omega)\|_{\mathcal H}^2z^2/(2\alpha)$ at $z=|\kappa|$.
+it gives the decrease $\Delta(\mu)^2/(2B_p^2)$.
 
-We next telescope the one-step estimate.  The correction hypothesis and
-\eqref{eq:quantitative-insertion-decrease} give, for every $n\ge1$,
-\begin{align}
-	\sum_{k=0}^{n-1}\frac{\Delta_k^2}{2B_p^2}
-	&\le J_{\mathcal H}(\mu_0)-J_{\mathcal H}(\mu_n)
-	&&\text{by telescoping the decreases}\notag\\
-	&\le J_{\mathcal H}(\mu_0)
-	&&\text{since $J_{\mathcal H}$ is nonnegative}.
-\label{eq:finite-certificate-sum}
-\end{align}
-Letting $n\to\infty$ proves \eqref{eq:certificate-violation-sum}, and a
-convergent series of nonnegative terms gives
-\eqref{eq:certificate-violation-limit}.  The smallest of the first $n$
-squared violations is at most their average, so
-\begin{align*}
-	\min_{0\le k<n}\Delta_k^2
-	&\le\frac1n\sum_{k=0}^{n-1}\Delta_k^2
-	&&\text{by the minimum--average inequality}\\
-	&\le\frac{2B_p^2J_{\mathcal H}(\mu_0)}n
-	&&\text{by \eqref{eq:finite-certificate-sum}}.
-\end{align*}
-Taking square roots proves \eqref{eq:certificate-violation-rate}.  If
-$B_p=0$, then $P_{p,\mu_k}=0$ and $\Delta_k=0$ for every $k$, so all three
-conclusions hold without an insertion.
-
-Finally, we derive the radius directly from the feature growth.  If
-$|\omega|\ge1$, then \eqref{eq:abstract-feature-growth} and
-Cauchy--Schwarz give
+Finally, we derive the radius from \eqref{eq:H1-growth}. If $|\omega|\ge1$,
+then Cauchy--Schwarz gives
 \begin{align*}
 	|P_{p,\mu}(\omega)|
-	&\le\|r_\mu\|_{\mathcal H}\|K_p(\omega)\|_{\mathcal H}
+	&\le\|r_\mu\|_{H^1(D)}\|K_p(\omega)\|_{H^1(D)}
 	&&\text{by Cauchy--Schwarz}\\
-	&\le C\|r_\mu\|_{\mathcal H}
-	\frac{(1+|\omega|)^s}{1+|\omega|^p}
-	&&\text{by \eqref{eq:abstract-feature-growth}}\\
-	&\le 2^sC\|r_\mu\|_{\mathcal H}|\omega|^{-(p-s)}
+	&\le C_K\|r_\mu\|_{H^1(D)}
+	\frac{(1+|\omega|)^{s_1}}{1+|\omega|^p}
+	&&\text{by \eqref{eq:H1-growth}}\\
+	&\le 2^{s_1}C_K\|r_\mu\|_{H^1(D)}|\omega|^{-(p-s_1)}
 	&&\text{since $|\omega|\ge1$}.
 \end{align*}
 If $|\omega|>R(\mu)$, the last expression is strictly smaller than
-$\alpha L_\phi/2$ by \eqref{eq:explicit-certificate-radius}.  This proves
-\eqref{eq:certificate-outside-radius} and the claimed localization of every
-violation and every maximizing insertion.
+$\alpha L_\phi/2$ by \eqref{eq:explicit-certificate-radius}. This proves the
+claimed localization of every accepted candidate and every maximizer.
 \end{proof}
 
-\begin{remark}[Hypotheses used]
-\label{rem:insertion-hypotheses}
-Of Assumptions~\ref{pen1} and~\ref{pen2} the proof uses only that $\phi$ is
-concave and nondecreasing with $\phi(0)=0$ and $L_\phi<\infty$; coercivity and
-$\phi\in C^1((0,\infty))$ are not needed. Finite atomicity and the finiteness
-of $J_{\mathcal H}$ are assumed because the algorithms below produce finite
-atomic iterates, not because the estimate requires them: for a finite atomic
-$\mu\in\mathcal M_p(\Omega)$ the normalized measure $\mu_p$ is again finite
-atomic, so $\Phi_\phi(\mu_p)$ is a finite sum of finite values and
-$\|\int_\Omega K_p\,d\mu_p\|_{\mathcal H}
-\le B_p\|\mu_p\|_{\mathcal M(\Omega)}<\infty$, whence
-$J_{\mathcal H}(\mu)<\infty$ is automatic.
-\end{remark}
+\begin{corollary}
+\label{cor:certificate-rate}
+Let $(\mu_k)_{k\ge0}$ be finite atomic iterates with $J(\mu_0)<\infty$, and
+write $\Delta_k:=\Delta(\mu_k)$. If $\Delta_k>0$, insert at an exact maximizer
+given by Theorem~\ref{thm:quantitative-insertion}. Then correct the coefficients,
+accepting the corrected iterate only if it does not increase the objective. Then
+\begin{align*}
+	\sum_{k=0}^{\infty}\Delta_k^2
+	&\le 2B_p^2J(\mu_0),\\
+	\Delta_k&\longrightarrow0,\\
+	\min_{0\le k<n}\Delta_k
+	&\le B_p\sqrt{\frac{2J(\mu_0)}{n}}
+	\qquad(n\ge1).
+\end{align*}
+These conclusions do not assert convergence of $(\mu_k)$ to a global
+minimizer or an objective-gap rate.
+\end{corollary}
 
-\begin{remark}[Population specialization]
-For the population problem, take $\mathcal H=H^1(D)$ and the population
-$K_p$. Then $J_{\mathcal H}=J$, and at the candidate $\bar\mu$ the abstract
-function $P_{p,\bar\mu}$ is $\bar P_p$.
-The bound \eqref{eq:H1-growth} gives \eqref{eq:abstract-feature-growth} with
-$C=C_K$ and $s=s_1$ whenever
-$p>s_1$.
-\end{remark}
+\begin{proof}
+If $B_p=0$, then $\Delta_k=0$ for every $k$ and the claims are immediate.
+Otherwise Theorem~\ref{thm:quantitative-insertion} and the correction
+hypothesis give, for every $n\ge1$,
+\begin{equation*}
+	\sum_{k=0}^{n-1}\frac{\Delta_k^2}{2B_p^2}
+	\le J(\mu_0)-J(\mu_n)
+	\le J(\mu_0).
+\end{equation*}
+Letting $n\to\infty$ gives the first claim, and summability gives
+$\Delta_k\to0$. Finally,
+\begin{equation*}
+	\min_{0\le k<n}\Delta_k^2
+	\le\frac1n\sum_{k=0}^{n-1}\Delta_k^2
+	\le\frac{2B_p^2J(\mu_0)}n,
+\end{equation*}
+which proves the stated rate.
+\end{proof}
 
-\begin{remark}[Empirical specialization]
-\label{rem:empirical-specialization}
-For the empirical problem, take $\mathcal H=\mathbb R^{M(d+1)}$ with its
-Euclidean inner product, assume that the following feature is continuous, and
-define
-\begin{equation}
-\label{eq:empirical-feature}
-	K^M(\omega)
-	:=\frac1{\sqrt M}
-	\bigl(K(\omega)(x^m),\nabla K(\omega)(x^m)\bigr)_{m=1}^M,
-	\qquad
-	K_p^M(\omega):=\frac{K^M(\omega)}{w_p(\omega)}.
-\end{equation}
-If $K_p^M\in C_0(\Omega;\mathcal H)$, use $K_p=K_p^M$ in
-\eqref{eq:abstract-hilbert-objective} and take the abstract target $V$ there
-to be
-\begin{equation*}
-	\frac1{\sqrt M}
-	\bigl(V(x^m),g^m\bigr)_{m=1}^M.
-\end{equation*}
-Then the fidelity in \eqref{eq:abstract-hilbert-objective} is $l^M$. Denote
-the corresponding function in this specialization by
-\begin{equation*}
-	P^M_{p,\mu}:=P_{p,\mu}.
-\end{equation*}
-For a finite measure
-$\mu_{\boldsymbol\omega,c}=\sum_{n=1}^Nc_n\delta_{\omega_n}$ with distinct
-nodes, Theorem~\ref{thm:normalization} gives the exact identity
-\begin{equation*}
-	J_{\mathcal H}(\mu_{\boldsymbol\omega,c})
-	=l^M(\mu_{\boldsymbol\omega,c})
-	+\alpha\sum_{n=1}^N
-	\phi\bigl(w_p(\omega_n)|c_n|\bigr).
-\end{equation*}
-Repeated nodes are first merged; the inequality in the proof of
-Corollary~\ref{cor:finite-global-minimizer} shows that merging cannot increase
-the penalty. Any bound
-\begin{equation*}
-	\|K^M(\omega)\|_{\mathcal H}\le C(1+|\omega|)^s,
-	\qquad s<p,
-\end{equation*}
-implies $K_p^M\in C_0(\Omega;\mathcal H)$ and gives the empirical search
-radius \eqref{eq:explicit-certificate-radius}.
-
-For value-only fitting the same specialization applies with
-$\mathcal H=\mathbb R^M$, dropping the gradient entries from $K^M$ and from
-the target.
-\end{remark}
-
-
-The G\^ateaux derivative of \eqref{eq:empirical-fidelity} in an unnormalized
-Dirac direction is
-\begin{equation*}
-	\begin{aligned}
-	P^M_{\mu_t}(\omega)
-	&:=D l^M(\mu_t)[\delta_\omega]\\
-	&=\frac{1}{M}\sum_{m=1}^M
-	\left[
-	[K(\omega)](x^m)
-	\bigl(\mathcal N\mu_t(x^m)-V(x^m)\bigr)
-	\right.\\[-2pt]
-	&\hspace{6em}\left.
-	+\nabla K(\omega)(x^m)\cdot
-	\bigl(\nabla\mathcal N\mu_t(x^m)-g^m\bigr)
-	\right].
-	\end{aligned}
-\end{equation*}
-Again, the second summand is omitted for value-only fitting, in which case the
-value-only substitution of Remark~\ref{rem:empirical-specialization} is in
-force. For
-$\boldsymbol\omega=(\omega_n)_{n=1}^N$,
-$c=(c_n)_{n=1}^N$, and
-$\mu_{\boldsymbol\omega,c}=\sum_{n=1}^Nc_n\delta_{\omega_n}$, define
+For the sampled data, Algorithm~\ref{alg:log} minimizes
 \begin{equation}
 \label{eq:empirical-log-objective}
 	J^M(\boldsymbol\omega,c)
@@ -3517,43 +3131,34 @@ $\mu_{\boldsymbol\omega,c}=\sum_{n=1}^Nc_n\delta_{\omega_n}$, define
 	+\alpha\sum_{n=1}^N
 		\phi_\gamma\bigl(w_p(\omega_n)|c_n|\bigr).
 \end{equation}
-
-For fixed distinct nodes, introduce the normalized coefficients
-$u_n:=w_p(\omega_n)c_n$ and the normalized dictionary columns
-$K_p^M(\omega_n)=K^M(\omega_n)/w_p(\omega_n)$. Then the correction minimizes
+Its normalized insertion profile is
 \begin{equation*}
-	\frac12\left\|\sum_{n=1}^N u_nK_p^M(\omega_n)-V^M\right\|_{\mathcal H}^2
+	P^M_{p,\mu_t}(\omega):=
+	\frac{P^M_{\mu_t}(\omega)}{w_p(\omega)}.
+\end{equation*}
+
+For fixed nodes, introduce the normalized coefficients
+$u_n:=w_p(\omega_n)c_n$. The outer-weight correction then minimizes
+\begin{equation*}
+	l^M\left(\sum_{n=1}^N
+	\frac{u_n}{w_p(\omega_n)}\delta_{\omega_n}\right)
 	+\alpha\sum_{n=1}^N\phi_\gamma(|u_n|).
 \end{equation*}
-Writing $h_\gamma(z):=\phi_\gamma(|z|)-|z|$ and
-$\tau=(1+\alpha\gamma)^{-1}$, the semismooth Newton solve uses the
-coordinatewise residual
-\begin{equation}
-\label{eq:proximal-residual}
-	u=\prox_{\tau\alpha|\cdot|}
-	\left(u-\tau\left[\nabla_ul^M
-	\left(\sum_{n=1}^Nu_nK_p^M(\omega_n)\right)
-	+\alpha\nabla h_\gamma(u)\right]\right).
-\end{equation}
-After the solve, the physical outer weights are recovered as
-$c_n=u_n/w_p(\omega_n)$. This is the normalized-coordinate substitution used
-by the implementation; the scalar map in \eqref{eq:proximal-residual} is the
-ordinary soft-thresholding operator.
 
-Throughout this subsection we impose the growth bound of
-Remark~\ref{rem:empirical-specialization} and apply
-Theorem~\ref{thm:quantitative-insertion} with
-$\mathcal H=\mathbb R^{M(d+1)}$, the empirical target, $K_p=K^M_p$ from
-\eqref{eq:empirical-feature}, and $\phi=\phi_\gamma$, for which $L_\phi=1$ by
-\eqref{eq:log-penalty}. For distinct nodes $J^M$ is then the objective
-\eqref{eq:abstract-hilbert-objective} of that theorem, with repeated nodes
-merged first; its derivative function $P^M_{p,\mu}$ of
-Remark~\ref{rem:empirical-specialization} is $P^M_\mu/w_p$, and its uniform
-bound $B^M_p:=\sup_\omega\|K^M_p(\omega)\|$ is finite. Every estimate below remains
-valid when $B^M_p$ is replaced by a computable upper bound
-$\widehat B\ge B^M_p$, since the increment bound
-\eqref{eq:normalized-objective-increment} only becomes weaker.
+Theorem~\ref{thm:quantitative-insertion} and
+Corollary~\ref{cor:certificate-rate} apply verbatim with the sampled
+value--gradient inner product in place of the $H^1(D)$ inner product. The
+empirical search radius is therefore given by
+\eqref{eq:explicit-certificate-radius}, using the sampled residual norm and
+the corresponding feature-growth constants.
 
+
+
+\subsubsection*{The insertion step}
+The theorem requires finding a maximizer of $|P^M_{p,\mu_t}(\omega)|$.
+Finding a global maximizer is generally intractable; for ReLU dictionaries it
+is NP-hard \cite[Section~3.3]{bach2017breaking}. The practical multistart
+search is proposed in the PDAP algorithm in the paper \cite{pieper2022nonconvex}.
 At the current iterate $\mu_t=\mu_{\boldsymbol\omega^{(t)},c^{(t)}}$ a
 candidate $\omega$ is therefore accepted when
 \begin{equation}
@@ -3562,75 +3167,55 @@ candidate $\omega$ is therefore accepted when
 	\qquad\text{that is,}\qquad
 	|P^M_{p,\mu_t}(\omega)|>\alpha L_\phi.
 \end{equation}
-The implementation uses the candidate-specific curvature
+
+Theorem~\ref{thm:quantitative-insertion} provides two additional pieces of
+information. First, it gives the bound $R(\mu_t)$ for sampling the initial
+points at each iteration. Second, because the semismooth Newton method is
+local, it gives an initial outer weight that already guarantees a decrease.
+
+For a nonhomogeneous activation set
+$R_{\mathrm{search}}(\mu_t):=\min\{R(\mu_t),e^5\}$.
+Each multistart initial point has norm at most $R_{\mathrm{search}}(\mu_t)$.
+Starting from each $\omega_0$, one unconstrained L-BFGS solve jointly optimizes all components of $\omega$ for
+$|P^M_{p,\mu_t}(\omega)|$.
+After optimization, candidates with $|\omega|>R_{\mathrm{search}}(\mu_t)$ are discarded.
+This avoids constrained optimization.
+
+Before running the SSN solver, the algorithm calculates
 \begin{equation}
 \label{eq:empirical-per-atom-warm-start}
-	A_p^M(\omega):=\|K_p^M(\omega)\|_{\mathcal H}^2,
+	A_p^M(\omega):=
+	\left\|\frac{K(\omega)}{w_p(\omega)}\right\|_M^2,
 	\qquad
 	\kappa_A(\omega):=-\frac{\Delta(\mu_t,\omega)}{A_p^M(\omega)}
 	\sign\bigl(P^M_{p,\mu_t}(\omega)\bigr),
 	\qquad
 	c_A(\omega):=\frac{\kappa_A(\omega)}{w_p(\omega)}.
 \end{equation}
-This is the exact minimizer of the per-candidate quadratic increment bound
-before its curvature is replaced by the uniform bound $(B_p^M)^2$. Since
-$A_p^M(\omega)\le(B_p^M)^2$, it decreases $J^M$ by at least
-$\Delta(\mu_t,\omega)^2/(2A_p^M(\omega))$, hence also by the amount asserted
-in \eqref{eq:quantitative-insertion-decrease}. The coefficient
-$c_A(\omega)$ is a warm start, not the output of the coefficient solve: the
-semismooth Newton correction below subsequently optimizes all outer weights.
-The decrease statement holds at every accepted candidate, not only at a global
-maximizer of $|P^M_{p,\mu_t}|$.
+The coefficient $c_A(\omega)$ is used to
+initialize the subsequent semismooth Newton correction, which optimizes all
+outer weights. The decrease statement holds for every accepted candidate,
+not only for a global maximizer of $|P^M_{p,\mu_t}|$.
 
-For a nonhomogeneous activation set
-$R_{\mathrm{search}}(\mu_t):=\min\{R(\mu_t),e^5\}$; if the hypotheses needed
-to compute $R(\mu_t)$ are unavailable, set $R_{\mathrm{search}}(\mu_t):=e^5$.
-Each multistart initial point is generated as
-$\omega_0=r\widehat\omega$, where $\widehat\omega$ is sampled uniformly on
-the unit sphere and $\log r$ is sampled uniformly on
-$[-3,\log R_{\mathrm{search}}(\mu_t)]$. Starting from each $\omega_0$, one
-unconstrained L-BFGS solve jointly optimizes all components of $\omega$ for
-$|P^M_{p,\mu_t}(\omega)|$. There is no separate directional or radial solve.
-After optimization, candidates with
-$|\omega|>R_{\mathrm{search}}(\mu_t)$ are discarded. The remaining candidates
-are traversed in their sampled order, and a candidate is discarded as a
-near-duplicate when its Euclidean distance from an earlier retained candidate
-is at most $\theta_{\mathrm{merge}}=10^{-2}$. Existing support points are not
-added to the multistart set.
-
-Under the standing growth bound, Theorem~\ref{thm:quantitative-insertion}
-guarantees that $|P^M_{p,\mu_t}|$ attains its maximum and that every $\omega$
-capable of satisfying \eqref{eq:empirical-insertion-condition} lies in the
-closed ball of radius $R(\mu_t)$. The additional $e^5$ cap is a numerical
-sampling and final-candidate filter bound; a final candidate outside the
-selected search ball is rejected rather than projected back.
-
-Finding a global maximizer is generally intractable; for ReLU dictionaries it
-is NP-hard \cite[Section~3.3]{bach2017breaking}. The practical multistart
-search above therefore produces locally refined candidates, without certifying
-stationarity or local maximality. The preceding local decrease
-estimate applies to every candidate that passes
-\eqref{eq:empirical-insertion-condition}. The rate in
-Theorem~\ref{thm:quantitative-insertion} additionally requires that the selected
-candidate attain the global maximum and that the subsequent correction not
-increase the post-insertion objective. It does not cover the multistart
-heuristic without a quantitative search-accuracy condition.
-
-With $M$ value samples and $Md$ gradient components, the convex
-total-variation problem underlying a conditional-gradient step has
-$M(d+1)$ scalar measurements and admits a minimizer with at most $M(d+1)$
-atoms \cite[Section~2.2]{bach2017breaking}. This observation does not assert convexity of
-the nonconvex coefficient problem used here.
+Writing $h_\gamma(z):=\phi_\gamma(|z|)-|z|$ and
+$\tau=(1+\alpha\gamma)^{-1}$, the semismooth Newton solve uses the
+coordinatewise residual
+\begin{equation}
+\label{eq:proximal-residual}
+	u=\prox_{\tau\alpha|\cdot|}
+	\left(u-\tau\left[\nabla_ul^M
+	\left(\sum_{n=1}^N
+	\frac{u_n}{w_p(\omega_n)}\delta_{\omega_n}\right)
+	+\alpha\nabla h_\gamma(u)\right]\right).
+\end{equation}
+After the solve, the physical outer weights are recovered as
+$c_n=u_n/w_p(\omega_n)$; the proximal map in
+\eqref{eq:proximal-residual} is ordinary soft thresholding.
 
 Algorithm~\ref{alg:log} uses the scalar penalty
 $\phi_\gamma$ from \eqref{eq:log-penalty} and the objective
 \eqref{eq:empirical-log-objective}, with the insertion condition
-\eqref{eq:empirical-insertion-condition}. At a nonzero coefficient, the
-penalty contribution to the coefficient derivative is
-\begin{equation*}
-	\alpha w_p(\omega_n)
-	\phi_\gamma'\bigl(w_p(\omega_n)|c_n|\bigr)\sign(c_n).
-\end{equation*}
+\eqref{eq:empirical-insertion-condition}.
 
 \begin{algorithm}[htbp]
 \caption{Iterative node insertion for $J^M$}
@@ -3640,29 +3225,18 @@ penalty contribution to the coefficient derivative is
 $\varepsilon_{\mathrm{prune}}$, and an initial network
 $\boldsymbol\omega^{(0)},c^{(0)}$ of width $N(0)$; set $t=0$.
 \While{$t < T_{\mathrm{out}}$}
-\State Set $R_{\mathrm{search}}=\min\{R(\mu_t),e^5\}$, or
-$R_{\mathrm{search}}=e^5$ when $R(\mu_t)$ is unavailable. Sample
-$N_{\mathrm{trial}}$ points $\omega_0=r\widehat\omega$ with
-$\widehat\omega$ uniform on the unit sphere and $\log r$ uniform on
-$[-3,\log R_{\mathrm{search}}]$.
+\State Set $R_{\mathrm{search}}=\min\{R(\mu_t),e^5\}$. Sample
+$N_{\mathrm{trial}}$ points $\omega_0$ with norm bounded by $R_{\mathrm{search}}$.
 \State From each $\omega_0$, run one unconstrained joint L-BFGS maximization of
-$|P^M_{p,\mu_t}(\omega)|$. Discard candidates with
-$|\omega|>R_{\mathrm{search}}$, then remove near-duplicates using Euclidean
-distance and tolerance $10^{-2}$.
+$|P^M_{p,\mu_t}(\omega)|$.
+\State Discard candidates with $|\omega|>R_{\mathrm{search}}$, then remove near-duplicates.
 \State Keep the candidates satisfying
 \eqref{eq:empirical-insertion-condition}; terminate if there is none.
-\State Retain the at most $N_{\mathrm{ins}}$ candidates with the largest
-$\Delta(\mu_t,\omega)$ and insert each with the
-warm-start outer weight
-$c_A(\omega)=-\Delta(\mu_t,\omega)
-\sign(P^M_{p,\mu_t}(\omega))/(w_p(\omega)A_p^M(\omega))$ from
+\State Insert at most $N_{\mathrm{ins}}$ nodes with the largest
+$\Delta(\mu_t,\omega)$, warm-start outer weight by
 \eqref{eq:empirical-per-atom-warm-start}.
 \State Optimize the outer weights of the enlarged network by the semismooth
-Newton method applied to the normalized-coordinate residual
-\eqref{eq:proximal-residual} for
-\eqref{eq:empirical-log-objective}, started from the weights just inserted;
-accept the result only if its objective is no larger than the post-insertion
-objective, and otherwise retain the post-insertion weights.
+Newton method.
 \State Remove nodes with $|c_n|\le\varepsilon_{\mathrm{prune}}$ (resulting in
 width $N(t+1)$).
 \State $t = t + 1$.
@@ -3671,92 +3245,89 @@ width $N(t+1)$).
 \end{algorithm}
 
 \subsection{Algorithm~\ref{alg:q}: the fractional-exponent penalty on the sphere}
+Algorithm~\ref{alg:q} uses $\psi_k(z)=z^q$, $q=2/(k+1)$, on the
+unit sphere. For $q<1$, the zero network is a local minimizer and the
+infinitesimal insertion condition of Algorithm~\ref{alg:log} is unavailable
+(Remark~\ref{rem:homogeneous_singular_slope}). We therefore test the actual
+change produced by inserting one atom with a finite coefficient.
 
-Algorithm~\ref{alg:q} uses
-$\psi_k(z)=z^q$, $q=2/(k+1)<1$, on the unit sphere.
-Because $\psi_k'(0^+)=+\infty$, it uses a finite-step decrease test instead
-of \eqref{eq:empirical-insertion-condition}. The implementation also includes
-the endpoint $k=1$, $q=1$, used for the ReLU--$\ell^1$ baseline; there the
-finite-step test reduces to the usual condition
-$|P^M_{\mu_t}(\omega)|>\alpha$.
-
-For the $q$-penalty with $q<1$, the zero network is always a local minimizer,
-and an infinitesimal insertion test gives no condition away from the existing
-support (Remark~\ref{rem:homogeneous_singular_slope}).
-We replace it with a \emph{finite-step decrease criterion}:
-given a candidate $\omega$, we evaluate the conservative surrogate increment
-\begin{equation*}
-	\widehat{\Delta J}^M_{\psi_k}(c;\omega)
-	=cP^M_{\mu_t}(\omega)
-	+\tfrac12c^2\|K(\omega)\|_M^2+\frac{\alpha}{q}|c|^q,
-\end{equation*}
-where
-\begin{equation*}
-	\|K(\omega)\|_M^2
-	:=\frac1M\sum_{m=1}^M
-	\left(|[K(\omega)](x^m)|^2+|\nabla K(\omega)(x^m)|^2\right),
-\end{equation*}
-and we accept $\omega$ if
-$\min_c\widehat{\Delta J}^M_{\psi_k}(c;\omega)<0$. For $q<1$ this is not the
-actual objective increment: its penalty coefficient $\alpha/q$ is larger than
-the coefficient $\alpha$ in \eqref{eq:homogeneous-empirical-objective}.
-
-Candidates with $A:=\|K(\omega)\|_M^2$ below the numerical zero tolerance are
-rejected. Otherwise the minimizing coefficient has sign
-$-\sign(P^M_{\mu_t}(\omega))$, and only that sign can decrease the surrogate;
-writing $A>0$, its
-magnitude solves
+We use the scalar proximal map
 \begin{equation}
-\label{eq:insertion-weight-equation}
-	Az+\alpha z^{q-1}=|P^M_{\mu_t}(\omega)|.
+\label{eq:power-prox}
+	\prox_{\lambda|\cdot|^q}(v)
+	\in\argmin_{z\in\mathbb R}
+	\left\{\frac12(z-v)^2+\lambda|z|^q\right\},
 \end{equation}
-The left-hand side is strictly convex with minimum at
+with zero selected when the minimum is attained both at zero and at a nonzero
+point. For $0<q<1$, put
 \begin{equation*}
-	z_{\mathrm{turn}}
-	:=\left(\frac{\alpha(1-q)}{A}\right)^{1/(2-q)}.
-\end{equation*}
-Below that minimum value \eqref{eq:insertion-weight-equation} has no positive
-root and the candidate is rejected; equality gives one double root, and a
-strictly larger right-hand side gives two roots. In the last case, the larger
-root $z^*$ is the only positive local minimizer of the surrogate. We compute
-$z^*$ by Newton's method to the right of $z_{\mathrm{turn}}$, where the
-left-hand side is increasing and convex, and accept $\omega$ with initial outer
-weight $c^*:=-\sign(P^M_{\mu_t}(\omega))z^*$ only when
-$\widehat{\Delta J}^M_{\psi_k}(c^*;\omega)<0$.
-For the endpoint $q=1$, the corresponding coefficient is
-$c^*=-\sign(P^M_{\mu_t}(\omega))
-(|P^M_{\mu_t}(\omega)|-\alpha)/A$ whenever the insertion condition holds.
-
-The subsequent coefficient solve minimizes
-\eqref{eq:homogeneous-empirical-objective}, whose penalty coefficient is
-$\alpha$ rather than $\alpha/q$. Since $\alpha/q>\alpha$ for $q<1$, a
-candidate accepted by the displayed finite-step test and inserted alone
-strictly decreases
-\eqref{eq:homogeneous-empirical-objective}. The value $c^*$ is an
-initialization for that solve, not a stationary point of its objective.
-
-For $q<1$, the scalar map used inside the coefficient correction is not the
-global proximal operator of $\alpha|c|^q$. Define instead the stationary-branch
-selector $S_{\nu,q}$ as follows. Put
-\begin{equation*}
-	t_{\mathrm{turn}}=[\nu q(1-q)]^{1/(2-q)},
+	\bar z=[2\lambda(1-q)]^{1/(2-q)},
 	\qquad
-	v_{\mathrm{turn}}
-	=t_{\mathrm{turn}}+\nu q t_{\mathrm{turn}}^{q-1}.
+	\bar v=\frac{2-q}{2(1-q)}\bar z.
 \end{equation*}
-For $|v|\le v_{\mathrm{turn}}$, set $S_{\nu,q}(v)=0$; above that threshold,
-set $S_{\nu,q}(v)$ to $\sign(v)$ times the larger positive solution of
-$t+\nu q t^{q-1}=|v|$. The correction applies semismooth Newton to the local
-stationarity residual
+Then the selected proximal value is zero when $|v|\le\bar v$; when
+$|v|>\bar v$, it is $\sign(v)z$, where $z$ is the largest positive solution
+of
+\begin{equation*}
+	z+\lambda qz^{q-1}=|v|.
+\end{equation*}
+The implementation evaluates this value in closed form for
+$q\in\{1/2,2/3\}$, using respectively a cubic in $\sqrt z$ and a quartic in
+$z^{1/3}$. At the endpoint $q=1$, \eqref{eq:power-prox} is ordinary soft
+thresholding.
+
+For a candidate $\omega\notin\atom\mu_t$, write
+\begin{equation*}
+	P:=P^M_{\mu_t}(\omega),
+	\qquad A:=\|K(\omega)\|_M^2.
+\end{equation*}
+If $A$ or $|P|$ is numerically zero, the candidate is discarded. Otherwise the
+exact one-atom objective increment is
 \begin{equation}
-\label{eq:algorithm2-stationary-residual}
-	c=S_{\alpha,q}\bigl(c-\nabla_cl^M(\mu_{\boldsymbol\omega,c})\bigr)
+\label{eq:algorithm2-increment}
+	\Delta J^M_{\psi_k}(c;\omega)
+	=cP+\frac12Ac^2+\alpha|c|^q.
 \end{equation}
-coordinatewise. For $q=1$, $S_{\alpha,1}$ is ordinary soft thresholding.
-Because $S_{\nu,q}$ selects a positive local branch for $q<1$ without comparing
-its scalar objective with the value at zero, the correction is only a local
-stationarity method; the outer acceptance guard supplies the objective-decrease
-check.
+Completing the square in \eqref{eq:algorithm2-increment} gives its selected
+global minimizer directly:
+\begin{equation}
+\label{eq:algorithm2-insertion-weight}
+	c^*(\omega)
+	:=\prox_{(\alpha/A)|\cdot|^q}\!\left(-\frac{P}{A}\right).
+\end{equation}
+We accept the candidate precisely when $c^*(\omega)\ne0$ and
+$\Delta J^M_{\psi_k}(c^*(\omega);\omega)<0$. Thus the same coefficient both
+certifies the finite-step decrease and initializes the subsequent correction.
+
+After insertion, let $m_t$ be the smallest magnitude among the nonzero outer
+weights. For $q<1$, the correction fixes the proximal scale
+\begin{equation}
+\label{eq:algorithm2-prox-scale}
+	\lambda_t
+	:=\min\left\{\alpha,
+	\frac{\rho_{\mathrm{prox}}m_t^{2-q}}{2(1-q)}\right\},
+	\qquad \rho_{\mathrm{prox}}=0.5,
+\end{equation}
+for the whole semismooth Newton solve. Every nonzero warm-start coefficient is
+strictly above the switching magnitude, since
+$\bar z\le\rho_{\mathrm{prox}}^{1/(2-q)}m_t<m_t$. Define, coordinatewise,
+\begin{equation}
+\label{eq:algorithm2-normal-map}
+	c(z):=\prox_{\lambda_t|\cdot|^q}(z),
+	\qquad
+	G_t(z):=\frac{\alpha}{\lambda_t}\bigl(z-c(z)\bigr)
+	+\nabla_c l^M(\mu_{\boldsymbol\omega,c(z)}).
+\end{equation}
+The coefficient correction applies semismooth Newton to $G_t(z)=0$. For
+$q=1$ we use soft thresholding with $\lambda_t=\alpha$. For $q<1$, an exact
+undamped Newton iteration on a fixed smooth branch has the usual local rate
+under nonsingularity; no convergence rate is claimed for the implemented
+globalizations. The corrected coefficients are retained only when they do not
+increase the post-insertion objective.
+
+The implementation uses $k\in\{2,3\}$, corresponding to
+$q\in\{2/3,1/2\}$; $k=1$, $q=1$ is retained as the ReLU--$\ell^1$
+baseline.
 
 \begin{algorithm}[htbp]
 \caption{Iterative node insertion for $J^M_{\psi_k}$}
@@ -3773,14 +3344,17 @@ points as additional starts.
 profile is evaluated after normalization onto $\mathbb S^d$. Normalize the
 final points, remove cosine near-duplicates, and repeat refinement after a merge,
 for at most five rounds.
-\State For each candidate compute $c^*$ from
-\eqref{eq:insertion-weight-equation} when it exists, and keep the candidate
-when $\widehat{\Delta J}^M_{\psi_k}(c^*;\omega)<0$; terminate if there is none.
+\State Discard final candidates that coincide numerically with the current
+support.
+\State For each candidate compute $c^*(\omega)$ from
+\eqref{eq:algorithm2-insertion-weight}, and keep it when
+$c^*(\omega)\ne0$ and
+$\Delta J^M_{\psi_k}(c^*(\omega);\omega)<0$; terminate if there is none.
 \State Retain the at most $N_{\mathrm{ins}}$ kept candidates with the smallest
-$\widehat{\Delta J}^M_{\psi_k}(c^*;\omega)$ and insert each with outer weight $c^*$.
-\State Minimize \eqref{eq:homogeneous-empirical-objective} in the coefficients
-by the semismooth Newton method applied to
-\eqref{eq:algorithm2-stationary-residual}; accept the
+$\Delta J^M_{\psi_k}(c^*;\omega)$ and insert each with outer weight $c^*$.
+\State Apply the semismooth Newton correction
+\eqref{eq:algorithm2-normal-map}, using
+\eqref{eq:algorithm2-prox-scale}; accept the
 result only if its objective is no larger than the post-insertion objective,
 and otherwise retain the post-insertion coefficients.
 \State Remove nodes with $|c_n|\le\varepsilon_{\mathrm{prune}}$ (resulting in
@@ -3810,7 +3384,7 @@ For a fitted value function $\widehat V$, the relative errors are
 Both norms are computed empirically on the validation or evaluation set
 specified for each experiment.
 
-\subsection{Van der Pol Oscillator}
+\subsection*{Van der Pol Oscillator}
 We consider the optimal control of the Van der Pol oscillator:
 \begin{equation*}
 \min_{u \in L^2(0,T;\mathbb R)}
@@ -3869,8 +3443,8 @@ We solve the open-loop problem on a $30 \times 30$ grid over $[-3,3]^2$ ($M = 90
 All experiments use $T_{\mathrm{out}} = 150$ outer iterations and
 $N_{\mathrm{trial}} = 50$ sampled candidate nodes per iteration. Each iteration
 inserts the single selected candidate ($N_{\mathrm{ins}} = 1$), so the
-one-candidate decrease statement applies. The certificate-rate conclusion of
-Theorem~\ref{thm:quantitative-insertion} remains conditional on the selected
+one-candidate decrease statement applies. Corollary~\ref{cor:certificate-rate}
+remains conditional on the selected
 candidate being an exact global maximizer and is not claimed for the multistart
 search. The loop terminates when no candidate clears the insertion threshold,
 as returned by the finite multistart search. This is a numerical stopping rule,
@@ -4128,33 +3702,30 @@ $\alpha = 10^{-5}$.
 \begin{figure}[htbp]
 \centering
 \captionsetup[subfigure]{justification=centering}
-\begin{subfigure}[t]{0.32\textwidth}
+\begin{subfigure}[t]{0.48\textwidth}
 \centering
 \includegraphics[width=\textwidth]{../experiments/01_vdp/paper_frac_exp_penalty/figures/value_surface_p2.png}
-\caption{$k=2$\\ ($N=40$, $\mathrm{Err}_{H^1} = 0.098$).}
+\caption{$k=2$\\ ($N=45$, $\mathrm{Err}_{H^1} = 0.100$).}
 \label{fig:H1_power_p2}
 \end{subfigure}
 \hfill
-\begin{subfigure}[t]{0.32\textwidth}
+\begin{subfigure}[t]{0.48\textwidth}
 \centering
 \includegraphics[width=\textwidth]{../experiments/01_vdp/paper_frac_exp_penalty/figures/value_surface_p3.png}
-\caption{$k=3$\\ ($N=25$, $\mathrm{Err}_{H^1} = 0.099$).}
+\caption{$k=3$\\ ($N=27$, $\mathrm{Err}_{H^1} = 0.099$).}
 \label{fig:H1_power_p3}
 \end{subfigure}
-\hfill
-\begin{subfigure}[t]{0.32\textwidth}
-\centering
-\includegraphics[width=\textwidth]{../experiments/01_vdp/paper_frac_exp_penalty/figures/value_surface_p5.png}
-\caption{$k=5$\\ ($N=21$, $\mathrm{Err}_{H^1} = 0.101$).}
-\label{fig:H1_power_p5}
-\end{subfigure}
 \caption{$H^1$-trained networks with $\alpha = 10^{-5}$ for
-$k \in \{2, 3, 5\}$.}
+$k \in \{2,3\}$.}
 \label{fig:H1_power}
 \end{figure}
 
-Under the $L^2$ loss the gradient error stays large for every power ($\mathrm{Err}_{H^1} \approx 4$--$5 \times 10^{-1}$): the value-only fit ignores $\nabla V$, so the atoms are placed without regard to the gradient field.
-The $H^1$ loss drives the gradient error down to $\approx 1.0 \times 10^{-1}$ for \emph{all} powers (Table~\ref{tab:alg2_gradient}).
+Under the $L^2$ loss the gradient error stays large for both powers
+($\mathrm{Err}_{H^1} \approx 4$--$5 \times 10^{-1}$): the value-only fit
+ignores $\nabla V$, so the atoms are placed without regard to the gradient
+field. The $H^1$ loss drives the gradient error down to
+$\approx 1.0 \times 10^{-1}$ for both powers
+(Table~\ref{tab:alg2_gradient}).
 
 \begin{table}[htbp]
 \centering
@@ -4168,11 +3739,8 @@ The $H^1$ loss drives the gradient error down to $\approx 1.0 \times 10^{-1}$ fo
 \toprule
 Power & $N$ & $\mathrm{Err}_{L^2}$ & $\mathrm{Err}_{H^1}$ \\
 \midrule
-$k = 2$ & 13 & $5.05 \times 10^{-2}$ & $4.09 \times 10^{-1}$ \\
-$k = 2.01$ & 13 & $4.83 \times 10^{-2}$ & $4.09 \times 10^{-1}$ \\
-$k = 3$ & 12 & $5.98 \times 10^{-2}$ & $4.54 \times 10^{-1}$ \\
-$k = 4$ & 13 & $5.48 \times 10^{-2}$ & $4.53 \times 10^{-1}$ \\
-$k = 5$ & 10 & $4.77 \times 10^{-2}$ & $4.39 \times 10^{-1}$ \\
+$k = 2$ & 13 & $2.78 \times 10^{-2}$ & $4.09 \times 10^{-1}$ \\
+$k = 3$ & 12 & $3.67 \times 10^{-2}$ & $4.53 \times 10^{-1}$ \\
 \bottomrule
 \end{tabular}
 \caption{$L^2$ trained}
@@ -4187,11 +3755,8 @@ $k = 5$ & 10 & $4.77 \times 10^{-2}$ & $4.39 \times 10^{-1}$ \\
 \toprule
 Power & $N$ & $\mathrm{Err}_{L^2}$ & $\mathrm{Err}_{H^1}$ \\
 \midrule
-$k = 2$ & 40 & $4.16 \times 10^{-1}$ & $9.83 \times 10^{-2}$ \\
-$k = 2.01$ & 45 & $4.17 \times 10^{-1}$ & $9.75 \times 10^{-2}$ \\
-$k = 3$ & 25 & $4.17 \times 10^{-1}$ & $9.94 \times 10^{-2}$ \\
-$k = 4$ & 22 & $4.16 \times 10^{-1}$ & $9.90 \times 10^{-2}$ \\
-$k = 5$ & 21 & $4.14 \times 10^{-1}$ & $1.007 \times 10^{-1}$ \\
+$k = 2$ & 45 & $4.17 \times 10^{-1}$ & $9.96 \times 10^{-2}$ \\
+$k = 3$ & 27 & $4.15 \times 10^{-1}$ & $9.87 \times 10^{-2}$ \\
 \bottomrule
 \end{tabular}
 \caption{$H^1$ trained}
@@ -4199,12 +3764,11 @@ $k = 5$ & 21 & $4.14 \times 10^{-1}$ & $1.007 \times 10^{-1}$ \\
 \end{subtable}
 \end{table}
 
-Increasing $k$ changes both the activation and the induced exponent
-$q=2/(k+1)$. The support drops from $40$--$45$ atoms for $k=2$ and $2.01$ to
-$21$--$25$ atoms for $k=3,4,5$, while the error remains between $0.098$ and
-$0.101$.
-Under the $L^2$ loss the fits use $10$--$14$ atoms and have
-$\mathrm{Err}_{H^1} \approx 4$--$5 \times 10^{-1}$
+Changing $k$ changes both the activation and the induced exponent
+$q=2/(k+1)$. At the same $H^1$ error scale, the $k=3$ fit uses $27$ atoms
+instead of $45$ for $k=2$.
+Under the $L^2$ loss the fits use $12$--$13$ atoms and have
+$\mathrm{Err}_{H^1} \approx 4.1$--$4.5 \times 10^{-1}$
 (Table~\ref{tab:alg2_gradient}\,(a)).
 
 \subsubsection{Summary}
@@ -4212,9 +3776,9 @@ $\mathrm{Err}_{H^1} \approx 4$--$5 \times 10^{-1}$
 Figure~\ref{fig:summary_frontier} plots the running best relative $H^1$ error
 along the selected fits. At the shared Algorithm~1 operating point, softplus
 uses $16$ atoms at error $1.03\times10^{-1}$ and the Gaussian uses $34$ at
-$9.83\times10^{-2}$. The lowest-error Algorithm~2 checkpoints use $86$ atoms
-at $9.81\times10^{-2}$ for $\mathrm{ReLU}^2$ and $29$ atoms at
-$9.76\times10^{-2}$ for $\mathrm{ReLU}^5$. Thus all four reach the same
+$9.83\times10^{-2}$. The lowest-error Algorithm~2 checkpoints use $75$ atoms
+at $9.84\times10^{-2}$ for $\mathrm{ReLU}^2$ and $40$ atoms at
+$9.69\times10^{-2}$ for $\mathrm{ReLU}^3$. Thus all four reach the same
 accuracy scale, with different support sizes.
 \begin{figure}[htbp]
 \centering
@@ -4222,7 +3786,7 @@ accuracy scale, with different support sizes.
 \caption{Running best relative $H^1$ validation error against support size.
 Nonhomogeneous profiles use the parameter values stated in
 Table~\ref{tab:alg1_gradient}; homogeneous profiles use $\alpha\psi_k$ at
-$\alpha=10^{-6}$ for the displayed $k\in\{2,5\}$ checkpoints.}
+$\alpha=10^{-6}$ for the displayed $k\in\{2,3\}$ checkpoints.}
 \label{fig:summary_frontier}
 \end{figure}
 
@@ -4233,7 +3797,7 @@ feedback. The finite-horizon optimal feedback is time-dependent and the
 rollout horizon exceeds the data horizon $T=3$. Therefore its rollout cost
 $6.48$ is not $V(0,y_0)$, and the comparison is not a test of finite-horizon
 optimality.
-Figure~\ref{fig:summary_feedback} shows $\|y(t)\|$ and $|u(t)|$ for softplus, the Gaussian, and $\reluk$ ($k = 5$), beside this reference. All three drive the state to the origin and track the reference control, at essentially its closed-loop cost ($6.48$, $6.50$, $6.50$ vs.\ $6.48$).
+Figure~\ref{fig:summary_feedback} shows $\|y(t)\|$ and $|u(t)|$ for softplus, the Gaussian, and $\reluk$ ($k = 3$), beside this reference. All three drive the state to the origin and track the reference control, at essentially its closed-loop cost ($6.48$, $6.50$, $6.50$ vs.\ $6.48$).
 \begin{figure}[htbp]
 \centering
 \captionsetup[subfigure]{justification=centering}
@@ -4257,7 +3821,7 @@ reference law obtained from the time-zero costates.}
 \end{figure}
 
 Figure~\ref{fig:summary_weights_raw} shows the inner parameters for the
-Gaussian, softplus, and $\reluk$ ($k = 5$).
+Gaussian, softplus, and $\reluk$ ($k = 3$).
 The two algorithms produce structurally different representations: Algorithm~2 constrains its atoms to the unit sphere $\mathbb{S}^2$, while Algorithm~1 leaves them free --- the Gaussian atoms in particular span a wide range of norms.
 \begin{figure}[htbp]
 \centering
@@ -4276,8 +3840,8 @@ The two algorithms produce structurally different representations: Algorithm~2 c
 \hfill
 \begin{subfigure}[t]{0.32\textwidth}
 \centering
-\includegraphics[width=\textwidth]{../experiments/01_vdp/paper_log_penalty/figures/weights_raw3d_relu5.png}
-\caption{$\mathrm{ReLU}^5 + \alpha\,\psi_5$.}
+\includegraphics[width=\textwidth]{../experiments/01_vdp/paper_log_penalty/figures/weights_raw3d_relu3.png}
+\caption{$\mathrm{ReLU}^3 + \alpha\,\psi_3$.}
 \end{subfigure}
 \caption{Inner parameters $(a_1,a_2,b)$, with the unit circle in the plane
 $b=0$ shown in light green. The two nonhomogeneous fits use
@@ -4288,9 +3852,7 @@ sign and dot size the magnitude of the outer weight.}
 
 
 
-
-
-\subsection{Pendulum Swing-Up}
+\subsection*{Pendulum Swing-Up}
 The question in this example is how a sparse gradient-trained network
 approximates a continuous value function whose gradient jumps across a
 switching set. A finite network with a continuously differentiable activation
@@ -4509,25 +4071,18 @@ approximations near $S$.
 \label{fig:rs_surface_tanh}
 \end{subfigure}
 \vspace{0.6em}
-\begin{subfigure}[b]{0.32\textwidth}
+\begin{subfigure}[b]{0.48\textwidth}
 \centering
 \includegraphics[width=\textwidth]{../experiments/02_pendulum/paper_log_penalty/figures/surface_relu2.png}
 \caption{$\mathrm{ReLU}^{2}$}
 \label{fig:rs_surface_relu2}
 \end{subfigure}
 \hfill
-\begin{subfigure}[b]{0.32\textwidth}
+\begin{subfigure}[b]{0.48\textwidth}
 \centering
 \includegraphics[width=\textwidth]{../experiments/02_pendulum/paper_log_penalty/figures/surface_relu3.png}
 \caption{$\mathrm{ReLU}^{3}$}
 \label{fig:rs_surface_relu3}
-\end{subfigure}
-\hfill
-\begin{subfigure}[b]{0.32\textwidth}
-\centering
-\includegraphics[width=\textwidth]{../experiments/02_pendulum/paper_log_penalty/figures/surface_relu5.png}
-\caption{$\mathrm{ReLU}^{5}$}
-\label{fig:rs_surface_relu5}
 \end{subfigure}
 \caption{Learned value surfaces $\widehat V(x)$ over the $(\theta,\dot\theta)$
 window $[-8,8]^{2}$, displayed on the common range $\widehat V\in[0,60]$.
@@ -4600,10 +4155,10 @@ Gaussian & 6k, $23\%$ near $S$ & $2.78 \times 10^{-1}$ & $1.36 \times 10^{-1}$ &
  & 6k, $60\%$ near $S$ & $2.99 \times 10^{-1}$ & $1.79 \times 10^{-1}$ & 145 \\
  & 6k $+$ 2k near $S$ & $2.96 \times 10^{-1}$ & $1.65 \times 10^{-1}$ & 79 \\
 \midrule
-$\mathrm{ReLU}^{2}$ & 6k, $23\%$ near $S$ & $2.38 \times 10^{-1}$ & $1.46 \times 10^{-1}$ & 110 \\
- & 6k, $40\%$ near $S$ & $2.77 \times 10^{-1}$ & $1.70 \times 10^{-1}$ & 133 \\
- & 6k, $60\%$ near $S$ & $3.10 \times 10^{-1}$ & $1.89 \times 10^{-1}$ & 112 \\
- & 6k $+$ 2k near $S$ & $2.46 \times 10^{-1}$ & $1.60 \times 10^{-1}$ & 133 \\
+$\mathrm{ReLU}^{2}$ & 6k, $23\%$ near $S$ & $3.30 \times 10^{-1}$ & $2.94 \times 10^{-1}$ & 140 \\
+ & 6k, $40\%$ near $S$ & $2.93 \times 10^{-1}$ & $2.46 \times 10^{-1}$ & 139 \\
+ & 6k, $60\%$ near $S$ & $3.56 \times 10^{-1}$ & $2.94 \times 10^{-1}$ & 145 \\
+ & 6k $+$ 2k near $S$ & $3.54 \times 10^{-1}$ & $2.65 \times 10^{-1}$ & 105 \\
 \bottomrule
 \end{tabular}
 \caption{Relative $H^1$ error on $S_{0.3}$ and $D\setminus S_{0.3}$. For each
@@ -4622,26 +4177,19 @@ systematic or material reduction in the error on $S_{0.3}$
 (Table~\ref{tab:rs_oversampling}). Thus the observed difficulty is not resolved
 by additional local samples.
 
-\subsubsection{\texorpdfstring{$\mathrm{ReLU}^2$}{ReLU2} fits the
-discontinuous gradient best}
-\label{sec:relu2-switching}
-Among the tested activation functions, $\mathrm{ReLU}^2$ has the smallest
-error in the value and gradient near $S$.
+\subsubsection{Validation and regional errors}
+\label{sec:switching-comparison}
 
 Figure~\ref{fig:rs_frontier}
 tracks the best relative $H^{1}$ validation error reached as neurons are
 inserted, for each activation paired with its penalty. The three
 nonhomogeneous activations use the parameter values in
 Table~\ref{tab:rs_feedback_cost};
-the rectified powers use $\psi_k$, with $\alpha=10^{-5}$ for $k=2$ and
-$\alpha=10^{-6}$ for $k\in\{3,5\}$. The error for
-$\mathrm{ReLU}^{2}$ becomes
-smaller than the other errors within the first insertions and reaches
-$\approx2.6\times10^{-1}$. The Gaussian is second at
-$\approx3.6\times10^{-1}$, followed by $\mathrm{ReLU}^{3}$ and $\tanh$ near
-$4.0\times10^{-1}$; $\mathrm{ReLU}^{5}$ ends near
-$4.9\times10^{-1}$, and softplus remains above $5\times10^{-1}$. Among the rectified powers,
-the error increases with $k$.
+the rectified powers use $\psi_k$ with $\alpha=10^{-6}$. The Gaussian reaches
+the smallest validation error, approximately $3.61\times10^{-1}$, followed
+by $\mathrm{ReLU}^{2}$ at $3.75\times10^{-1}$, $\tanh$ at
+$4.06\times10^{-1}$, $\mathrm{ReLU}^{3}$ at $4.56\times10^{-1}$, and
+softplus at $5.31\times10^{-1}$.
 
 \begin{figure}[htbp]
 \centering
@@ -4649,8 +4197,7 @@ the error increases with $k$.
 \caption{Best relative $H^{1}$ validation error against
 neuron count. The nonhomogeneous activations use
 \eqref{eq:empirical-log-objective}; the homogeneous activations use
-$J^M_{\psi_k}$ with $\alpha=10^{-5}$ for $k=2$ and
-$\alpha=10^{-6}$ for $k\in\{3,5\}$.}
+$J^M_{\psi_k}$ with $\alpha=10^{-6}$ for $k\in\{2,3\}$.}
 \label{fig:rs_frontier}
 \end{figure}
 
@@ -4658,13 +4205,11 @@ Figure~\ref{fig:rs_dumbbell} reports
 the relative $H^{1}$ error on a separate evaluation set of approximately
 $9.6\times10^{5}$ points. Training rows are excluded, and for each run we use
 the recorded iterate with the smallest training objective. Errors are reported
-on $S_{0.3}$ and $D\setminus S_{0.3}$. $\mathrm{ReLU}^{2}$ has the smallest
-error in both sets ($0.257$ and $0.165$), followed by the Gaussian
-($0.304$ and $0.191$). The $\tanh$ fit is next among the nonhomogeneous
-profiles ($0.358$ and $0.197$), while softplus is less accurate
-($0.501$ and $0.417$). $\mathrm{ReLU}^{3}$ is competitive on the switching
-tube but much worse away from it ($0.349$ and $0.854$), and
-$\mathrm{ReLU}^{5}$ has errors $0.560$ and $0.703$ in the two regions.
+on $S_{0.3}$ and $D\setminus S_{0.3}$. The Gaussian has the smallest errors
+in both regions ($0.304$ and $0.191$). The corresponding values are
+$0.340$ and $0.250$ for $\mathrm{ReLU}^{2}$, $0.358$ and $0.197$ for
+$\tanh$, $0.409$ and $0.294$ for $\mathrm{ReLU}^{3}$, and $0.501$ and
+$0.417$ for softplus.
 
 \begin{figure}[htbp]
 \centering
@@ -4752,33 +4297,29 @@ the feedback formula using the costate associated with the smaller value.
 \hfill
 \begin{subfigure}[b]{0.32\textwidth}
 \centering
-\includegraphics[width=\textwidth]{../experiments/02_pendulum/paper_log_penalty/figures/feedback_relu5.png}
-\caption{$\mathrm{ReLU}^{5}$ + $\psi_{5}$}
-\label{fig:rs_feedback_relu5}
+\includegraphics[width=\textwidth]{../experiments/02_pendulum/paper_log_penalty/figures/feedback_relu3.png}
+\caption{$\mathrm{ReLU}^{3}$ + $\psi_{3}$}
+\label{fig:rs_feedback_relu3}
 \end{subfigure}
 \caption{Closed-loop paths in the $(\theta,\dot\theta)$ plane from the
 two starts $A$ (blue) and $B$ (red) on either side of the switching curve
 (black), one panel per feedback law; all panels share the same axes. The
 reference law swings over the top from $A$ and brakes to $\theta=0$ from $B$.
-Softplus, $\mathrm{ReLU}^{2}$ and $\mathrm{ReLU}^{5}$ reach an upright
-neighbourhood from both starts.}
+Softplus and $\mathrm{ReLU}^{2}$ reach an upright neighbourhood from both
+starts; the other fitted laws reach one only from $B$.}
 \label{fig:rs_feedback}
 \end{figure}
 
-Three laws reach the upright neighbourhood from both starts,
-$\mathrm{ReLU}^{2}$, $\mathrm{ReLU}^{5}$ and softplus, and they do so at very different costs
-(Table~\ref{tab:rs_feedback_cost}). From $B$, $\mathrm{ReLU}^{2}$ brakes to the
-upright at essentially the reference cost ($10.3$ vs $10.2$); from $A$ it
-follows the path associated with $V_{2\pi}$, with cost $64.9$ rather than the
-reference cost $26.2$.
-Softplus reaches the upright from both starts as well, at costs $69.8$ and
-$11.2$.
-$\mathrm{ReLU}^{5}$ also reaches an upright from both starts, but at much larger
-costs, $117.8$ and $149.6$.
+Two fitted laws reach the upright neighbourhood from both starts,
+$\mathrm{ReLU}^{2}$ and softplus, and they do so at different costs
+(Table~\ref{tab:rs_feedback_cost}). From $B$, $\mathrm{ReLU}^{2}$ brakes to
+the upright at essentially the reference cost ($10.3$ vs.\ $10.2$); from
+$A$ it reaches the upright with cost $76.3$ rather than the reference cost
+$26.2$. Softplus reaches the upright at costs $69.8$ and $11.2$.
 The Gaussian, $\tanh$, and $\mathrm{ReLU}^{3}$ satisfy the terminal criterion
 only from $B$.
 Figure~\ref{fig:rs_feedback_control} shows the control signal from $B$:
-the $\mathrm{ReLU}^{2}$ law is closest to the reference, while all six laws
+the $\mathrm{ReLU}^{2}$ law is closest to the reference, while all five fitted laws
 that reach the upright from $B$ produce distinct transient controls.
 
 \begin{table}[htbp]
@@ -4797,9 +4338,8 @@ Gaussian & $8451.8$ & no & $10.1$ & yes \\
 softplus & $69.8$ & yes & $11.2$ & yes \\
 $\tanh$ & $7822.2$ & no & $10.2$ & yes \\
 \midrule
-$\mathrm{ReLU}^{2} + \psi_{2}$ & $64.9$ & yes & $10.3$ & yes \\
-$\mathrm{ReLU}^{3} + \psi_{3}$ & $1.40\times10^{5}$ & no & $10.2$ & yes \\
-$\mathrm{ReLU}^{5} + \psi_{5}$ & $117.8$ & yes & $149.6$ & yes \\
+$\mathrm{ReLU}^{2} + \psi_{2}$ & $76.3$ & yes & $10.3$ & yes \\
+$\mathrm{ReLU}^{3} + \psi_{3}$ & $1609.3$ & no & $10.2$ & yes \\
 \bottomrule
 \end{tabular}
 \caption{Closed-loop rollout cost over the horizon $T = 10$ and terminal
@@ -4839,23 +4379,22 @@ ${\approx}{-7}$ to $0$; $\mathrm{ReLU}^{2}$ follows it most closely.}
 \label{fig:rs_feedback_control}
 \end{figure}
 
-In summary, $\mathrm{ReLU}^{2}$ with the fractional-exponent penalty gives the
-lowest error for this nonsmooth target and the rollout closest to the
-reference: it reaches the upright from both starts, at
-cost $10.3$ from $B$ and $64.9$ from $A$ against the reference $10.2$ and
+In summary, the Gaussian gives the smallest validation and regional errors,
+while $\mathrm{ReLU}^{2}$ gives the rollout closest to the reference. The
+$\mathrm{ReLU}^{2}$ law reaches the upright from both starts, at
+cost $10.3$ from $B$ and $76.3$ from $A$ against the reference $10.2$ and
 $26.2$. Softplus also reaches the upright from both starts, but with a larger
 cost from $A$; the Gaussian, $\tanh$, and $\mathrm{ReLU}^{3}$ succeed only
-from $B$. $\mathrm{ReLU}^{5}$ reaches an upright from both starts, but at much
-higher cost than the reference.
+from $B$.
 
 The regional approximation error and the binary terminal outcome contain
 different information. The Gaussian and $\tanh$ fits are more accurate than
 softplus on both reported regions, yet softplus makes the correct branch
-decision from $A$ while they do not. Conversely, $\mathrm{ReLU}^{2}$ combines
-the smallest regional errors with the rollout closest to the reference. Thus
-the switching-set error diagnoses the difficulty of approximating the
-discontinuous gradient, but a reliable feedback assessment still requires a
-closed-loop test.
+decision from $A$ while they do not. Conversely, $\mathrm{ReLU}^{2}$ has
+larger regional errors than the Gaussian and $\tanh$ away from the switching
+set, yet gives the rollout closest to the reference. Thus the switching-set
+error diagnoses the difficulty of approximating the discontinuous gradient,
+but a reliable feedback assessment still requires a closed-loop test.
 
 
 \FloatBarrier
@@ -4893,9 +4432,9 @@ bounded by a covering number. Corollary~\ref{cor:finite-global-minimizer}
 shows that every global minimizer is finite atomic and that the
 measure-theoretic minimum equals an attained finite-network minimum. For exact
 global maximization of $|P_{p,\mu}|$ followed by nonincreasing corrections,
-Theorem~\ref{thm:quantitative-insertion} gives squared one-step descent,
-convergence of the excess above the insertion threshold to zero, and a
-best-iterate rate of order $n^{-1/2}$. The sufficient local
+Theorem~\ref{thm:quantitative-insertion} gives squared one-step descent, while
+Corollary~\ref{cor:certificate-rate} gives convergence of the excess above the
+insertion threshold to zero and a best-iterate rate of order $n^{-1/2}$. The sufficient local
 condition is given in Theorem~\ref{sc_opt}.
 
 For positively $k$-homogeneous profiles, radial scaling is absorbed into the
@@ -4919,13 +4458,12 @@ complement for every training set; the same ordering holds for the Gaussian,
 whose switching-region error is about $1.7$--$2.0$ times its complementary
 error. Adding training samples near $S$ produces no systematic or material
 reduction in the error on $S_{0.3}$ at the tested network widths.
-$\mathrm{ReLU}^{2}$ gives the smallest regional error and the closed-loop path
-closest to the reference. Softplus also reaches an upright neighbourhood from
-both initial states, although at a larger cost from $A$; the Gaussian, $\tanh$,
-and $\mathrm{ReLU}^{3}$ do so only from $B$. $\mathrm{ReLU}^{5}$ reaches an
-upright from both states but with substantially larger costs. The regional error and the
-closed-loop branch decision are therefore complementary diagnostics rather
-than interchangeable rankings.
+The Gaussian gives the smallest regional errors, while $\mathrm{ReLU}^{2}$
+gives the closed-loop path closest to the reference. Softplus also reaches an
+upright neighbourhood from both initial states, although at a larger cost from
+$A$; the Gaussian, $\tanh$, and $\mathrm{ReLU}^{3}$ do so only from $B$.
+The regional error and the closed-loop branch decision are therefore
+complementary diagnostics rather than interchangeable rankings.
 
 The experiments are two-dimensional, and the behavior in higher dimensions
 remains to be studied. For targets with a gradient discontinuity, different
