@@ -35,7 +35,13 @@ def _regularizer_terms(model, objective: Objective) -> dict[str, float]:
         # phi(w_p(omega_n)|c_n|) = phi(|u_n|), so score it on u = w_p * c -- the same
         # quantity ssn_solve minimizes, so the recorded objective cannot drift from it.
         if objective.normalized:
-            theta = theta * atom_normalizer(W, b, p=objective.moment_order)
+            scale = atom_normalizer(W, b, p=objective.moment_order)
+            if scale.numel() != theta.numel():
+                raise RuntimeError(
+                    "normalized Algorithm 1 expects one trainable coordinate per atom "
+                    f"(got {theta.numel()} for {scale.numel()} atoms)"
+                )
+            theta = theta * scale
         phi = nonconvex_penalty(
             theta,
             penalized,

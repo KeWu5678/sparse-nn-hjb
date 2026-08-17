@@ -73,7 +73,8 @@ def certificate_radius(
 
     ``None`` means that the caller uses the numerical fallback ``exp(5)``.  It is
     returned when the activation declares no growth data, when ``p <= s1`` (so
-    the theorem's hypothesis fails), or when the inputs are degenerate.
+    the theorem's hypothesis fails), or when a required scale is nonpositive.
+    A zero residual instead returns the theorem's minimal radius ``1``.
     """
     if growth is None or alpha <= 0.0 or l_phi <= 0.0:
         return None

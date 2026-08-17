@@ -74,6 +74,7 @@ experiments/**/analysis.py
 # copies may be kept for comparison without being part of the current version.
 experiments/*/moment_penalty/
 experiments/moment_refinement_common.py
+experiments/moment_followup_common.py
 experiments/*/paper_log_penalty/
 experiments/*/paper_frac_exp_penalty/
 experiments/algorithm2_rho_pilot.md

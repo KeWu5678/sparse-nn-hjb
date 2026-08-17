@@ -90,6 +90,9 @@ sweep:  ## run Hydra multirun EXPERIMENT ({vdp,pendulum}/{log_penalty,frac_exp_p
 	  echo "Supported: vdp/log_penalty, vdp/frac_exp_penalty, pendulum/log_penalty, pendulum/frac_exp_penalty."; \
 	  exit 2; \
 	}
+	@if find "$(SWEEP_DIR)" -name '*.json' -print -quit 2>/dev/null | grep -q .; then \
+	  echo "$(SWEEP_DIR) already contains records; refusing to mix runs."; exit 2; \
+	fi
 	OMP_NUM_THREADS=1 $(PY) scripts/train.py -m +experiment=$(EXPERIMENT) \
 	  hydra/launcher=joblib hydra.launcher.n_jobs=$(JOBS) \
 	  hydra.sweep.dir=$(SWEEP_DIR) \

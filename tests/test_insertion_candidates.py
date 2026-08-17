@@ -106,7 +106,7 @@ def test_algorithm1_distinguishes_radius_search_failure_from_threshold_stop(
     X, residual_v, residual_dv = _inputs()
 
     _fake_lbfgs(monkeypatch, [[2.0, 0.0]])
-    with caplog.at_level(logging.INFO):
+    with caplog.at_level(logging.DEBUG):
         insertion.profile_threshold(
             X,
             residual_v,
@@ -123,12 +123,13 @@ def test_algorithm1_distinguishes_radius_search_failure_from_threshold_stop(
             radius=1.0,
             verbose=True,
         )
-    assert "discarded all 1 refined candidates outside the search radius" in caplog.text
+    assert "discarded 1 refined candidate(s) outside the search radius" in caplog.text
+    assert "retained no distinct candidate after geometric filters" in caplog.text
     assert "clears the insertion threshold" not in caplog.text
 
     caplog.clear()
     _fake_lbfgs(monkeypatch, [[0.0, 0.0]])
-    with caplog.at_level(logging.INFO):
+    with caplog.at_level(logging.DEBUG):
         insertion.profile_threshold(
             X,
             residual_v,
@@ -145,8 +146,39 @@ def test_algorithm1_distinguishes_radius_search_failure_from_threshold_stop(
             radius=1.0,
             verbose=True,
         )
-    assert "No in-radius candidate clears the insertion threshold" in caplog.text
-    assert "discarded all" not in caplog.text
+    assert "No retained candidate clears the insertion threshold" in caplog.text
+    assert "discarded" not in caplog.text
+
+
+def test_sphere_search_reports_when_only_existing_support_is_returned(
+    monkeypatch, caplog
+):
+    X, residual_v, residual_dv = _inputs()
+    _fake_lbfgs(monkeypatch, [])
+    existing = (
+        torch.tensor([[1.0]], dtype=torch.float64),
+        torch.tensor([0.0], dtype=torch.float64),
+    )
+
+    with caplog.at_level(logging.DEBUG):
+        insertion.profile_threshold(
+            X,
+            residual_v,
+            residual_dv,
+            activation=torch.relu,
+            power=2.0,
+            loss_weights=(1.0, 1.0),
+            alpha=1.0,
+            sample_sphere=_starts([[1.0, 0.0]]),
+            N=1,
+            max_insert=1,
+            use_sphere=True,
+            existing_atoms=existing,
+            verbose=True,
+        )
+
+    assert "retained no distinct candidate after geometric filters" in caplog.text
+    assert "outside the search radius" not in caplog.text
 
 
 def test_algorithm1_ignores_existing_atoms_as_search_starts(monkeypatch):

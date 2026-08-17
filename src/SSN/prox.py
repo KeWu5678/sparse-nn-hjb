@@ -11,6 +11,11 @@ import torch
 
 from .penalty import _ddphi, _dphi
 
+# Activation powers whose induced exponents q=2/(power+1) have verified global
+# scalar proximal maps below.  PDAP imports this tuple for configuration
+# validation so adding a closed form has one authority.
+SUPPORTED_ACTIVATION_POWERS = (1.0, 2.0, 3.0)
+
 
 def _compute_prox_q_half(v, mu):
     """Closed-form global proximal map for ``mu*|.|^(1/2)``.

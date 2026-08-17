@@ -8,5 +8,6 @@ without creating an import cycle.
 """
 
 from .optimizer import SSN
+from .prox import SUPPORTED_ACTIVATION_POWERS
 
-__all__ = ["SSN"]
+__all__ = ["SSN", "SUPPORTED_ACTIVATION_POWERS"]

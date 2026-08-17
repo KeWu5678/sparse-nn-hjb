@@ -265,9 +265,9 @@ def test_theorem_radius_binds_only_at_large_moment_order() -> None:
 
 def test_insertion_reuses_the_residual_for_the_theorem_radius() -> None:
     cfg = _cfg(
-        alpha=1e6,
+        alpha=1e-4,
         moment_order=2.01,
-        insert_init="guaranteed",
+        insert_init="warm_start",
         insert_mode="sequential",
         loop_order="insertion_first",
         radial_cap="theorem",
@@ -277,6 +277,8 @@ def test_insertion_reuses_the_residual_for_the_theorem_radius() -> None:
         torch.as_tensor(samples[key], dtype=torch.float64)
         for key in ("x", "v", "dv")
     )
+    torch.manual_seed(0)
+    np.random.seed(0)
     model = build_model(cfg, input_dim=2)
     original_predict = model.predict_tensors
     prediction_calls = 0
@@ -297,7 +299,9 @@ def test_insertion_reuses_the_residual_for_the_theorem_radius() -> None:
         verbose=False,
     )
 
-    # One residual evaluation for insertion and one evaluation per recorded split.
+    assert model.n_neurons == 1  # Exercise the warm-start branch with an accepted atom.
+    # Insertion, radius selection, and warm-start share one residual; history then
+    # evaluates the recorded train and validation splits once each.
     assert prediction_calls == 3
 
 
@@ -311,11 +315,11 @@ def test_insertion_reuses_the_residual_for_the_theorem_radius() -> None:
         (dict(insert_init="guaranteed", kind="semiconcave"), "signed theorem step"),
         (
             dict(insertion="finite_step", activation="relu", power=4.0, gamma=0.0),
-            "powers 1, 2, or 3",
+            "powers 1, 2, 3",
         ),
         (
             dict(insertion="profile", activation="relu", power=5.0, gamma=0.0),
-            "powers 1, 2, or 3",
+            "powers 1, 2, 3",
         ),
         (
             dict(insertion="finite_step", activation="relu", power=2.0, gamma=0.1),

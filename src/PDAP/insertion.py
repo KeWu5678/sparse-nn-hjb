@@ -330,14 +330,18 @@ def profile_threshold(
             "rule=%s (alpha=%.2e, init=%s)",
             N, n_after, len(accepted_a), max_insert, rule, alpha, insert_init,
         )
-        if not accepted_a and discarded_outside == N:
-            logger.info(
-                "Candidate search discarded all %d refined candidates outside "
-                "the search radius",
+        if discarded_outside:
+            logger.debug(
+                "Candidate search discarded %d refined candidate(s) outside the "
+                "search radius",
                 discarded_outside,
             )
-        elif not accepted_a and n_after > 0:
-            logger.info("No in-radius candidate clears the insertion threshold")
+        if not accepted_a and n_after == 0:
+            logger.debug(
+                "Candidate search retained no distinct candidate after geometric filters"
+            )
+        elif not accepted_a:
+            logger.debug("No retained candidate clears the insertion threshold")
 
     if len(accepted_a) == 0:
         empty_c = np.empty((0,), dtype=np.float64) if guaranteed else None

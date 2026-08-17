@@ -34,6 +34,7 @@ import torch
 
 from ..config.activations import get_growth, get_use_sphere
 from ..models.signed import SignedModel
+from ..SSN import SUPPORTED_ACTIVATION_POWERS
 from .history import History, objective_value
 from .insertion import finite_step, profile_threshold
 from .radius import certificate_radius, sample_extent
@@ -86,9 +87,10 @@ class PDAP:
         # The coefficient correction uses closed-form proximal maps.  Reject an
         # unsupported exponent here for every insertion strategy, rather than
         # letting a profile run fail inside its first SSN correction.
-        if m.power not in (1.0, 2.0, 3.0):
+        if m.power not in SUPPORTED_ACTIVATION_POWERS:
+            supported = ", ".join(f"{power:g}" for power in SUPPORTED_ACTIVATION_POWERS)
             raise ValueError(
-                "the coefficient correction supports activation powers 1, 2, or 3; "
+                f"the coefficient correction supports activation powers {supported}; "
                 f"got power={m.power}"
             )
 

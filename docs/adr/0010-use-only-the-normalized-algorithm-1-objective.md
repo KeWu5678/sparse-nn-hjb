@@ -15,6 +15,11 @@ profile model:
 - the paper's current objective, which evaluates the scalar penalty at
   `w_p(omega) |c|`.
 
+The former branch also covered the unweighted objective
+`L + alpha * sum phi_gamma(|c_n|)` when `moment_beta=0`.  That plain comparator
+was the default of the old `log_penalty` configurations; it is a special case
+of the retired branch, not a third objective retained by the current version.
+
 Supporting both required separate branches in candidate refinement, insertion
 acceptance, warm-starting, coefficient correction, objective recording, Hydra
 configuration, and experiment tooling. The additive formulation is no longer
@@ -53,6 +58,9 @@ The separate ReLU--L1 baseline also remains unchanged.
   implementation rather than adding a compatibility branch to current code.
 - Historical additive-study artifacts may remain local, but are not tracked by
   the current version.
+- Historical unweighted `log_penalty` results likewise describe the retired
+  `moment_beta=0` special case and must not be presented as current normalized-
+  measure results.
 
 ## Alternative considered
 
