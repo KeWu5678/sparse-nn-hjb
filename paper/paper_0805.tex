@@ -85,8 +85,9 @@ We recover optimal feedback laws for nonlinear control problems by
 approximating Hamilton--Jacobi--Bellman value functions with sparse shallow
 neural networks. Value and gradient are
 generated from the open-loop problem by the Pontryagin maximum principle, and
-the network is trained with a gradient-augmented $H^1$ fidelity. For
-nonhomogeneous activation functions on
+the network is trained with a gradient-augmented $H^1$ fidelity. 
+
+For nonhomogeneous activation functions on
 the unbounded parameter space $\Omega=\mathbb R^{d+1}$, fix $p>0$, set
 $w_p(\omega)=1+|\omega|^p$ and $\mu_p=w_p\mu$, and normalize the ridge atom
 $K$ as $K_p=K/w_p$. We study the
@@ -96,15 +97,19 @@ normalized objective
 \end{equation*}
 where the concave scalar penalty has finite positive right slope at zero.
 Normalization makes the dictionary vanish at infinity under a polynomial
-growth gap. This yields existence by normalized weak-* compactness. Under
-strict bounded-interval curvature, every finite-objective local minimizer has finite support
-and satisfies a covering-number bound, while the global minimum is attained
-by a finite network. Exact maximization of the weighted G\^ateaux derivative
-at each insertion, followed by a nonincreasing correction, drives its excess
-above the insertion threshold to zero, with a best-iterate rate of order
-$n^{-1/2}$. For positively
-$k$-homogeneous activations, we retain the equivalent formulation on the unit
-sphere with its induced fractional-power penalty on the outer coefficients.
+growth gap. This yields existence by normalized weak-* compactness. If the
+penalty is strongly concave on every bounded interval, every local minimizer
+has finite support and satisfies a covering-number bound, while the global
+minimum is attained by a finite network. 
+Maximization of the weighted G\^ateaux derivative in the a posteriori bound
+at each insertion, followed by a subsequent outer weights correction, achieves 
+a best-iterate rate of order $n^{-1/2}$. 
+
+For positively $k$-homogeneous activations, we give an
+equivalent measure problem on the unit sphere with the fractional
+outer-coefficient penalty $|c|^{2/(k+1)}$. Every local minimizer in total
+variation has finite support, while every global minimizer satisfies an
+explicit a priori width bound.
 The resulting algorithms are studied on the Van der Pol oscillator and the
 pendulum swing-up problem, whose value function has a gradient discontinuity
 across a switching set.
@@ -134,11 +139,10 @@ results below are used under the following standing well-posedness
 assumptions: for every admissible initial pair and every
 $u\in L^2(t_0,T;\mathbb R^{m_u})$, the state equation has a unique absolutely
 continuous solution; the value is finite and the infimum is attained; every
-minimizer satisfies the normal Pontryagin maximum principle; and the dynamic
+minimizer satisfies the Pontryagin maximum principle; and the dynamic
 programming principle and comparison hypotheses hold, so that the continuous
 value function is characterized as the viscosity solution of the HJB
-equation. These assumptions are imposed explicitly rather than inferred from
-the displayed $C^1$ regularity alone.
+equation.
 
 One approach computes an open-loop state-costate-control path for a fixed
 initial condition $x$. The Pontryagin maximum principle (PMP) yields a coupled
@@ -229,7 +233,7 @@ issued from $x^m$, let
 \begin{equation*}
 	g^m:=p^{*,m}(0)
 \end{equation*}
-denote the costate label in the gradient channel. At every sample where $V$
+denote the costate. At every sample where $V$
 is differentiable, sensitivity relations give $g^m=\nabla V(x^m)$
 \cite{cristiani2010initialization,cannarsa1991some,clarke1987relationship}.
 At a switching point, competing optimal paths may supply different costate
@@ -250,83 +254,58 @@ Fix a bounded Lipschitz training domain $D\subset\mathbb R^d$.
 Section~3 introduces the corresponding population fidelity $L$ with respect
 to Lebesgue measure on $D$.
 
-A traditional sparse shallow network uses the ReLU activation and an
-$\ell^1$ penalty on the outer coefficients
-\cite{bengio2005convex,bach2017breaking}. Under gradient-augmented fitting,
-this formulation has two limitations. 1. The convex penalty may retain redundant
-neurons whose inner parameters cluster. 2. The second-order weak derivative of
-ReLU does not exist as a function while it is a distribution, and we cannot
-use it to approximate high-order derivatives.
 
-\paragraph{\emph{Sparsity beyond the convex penalty}}
+Another focus of this study is the sparsity of the network. 
 The number of neurons $N$ is itself an optimization variable.
 Although width alone does not generally explain a model's inductive bias
 \cite{neyshabur2014search}, sparsity is crucial for computational efficiency
 in many problems.
 Furthermore, sparsity is necessary for certain applications, such as knowledge distillation and deconvolution of point-like objects.
-A standard sparse-learning procedure uses a convex reformulation with a
-sparsity-promoting penalty on the outer weights, most commonly the $\ell^1$
-penalty (LASSO).
+
+
+A traditional sparse shallow network uses the ReLU activation and an
+$\ell^1$ penalty on the outer coefficients
+\cite{bengio2005convex,bach2017breaking}.  
+The convex penalty may retain redundant neurons whose inner parameters cluster.
 Pieper and Petrosyan \cite{pieper2022nonconvex} showed that convex penalties
 cannot effectively eliminate this redundancy when neurons cluster in a small
 neighborhood and introduced a concave nonconvex functional for this purpose.
-We extend the relaxed concave measure formulation to gradient-augmented
-fitting with an unbounded, nonhomogeneous dictionary. Placing the parameter
-weight inside the scalar penalty preserves its strict curvature after
-normalization and yields both finite support and a quantitative neuron bound.
-For positively $k$-homogeneous activations, radial rescaling instead induces
-a fractional exponent and its corresponding width bound.
+However this formulation does not extend to the gradient fitting since the formulation is restricted to the ReLU setting. 
+The second-order weak derivative of ReLU does not exist as a function while it is a distribution, and we cannot
+use it to approximate high-order derivatives. 
+We need to extend to the smooth activation functions. 
 
-\paragraph{\emph{Activation functions beyond ReLU}}
-We therefore consider smoother activation functions.
-This extension requires a treatment of the unbounded inner-parameter space for gradient training.
-For positively $k$-homogeneous activations, radial scaling can be absorbed
+
+The difficulty is, such extension requires a treatment of the unbounded inner-parameter space for gradient training.
+1. For positively $k$-homogeneous activations, radial scaling can be absorbed
 into the outer coefficient, and the network has an equivalent representation
-with inner parameters on the unit sphere. For nonhomogeneous activations such
+with inner parameters on the unit sphere. 
+However, the induced nonconvex penalty admits infinite slope at 0
+and the usual functional tools to prove the existence and optimality are not applicable. 
+2. For nonhomogeneous activations such
 as $\tanh$, softplus, and the Gaussian, radial scaling changes the atom and
 cannot be removed by normalization. Without normalization, sequences
 with $|\omega|\to\infty$ may retain a nonzero contribution to the represented
-function, as shown in Section~\ref{sec:escape}. We therefore introduce
-\begin{equation*}
-	w_p(\omega)=1+|\omega|^p,
-	\qquad
-	\mu_p=w_p\mu,
-	\qquad
-	K_p=\frac{K}{w_p}.
-\end{equation*}
-Then $\mathcal N\mu=\int_\Omega K_p\,d\mu_p$, and $K_p$ vanishes at
-infinity when $p$ exceeds the polynomial growth of $K$. We analyze
-\begin{equation*}
-	J(\mu)=L(\mu)+\alpha\Phi_\phi(\mu_p),
-\end{equation*}
-where $p>0$ is the moment order, $\alpha>0$ is the regularization weight,
-and $\phi$ and $\Phi_\phi$ are the scalar and measure penalties defined in
-Section~3. The symbol $\gamma$ used below is the shape parameter of the log
-penalty in \eqref{eq:log-penalty}. The finite-network penalty is
-$\alpha\sum_n\phi(w_p(\omega_n)|c_n|)$ after repeated locations are merged.
-
+function, as shown in Section~\ref{sec:escape}. We adress those difficulties in each case.
 \paragraph{\emph{Contributions}}
 The contributions are the following.
 \begin{enumerate}
 	\item \emph{Nonhomogeneous activations on the unbounded parameter domain.}
-	For concave scalar penalties with finite positive right slope, we prove a
-	disjoint-test representation and derive weak-* lower semicontinuity and,
-	under coercivity, bounded total-variation sublevels
+	For concave scalar penalties with finite positive right slope, 
+	we introduce a concave measure formulation to gradient-augmented 
+	fitting with an unbounded, nonhomogeneous dictionary.
+	We prove a weak representation of the formulation and derive weak-* lower semicontinuity
 	(Theorem~\ref{thm:phi-lsc} and Corollary~\ref{cor:phi-lsc-sublevels}).
-	The weighted-measure isometry in Theorem~\ref{thm:normalization} moves the
-	parameter growth into the normalized atom $K_p$. For continuous
-	activations of polynomial value growth $s_0<p$, this gives a global
-	minimizer on $\Omega=\mathbb R^{d+1}$
-	(Theorem~\ref{thm:existence}). The unnormalized fidelity can fail to be
-	weak-* lower semicontinuous, and the unnormalized problem can fail to attain
-	its infimum (Examples~\ref{ex:tanh_escape} and~\ref{ex:softplus_escape}).
-	Under full $H^1$ growth $s_1<p$ and strict bounded-interval curvature,
-	every finite-objective local minimizer is finite atomic, its normalized atoms are
+	In Theorem~\ref{thm:normalization} we introduce the normalized atom $K_p$,
+	which gives a global minimizer on $\Omega=\mathbb R^{d+1}$ for continuous activations 
+	of implied polynomial growth condition (Theorem~\ref{thm:existence}). 
+	Under strong concavity of the penalty on every bounded interval,
+	every local minimizer is finite atomic, its normalized atoms are
 	quantitatively separated, and its width is bounded by a covering number
 	(Theorem~\ref{thm:finite_support}). Corollary~\ref{cor:finite-global-minimizer}
 	gives an attained finite-network problem and an a priori neuron bound.
 	The normalized optimality system is Theorem~\ref{opt_cdt}.
-	Theorem~\ref{thm:quantitative-insertion} gives squared one-step descent,
+	Theorem~\ref{thm:quantitative-insertion} gives algorithm
 	and Corollary~\ref{cor:certificate-rate} gives an $n^{-1/2}$ best-iterate
 	rate for the excess above the insertion threshold.
 	\item \emph{The $k$-homogeneous formulation.} Extending the degree-one
@@ -345,7 +324,7 @@ The contributions are the following.
 	minimizer exists, that every global minimizer is a finite network obeying
 	an explicit a priori width bound
 	(Theorem~\ref{thm:homogeneous_existence}), and that every
-	total-variation local minimizer with finite objective has finite support
+	total-variation local minimizer of the proper objective has finite support
 	(Corollary~\ref{cor:homogeneous_local_support}).
 	\item \emph{Gradient-augmented algorithms and feedback recovery.}
 	The first insertion algorithm places the polynomial parameter weight
@@ -1397,8 +1376,8 @@ $J(\bar\mu)\le\liminf_nJ(\mu_n)=\inf J$.
 
 \subsection{Optimality conditions and finite support}
 \label{sec:optimality}
-Let $\bar\mu$ be a finite-objective local minimizer. For a measure $\mu$ and
-an admissible direction $\mu'$, the G\^ateaux derivative is
+Let $\bar\mu$ be a local minimizer. For a measure $\mu$ and an admissible
+direction $\mu'$, the G\^ateaux derivative is
 \begin{equation*}
 	DL(\mu)[\mu']
 	:=\lim_{t\to0}\frac{L(\mu+t\mu')-L(\mu)}{t}
