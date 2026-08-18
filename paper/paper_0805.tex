@@ -315,16 +315,15 @@ The contributions are the following.
 	the inner and outer parameters over radial representations induces the
 	fractional-power penalty $|c|^{2/(k+1)}$ on the unit sphere
 	(Lemma~\ref{lem:homogeneous-penalty}), and the resulting problem is posed
-	over all of $\mathcal M(\mathbb S^d)$. Finite atomic truncations show that
-	this problem and the finite-network problem have the same infimum
+	over all of $\mathcal M(\mathbb S^d)$, which has the same infimum as the finite-network problem
 	(Proposition~\ref{prop:homogeneous_reduction}). We derive the atomwise
 	optimality conditions and a positive lower bound on the weights of every
 	total-variation local minimizer
-	(Theorem~\ref{thm:homogeneous_optimality}), and prove that a global
+	(Theorem~\ref{thm:homogeneous_optimality}). A global
 	minimizer exists, that every global minimizer is a finite network obeying
 	an explicit a priori width bound
-	(Theorem~\ref{thm:homogeneous_existence}), and that every
-	total-variation local minimizer of the proper objective has finite support
+	(Theorem~\ref{thm:homogeneous_existence}).
+	Every local minimizer has finite support
 	(Corollary~\ref{cor:homogeneous_local_support}).
 	\item \emph{Gradient-augmented algorithms and feedback recovery.}
 	The first insertion algorithm places the polynomial parameter weight
@@ -373,9 +372,6 @@ outer iteration and seed $42$.}
 \label{fig:neuron_h1_frontier}
 \end{figure}
 
-Section~2 records the measure-theoretic preliminaries, Sections~3--4 develop
-the nonhomogeneous and homogeneous formulations, Section~5 gives the data and
-training algorithms, and Section~6 reports the numerical studies.
 
 \section{Preliminaries}
 This section reviews the measure-theoretic facts used in the paper. The
@@ -4245,7 +4241,9 @@ Three fitted laws reach the upright neighbourhood from both starts
 (Table~\ref{tab:rs_feedback_cost}). Softplus does so at costs $69.8$ and
 $11.2$ from $A$ and $B$, $\mathrm{ReLU}^{2}$ at $60.4$ and $10.1$, and
 $\mathrm{ReLU}^{3}$ at $103.2$ and $10.3$. The Gaussian and $\tanh$ satisfy
-the terminal criterion only from $B$.
+the terminal criterion only from $B$. The ReLU--$\ell^1$ baseline also reaches
+the upright only from $B$; its rollout costs are $265.4$ and $24.3$ from $A$
+and $B$, respectively.
 Figure~\ref{fig:rs_feedback_control} shows the control signal from $A$.
 The reference starts with a control close to zero, whereas every fitted law
 starts with a substantially larger negative control and consequently follows
@@ -4262,6 +4260,7 @@ a different closed-loop trajectory.
 Feedback law & cost & reaches upright & cost & reaches upright \\
 \midrule
 reference (PMP) & $26.2$ & yes & $10.2$ & yes \\
+ReLU $+\ell^1$ & $265.4$ & no & $24.3$ & yes \\
 \midrule
 Gaussian & $8451.8$ & no & $10.1$ & yes \\
 softplus & $69.8$ & yes & $11.2$ & yes \\
