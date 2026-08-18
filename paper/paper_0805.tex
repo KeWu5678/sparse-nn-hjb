@@ -335,40 +335,68 @@ The contributions are the following.
 	across a switching set.
 \end{enumerate}
 
-Figure~\ref{fig:neuron_h1_frontier} compares the traditional ReLU network with
-an $\ell^1$ penalty against representative models from the two formulations.
+Figure~\ref{fig:neuron_h1_frontier}\subref{fig:frontier_vdp} compares the traditional ReLU network with
+an $\ell^1$ penalty against representative models from the two formulations
+on the Van der Pol problem.
 The comparison is one of accuracy at a given support size rather than of lowest
-attainable error. On the Van der Pol problem the traditional $\ell^1$ network is
+attainable error. The traditional $\ell^1$ network is
 less accurate than the best nonconvex curve at every support budget below $119$
 atoms --- $1.70\times10^{-1}$ against $1.02\times10^{-1}$ at twenty atoms ---
 and overtakes it at that width, eventually reaching
 $8.75\times10^{-2}$. The nonconvex penalties therefore buy accuracy per neuron,
-not a lower floor. On the pendulum, where the value gradient jumps across the
-switching set, $\mathrm{ReLU}^{2}$ gives the smallest regional errors, while
-softplus, $\mathrm{ReLU}^{2}$, and $\mathrm{ReLU}^{3}$ reach an upright
-neighbourhood from both tested starts.
+not a lower floor. Figure~\ref{fig:neuron_h1_frontier}\subref{fig:feedback_cost_a}
+reports the complementary closed-loop test on the pendulum problem. It shows
+that validation error alone does not determine feedback performance: the
+Gaussian has lower validation error than softplus but fails from start $A$,
+whereas softplus,
+$\mathrm{ReLU}^{2}$, and $\mathrm{ReLU}^{3}$ reach an upright neighbourhood
+from that start.
 
 \begin{figure}[htbp]
 \centering
-\begin{subfigure}[t]{0.48\textwidth}
+\begin{subfigure}[t]{0.50\textwidth}
+\vspace{0pt}
 \centering
 \includegraphics[width=\textwidth]{../experiments/01_vdp/paper_log_penalty/figures/frontier_intro.png}
-\caption{Van der Pol oscillator.}
+\caption{Van der Pol accuracy against width.}
 \label{fig:frontier_vdp}
 \end{subfigure}
 \hfill
-\begin{subfigure}[t]{0.48\textwidth}
+\begin{subfigure}[t]{0.47\textwidth}
+\vspace{0pt}
 \centering
-\includegraphics[width=\textwidth]{../experiments/02_pendulum/paper_log_penalty/figures/frontier_intro.png}
-\caption{Pendulum swing-up.}
-\label{fig:frontier_pendulum}
+\small
+\setlength{\tabcolsep}{4pt}
+\renewcommand{\arraystretch}{1.18}
+\begin{tabular}{lcc}
+\toprule
+Feedback law & cost & upright \\
+\midrule
+reference (PMP) & $26.2$ & yes \\
+ReLU $+\ell^1$ & $265.4$ & no \\
+\midrule
+Gaussian & $8451.8$ & no \\
+softplus & $69.8$ & yes \\
+$\tanh$ & $7822.2$ & no \\
+\midrule
+$\mathrm{ReLU}^{2} + \psi_{2}$ & $60.4$ & yes \\
+$\mathrm{ReLU}^{3} + \psi_{3}$ & $103.2$ & yes \\
+\bottomrule
+\end{tabular}
+\caption{Pendulum feedback from start $A$.}
+\label{fig:feedback_cost_a}
 \end{subfigure}
-\caption{Running best relative $H^1$ validation error as neurons are inserted.
-The nonhomogeneous activations are fitted by Algorithm~\ref{alg:log} with
-$(\alpha,\gamma,p)=(10^{-4},10,2.01)$; $\mathrm{ReLU}^2$
-and the traditional $\ell^1$ network are fitted by Algorithm~\ref{alg:q}, the latter at
-$k=1$, where the induced exponent is $q=1$. All curves use one atom per
-outer iteration and seed $42$.}
+\caption{Complementary performance summaries. Panel (a) shows the running
+best relative $H^1$ validation error as neurons are inserted. Panel (b) gives
+the closed-loop rollout cost from $A=(0.71,0.68)$ over $T=10$ and whether the
+terminal state reaches the upright neighbourhood, defined by
+$\operatorname{dist}(\theta,2\pi\mathbb Z)<0.4$ and $|\dot\theta|<0.4$.
+The nonhomogeneous models use Algorithm~\ref{alg:log}
+with $(\alpha,\gamma,p)=(10^{-4},10,2.01)$; the ReLU--$\ell^1$ baseline and
+the homogeneous models use Algorithm~\ref{alg:q} at the most accurate
+$\alpha$ for each $k$. All fits use one atom per outer iteration and seed $42$.
+The reference feedback compares $V_0$ and $V_{2\pi}$ using the nearest PMP
+samples.}
 \label{fig:neuron_h1_frontier}
 \end{figure}
 
@@ -4034,7 +4062,7 @@ window $[-8,8]^{2}$, displayed on the common range $\widehat V\in[0,60]$.
 The $\reluk$ models are trained with the fractional-exponent penalty $\psi_k$,
 and the nonhomogeneous models with \eqref{eq:empirical-log-objective} using the
 parameter values reported in
-Table~\ref{tab:rs_feedback_cost}.}
+Figure~\ref{fig:neuron_h1_frontier}\subref{fig:feedback_cost_a}.}
 \label{fig:rs_surfaces}
 \end{figure}
 
@@ -4128,7 +4156,7 @@ Figure~\ref{fig:rs_frontier}
 tracks the best relative $H^{1}$ validation error reached as neurons are
 inserted, for each activation paired with its penalty. The three
 nonhomogeneous activations use the parameter values in
-Table~\ref{tab:rs_feedback_cost};
+Figure~\ref{fig:neuron_h1_frontier}\subref{fig:feedback_cost_a};
 the rectified powers use $\psi_k$ with $\alpha=10^{-6}$ for both $k=2$ and
 $k=3$. The $k=2$ fit reaches the smallest validation error, approximately
 $3.13\times10^{-1}$, followed by the Gaussian at $3.61\times10^{-1}$,
@@ -4237,51 +4265,16 @@ $B$.}
 \label{fig:rs_feedback}
 \end{figure}
 
-Three fitted laws reach the upright neighbourhood from both starts
-(Table~\ref{tab:rs_feedback_cost}). Softplus does so at costs $69.8$ and
-$11.2$ from $A$ and $B$, $\mathrm{ReLU}^{2}$ at $60.4$ and $10.1$, and
-$\mathrm{ReLU}^{3}$ at $103.2$ and $10.3$. The Gaussian and $\tanh$ satisfy
-the terminal criterion only from $B$. The ReLU--$\ell^1$ baseline also reaches
-the upright only from $B$; its rollout costs are $265.4$ and $24.3$ from $A$
-and $B$, respectively.
+From the harder start $A$, softplus, $\mathrm{ReLU}^{2}$, and
+$\mathrm{ReLU}^{3}$ reach the upright neighbourhood, at costs $69.8$, $60.4$,
+and $103.2$, respectively
+(Figure~\ref{fig:neuron_h1_frontier}\subref{fig:feedback_cost_a}). The
+Gaussian, $\tanh$, and ReLU--$\ell^1$ laws do not satisfy the terminal
+criterion from this start.
 Figure~\ref{fig:rs_feedback_control} shows the control signal from $A$.
 The reference starts with a control close to zero, whereas every fitted law
 starts with a substantially larger negative control and consequently follows
 a different closed-loop trajectory.
-
-\begin{table}[htbp]
-\centering
-\setlength{\tabcolsep}{12pt}
-\renewcommand{\arraystretch}{1.25}
-\begin{tabular}{lcccc}
-\toprule
- & \multicolumn{2}{c}{start $A = (0.71, 0.68)$} & \multicolumn{2}{c}{start $B = (0.23, 0.53)$} \\
-\cmidrule(lr){2-3} \cmidrule(lr){4-5}
-Feedback law & cost & reaches upright & cost & reaches upright \\
-\midrule
-reference (PMP) & $26.2$ & yes & $10.2$ & yes \\
-ReLU $+\ell^1$ & $265.4$ & no & $24.3$ & yes \\
-\midrule
-Gaussian & $8451.8$ & no & $10.1$ & yes \\
-softplus & $69.8$ & yes & $11.2$ & yes \\
-$\tanh$ & $7822.2$ & no & $10.2$ & yes \\
-\midrule
-$\mathrm{ReLU}^{2} + \psi_{2}$ & $60.4$ & yes & $10.1$ & yes \\
-$\mathrm{ReLU}^{3} + \psi_{3}$ & $103.2$ & yes & $10.3$ & yes \\
-\bottomrule
-\end{tabular}
-\caption{Closed-loop rollout cost over the horizon $T = 10$ and terminal
-outcome for each feedback law from the two starts on either side of the
-switching curve; ``reaches upright'' means the final state satisfies
-$\operatorname{dist}(\theta, 2\pi\mathbb{Z}) < 0.4$ and $|\dot\theta| < 0.4$
-at $T = 10$. This condition concerns the terminal state of one finite
-rollout and does not assert asymptotic stability. The reference law compares $V_0$ and
-$V_{2\pi}$ using the nearest PMP samples. The middle block uses
-Algorithm~\ref{alg:log} with
-$\alpha = 10^{-4}$, $\gamma = 10$, $p = 2.01$; the lower block uses
-Algorithm~\ref{alg:q} at the most accurate $\alpha$ for each $k$.}
-\label{tab:rs_feedback_cost}
-\end{table}
 
 \begin{figure}[htbp]
 \centering
