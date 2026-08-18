@@ -354,16 +354,14 @@ from that start.
 
 \begin{figure}[htbp]
 \centering
-\begin{subfigure}[t]{0.50\textwidth}
-\vspace{0pt}
+\begin{subfigure}[b]{0.50\textwidth}
 \centering
 \includegraphics[width=\textwidth]{../experiments/01_vdp/paper_log_penalty/figures/frontier_intro.png}
 \caption{Van der Pol accuracy against width.}
 \label{fig:frontier_vdp}
 \end{subfigure}
 \hfill
-\begin{subfigure}[t]{0.47\textwidth}
-\vspace{0pt}
+\begin{subfigure}[b]{0.47\textwidth}
 \centering
 \small
 \setlength{\tabcolsep}{4pt}
@@ -391,6 +389,7 @@ best relative $H^1$ validation error as neurons are inserted. Panel (b) gives
 the closed-loop rollout cost from $A=(0.71,0.68)$ over $T=10$ and whether the
 terminal state reaches the upright neighbourhood, defined by
 $\operatorname{dist}(\theta,2\pi\mathbb Z)<0.4$ and $|\dot\theta|<0.4$.
+This is a terminal-time test, not an assertion of asymptotic stability.
 The nonhomogeneous models use Algorithm~\ref{alg:log}
 with $(\alpha,\gamma,p)=(10^{-4},10,2.01)$; the ReLU--$\ell^1$ baseline and
 the homogeneous models use Algorithm~\ref{alg:q} at the most accurate
