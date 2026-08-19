@@ -3,7 +3,7 @@
 [![CI](https://github.com/KeWu5678/sparse-nn-hjb/actions/workflows/ci.yml/badge.svg)](https://github.com/KeWu5678/sparse-nn-hjb/actions/workflows/ci.yml)
 
 **A 16-neuron softplus network stabilizes the Van der Pol system at the
-reference rollout cost (6.48), while a 40-neuron ReLU<sup>3</sup> network
+reference rollout cost (6.48), while a 38-neuron ReLU<sup>3</sup> network
 reaches relative $H^1$ error 0.097.**
 
 Closed-loop rollout of the Van der Pol oscillator from $y_0=(2,1)$ shows that
@@ -46,16 +46,17 @@ Representative $H^1$-trained Van der Pol runs reported in the paper are:
 | softplus | normalized log penalty | **16** | 0.103 | yes | **6.48** |
 | Gaussian | normalized log penalty | 34 | 0.098 | yes | 6.50 |
 | tanh | normalized log penalty | 38 | 0.101 | yes | 6.50 |
-| ReLU<sup>2</sup> | $|c|^{2/3}$ | 75 | 0.098 | — | — |
-| ReLU<sup>3</sup> | $|c|^{1/2}$ | 40 | **0.097** | yes | 6.50 |
+| ReLU<sup>2</sup> | $|c|^{2/3}$ | 48 | 0.099 | — | — |
+| ReLU<sup>3</sup> | $|c|^{1/2}$ | 38 | **0.097** | yes | 6.49 |
 
 (reference rollout cost: 6.48)
 
 The nonhomogeneous models reach the 0.10 error scale with 16–38 atoms;
-ReLU<sup>3</sup> reaches a slightly lower error with 40. The traditional
+ReLU<sup>3</sup> reaches a slightly lower error with 38. The traditional
 ReLU+$\ell^1$ baseline eventually reaches a lower error, but it is less
-accurate at every support below 121 atoms. The nonconvex formulations therefore
-improve accuracy per neuron rather than the ultimate error floor.
+accurate than the best nonconvex curve below 114 atoms. The nonconvex
+formulations therefore improve accuracy per neuron rather than the ultimate
+error floor.
 
 The two algorithm families also leave different geometric signatures in the
 learned parameters. The fractional-power formulation constrains its atoms to
@@ -77,18 +78,19 @@ sides of the jump.
 
 The findings are sharp:
 
-- **Every reported model has larger error near the switching set than away
-  from it.** The Gaussian has the smallest regional errors, 0.304 near the
-  switching set and 0.191 elsewhere. Adding samples near the switching set
-  gives no systematic or material reduction at the tested widths.
+- **The switching region is harder for four of the five reported models.**
+  ReLU<sup>3</sup> is the exception, with similarly high error in both regions.
+  The Gaussian has the smallest regional errors, 0.304 near the switching set
+  and 0.191 elsewhere. Adding samples near the switching set gives no
+  systematic or material reduction at the tested widths.
 - **No model reproduces the full gradient jump.** ReLU<sup>2</sup> develops
   the sharpest fitted change of slope, while the smooth activations interpolate
   through the discontinuity.
 - **Regional error and feedback quality rank the models differently.**
-  ReLU<sup>2</sup> and softplus reach an upright neighbourhood from both tested
-  starts. From the harder start their costs are 76.3 and 69.8, respectively,
-  against the reference cost 26.2. Gaussian, tanh, and ReLU<sup>3</sup> succeed
-  only from the easier start; there ReLU<sup>2</sup> reaches cost 10.3 against
+  Softplus and ReLU<sup>3</sup> reach an upright neighbourhood from both tested
+  starts. From the harder start their costs are 69.8 and 110.9, respectively,
+  against the reference cost 26.2. Gaussian, tanh, and ReLU<sup>2</sup> succeed
+  only from the easier start; there ReLU<sup>2</sup> reaches cost 10.5 against
   the reference 10.2.
 
 A parallel theory program studies why activation regularity matters for such

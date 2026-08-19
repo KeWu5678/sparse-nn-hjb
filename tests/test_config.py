@@ -113,7 +113,7 @@ def test_use_sphere_derives_from_activation() -> None:
     assert PDAP(smooth)._use_sphere is False
 
 
-def test_algorithm2_provenance_describes_the_actual_coefficient_solver() -> None:
+def test_algorithm2_provenance_describes_search_and_coefficient_solver() -> None:
     with initialize(version_base=None, config_path="../conf"):
         l1 = compose(
             config_name="config",
@@ -125,11 +125,15 @@ def test_algorithm2_provenance_describes_the_actual_coefficient_solver() -> None
         )
         profile = compose(config_name="config", overrides=["env.verbose=false"])
 
-    assert PDAP(l1).coefficient_solver_provenance == {
+    assert PDAP(l1).algorithm_provenance == {
+        "candidate_starts": "random_sphere_multistart",
         "coefficient_solver": "soft_threshold",
     }
-    assert PDAP(fractional).coefficient_solver_provenance == {
+    assert PDAP(fractional).algorithm_provenance == {
+        "candidate_starts": "random_sphere_multistart",
         "coefficient_solver": "global_prox_warmstart_scale",
+        "existing_support_filter": "numerical_repeat_only",
+        "existing_support_cosine_gap_tol": 1e-8,
         "rho": 0.5,
     }
-    assert PDAP(profile).coefficient_solver_provenance == {}
+    assert PDAP(profile).algorithm_provenance == {}

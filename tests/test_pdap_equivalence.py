@@ -10,6 +10,9 @@ Golden values: ``tests/fixtures/pdap_golden.npz``.  Regenerate from a known-good
 tree with ``PDAP_UPDATE_GOLDEN=1 pytest tests/test_pdap_equivalence.py``.
 
 Notes:
+- the sphere-search baselines were re-captured when Algorithm 2 stopped using
+  copies of the current support as additional L-BFGS starts.  Both variants now
+  use exactly ``N_trial`` random starts per candidate search.
 - the finite-step baseline was re-captured when PDAP pruning changed from
   duplicate-merge pruning to amplitude-only pruning; this keeps one additional
   atom in the short characterization run.
