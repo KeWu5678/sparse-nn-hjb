@@ -32,7 +32,7 @@ from typing import Tuple
 
 import torch
 
-from ..config.activations import get_growth, get_use_sphere
+from ..config.activations import get_activation, get_growth, get_use_sphere
 from ..SSN import SUPPORTED_ACTIVATION_POWERS
 from .history import History, objective_value
 from .insertion import (
@@ -71,6 +71,9 @@ class PDAP:
             raise ValueError(f"model.insertion must be 'profile' or 'finite_step', got {m.insertion!r}")
 
         self.insertion_kind = m.insertion
+        self._activation_name = m.activation
+        self._activation = get_activation(m.activation)
+        self._power = m.power
         self._use_sphere = get_use_sphere(m.activation)
         self._growth = get_growth(m.activation)
 
@@ -376,7 +379,16 @@ class PDAP:
         amp_tol: float = 1e-8,
         verbose: bool = True,
     ) -> History:
-        """Train ``model`` in place on ``data_train``; return the :class:`History`."""
+        """Train a model matching the configured activation and power in place."""
+        if model.activation is not self._activation:
+            raise ValueError(
+                f"model activation must match configured activation={self._activation_name!r}; "
+                "construct the model with build_model using the trainer's config"
+            )
+        if model.power != self._power:
+            raise ValueError(
+                f"model power={model.power} does not match configured power={self._power}"
+            )
         history = History()
         o = self.objective
         if verbose:

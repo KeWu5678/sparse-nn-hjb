@@ -14,7 +14,7 @@ tests assert conformance with ``isinstance``.
 
 from __future__ import annotations
 
-from typing import Iterator, Optional, Protocol, Tuple, runtime_checkable
+from typing import Any, Callable, Iterator, Mapping, Optional, Protocol, Tuple, runtime_checkable
 
 import numpy as np
 import torch
@@ -28,10 +28,15 @@ class PDAPModel(Protocol):
     # hyperparameters are the trainer's, not the model's.
     power: float
     q: float
+    activation: Callable[[torch.Tensor], torch.Tensor]
     input_dim: Optional[int]
 
     # --- the model is an nn.Module: theta is its trainable parameters ---
     def parameters(self, recurse: bool = True) -> Iterator[torch.nn.Parameter]: ...
+    def state_dict(self, *args, **kwargs) -> Mapping[str, torch.Tensor]: ...
+    def load_state_dict(
+        self, state_dict: Mapping[str, torch.Tensor], strict: bool = True, assign: bool = False,
+    ) -> Any: ...
 
     # --- atom support ---
     @property

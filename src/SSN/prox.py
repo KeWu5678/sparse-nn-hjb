@@ -163,7 +163,7 @@ def power_prox_derivative(v, mu, q=1.0, prox_result=None):
         # belongs in its own commit with the golden fixture re-captured.
         diagonal_term = torch.clamp(1 - mu / normsv_safe, min=0)
         mask = normsv >= mu
-        outer_product_term = mask.float() * mu / (normsv_safe ** 3) * (v ** 2)
+        outer_product_term = mask.to(dtype=v.dtype) * mu / (normsv_safe ** 3) * (v ** 2)
         return torch.diag(diagonal_term + outer_product_term)
 
     scale = torch.as_tensor(mu, dtype=v.dtype, device=v.device)
@@ -235,8 +235,8 @@ def _phi_prox(sigma: float, g: float, th: float, gamma: float, q: float = 1.0) -
         if tau <= 0:
             return 0.0
         tq = tau ** q
-        dp = _dphi(torch.tensor(tq), th, gamma).item()
-        ddp = _ddphi(torch.tensor(tq), th, gamma).item()
+        dp = _dphi(torch.tensor(tq, dtype=torch.float64), th, gamma).item()
+        ddp = _ddphi(torch.tensor(tq, dtype=torch.float64), th, gamma).item()
         F_val = tau - g + sigma * q * tau ** (q - 1) * dp
         F_deriv = 1.0 + sigma * (
             q * (q - 1) * tau ** (q - 2) * dp

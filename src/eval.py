@@ -160,6 +160,6 @@ def distance_binned_error(
     for i in range(n_bins):
         lo, hi = edges[i], edges[i + 1]
         in_bin = (d >= lo) & (d <= hi) if i == n_bins - 1 else (d >= lo) & (d < hi)
-        ratio = (per_sample[in_bin].mean() / overall) if bool(in_bin.any()) else torch.tensor(float("nan"))
+        ratio = (per_sample[in_bin].mean() / overall) if bool(in_bin.any()) else per_sample.new_tensor(float("nan"))
         metrics[f"distbin{i + 1}_ratio"] = float(ratio.item())
     return metrics
