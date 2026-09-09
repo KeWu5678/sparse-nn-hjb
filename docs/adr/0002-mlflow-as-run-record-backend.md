@@ -6,7 +6,7 @@ status: accepted
 
 See [mlflow.md](mlflow.md) for day-to-day usage (deploy, backfill, live logging).
 
-`ExperimentRun` is the central runtime API for experiment recording. Every run
+`ExperimentRun` is the central runtime API for experiment recording. Every completed run
 writes a local JSON **Run Record** and local **Run Artifacts** in the Hydra
 output directory. When `MLFLOW_TRACKING_URI` is set, the completed Run Record is
 also projected to MLflow so the MLflow UI can compare runs.
@@ -18,7 +18,9 @@ is destroyed, the dashboard can be rebuilt from local Run Records later.
 
 ## Decision
 
-- Always write and keep the local JSON Run Record on `finish()` or `fail()`.
+- Write and keep the local JSON Run Record on successful completion (`finish()`).
+- Failed training runs retain diagnostic logs but do not produce a Run Record
+  or a dashboard entry. The generic runner does not call `fail()`.
 - If `MLFLOW_TRACKING_URI` is set, publish dashboard metadata to MLflow after the
   JSON record is written.
 - Do not upload artifacts to MLflow or S3 in v1. MLflow stores local artifact
