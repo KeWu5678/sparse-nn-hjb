@@ -5,8 +5,12 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
+import numpy as np
+import pytest
 from omegaconf import OmegaConf
 
+from src.config.schema import ExperimentConfig
+from src.data import ValueSampleNormalizer
 from src.experiment_logging import ExperimentRun
 from src.logging_config import configure_logging
 
@@ -230,3 +234,56 @@ def test_run_id_uses_experiment_data_date_and_suffix():
     run_id = train.run_id_from_config(cfg, hydra_cfg=hydra_cfg, today="20260611", suffix="a3f9")
 
     assert run_id == "regionsplitpendulum_pendulum_20260611_a3f9"
+
+
+@pytest.mark.parametrize("normalize", [True, False])
+def test_training_record_preserves_fitted_normalization(tmp_path, monkeypatch, normalize):
+    train = load_train_module()
+    monkeypatch.delenv("MLFLOW_TRACKING_URI", raising=False)
+    samples = {
+        "x": np.array([[2.0, -4.0], [1.0, 3.0], [-1.0, 2.0], [0.0, 1.0]]),
+        "v": np.array([[8.0], [4.0], [2.0], [1.0]]),
+        "dv": np.array([[3.0, 5.0], [2.0, 1.0], [1.0, 1.0], [0.0, 1.0]]),
+    }
+    dataset = tmp_path / "samples.npz"
+    np.savez(dataset, **samples)
+    run_dir = tmp_path / "run"
+    hydra_cfg = OmegaConf.create({"runtime": {"output_dir": str(run_dir)}})
+    monkeypatch.setattr(train.HydraConfig, "get", lambda: hydra_cfg)
+    cfg = OmegaConf.structured(ExperimentConfig())
+    cfg.data.path = str(dataset)
+    cfg.data.normalize = normalize
+    cfg.training.loop_order = "insertion_first"
+    cfg.training.num_iterations = 0
+    cfg.env.verbose = False
+
+    train.main.__wrapped__(cfg)
+
+    record = json.loads(next(run_dir.glob("*.json")).read_text())
+    assert record["config"]["data"]["normalize"] is normalize
+    if normalize:
+        assert record["normalization"] == {"x_scale": [2.0, 4.0], "v_scale": 8.0}
+        saved = record["normalization"]
+        restored = ValueSampleNormalizer(np.asarray(saved["x_scale"]), saved["v_scale"])
+        normalized = restored.normalize(samples)
+        value, gradient = restored.denormalize_prediction(normalized["v"], normalized["dv"])
+        np.testing.assert_allclose(value, samples["v"])
+        np.testing.assert_allclose(gradient, samples["dv"])
+    else:
+        assert record["normalization"] is None
+
+
+def test_failed_training_keeps_logs_without_a_run_record(tmp_path, monkeypatch):
+    train = load_train_module()
+    monkeypatch.delenv("MLFLOW_TRACKING_URI", raising=False)
+    hydra_cfg = OmegaConf.create({"runtime": {"output_dir": str(tmp_path)}})
+    monkeypatch.setattr(train.HydraConfig, "get", lambda: hydra_cfg)
+    cfg = OmegaConf.structured(ExperimentConfig())
+    cfg.data.path = str(tmp_path / "missing.npz")
+    cfg.env.verbose = False
+
+    with pytest.raises(FileNotFoundError):
+        train.main.__wrapped__(cfg)
+
+    assert (tmp_path / "run.log").exists()
+    assert not list(tmp_path.glob("*.json"))

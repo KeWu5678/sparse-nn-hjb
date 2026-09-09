@@ -244,7 +244,10 @@ def main(cfg: DictConfig) -> None:
     # Persist the run record into Hydra's per-run output dir (Hydra also writes
     # .hydra/config.yaml). MLflow can be added as a backend behind this interface.
     run.log_metrics(metrics)
-    record = run.finish(status="completed")
+    record = run.finish(
+        status="completed",
+        summary={"normalization": normalizer.to_dict() if normalizer is not None else None},
+    )
     logger.info("run record: %s", record)
 
 

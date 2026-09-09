@@ -32,7 +32,8 @@ loaders.
 Generic PDAP training normalizes value samples by default as pre-training data
 preprocessing, not as optimizer behavior. The value-sample loader and reversible
 normalization transform should live in `src/data.py`, and the fitted transform
-must be recorded in the Run Record or artifacts; disabling normalization is a
+is recorded in the Run Record's `normalization` field as `x_scale` and `v_scale`
+(`null` when disabled); disabling normalization is a
 diagnostic or legacy-reproduction choice, not the default experiment path.
 Performance-evaluation functions that become reusable should live in `src`, but
 the current model-level relative errors may remain in the model/PDAP training
