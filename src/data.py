@@ -122,5 +122,7 @@ def split_value_samples(
             "both sides must be non-empty"
         )
     perm = np.random.permutation(n)
-    take = lambda idx: tuple(torch.tensor(samples[k][idx]) for k in ("x", "v", "dv"))
+    take = lambda idx: tuple(
+        torch.tensor(samples[k][idx], dtype=torch.float64) for k in ("x", "v", "dv")
+    )
     return take(perm[:split]), take(perm[split:])

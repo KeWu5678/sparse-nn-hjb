@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import numpy as np
+import torch
 
-from src.data import ValueSampleNormalizer, load_value_samples
+from src.data import ValueSampleNormalizer, load_value_samples, split_value_samples
 from src.metric import format_table
 
 
@@ -34,6 +35,16 @@ def test_value_sample_normalizer_uses_chain_rule_for_gradient():
     np.testing.assert_allclose(normalized["x"], [[1.0, -1.0]])
     np.testing.assert_allclose(normalized["v"], [[1.0]])
     np.testing.assert_allclose(normalized["dv"], [[0.75, 2.5]])
+
+
+def test_split_converts_samples_to_float64():
+    samples = {
+        "x": np.ones((4, 2), dtype=np.float32),
+        "v": np.ones((4, 1), dtype=np.float32),
+        "dv": np.ones((4, 2), dtype=np.float32),
+    }
+    train, valid = split_value_samples(samples, train_fraction=0.5)
+    assert all(tensor.dtype == torch.float64 for tensor in (*train, *valid))
 
 
 def test_format_table_is_markdown_without_pandas():
