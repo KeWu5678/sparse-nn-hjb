@@ -26,8 +26,11 @@ degraded the pendulum fits.
   different starts in the same search.
 - Reject a candidate against the existing support only as a numerical repeat,
   using cosine gap `1e-8`.
-- Record this rule as `existing_support_filter=numerical_repeat_only` together
-  with `existing_support_cosine_gap_tol=1e-8` in Algorithm 2 run provenance.
+
+Both tolerances live at their use sites in
+`src/PDAP/insertion.py::_generate_candidates`: `merge_tol` (configurable, `1e-2`
+by default) for candidate deduplication, and a literal `1e-8` for the existing-
+support filter.
 
 ## Consequences
 
