@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Upload existing local Run Records to an MLflow tracking server.
 
-See deploy/README.md for the EC2-backed `make mlflow-backfill` workflow.
+See deploy/README.md for the local container workflow.
 Run with --help for the full argument list.
 """
 

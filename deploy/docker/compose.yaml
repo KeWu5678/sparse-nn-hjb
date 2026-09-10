@@ -1,0 +1,27 @@
+# Local MLflow tracking server (ADR 0014).
+#
+# Runs on the developer machine and survives reboots without holding a terminal
+# open. Backend store is SQLite on a bind mount, and is disposable: MLflow is a
+# projection of the local Run Records (ADR 0002), so it can be rebuilt with
+# scripts/upload_run_records_to_mlflow.py at any time.
+#
+#   docker compose -f deploy/docker/compose.yaml up -d
+#   export MLFLOW_TRACKING_URI=http://127.0.0.1:5000
+
+services:
+  mlflow:
+    # Server and client must not straddle an MLflow major version. Keep this
+    # tag equal to the resolved mlflow version in uv.lock -- the floor spec in
+    # pyproject.toml is not sufficient to pin it.
+    image: ghcr.io/mlflow/mlflow:v3.15.1
+    container_name: mlflow
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5000:5000"
+    volumes:
+      - ./mlflow-data:/data
+    command: >
+      mlflow server
+      --host 0.0.0.0
+      --port 5000
+      --backend-store-uri sqlite:////data/mlflow.db

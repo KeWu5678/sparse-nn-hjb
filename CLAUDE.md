@@ -33,7 +33,8 @@ Thesis & papers: `/Users/chaoruiz/Documents/NotePaper/MasterThesis/`
 - `notebook/` — curated explanatory notebooks for SSN, PDAP run parameters,
   and selected result views.
 - `docs/research/` — theory program (`OVERVIEW.md`, `CLAIMS.md`, `NOTATION.md`);
-  `docs/adr/` — decisions, plus `docs/adr/mlflow.md` (MLflow tracking-server guide).
+  `docs/adr/` — decisions, plus `docs/adr/mlflow.md` (MLflow tracking-server guide;
+  local container per ADR 0014).
 - `paper/` — LaTeX working directory. Only `paper_0805.tex` and its compiled
   PDF are tracked; bibliography, figures, build files, and working notes stay
   local. Superseded versions and their review record live in
