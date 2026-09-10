@@ -48,7 +48,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def _load_pool(data_rel: str, cache: dict):
-    from src.paths import DATA_DIR
+    from src.data import DATA_DIR
     if data_rel not in cache:
         data_path = DATA_DIR / data_rel
         pool_path = data_path.with_name(data_path.stem + "_region_eval_pool.npz")

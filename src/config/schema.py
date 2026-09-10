@@ -134,7 +134,7 @@ class TrainingConfig:
 class DataConfig:
     """The data source: a key-based ``.npy`` or ``.npz`` with ``x``, ``v``, ``dv``.
 
-    ``path`` is a bare filename under ``DATA_DIR`` (see ``src.paths``); absolute
+    ``path`` is a bare filename under ``DATA_DIR`` (see ``src.data``); absolute
     paths are allowed. Resolution happens in ``src.data.load_value_samples``.
     The default points at the existing legacy VDP ``.npy``; new OpenLoop
     generators save ``.npz`` files with the same keys.

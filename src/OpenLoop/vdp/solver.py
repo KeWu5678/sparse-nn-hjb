@@ -16,7 +16,6 @@ from scipy.optimize import minimize, root
 
 from src.OpenLoop.value_samples import ValueSamples
 from src.OpenLoop.vdp.problem import VdpOptimalControlProblem
-from src.paths import DATA_DIR
 
 
 def _trapz_norm(time_grid: np.ndarray, values: np.ndarray) -> float:
@@ -93,7 +92,7 @@ class VdpOpenLoopSolution:
 
     def save_dataset(
         self,
-        output_dir: str | Path = DATA_DIR,
+        output_dir: str | Path,
         *,
         grid_shape: tuple[int, int] | None = None,
         date_tag: str | None = None,

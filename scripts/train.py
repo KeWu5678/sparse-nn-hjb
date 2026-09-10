@@ -41,12 +41,11 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from src.config.schema import ExperimentConfig
-from src.data import load_value_samples, normalize_value_samples, split_value_samples
+from src.data import DATA_DIR, load_value_samples, normalize_value_samples, split_value_samples
 from src.eval import distance_binned_error, region_split_errors
 from src.experiment_logging import ExperimentRun
 from src.logging_config import configure_logging
 from src.models import build_model
-from src.paths import DATA_DIR
 from src.PDAP import PDAP
 
 logger = logging.getLogger(__name__)

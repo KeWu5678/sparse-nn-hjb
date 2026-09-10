@@ -21,7 +21,9 @@ from typing import Any
 import numpy as np
 import torch
 
-from .paths import DATA_DIR
+#: Dataset root. Datasets are referenced by bare filename everywhere else; this
+#: is the one place that name becomes a path (see :func:`load_value_samples`).
+DATA_DIR = Path(__file__).resolve().parents[1] / "rawdata" / "data"
 
 ValueSamples = dict[str, np.ndarray]
 TensorSamples = tuple[torch.Tensor, torch.Tensor, torch.Tensor]
@@ -58,7 +60,7 @@ def _as_value_samples(raw: Any) -> ValueSamples:
 def load_value_samples(path: str | Path) -> ValueSamples:
     """Load a ``.npy``/``.npz`` value-sample file.
 
-    ``path`` resolves under :data:`src.paths.DATA_DIR`; an absolute ``path`` is
+    ``path`` resolves under :data:`src.data.DATA_DIR`; an absolute ``path`` is
     used unchanged (``DATA_DIR / abs`` returns ``abs``). This is the single place
     data paths are resolved — callers pass a bare filename, not a built path.
     """

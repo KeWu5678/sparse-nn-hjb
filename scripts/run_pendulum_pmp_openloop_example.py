@@ -16,13 +16,13 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from src.data import DATA_DIR  # noqa: E402
 from src.OpenLoop.pendulum import (  # noqa: E402
     PendulumPmpSolver,
     PendulumPmpSolverConfig,
     PendulumSwingUpProblem,
 )
 from src.OpenLoop.value_samples import ValueSamples  # noqa: E402
-from src.paths import DATA_DIR  # noqa: E402
 
 
 def parse_args() -> argparse.Namespace:

@@ -49,11 +49,11 @@ from scipy.interpolate import (  # noqa: E402
 )
 from scipy.spatial import cKDTree  # noqa: E402
 
+from src.data import DATA_DIR  # noqa: E402
 from src.OpenLoop.pendulum.nonsmooth import (  # noqa: E402
     compute_nonsmooth_curve,
     restrict_trajectory_to_curve,
 )
-from src.paths import DATA_DIR  # noqa: E402
 
 # Resolve the wired pendulum dataset from the Hydra config so these figures always
 # track whatever conf/data/pendulum.yaml points at.
