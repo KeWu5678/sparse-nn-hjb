@@ -114,7 +114,6 @@ class TrainingConfig:
     #                  back to the clamp when the activation declares none.
     radial_cap: str = "fixed"
     # SSN solver (src/SSN/optimizer.py defaults + the hardcoded iterations=20)
-    lr: float = 1.0
     method: str = "levenberg_marquardt"   # "levenberg_marquardt" | "steihaug_cg"
     max_ls_iter: int = 500
     tolerance_ls: float = 1.0 + 1e-8

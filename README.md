@@ -116,6 +116,10 @@ uv run python scripts/train.py -m +experiment=pendulum/paper_frac_exp_penalty
 Their run records and derived artifacts are written only to local ignored
 paths.
 
+`make sweep EXPERIMENT=<name>` runs training and saves run records; it does not
+run analysis scripts or generate reports. Pendulum runs include switching-region
+and rest-region evaluation metrics. Tables and figures are generated separately.
+
 ### Under the hood
 
 - **`src/SSN/` — a semismooth Newton optimizer in PyTorch**: a

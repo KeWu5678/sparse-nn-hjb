@@ -9,8 +9,8 @@ Gauss-Newton form ``(1/M)(w1 Phi_v'Phi_v + w2 Phi_g'Phi_g)``; the closure is the
 data loss on ``Phi @ theta`` plus the nonconvex penalty on the penalized block.
 :class:`src.SSN.SSN` owns the semismooth-Newton step.
 
-SSN hyperparameters (alpha, gamma, th, power, lr, method, line-search/trust-region
-tolerances) are read from the model, where the config places them.
+Objective and solver settings come from the trainer; the activation power and
+penalty exponent come from the model.
 """
 
 from __future__ import annotations
@@ -62,7 +62,6 @@ class Objective:
 class SolverConfig:
     """How the SSN outer solve is run (globalization + line-search tolerances)."""
 
-    lr: float = 1.0
     method: str = "levenberg_marquardt"
     max_ls_iter: int = 500
     tolerance_ls: float = 1.0 + 1e-8
@@ -144,8 +143,6 @@ def ssn_solve(
     w1, w2 = objective.loss_weights
     alpha, gamma, th, q = objective.alpha, objective.gamma, objective.th, model.q
 
-    H = (w1 / Nx) * (Phi_v.T @ Phi_v) + (w2 / Nx) * (Phi_g.T @ Phi_g)
-
     # theta is the signed model's trainable output weights. SSN solves the
     # linear-in-theta subproblem on a standalone copy, then writes it back.
     params = [p for p in model.parameters() if p.requires_grad]
@@ -167,8 +164,9 @@ def ssn_solve(
             )
         Phi_v = Phi_v / scale
         Phi_g = Phi_g / scale
-        H = (w1 / Nx) * (Phi_v.T @ Phi_v) + (w2 / Nx) * (Phi_g.T @ Phi_g)
         theta = torch.nn.Parameter((theta.detach() * scale).clone())
+
+    H = (w1 / Nx) * (Phi_v.T @ Phi_v) + (w2 / Nx) * (Phi_g.T @ Phi_g)
 
     prox_scale = None
     initial_nonzero = None
@@ -186,7 +184,7 @@ def ssn_solve(
     optimizer = SSN(
         [theta], alpha=alpha, gamma=gamma,
         penalized_mask=penalized, nonneg_mask=nonneg,
-        th=th, lr=solver.lr, power=model.power, method=solver.method,
+        th=th, power=model.power, method=solver.method,
         max_ls_iter=solver.max_ls_iter, tolerance_ls=solver.tolerance_ls,
         tolerance_grad=solver.tolerance_grad, sigmamax=solver.sigmamax,
         prox_scale=prox_scale,

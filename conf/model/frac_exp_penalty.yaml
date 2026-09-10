@@ -1,4 +1,0 @@
-# Registered model: signed shallow network with fractional-exponent-penalty.
-# (= registry.py ALIASES["signed"])
-kind: signed
-insertion: finite_step

@@ -21,9 +21,9 @@ it is an unnormalized profile comparator rather than an Algorithm 1 cell.
 Fixed settings include `model.power=1`, normalized data, and seed 42. Run into
 an empty record root with:
 
-```sh
-make sweep EXPERIMENT=vdp/log_penalty
-```
+This sweep's config (`conf/experiment/vdp/log_penalty.yaml`) was retired on 2026-09-10;
+only the `paper_*` experiments are runnable now. The archived records under
+`rawdata/logs/multirun/vdp/log_penalty/` remain readable by `analysis.py`.
 
 The former report and figures used the retired unweighted objective and are not
 current evidence; they remain available from Git history.

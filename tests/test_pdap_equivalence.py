@@ -10,6 +10,9 @@ Golden values: ``tests/fixtures/pdap_golden.npz``.  Regenerate from a known-good
 tree with ``PDAP_UPDATE_GOLDEN=1 pytest tests/test_pdap_equivalence.py``.
 
 Notes:
+- Both baselines were re-captured when all network layers began initializing in
+  float64. This removes coefficient rounding during support replacement and
+  changes the random stream consumed by layer initialization before insertion.
 - the sphere-search baselines were re-captured when Algorithm 2 stopped using
   copies of the current support as additional L-BFGS starts.  Both variants now
   use exactly ``N_trial`` random starts per candidate search.

@@ -1,4 +1,3 @@
-import numpy as np
 import torch
 import torch.nn as nn
 
@@ -41,7 +40,7 @@ class ShallowNetwork(nn.Module):
             self.initializer = initializer
 
         # Create hidden layer
-        self.hidden = nn.Linear(layer_sizes[0], layer_sizes[1])
+        self.hidden = nn.Linear(layer_sizes[0], layer_sizes[1], dtype=torch.float64)
 
         # Initialize or set inner weights/bias
         if inner_weights is None or inner_bias is None:
@@ -54,24 +53,21 @@ class ShallowNetwork(nn.Module):
             del self.hidden.bias
 
             # Convert to tensors if needed
-            if isinstance(inner_weights, np.ndarray):
-                inner_weights = torch.tensor(inner_weights, dtype=torch.float64)
-            if isinstance(inner_bias, np.ndarray):
-                inner_bias = torch.tensor(inner_bias, dtype=torch.float64)
+            inner_weights = torch.as_tensor(inner_weights, dtype=torch.float64)
+            inner_bias = torch.as_tensor(inner_bias, dtype=torch.float64)
 
             # Assign new weights (these become trainable parameters)
             self.hidden.weight = torch.nn.Parameter(inner_weights.clone())
             self.hidden.bias = torch.nn.Parameter(inner_bias.clone())
 
         # Create output layer
-        self.output = nn.Linear(layer_sizes[1], layer_sizes[2])
+        self.output = nn.Linear(layer_sizes[1], layer_sizes[2], dtype=torch.float64)
 
         # Initialize output weights
         if outer_weights is None:
             self.initializer(self.output.weight)
         else:
-            if isinstance(outer_weights, np.ndarray):
-                outer_weights = torch.tensor(outer_weights, dtype=torch.float64)
+            outer_weights = torch.as_tensor(outer_weights, dtype=torch.float64)
             with torch.no_grad():
                 # Copy provided weights into existing parameter
                 self.output.weight.copy_(outer_weights)
@@ -79,10 +75,6 @@ class ShallowNetwork(nn.Module):
         # the output bias is set to zero and not trainable
         nn.init.zeros_(self.output.bias)
         self.output.bias.requires_grad = False
-
-        # Ensure layers use double precision to match input data
-        self.hidden.double()
-        self.output.double()
 
     def forward(self, x):
         # Hidden layer transformation

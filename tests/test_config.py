@@ -5,13 +5,18 @@ from __future__ import annotations
 import pytest
 import torch
 from hydra import compose, initialize
+from hydra.core.config_store import ConfigStore
+from hydra.core.hydra_config import HydraConfig
 
-import src.config.store  # noqa: F401  — registers `config_schema`
 from src.config import get_activation, get_use_sphere
+from src.config.schema import ExperimentConfig
 from src.data import load_value_samples
 from src.models import build_model
 from src.paths import DATA_DIR
 from src.PDAP import PDAP
+
+# Must be registered before any compose() call below.
+ConfigStore.instance().store(name="config_schema", node=ExperimentConfig)
 
 
 def test_compose_defaults() -> None:
@@ -33,12 +38,12 @@ def test_compose_defaults() -> None:
 
 def test_model_groups() -> None:
     with initialize(version_base=None, config_path="../conf"):
-        fs = compose(config_name="config", overrides=["model=frac_exp_penalty"])
+        fs = compose(config_name="config", overrides=["+model=finite_step"])
         alg1 = compose(config_name="config", overrides=[
-            "model=paper_log_penalty",
+            "+model=profile",
             "model.activation=softplus",
         ])
-    # frac_exp_penalty config group = signed + finite_step
+    # finite_step config group = signed + finite_step
     assert fs.model.kind == "signed"
     assert fs.model.insertion == "finite_step"
     assert PDAP(alg1).objective.normalized
@@ -46,18 +51,62 @@ def test_model_groups() -> None:
     assert "moment_beta" not in alg1.model
 
 
-def test_curated_experiment_configs_compose() -> None:
+def _compose_experiment(experiment: str, model: str, data: str):
+    """Compose one point of an experiment's sweep.
+
+    Experiments pin neither `model` nor `data`; both are sweep axes.
+    """
     with initialize(version_base=None, config_path="../conf"):
-        log_pen = compose(config_name="config", overrides=["+experiment=pendulum/log_penalty"])
-        frac = compose(config_name="config", overrides=["+experiment=vdp/frac_exp_penalty"])
+        cfg = compose(
+            config_name="config",
+            overrides=[f"+experiment={experiment}", f"+model={model}", f"+data={data}"],
+            return_hydra_config=True,
+        )
+    HydraConfig.instance().set_config(cfg)
+    return cfg
 
-    assert log_pen.name == "pendulum_log_penalty"
-    assert log_pen.model.power == 1.0
-    assert log_pen.data.path.startswith("Pendulum")
 
-    assert frac.name == "vdp_frac_exp_penalty"
-    assert frac.model.insertion == "finite_step"
-    assert frac.model.power == 2.0
+def test_curated_experiment_configs_compose() -> None:
+    try:
+        log_pen = _compose_experiment("log_penalty", "profile", "pendulum")
+        assert log_pen.name == "pendulum_log_penalty"
+        assert log_pen.model.power == 1.0
+        assert log_pen.data.path.startswith("Pendulum")
+        assert log_pen.hydra.runtime.choices["eval"] == "region_split"
+
+        frac = _compose_experiment("frac_exp_penalty", "finite_step", "vdp")
+        assert frac.name == "vdp_frac_exp_penalty"
+        assert frac.model.insertion == "finite_step"
+        assert frac.model.power == 2.0
+
+        # The reference baseline is Algorithm 1's insertion with a convex L1
+        # penalty (power=1 -> q=1, gamma=0 -> phi = identity), not Algorithm 2.
+        baseline = _compose_experiment("relu_l1_baseline", "profile", "vdp")
+        assert baseline.name == "vdp_relu_l1_baseline"
+        assert baseline.model.insertion == "profile"
+        assert baseline.model.power == 1.0
+        assert baseline.model.gamma == 0.0
+        assert baseline.training.insert_init == "warm_start"
+    finally:
+        HydraConfig.instance().cfg = None
+
+
+def test_experiments_sweep_both_datasets() -> None:
+    """Every curated experiment carries the dataset as a sweep axis."""
+    with initialize(version_base=None, config_path="../conf"):
+        for experiment in (
+            "log_penalty",
+            "frac_exp_penalty",
+            "relu_l1_baseline",
+        ):
+            cfg = compose(
+                config_name="config",
+                overrides=[f"+experiment={experiment}", "+model=profile", "+data=vdp"],
+                return_hydra_config=True,
+            )
+            params = cfg.hydra.sweeper.params
+            assert params["+data"] == "vdp,pendulum", experiment
+            assert "+model" in params, experiment
 
 
 def test_config_builds_trainer_and_model() -> None:
@@ -117,13 +166,16 @@ def test_algorithm2_provenance_describes_search_and_coefficient_solver() -> None
     with initialize(version_base=None, config_path="../conf"):
         l1 = compose(
             config_name="config",
-            overrides=["model=frac_exp_penalty", "model.power=1", "env.verbose=false"],
+            overrides=["+model=finite_step", "model.power=1", "env.verbose=false"],
         )
         fractional = compose(
             config_name="config",
-            overrides=["model=frac_exp_penalty", "model.power=2", "env.verbose=false"],
+            overrides=["+model=finite_step", "model.power=2", "env.verbose=false"],
         )
-        profile = compose(config_name="config", overrides=["env.verbose=false"])
+        profile = compose(
+            config_name="config",
+            overrides=["+model=profile", "env.verbose=false"],
+        )
 
     assert PDAP(l1).algorithm_provenance == {
         "candidate_starts": "random_sphere_multistart",

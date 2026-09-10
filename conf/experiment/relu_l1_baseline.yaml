@@ -1,0 +1,42 @@
+# @package _global_
+# The reference PDAP baseline: Konstantin Pieper's MATLAB NonConvexSparseNN
+# (github.com/konstpieper/NonConvexSparseNN), which this repo ports.
+#
+# Neither Algorithm 1 nor 2: profile insertion with the coordinate-descent warm
+# start, and a convex L1 penalty (power=1 -> q=1; gamma=0 -> phi = identity).
+# `relu` is a sphere activation, so `normalized` is False here and there is no
+# radial search for radial_cap to bound.
+#
+# The existing relu/power=1 records (rawdata/logs/multirun/frontier_relu_l1 and
+# .../paper_frac_exp_penalty/relu_l1) are NOT this baseline -- they are
+# Algorithm 2 at power=1.
+
+name: ${hydra:runtime.choices.data}_relu_l1_baseline
+
+model:
+  power: 1.0
+  gamma: 0.0
+  alpha: 1e-5
+  loss_weights: [1.0, 1.0]
+
+training:
+  insert_init: warm_start
+  loop_order: correction_first
+  radial_cap: fixed
+
+data:
+  normalize: true
+
+hydra:
+  sweep:
+    # alpha is this experiment's only real axis (activation and power are pinned).
+    subdir: ${hydra:runtime.choices.data}/${hydra:runtime.choices.experiment}/alpha_${model.alpha}/${hydra.job.num}
+  sweeper:
+    params:
+      +model: profile
+      +data: vdp,pendulum
+      model.activation: relu
+      model.power: 1.0
+      model.gamma: 0
+      model.alpha: 1e-2,1e-3,1e-4,1e-5,1e-6
+      model.loss_weights: "[1.0,0.0],[1.0,1.0]"

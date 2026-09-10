@@ -10,11 +10,9 @@ global scalar prox. The coefficient correction uses the global-prox normal map
 with the warm-start-derived fixed scale documented in
 `vault/power_q_penalty.md`.
 
-Run into an empty output root with:
-
-```sh
-make sweep EXPERIMENT=vdp/frac_exp_penalty
-```
+This sweep's config (`conf/experiment/vdp/frac_exp_penalty.yaml`) was retired on 2026-09-10;
+only the `paper_*` experiments are runnable now. The archived records under
+`rawdata/logs/multirun/vdp/frac_exp_penalty/` remain readable by `analysis.py`.
 
 The validated manuscript-facing run set and current numerical report stay local
 under `../paper_frac_exp_penalty/`.

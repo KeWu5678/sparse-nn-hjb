@@ -134,3 +134,19 @@ penalties this project uses are selected by parameter values, documented inline 
 
 So the penalty is configurable but not a named axis; `power` and `gamma` remain
 its controls, and the penalty exponent stays coupled to the activation power.
+
+## Model compatibility and numerical precision
+
+`PDAP.fit` checks that the supplied model uses the configured activation
+callable and power before reading data or changing model state. Callers use
+`build_model` with the same configuration as the trainer. This prevents the
+trainer's geometry, growth data, and normalized objective from disagreeing with
+the actual network. `PDAPModel` also declares activation and state save/restore,
+which insertion, history, and the correction guard already require.
+
+Floating-point data, model layers, and numerical work arrays use float64.
+Layers are created in float64 before assigning supplied coefficients, so
+support replacement cannot round an SSN solution through float32. This changes
+the layer-initialization random stream and supersedes the historical bit-exact
+behavior above; the PDAP reference summaries are refreshed for this deliberate
+numerical change.

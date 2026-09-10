@@ -65,16 +65,16 @@ def _run_trajectory(config: dict) -> np.ndarray:
     kind = config["kind"]
     if kind == "ssn":
         opt = SSN(
-            [theta], alpha=alpha, gamma=gamma, th=th, lr=1.0, power=power,
+            [theta], alpha=alpha, gamma=gamma, th=th, power=power,
             prox_scale=config.get("prox_scale"),
         )
     elif kind == "ssn_tr":
         # folded into the base SSN: trust-region (Steihaug-CG) globalization
-        opt = SSN([theta], alpha=alpha, gamma=gamma, th=th, lr=1.0, power=power,
+        opt = SSN([theta], alpha=alpha, gamma=gamma, th=th, power=power,
                   method="steihaug_cg")
     elif kind == "ssn_masked":
         opt = SSN(
-            [theta], alpha=alpha, gamma=gamma, th=th, lr=1.0, power=power,
+            [theta], alpha=alpha, gamma=gamma, th=th, power=power,
             penalized_mask=pen_mask, nonneg_mask=config["nonneg_mask"],
         )
     else:  # pragma: no cover

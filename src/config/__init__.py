@@ -10,7 +10,6 @@ from .schema import (
     ModelConfig,
     TrainingConfig,
 )
-from .store import register_configs
 
 __all__ = [
     "ModelConfig",
@@ -21,5 +20,4 @@ __all__ = [
     "ACTIVATIONS",
     "get_activation",
     "get_use_sphere",
-    "register_configs",
 ]

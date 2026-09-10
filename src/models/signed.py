@@ -51,7 +51,7 @@ class SignedModel(ShallowNetwork):
 
         ``n`` changes every PDAP iteration, so the layers are rebuilt by
         re-running ``ShallowNetwork``'s constructor (which owns weight and RNG
-        handling -- preserving the random stream the PDAP loop is tuned against).
+        handling). Layers and supplied coefficients are float64 throughout.
         """
         W = torch.as_tensor(W, dtype=torch.float64)
         b = torch.as_tensor(b, dtype=torch.float64).reshape(-1)

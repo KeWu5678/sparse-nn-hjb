@@ -39,7 +39,7 @@ switching set.
   shrank the region it was graded on — and was mostly seen data. (Records
   written before the consolidation carry the same metrics under legacy
   `near`/`far` keys.)
-- **No sweep of its own** (`make region-split` regenerates the analysis): this
+- **No sweep of its own** (reports are generated separately by local analysis): this
   study reads the H1 runs of the two pendulum model-family sweeps, which record
   the region metrics on every run (`data=pendulum` auto-selects the region
   eval). The former dedicated region_split sweep was a strict subset of the
