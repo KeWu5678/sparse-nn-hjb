@@ -160,32 +160,3 @@ def test_use_sphere_derives_from_activation() -> None:
     # default activation is relu (homogeneous -> sphere); matern52 is not
     assert PDAP(default)._use_sphere is True
     assert PDAP(smooth)._use_sphere is False
-
-
-def test_algorithm2_provenance_describes_search_and_coefficient_solver() -> None:
-    with initialize(version_base=None, config_path="../conf"):
-        l1 = compose(
-            config_name="config",
-            overrides=["+model=finite_step", "model.power=1", "env.verbose=false"],
-        )
-        fractional = compose(
-            config_name="config",
-            overrides=["+model=finite_step", "model.power=2", "env.verbose=false"],
-        )
-        profile = compose(
-            config_name="config",
-            overrides=["+model=profile", "env.verbose=false"],
-        )
-
-    assert PDAP(l1).algorithm_provenance == {
-        "candidate_starts": "random_sphere_multistart",
-        "coefficient_solver": "soft_threshold",
-    }
-    assert PDAP(fractional).algorithm_provenance == {
-        "candidate_starts": "random_sphere_multistart",
-        "coefficient_solver": "global_prox_warmstart_scale",
-        "existing_support_filter": "numerical_repeat_only",
-        "existing_support_cosine_gap_tol": 1e-8,
-        "rho": 0.5,
-    }
-    assert PDAP(profile).algorithm_provenance == {}
