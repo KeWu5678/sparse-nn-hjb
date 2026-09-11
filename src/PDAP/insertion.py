@@ -256,18 +256,15 @@ def profile_threshold(
     normalized: bool = False, insert_init: str = "warm_start",
     radius: Optional[float] = None,
 ) -> Tuple[np.ndarray, np.ndarray, Optional[np.ndarray]]:
-    """Accept atoms whose derivative magnitude clears the insertion threshold.
+    """Select candidates for Algorithm 1 or the ReLU--L1 baseline.
 
-    Two model families use this search:
+    Normalized Algorithm 1 accepts ``|P(omega)| / w_p(omega) > alpha``.
+    The ReLU--L1 baseline has sphere-normalized inner parameters but no moment
+    normalization, so it accepts ``|P(omega)| > alpha``.
 
-      * normalized Algorithm 1 uses
-        ``|P_p(omega)| > alpha*L_phi`` with ``P_p = P/w_p``.  ``L_phi = phi'(0+) = 1``
-        for the whole log family, so the threshold is just ``alpha``.
-      * an unnormalized profile model uses the classical ``|P(omega)| > alpha``.
-
-    Candidates are ranked by their margin above the threshold, which in the
-    normalized case is the certificate violation
-    ``Delta(mu,omega) = max{|P_p(omega)| - alpha*L_phi, 0}``.
+    Candidates are ranked by their margin above the applicable threshold. For
+    Algorithm 1 this is the certificate violation
+    ``Delta(mu, omega) = |P(omega)| / w_p(omega) - alpha``.
 
     Returns ``(W, b, c)``; ``c`` is ``None`` unless ``insert_init="guaranteed"``,
     in which case it carries the theorem's per-atom coefficient.
@@ -386,7 +383,10 @@ def profile_threshold(
 # Strategy 2: finite-step acceptance
 # ---------------------------------------------------------------------------- #
 def solve_insertion_weight(
-    p_omega: float, S_sq: float, alpha: float, q: float,
+    p_omega: float,
+    S_sq: float,
+    alpha: float,
+    q: float,
 ) -> Optional[Tuple[float, float]]:
     """Minimize the actual one-atom objective increment.
 
