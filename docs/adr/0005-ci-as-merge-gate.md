@@ -28,7 +28,7 @@ from a runner that lints and runs 83 tests against unchanged sources.
   rebase after each one is friction without a corresponding risk.
 - **No review requirement.** A single author cannot approve their own pull
   request, so requiring one would wedge every pull request opened.
-- **`paths-ignore` on the `push` trigger only** — `papar/**`, `**.md`,
+- **`paths-ignore` on the `push` trigger only** — `paper/**`, `**.md`,
   `.gitignore`. It is deliberately absent from `pull_request`: a required check
   that never runs also never reports, leaving the pull request permanently on
   "Expected — waiting for status".

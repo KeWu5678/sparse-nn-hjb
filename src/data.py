@@ -63,6 +63,9 @@ def load_value_samples(path: str | Path) -> ValueSamples:
     ``path`` resolves under :data:`src.data.DATA_DIR`; an absolute ``path`` is
     used unchanged (``DATA_DIR / abs`` returns ``abs``). This is the single place
     data paths are resolved — callers pass a bare filename, not a built path.
+
+    ``allow_pickle=True`` supports trusted legacy ``.npy`` files containing a
+    dictionary. New project datasets use plain arrays in ``.npz`` files.
     """
     raw = np.load(DATA_DIR / path, allow_pickle=True)
     return _as_value_samples(raw)
