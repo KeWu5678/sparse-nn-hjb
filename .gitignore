@@ -79,8 +79,6 @@ experiments/*/paper_log_penalty/
 experiments/*/paper_frac_exp_penalty/
 experiments/algorithm2_rho_pilot.md
 scripts/paper/
-scripts/regenerate_paper_artifacts.sh
-scripts/refresh_algorithm2_paper_runs.sh
 tests/test_paper_artifact_preflight.py
 
 # ---- paper/ (LaTeX working dir) ----

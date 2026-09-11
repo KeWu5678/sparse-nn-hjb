@@ -41,8 +41,6 @@ import torch
 
 from ..config.activations import Growth
 
-__all__ = ["FIXED_LOG_CLAMP", "sample_extent", "growth_constant", "certificate_radius"]
-
 # Numerical upper bound used for sampling and final candidate filtering.
 FIXED_LOG_CLAMP = 5.0
 
