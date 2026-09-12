@@ -3,8 +3,8 @@
 [![CI](https://github.com/KeWu5678/sparse-nn-hjb/actions/workflows/ci.yml/badge.svg)](https://github.com/KeWu5678/sparse-nn-hjb/actions/workflows/ci.yml)
 
 **A 16-neuron softplus network stabilizes the Van der Pol system at the
-reference rollout cost (6.48), while a 38-neuron ReLU<sup>3</sup> network
-reaches relative $H^1$ error 0.097.**
+reference rollout cost (6.48), with original-coordinate relative $H^1$
+error 0.241.**
 
 Closed-loop rollout of the Van der Pol oscillator from $y_0=(2,1)$ shows that
 the fitted feedback laws stabilize the system with different support sizes but
@@ -41,22 +41,25 @@ when it does not increase the objective.
 
 Representative $H^1$-trained Van der Pol runs reported in the paper are:
 
-| activation | penalty | neurons | rel. $H^1$ error | stabilizes | closed-loop cost |
-| --- | --- | ---: | ---: | :---: | ---: |
-| softplus | normalized log penalty | **16** | 0.103 | yes | **6.48** |
-| Gaussian | normalized log penalty | 34 | 0.098 | yes | 6.50 |
-| tanh | normalized log penalty | 38 | 0.101 | yes | 6.50 |
-| ReLU<sup>2</sup> | $|c|^{2/3}$ | 48 | 0.099 | — | — |
-| ReLU<sup>3</sup> | $|c|^{1/2}$ | 38 | **0.097** | yes | 6.49 |
+| activation | penalty | neurons | rel. $H^1$ error |
+| --- | --- | ---: | ---: |
+| softplus | normalized log penalty | **16** | 0.241 |
+| Gaussian | normalized log penalty | 34 | 0.236 |
+| tanh | normalized log penalty | 38 | 0.237 |
+| ReLU<sup>2</sup> | $|c|^{2/3}$ | 45 | 0.236 |
+| ReLU<sup>3</sup> | $|c|^{1/2}$ | 28 | **0.235** |
 
-(reference rollout cost: 6.48)
+These are the paper's activation-comparison checkpoints, selected by minimum
+training objective. The first three use $\alpha=10^{-4}$, $\gamma=10$,
+$p=2.01$; the two fractional-power runs use $\alpha=10^{-5}$.
+Reported $H^1$ errors combine errors in the original-scale $V$ and its gradient
+with respect to the original state variables, not the normalized training
+coordinates. They supersede the earlier approximately 0.10 figures.
 
-The nonhomogeneous models reach the 0.10 error scale with 16–38 atoms;
-ReLU<sup>3</sup> reaches a slightly lower error with 38. The traditional
-ReLU+$\ell^1$ baseline eventually reaches a lower error, but it is less
-accurate than the best nonconvex curve below 114 atoms. The nonconvex
-formulations therefore improve accuracy per neuron rather than the ultimate
-error floor.
+The nonconvex models reach a similar error scale with different support sizes.
+In the paper's support-budget comparison they have lower error at small support
+budgets, while the traditional ReLU+$\ell^1$ network reaches a lower error with
+a larger support. This is not a claim of dominance at every support budget.
 
 The two algorithm families also leave different geometric signatures in the
 learned parameters. The fractional-power formulation constrains its atoms to
@@ -93,10 +96,9 @@ The findings are sharp:
   only from the easier start; there ReLU<sup>2</sup> reaches cost 10.5 against
   the reference 10.2.
 
-A parallel theory program studies why activation regularity matters for such
-targets: [`docs/research/OVERVIEW.md`](docs/research/OVERVIEW.md), with a
-proved/refuted/open claims registry in
-[`docs/research/CLAIMS.md`](docs/research/CLAIMS.md).
+A parallel local theory program studies why activation regularity matters for
+such targets. Its notes and claims registry under `docs/research/` are not
+distributed with a clean checkout.
 
 ## Reproduce it
 
@@ -138,8 +140,9 @@ and rest-region evaluation metrics. Tables and figures are generated separately.
   `scripts/upload_run_records_to_mlflow.py` projects them into the MLflow
   dashboard defined in [`deploy/`](deploy). See
   [docs/adr/mlflow.md](docs/adr/mlflow.md).
-- **Publication artifacts are local**: experiment run records, generated
+- **Paper inputs stay local**: current experiment run records, generated paper
   reports, figures, and paper-support scripts are intentionally not tracked.
+  Historical curated summaries remain tracked and are marked as superseded.
   The manuscript source and compiled PDF are the publication record.
 - CI runs the test suite and `ruff` on every push.
 

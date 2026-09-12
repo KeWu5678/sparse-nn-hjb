@@ -13,14 +13,16 @@ the repository root). Only the three TeX-included PNGs are generated, directly i
 
 | file | what it shows |
 | --- | --- |
-| [`paper/plot/pendulum_value_scatter.png`](../../../paper/plot/pendulum_value_scatter.png) | 3D scatter of the raw samples (θ, θ̇, V), coloured by value |
-| [`paper/plot/pendulum_value_surface.png`](../../../paper/plot/pendulum_value_surface.png) | V(θ, θ̇) over the state plane (the 3000-sample set, periodic-folded into one cell then tiled) |
-| [`paper/plot/pendulum_regions.png`](../../../paper/plot/pendulum_regions.png) | each state coloured by the upright it belongs to (nearest basin-cut characteristic, tiled by 2πk); the boundaries are the switching-set spirals winding around the hanging points ±π, ±3π (paper Fig. 2, left) |
+| `paper/plot/pendulum_value_scatter.png` | 3D scatter of the raw samples (θ, θ̇, V), coloured by value |
+| `paper/plot/pendulum_value_surface.png` | V(θ, θ̇) over the state plane (the 3000-sample set, periodic-folded into one cell then tiled) |
+| `paper/plot/pendulum_regions.png` | each state coloured by the upright it belongs to (nearest basin-cut characteristic, tiled by 2πk); the boundaries are the switching-set spirals winding around the hanging points ±π, ±3π (paper Fig. 2, left) |
 
-The unused whole-trajectory PNG and old experiment-directory copies are preserved
-in the [image archive](../../../outdated/experiment-code-cleanup-2026-09-12/unreferenced_pngs/experiments/00_openloop/pendulum/figures/).
-They are not regenerated. See the [paper pipeline](../../../scripts/paper/README.md)
-for the final allowlist/provenance check.
+These generated files are local; the distributed figures are embedded in the
+[tracked paper](../../../paper/paper_0805.pdf). The unused whole-trajectory PNG
+and old experiment-directory copies are archived locally under
+`outdated/experiment-code-cleanup-2026-09-12/unreferenced_pngs/` and are not
+distributed or regenerated. The optional local pipeline notes in
+`scripts/paper/README.md` describe the final allowlist/provenance check.
 
 The regions figure tracks the switching set deeper (`_REGIONS_CAP = 80`) than the wired
 training data (`basin_value_max = 50`, which only resolves ~half a spiral turn); the deeper

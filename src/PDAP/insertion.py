@@ -29,6 +29,7 @@ import torch
 
 from ..SSN.prox import power_prox
 from .moment import moment_weight
+from .radius import FIXED_LOG_CLAMP
 
 logger = logging.getLogger(__name__)
 
@@ -182,7 +183,7 @@ def _generate_candidates(
     a_t, b_t = sample_sphere(N)
     existing_unit = None
     if not use_sphere:
-        r_max = float(radius) if radius is not None else math.exp(5.0)
+        r_max = float(radius) if radius is not None else math.exp(FIXED_LOG_CLAMP)
         lo, hi = math.log(math.exp(-3.0)), math.log(max(r_max, math.exp(-3.0) * 1.001))
         u = torch.rand(a_t.shape[0], dtype=torch.float64)
         r = torch.exp(lo + (hi - lo) * u)
@@ -207,7 +208,6 @@ def _generate_candidates(
         a_t, b_t = maximize_batch(a_t, b_t, steps=lbfgs_steps, lr=lbfgs_lr)
         if not use_sphere:
             U = torch.cat([a_t, b_t.reshape(-1, 1)], dim=1)
-            r_max = float(radius) if radius is not None else math.exp(5.0)
             inside = torch.linalg.vector_norm(U, dim=1) <= r_max
             discarded_outside += int((~inside).sum().item())
             a_t, b_t = a_t[inside], b_t[inside]

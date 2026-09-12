@@ -336,7 +336,7 @@ Thus the observed advantage is a small-width accuracy trade-off, not a
 uniform improvement across support budgets.
 Figure~\ref{fig:neuron_h1_frontier}\subref{fig:feedback_cost_a}
 reports the complementary closed-loop test on the pendulum problem. It shows
-that the ReLU network with $\ell^1$ penalty does not stablize, while softplus, 
+that the selected ReLU network with $\ell^1$ penalty does not stabilize, while softplus,
 $\mathrm{ReLU}^{2}$ and $\mathrm{ReLU}^{3}$ do from that start.
 
 \begin{figure}[htbp]
@@ -379,7 +379,12 @@ $\operatorname{dist}(\theta,2\pi\mathbb Z)<0.4$ and $|\dot\theta|<0.4$.
 The nonhomogeneous models use Algorithm~\ref{alg:log}
 with $(\alpha,\gamma,p)=(10^{-4},10,2.01)$; the ReLU--$\ell^1$ baseline uses
 Algorithm~\ref{alg:q} with $\alpha=10^{-5}$ in panel (a) and $10^{-6}$ in
-panel (b), and the homogeneous models use $\alpha=10^{-6}$.}
+panel (b), and the homogeneous models use $\alpha=10^{-6}$.
+The baseline run in (a) attains the lowest frontier error in its six-$\alpha$
+sweep; the baseline checkpoint in (b) has the lowest validation error in its
+six-$\alpha$ sweep at the minimum-training-objective iterate, not the lowest
+rollout cost. These are benchmark-specific comparisons, not a matched-$\alpha$
+comparison.}
 \label{fig:neuron_h1_frontier}
 \end{figure}
 
@@ -3626,7 +3631,8 @@ $5.96\times10^{-1}$ to $4.36\times10^{-2}$ for softplus, from
 $6.12\times10^{-1}$ to $4.22\times10^{-2}$ for $\tanh$, and from
 $5.51\times10^{-1}$ to $3.57\times10^{-2}$ for the Gaussian. Fitting values
 alone therefore gives substantially poorer gradient approximations, which
-can compromise feedback synthesis.
+can compromise feedback synthesis. These gradient gains come at the expense
+of value accuracy (Table~\ref{tab:alg1_gradient}).
 
 The Gaussian is most accurate ($2.36\times10^{-1}$) and uses $34$ atoms;
 $\tanh$ reaches $2.37\times10^{-1}$ with $38$, and softplus
@@ -3665,12 +3671,13 @@ the reported errors use the unclipped network outputs.}
 \label{fig:H1_power}
 \end{figure}
 
-Under the $L^2$ loss the combined value--gradient error stays large for both powers
-($\mathrm{Err}_{H^1} \approx 3.5 \times 10^{-1}$): the value-only fit
-ignores $\nabla V$, so the atoms are placed without regard to the gradient
-field. The $H^1$ loss lowers the combined error to
-$\approx 2.4 \times 10^{-1}$ for both powers
-(Table~\ref{tab:alg2_gradient}).
+For these fixed-$\alpha$, single-seed fits, adding gradient data lowers the
+combined value--gradient error from
+$\mathrm{Err}_{H^1}\approx 3.5\times10^{-1}$ to
+$\approx 2.4\times10^{-1}$ for both powers, a factor of about $1.5$
+(Table~\ref{tab:alg2_gradient}). This improvement comes with larger support
+and higher value error $\mathrm{Err}_{L^2}$; the comparison alone does not
+establish better closed-loop performance.
 
 \begin{table}[htbp]
 \centering

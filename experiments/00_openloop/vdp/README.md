@@ -9,10 +9,12 @@ Figures carry no titles.
 
 | file | what it shows |
 | --- | --- |
-| [`paper/plot/v.png`](../../../paper/plot/v.png) | 3D scatter of the samples (x[0], x[1], V) coloured by value |
-| [`paper/plot/dv.png`](../../../paper/plot/dv.png) | state-plane scatter coloured by V, with ∇V arrows on a grid |
+| `paper/plot/v.png` | 3D scatter of the samples (x[0], x[1], V) coloured by value |
+| `paper/plot/dv.png` | state-plane scatter coloured by V, with ∇V arrows on a grid |
 
-The unused interpolated-surface PNG and old experiment-directory copies are
-preserved in the [image archive](../../../outdated/experiment-code-cleanup-2026-09-12/unreferenced_pngs/experiments/00_openloop/vdp/figures/).
-They are not regenerated. See the [paper pipeline](../../../scripts/paper/README.md)
-for the final allowlist/provenance check.
+These generated files are local; the distributed figures are embedded in the
+[tracked paper](../../../paper/paper_0805.pdf). The unused interpolated-surface
+PNG and old experiment-directory copies are archived locally under
+`outdated/experiment-code-cleanup-2026-09-12/unreferenced_pngs/` and are not
+distributed or regenerated. The optional local pipeline notes in
+`scripts/paper/README.md` describe the final allowlist/provenance check.
