@@ -35,6 +35,7 @@ def _fake_lbfgs(monkeypatch, outputs):
 
         def __init__(self, params, **_kwargs):
             self.param = params[0]
+            self.start = self.param.detach().clone()
             self.instances.append(self)
 
         def zero_grad(self):
@@ -98,6 +99,14 @@ def test_algorithm1_discards_candidates_outside_sampling_radius(
     assert discarded_outside == 1
     assert a.shape == (0, 1)
     assert b.shape == (0,)
+
+
+def test_algorithm1_sampling_and_filter_share_the_fallback_cap(monkeypatch):
+    monkeypatch.setattr(insertion, "FIXED_LOG_CLAMP", math.log(2.0))
+    monkeypatch.setattr(insertion.torch, "rand", lambda n, **kwargs: torch.ones(n, **kwargs))
+    _, _, n, discarded, fake = _generate(monkeypatch, outputs=[[3.0, 0.0]], radius=None)
+    assert fake.instances[0].start.norm().item() == pytest.approx(2.0)
+    assert n == 0 and discarded == 1
 
 
 def test_algorithm1_distinguishes_radius_search_failure_from_threshold_stop(

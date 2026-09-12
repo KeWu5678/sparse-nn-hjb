@@ -60,6 +60,14 @@ their samples should supply that same transform. The default `None` preserves
 the untransformed caller contract. Historical errors are never relabeled or
 overwritten by reporting.
 
+`run.stored_metric_coordinates` identifies the convention of the saved errors.
+An absent `metric_coordinates` tag means `training`, including records that
+already contain `normalization`; unknown labels are rejected. Loading a
+normalized run with training-coordinate metrics warns about this distinction.
+Use `validation_metrics(run)` or `evaluate_history(run)` to obtain physical
+errors instead of comparing those results with stored training-coordinate H1
+values. Loading does not alter the original record or its saved errors.
+
 ### Historical records without normalization metadata
 
 The current paper's old sweeps use an explicit compatibility opt-in:
@@ -115,7 +123,7 @@ arrays, not separately supplied activations or re-fitted normalizers.
 
 ## Reproduction and scope
 
-See the local [paper pipeline](../scripts/paper/README.md) for current manuscript
+See the local-only `scripts/paper/README.md` for current manuscript
 commands. Its VDP Algorithm 2 frontier comparison uses alpha=1e-6; the surface/table comparison
 uses alpha=1e-5. These are deliberately distinct. Existing run selection stays
 fixed during rescoring; retuning is a separate experiment.
@@ -155,6 +163,6 @@ to the manuscript pipeline. Nineteen retired experiment source files, the shared
 all-grid analyzer, pre-trim source/documentation copies, and 170 unreferenced PNGs
 are recoverable under `outdated/experiment-code-cleanup-2026-09-12/`. The images
 retain their bytes and repository-relative paths under `unreferenced_pngs/`;
-its `PNG_SHA256SUMS` verifies them. Historical reports retain their numerical
-prose and point to archived images where available. Investigation scripts outside
-the manuscript pipeline were not removed.
+its `PNG_SHA256SUMS` verifies them. Historical reports label superseded metrics
+and note locally archived images without linking to unavailable files.
+Investigation scripts outside the manuscript pipeline were not removed.

@@ -1,5 +1,7 @@
 # Fractional-power penalty — pendulum swing-up
 
-No current generic sweep has been recorded in this directory. Run the command
-in `README.md` into an empty record root to regenerate it. The validated current
-paper results stay local under `../paper_frac_exp_penalty/`.
+This directory is historical; its retired analyzer is not a current
+regeneration entry point.
+Current results are in the [tracked paper](../../../paper/paper_0805.pdf).
+For current training commands, see the [repository README](../../../README.md#reproduce-it);
+paper-specific reports and figures remain local and are not distributed.

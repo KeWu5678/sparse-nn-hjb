@@ -36,7 +36,7 @@ The figure check rejects missing included images and unreferenced PNGs in
 Saved-run reconstruction/evaluation belongs to `src/results.py`; rendering and
 export belong to `src/plots.py`. Paper-specific selection and feedback logic live
 in the local `scripts/paper/` workspace. See [plotting](../docs/plotting.md) and
-the [current-paper commands](../scripts/paper/README.md). Those local paper paths
+the local-only command guide `scripts/paper/README.md`. Those local paper paths
 require the original datasets, records and sidecars; they are not a clean-checkout
 reproduction guarantee.
 
@@ -49,12 +49,13 @@ New generic sweeps do not refresh the separately reviewed paper record trees.
 
 The `baseline`, `log_penalty`, `frac_exp_penalty`, `moment_penalty`, VDP `summary`
 and pendulum `region_split` directories retain their historical reports. Their
-unreferenced PNGs are archived; report image links point there where the image
-was available. These directories are not current regeneration entry points.
+unreferenced PNGs are archived locally and are not distributed with the
+repository; tracked reports do not embed or link to those unavailable images.
+These directories are not current regeneration entry points.
 
 Nineteen obsolete source files (5,709 lines) were moved, without changing their
 bytes, to the local archive
-[`outdated/experiment-code-cleanup-2026-09-12/`](../outdated/experiment-code-cleanup-2026-09-12/).
+`outdated/experiment-code-cleanup-2026-09-12/` (not included in a clean checkout).
 It contains the original paths, SHA-256 manifest, old READMEs and stale bytecode.
 The fourteen additive-moment files depend on the retired objective/configuration;
 the other five are historical analyzers with obsolete metric/solver contracts,
@@ -68,7 +69,9 @@ and preserved copies of the narrowed generators and shared renderer under
 `unreferenced_pngs/`, preserving repository-relative paths. Verify the images with
 `shasum -a 256 -c PNG_SHA256SUMS` from that archive subdirectory. The 36 included
 PNGs, datasets, run records, and historical report numbers were preserved;
-historical report changes are limited to image/reference paths.
+historical reports now label superseded training-coordinate metrics and remove
+links to unavailable images. Current physical-coordinate results are in the
+[tracked paper](../paper/paper_0805.pdf).
 
 Figure 12's known reference-selection defect is still a separate scientific
 correction. Its retained PNGs were not silently changed by this cleanup.
@@ -91,13 +94,13 @@ correction. Its retained PNGs were not silently changed by this cleanup.
    comes from leaky squared-ReLU / squared-ReLU families with spherical
    parameterization. They beat smooth activations in near-discontinuity error
    and preserve the expected near/far localization pattern.
-   Legacy summary: [docs/research/D3_harmonic_analysis/refs/legacy-analytical-search.md](../docs/research/D3_harmonic_analysis/refs/legacy-analytical-search.md)
+   Local-only summary: `docs/research/D3_harmonic_analysis/refs/legacy-analytical-search.md`.
 
 4. Archived semiconcave-versus-signed comparison.
    This historical study found no consistent advantage from the semiconcave
    parametrization. The implementation was retired by ADR 0012 because it is
    unused by the manuscript and current experiments; Git history preserves it.
-   Legacy summary: [docs/research/D4_max_plus/refs/legacy-semiconcave-comparison.md](../docs/research/D4_max_plus/refs/legacy-semiconcave-comparison.md)
+   Local-only summary: `docs/research/D4_max_plus/refs/legacy-semiconcave-comparison.md`.
 
 ## Migration Note
 

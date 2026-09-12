@@ -1,13 +1,22 @@
-# VDP summary — Algorithm 1 vs Algorithm 2
+# Historical VDP cross-experiment summary
 
-Cross-experiment summary at the fixed operating point **α = 1e-5**. Algorithm 1 =
+This superseded report retains the original run selection and numbers. Its
+relative errors were stored in normalized training coordinates; they have not
+been rescored as errors of the original-scale value function and gradient.
+The objectives and supported powers also predate the current solver. Do not
+compare these numbers or rankings with the [current paper](../../../paper/paper_0805.pdf).
+All figures described below are archived locally and are not distributed with
+this repository.
+
+Historical comparison at the fixed operating point **α = 1e-5**. Here “Algorithm 1” =
 profile insertion + log penalty (**γ = 1**), activations tanh/softplus/gaussian
 (from `../log_penalty`). Algorithm 2 = finite-step insertion + power penalty
-(**γ = 0**), ReLU^2/ReLU^5 (from `../frac_exp_penalty`). Three figures, three claims.
+(**γ = 0**), ReLU^2/ReLU^5 (from `../frac_exp_penalty`). These are historical
+labels, not an identification with the current paper's algorithms.
 
-Champion runs (lowest rel-H1 validation error at the fixed point)
+Historical champion runs (lowest stored validation error at the fixed point)
 
-| method | algorithm | neurons | rel H1 |
+| method | historical algorithm | neurons | stored rel H1 (training coordinates) |
 | ------ | --------- | ------- | ------ |
 | tanh | Algo 1 (profile, γ=1) | 66 | 0.314 |
 | softplus | Algo 1 (profile, γ=1) | 27 | 0.292 |
@@ -17,51 +26,41 @@ Champion runs (lowest rel-H1 validation error at the fixed point)
 
 ## Frontier — sparsity at equal accuracy
 
-![frontier](../../../outdated/experiment-code-cleanup-2026-09-12/unreferenced_pngs/experiments/01_vdp/summary/figures/frontier.png)
-
-Each curve is a champion's insertion growth trajectory (neurons vs cumulative-min
-rel-H1). **Algorithm 2 (ReLU^k) reaches the best gradient accuracy (rel H1 ≈ 0.10)
-with ~20 neurons**, where the best Algorithm-1 activation (gaussian) needs ~113 for
-the same accuracy; softplus/tanh plateau higher. Equal accuracy, a fraction of the
-atoms.
+The archived curves show each champion's insertion trajectory (neurons versus
+cumulative-minimum stored relative H1). In that historical metric, ReLU^5 reached
+approximately 0.10 with 21 neurons and Gaussian with 113. This is not a
+current original-coordinate accuracy-per-neuron comparison.
 
 ## Feedback — both algorithms stabilize
 
-| ‖y(t)‖ | \|u(t)\| |
-| --- | --- |
-| ![state](../../../outdated/experiment-code-cleanup-2026-09-12/unreferenced_pngs/experiments/01_vdp/summary/figures/feedback_state.png) | ![control](../../../outdated/experiment-code-cleanup-2026-09-12/unreferenced_pngs/experiments/01_vdp/summary/figures/feedback_control.png) |
-
-Closed-loop rollout from y₀=(2, 1) under the synthesized feedback û(x) =
-−∂_{x₂}V̂/(2β), beside the true control.
+Historical closed-loop rollout from y₀=(2, 1) under the synthesized feedback
+û(x) = −∂_{x₂}V̂/(2β), beside the reference control.
 
 | controller | neurons | stabilizes? | closed-loop cost |
 | ---------- | ------- | ----------- | ---------------- |
-| true | — | yes | 6.48 |
+| reference | — | yes | 6.48 |
 | softplus | 27 | yes | 6.68 |
 | gaussian | 113 | yes | 6.51 |
 | relu5 | 21 | yes | 6.49 |
 
-Every controller drives ‖y(t)‖ to the origin at ≈ the true optimal cost — sparsity,
-not control viability, is what separates the algorithms on this smooth problem.
+These archived runs stabilized the system near the reference rollout cost.
+The table is historical rollout evidence, not a claim of certified optimality
+or a comparison of the current paper's selected models.
 
-## Weights — a structural portrait (keep one variant)
+## Weights — archived structural portraits
 
 The learned atoms differ structurally: Algorithm 2 constrains them to the unit
 sphere S², Algorithm 1 does not (gaussian spans a huge norm range). This is a
-*portrait*, not the cause of the accuracy/sparsity gap — that mechanism (σ′
-diversity, the penalty) is in the previous section. Dot color = sign of the outer
+*portrait*, not evidence of the cause of an accuracy/sparsity gap.
+In the archived figures, dot color = sign of the outer
 weight, size ∝ |outer weight|.
 
 **Variant A — stereographic projection of S²** (atoms radially projected onto the
 sphere; green circle = equator):
 
-| gaussian (φ_log, γ=1) | softplus (φ_log, γ=1) | ReLU^5 (|c|^q, q=1/3) |
-| --- | --- | --- |
-| ![gaussian](../../../outdated/experiment-code-cleanup-2026-09-12/unreferenced_pngs/experiments/01_vdp/summary/figures/weights_stereo_gaussian.png) | ![softplus](../../../outdated/experiment-code-cleanup-2026-09-12/unreferenced_pngs/experiments/01_vdp/summary/figures/weights_stereo_softplus.png) | ![relu5](../../../outdated/experiment-code-cleanup-2026-09-12/unreferenced_pngs/experiments/01_vdp/summary/figures/weights_stereo_relu5.png) |
+The three archived panels compare Gaussian, softplus and ReLU^5.
 
 **Variant B — raw (a₁, a₂, b) with unit-sphere wireframe** (ReLU on the sphere,
 Algo-1 scattered off it):
 
-| gaussian (φ_log, γ=1) | softplus (φ_log, γ=1) | ReLU^5 (|c|^q, q=1/3) |
-| --- | --- | --- |
-| ![gaussian](../../../outdated/experiment-code-cleanup-2026-09-12/unreferenced_pngs/experiments/01_vdp/summary/figures/weights_raw3d_gaussian.png) | ![softplus](../../../outdated/experiment-code-cleanup-2026-09-12/unreferenced_pngs/experiments/01_vdp/summary/figures/weights_raw3d_softplus.png) | ![relu5](../../../outdated/experiment-code-cleanup-2026-09-12/unreferenced_pngs/experiments/01_vdp/summary/figures/weights_raw3d_relu5.png) |
+The same three models are shown in the archived raw-coordinate panels.

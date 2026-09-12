@@ -110,8 +110,10 @@ class History:
     total_variation: List[float] = field(default_factory=list)
     radius_r95: List[float] = field(default_factory=list)
     radius_max: List[float] = field(default_factory=list)
-    #: Radius used this iteration: min(theorem radius, exp(5)), the numerical
-    #: fallback exp(5), or 1 for a unit-sphere dictionary. None means no search.
+    #: Cap of the search that produced the support being evaluated:
+    #: min(theorem radius, exp(5)), fallback exp(5), or 1 on the unit sphere.
+    #: None means no search. In correction-first order, this is the preceding
+    #: insertion (initialization for row 0); the final insertion is unrecorded.
     search_radius: List[float | None] = field(default_factory=list)
     #: 1 = theorem radius available, 0 = requested but a required hypothesis
     #: failed (fallback used), -1 = not requested (radial_cap=fixed, or a
@@ -135,9 +137,10 @@ class History:
     ) -> None:
         """Evaluate the current model and append one iteration's record.
 
-        ``search_radius``/``theorem_applied`` describe the insertion search cap
-        this iteration used. They are what separates a ``radial_cap=theorem``
-        run whose hypothesis failed from a ``radial_cap=fixed`` run: both search
+        ``search_radius``/``theorem_applied`` describe the search that produced
+        the support being evaluated, in either loop order. They separate a
+        ``radial_cap=theorem`` run whose hypothesis failed from a
+        ``radial_cap=fixed`` run: both search
         inside ``exp(5)``, and without these the records are identical.
         """
         train_pred = model.predict_tensors(data_train[0])
@@ -172,8 +175,9 @@ class History:
         # Only reporting errors undo the data transform. Fidelity, regularizer,
         # and best-checkpoint selection above stay in the training objective.
         train_target, valid_target = data_train[1:], data_valid[1:]
-        if self.reporting_normalizer is not None:
-            denormalize = self.reporting_normalizer.denormalize_tensors
+        normalizer = getattr(self, "reporting_normalizer", None)
+        if normalizer is not None:
+            denormalize = normalizer.denormalize_tensors
             train_pred, train_target = denormalize(*train_pred), denormalize(*train_target)
             valid_pred, valid_target = denormalize(*valid_pred), denormalize(*valid_target)
         l2t, gt, h1t = relative_errors(*train_pred, *train_target)

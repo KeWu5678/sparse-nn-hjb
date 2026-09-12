@@ -29,6 +29,7 @@ import torch
 
 from ..SSN.prox import power_prox
 from .moment import moment_weight
+from .radius import FIXED_LOG_CLAMP
 
 logger = logging.getLogger(__name__)
 
@@ -177,12 +178,12 @@ def _generate_candidates(
                         keep[j] = False
         return a_cands[keep], b_cands[keep]
 
-    # Homogeneuous models use the sampled directions directly;
-    # Nonhomogeneous models give each direction a log-uniform radius.
+    # Homogeneous models use the sampled directions directly;
+    # nonhomogeneous models give each direction a log-uniform radius (ADR 0006).
     a_t, b_t = sample_sphere(N)
     existing_unit = None
     if not use_sphere:
-        r_max = float(radius) if radius is not None else math.exp(5.0)
+        r_max = float(radius) if radius is not None else math.exp(FIXED_LOG_CLAMP)
         lo, hi = math.log(math.exp(-3.0)), math.log(max(r_max, math.exp(-3.0) * 1.001))
         u = torch.rand(a_t.shape[0], dtype=torch.float64)
         r = torch.exp(lo + (hi - lo) * u)
@@ -207,7 +208,6 @@ def _generate_candidates(
         a_t, b_t = maximize_batch(a_t, b_t, steps=lbfgs_steps, lr=lbfgs_lr)
         if not use_sphere:
             U = torch.cat([a_t, b_t.reshape(-1, 1)], dim=1)
-            r_max = float(radius) if radius is not None else math.exp(5.0)
             inside = torch.linalg.vector_norm(U, dim=1) <= r_max
             discarded_outside += int((~inside).sum().item())
             a_t, b_t = a_t[inside], b_t[inside]
@@ -261,6 +261,8 @@ def profile_threshold(
     Normalized Algorithm 1 accepts ``|P(omega)| / w_p(omega) > alpha``.
     The ReLU--L1 baseline has sphere-normalized inner parameters but no moment
     normalization, so it accepts ``|P(omega)| > alpha``.
+    Both use the implemented log/L1 family with ``L_phi = phi'(0+) = 1``;
+    for a general penalty the threshold would be ``alpha * L_phi``.
 
     Candidates are ranked by their margin above the applicable threshold. For
     Algorithm 1 this is the certificate violation

@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import os
 import pickle
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -112,6 +113,15 @@ class SavedRun:
     iteration: int
     normalization_recovered: bool = False
 
+    @property
+    def stored_metric_coordinates(self) -> str:
+        """Coordinates of recorded errors, not of freshly recomputed metrics.
+
+        Records predating physical reporting used training coordinates, even
+        when they already saved a normalization transform.
+        """
+        return self.record.get("metric_coordinates", "training")
+
 
 def load_run(record_path: str | Path, *, recover_legacy_normalization: bool = False) -> SavedRun:
     """Restore one run's saved best checkpoint and recorded data transform.
@@ -120,6 +130,9 @@ def load_run(record_path: str | Path, *, recover_legacy_normalization: bool = Fa
     reconstructs the old max-absolute transform only when the field is absent,
     and requires reproducing the saved training-coordinate validation errors.
     It never repairs a contradictory/null transform or writes the Run Record.
+    Missing ``metric_coordinates`` means stored errors use training coordinates;
+    loading a normalized run with such errors warns against mixing them with
+    freshly recomputed physical errors. Unknown coordinate labels are rejected.
     """
     path = Path(record_path)
     record = json.loads(path.read_text(encoding="utf-8"))
@@ -132,6 +145,9 @@ def _restore_run(
 ) -> SavedRun:
     if record.get("status") != "completed":
         raise ValueError(f"expected a completed Run Record: {path}")
+    metric_coordinates = record.get("metric_coordinates", "training")
+    if metric_coordinates not in ("training", "physical"):
+        raise ValueError(f"unsupported metric_coordinates={metric_coordinates!r} in {path}")
     cfg = record["config"]
     model_cfg = cfg["model"]
     if model_cfg["kind"] != "signed":
@@ -155,6 +171,13 @@ def _restore_run(
             raise ValueError(f"normalized run has no recorded normalization: {path}")
         normalizer = _recover_legacy_normalizer(record, model)
         recovered = True
+    if normalizer is not None and metric_coordinates == "training":
+        warnings.warn(
+            "Stored metrics use training coordinates; validation_metrics and "
+            "evaluate_history recompute physical-coordinate errors. "
+            "Do not compare these metrics without rescoring.",
+            UserWarning, stacklevel=2,
+        )
     return SavedRun(path, record, history, model, normalizer,
                     int(_field(history, "best_iteration")), recovered)
 
@@ -233,7 +256,7 @@ def _validation_samples(record: dict[str, Any], samples=None) -> TensorSamples:
 
 def _recover_legacy_normalizer(record: dict[str, Any], model) -> ValueSampleNormalizer:
     """Explicit adapter for records written before data transforms were saved."""
-    if record.get("metric_coordinates") is not None:
+    if record.get("metric_coordinates", "training") != "training":
         raise ValueError("normalization recovery is only supported for legacy training-coordinate metrics")
     samples = load_value_samples(record["config"]["data"]["path"])
     normalizer = ValueSampleNormalizer.fit(samples)

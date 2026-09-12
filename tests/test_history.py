@@ -1,4 +1,5 @@
 import math
+import pickle
 
 import numpy as np
 import pytest
@@ -129,6 +130,9 @@ def test_physical_reporting_does_not_change_objectives_snapshots_or_selection():
     data = x, v, dv
     objective = Objective(alpha=0.1, gamma=0.2, normalized=True)
     unchanged = History()
+    # Old pickles predate the optional reporting transform.
+    del unchanged.reporting_normalizer
+    unchanged = pickle.loads(pickle.dumps(unchanged))
     physical = History(reporting_normalizer=normalizer)
     for coefficient in (1.0, 2.0):
         model.set_atoms(

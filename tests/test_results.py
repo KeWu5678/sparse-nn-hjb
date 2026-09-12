@@ -50,6 +50,7 @@ def record_path(tmp_path):
             "env": {"seed": 42},
         },
         "normalization": {"x_scale": [2., 4.], "v_scale": 8.},
+        "metric_coordinates": "physical",
         "artifacts": [{"name": "fit_history", "path": artifact.name}],
     }
     path.write_text(json.dumps(record))
@@ -67,6 +68,7 @@ def test_saved_run_uses_recorded_scaling_not_dataset_maxima(record_path):
     assert run.iteration == 1
     # Objective/measure normalization is not another transform of V.
     assert run.record["config"]["model"]["moment_order"] == 99.
+    assert run.stored_metric_coordinates == "physical"
 
 
 def test_checkpoint_override_does_not_change_saved_model(record_path):
@@ -102,7 +104,12 @@ def test_loading_and_validation_split_leave_rng_unchanged(record_path):
 
 
 def test_rescoring_ignores_stored_normalized_errors(record_path):
-    run = load_run(record_path)
+    record = json.loads(record_path.read_text())
+    record.pop("metric_coordinates")
+    record_path.write_text(json.dumps(record))
+    with pytest.warns(UserWarning, match="Stored metrics use training coordinates"):
+        run = load_run(record_path)
+    assert run.stored_metric_coordinates == "training"
     raw = record_path.read_bytes()
     x, v, dv = validation_samples(run)
     expected = relative_errors(*predict_physical(run, x), v, dv)
@@ -114,6 +121,23 @@ def test_rescoring_ignores_stored_normalized_errors(record_path):
     assert curve["rel_h1"][1] == expected[2]
     assert curve["rel_h1"][0] == relative_errors(*predict_physical(run, x, 0), v, dv)[2]
     assert run.history.err_h1_val == [123., 456.]
+    assert record_path.read_bytes() == raw
+
+
+@pytest.mark.parametrize("coordinates", ["training", "physical", "unknown", None])
+def test_stored_metric_coordinate_contract(record_path, coordinates):
+    record = json.loads(record_path.read_text())
+    record["metric_coordinates"] = coordinates
+    record_path.write_text(json.dumps(record))
+    raw = record_path.read_bytes()
+    if coordinates not in ("training", "physical"):
+        with pytest.raises(ValueError, match="metric_coordinates"):
+            load_run(record_path)
+    elif coordinates == "training":
+        with pytest.warns(UserWarning, match="Stored metrics use training coordinates"):
+            assert load_run(record_path).stored_metric_coordinates == coordinates
+    else:
+        assert load_run(record_path).stored_metric_coordinates == coordinates
     assert record_path.read_bytes() == raw
 
 
@@ -196,9 +220,13 @@ def test_surface_grid_uses_same_unclipped_prediction(record_path):
     np.testing.assert_array_equal(value.ravel(), expected.numpy().ravel())
 
 
-def test_explicit_legacy_recovery_must_reproduce_saved_metrics(record_path):
+@pytest.mark.parametrize("coordinates", [None, "training"])
+def test_explicit_legacy_recovery_must_reproduce_saved_metrics(record_path, coordinates):
     record = json.loads(record_path.read_text())
     record.pop("normalization")
+    record.pop("metric_coordinates")
+    if coordinates is not None:
+        record["metric_coordinates"] = coordinates
     with np.load(record["config"]["data"]["path"]) as samples:
         indices = np.random.RandomState(42).permutation(10)[6:]
         x = samples["x"][indices] / [19., 20.]
@@ -219,7 +247,8 @@ def test_explicit_legacy_recovery_must_reproduce_saved_metrics(record_path):
     raw = record_path.read_bytes()
     with pytest.raises(ValueError, match="no recorded normalization"):
         load_run(record_path)
-    run = load_run(record_path, recover_legacy_normalization=True)
+    with pytest.warns(UserWarning, match="Stored metrics use training coordinates"):
+        run = load_run(record_path, recover_legacy_normalization=True)
     assert run.normalization_recovered
     np.testing.assert_array_equal(run.normalizer.x_scale, [19., 20.])
     assert run.normalizer.v_scale == 10.
