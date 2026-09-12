@@ -83,14 +83,6 @@ scripts/regenerate_paper_artifacts.sh
 scripts/refresh_algorithm2_paper_runs.sh
 tests/test_paper_artifact_preflight.py
 
-# ---- Terraform (deploy/terraform/) — .terraform.lock.hcl stays tracked ----
-deploy/terraform/.terraform/
-deploy/terraform/*.tfstate
-deploy/terraform/*.tfstate.*
-deploy/terraform/*.tfvars
-deploy/terraform/*.tfvars.json
-!deploy/terraform/example.tfvars
-
 # ---- paper/ (LaTeX working dir) ----
 # Only the current source and compiled publication are version-controlled.
 # Bibliography, figures, auxiliary files, and working notes stay local.
@@ -103,3 +95,6 @@ docs/paper_archive/
 
 # domain-language notes are local working docs
 CONTEXT.md
+
+# ---- Local MLflow container state (deploy/docker/) ----
+deploy/docker/mlflow-data/

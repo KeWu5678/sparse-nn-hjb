@@ -130,8 +130,9 @@ paths.
   core are checked against stored reference solutions, not just unit
   assertions (`tests/`).
 - **Runs are records**: each training run writes a JSON record under
-  `rawdata/logs/multirun/`; `make mlflow-backfill` publishes them to the MLflow
-  tracking stack defined in [`deploy/`](deploy). See
+  `rawdata/logs/multirun/`; those records are the source of truth, and
+  `scripts/upload_run_records_to_mlflow.py` projects them into the MLflow
+  dashboard defined in [`deploy/`](deploy). See
   [docs/adr/mlflow.md](docs/adr/mlflow.md).
 - **Publication artifacts are local**: experiment run records, generated
   reports, figures, and paper-support scripts are intentionally not tracked.
@@ -144,9 +145,9 @@ paths.
 | --- | --- |
 | `src/` | Library code: signed shallow networks, `PDAP/`, `SSN/`, data/evaluation/plotting |
 | `conf/` | Hydra configs: data, model, evaluation, experiment sweeps |
-| `scripts/` | Training entry point (`train.py`), dataset generators, MLflow backfill |
+| `scripts/` | Training entry point (`train.py`), dataset generators, MLflow importer |
 | `experiments/` | Experiment definitions and legacy curated studies; current paper outputs stay local |
 | `tests/` | pytest suite, including golden-output solver tests |
 | `docs/` | Research program, claims registry, ADRs, and MLflow guide |
-| `deploy/` | Terraform for the MLflow tracking server |
+| `deploy/` | Containerized MLflow tracking server |
 | `vault/` | Deeper implementation notes |

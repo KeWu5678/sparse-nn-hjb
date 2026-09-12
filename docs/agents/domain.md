@@ -18,8 +18,8 @@ Single-context repo (most repos):
 /
 ├── CONTEXT.md
 ├── docs/adr/
-│   ├── 0001-self-hosted-mlflow-on-ec2.md
-│   └── 0002-mlflow-as-run-record-backend.md
+│   ├── 0002-mlflow-as-run-record-backend.md
+│   └── 0014-retire-the-ec2-mlflow-target.md
 └── src/
 ```
 
