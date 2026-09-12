@@ -76,4 +76,4 @@ straddles the curve (221 near-side / 169 far-side); 44% of samples within 0.3
 of the switching curve have an opposite-side neighbour within 0.3 (0% in the one-sided
 data). The residual one-sided stretches are arms whose far branch lies beyond
 the `value_max` integration cap. Downstream use and findings:
-`experiments/03_region_split_pendulum/`.
+`experiments/02_pendulum/region_split/`.

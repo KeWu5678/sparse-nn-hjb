@@ -20,6 +20,16 @@ axes. Each experiment directory owns the research question, analysis, figures,
 and Markdown results, while `scripts/train.py` owns one Hydra-composed PDAP
 training config point.
 
+The public Make surface is deliberately small: `help`, `openloop`, and `sweep`.
+An earlier 381-line Makefile also encoded paper regeneration, study-specific
+analysis, follow-up grids, infrastructure, and repeated Hydra launch policy. Once
+the active experiment configurations were collapsed onto shared model and data
+axes, those targets no longer represented independent public workflows. We
+removed them instead of splitting them into Make includes or introducing a
+workflow dispatcher and another YAML schema. Add an orchestration layer only
+when a second stable, repeated workflow cannot be expressed as an experiment
+configuration passed to `sweep`.
+
 The generic runner boundary is deliberately narrow: run one independent PDAP
 training config point on one dataset, compose the configured PDAP model, train
 it, write a Run Record, and save only minimal generic artifacts such as a config
@@ -28,7 +38,9 @@ Following ADR-0002, the full fit result is a Run Artifact referenced by the Run
 Record, not embedded in the Run Record JSON.
 All experiment data loading is centralized around the shared `(x, V(x), dV(x))`
 value-sample contract; experiments select datasets rather than defining custom
-loaders.
+loaders. The loader accepts the legacy object-backed `.npy` datasets with
+`allow_pickle=True`; these are trusted local project artifacts, not an
+untrusted-input boundary. New value-sample generators write plain `.npz` arrays.
 Generic PDAP training normalizes value samples by default as pre-training data
 preprocessing, not as optimizer behavior. The value-sample loader and reversible
 normalization transform should live in `src/data.py`, and the fitted transform
@@ -59,8 +71,8 @@ figures, while notebooks remain optional interactive views over the same Run
 Records and artifacts.
 
 The legacy VDP notebooks classify into separate experiments: `pdpa_vdp.ipynb`
-belongs to `activationsearch`, while `pdpa_v3_vdp.ipynb` belongs to
-`penaltypowers`. `experiment_analysis.ipynb` is still unclassified.
+belongs to `log_penalty`, while `pdpa_v3_vdp.ipynb` belongs to
+`frac_exp_penalty`. `experiment_analysis.ipynb` is still unclassified.
 
 We chose this over making notebooks the experiment source of truth, over
 continuing to grow `autoresearch/`, and over putting every runner in top-level

@@ -29,7 +29,7 @@ mpl.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 from scipy.interpolate import griddata  # noqa: E402
 
-from src.data import DATA_DIR  # noqa: E402
+from src.data import DATA_DIR, load_value_samples  # noqa: E402
 from src.plots import (  # noqa: E402
     plot_value_scatter3d,
     plot_vdp_value_with_gradient_arrows2d,
@@ -78,7 +78,7 @@ def _surface(dataset) -> Path:
 
 
 def main() -> int:
-    dataset = np.load(DATA, allow_pickle=True)
+    dataset = load_value_samples(DATA)
 
     fig, ax = plot_value_scatter3d(dataset, title="", show=False, colorbar=False, azim=-105.0)
     _ref_style(ax, np.asarray(dataset["x"]))

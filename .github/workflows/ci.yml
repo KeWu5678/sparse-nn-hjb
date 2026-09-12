@@ -8,7 +8,7 @@ on:
   push:
     branches: [main]
     paths-ignore:
-      - 'papar/**'
+      - 'paper/**'
       - '**.md'
       - '.gitignore'
   pull_request:

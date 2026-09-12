@@ -102,7 +102,8 @@ def grade(raw, poly: Polygon):
 
 
 def main():
-    raw = pickle.load(open(CACHE, "rb"))
+    with CACHE.open("rb") as stream:
+        raw = pickle.load(stream)
     # Cap at value <= 35 (matches the reference's value-31 trim intent) instead of
     # the erratic-step trim, which over-cut the outer arms.
     arms = track_arms(raw, np.arange(26.0, 35.0, 0.25))
