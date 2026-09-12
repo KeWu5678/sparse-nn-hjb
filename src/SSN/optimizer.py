@@ -45,7 +45,6 @@ class SSN(Optimizer):
         params:        parameters to optimize (outer weights only).
         alpha, gamma:  regularization / non-convexity parameters.
         th:            L1 (th=1) <-> non-convex (th=0) interpolation (default 0.5).
-        lr:            step mixing factor (default 1.0).
         max_ls_iter:   max line-search iterations (levenberg_marquardt).
         tolerance_ls:  accept step if loss_new <= tolerance_ls * loss.
         power:         activation power; sets q = 2/(power+1).
@@ -68,7 +67,6 @@ class SSN(Optimizer):
         alpha: float,
         gamma: float,
         th: float = 0.5,
-        lr: float = 1.0,
         max_ls_iter: int = 500,
         tolerance_ls: float = 1.0 + 1e-8,
         power: float = 1.0,
@@ -88,7 +86,6 @@ class SSN(Optimizer):
         # power/q, data_hessian) lives in instance attributes; transient
         # cross-step state (trust-region ``sigma``) lives in ``self.state``.
         defaults = {
-            "lr": lr,
             "alpha": alpha,
             "gamma": gamma,
             "th": th,
@@ -302,7 +299,6 @@ class SSN(Optimizer):
 
         group = self.param_groups[0]
         alpha, th, gamma = group["alpha"], group["th"], group["gamma"]
-        lr = float(group.get("lr", 1.0))  # mixing factor for step size
         self.last_step_success = True
 
         if self.q < 1.0:
@@ -333,5 +329,5 @@ class SSN(Optimizer):
 
         strategy = _STRATEGIES[group["method"]]
         return strategy(
-            self, closure, loss, params, q, Gq, DG, inverse_step, lr
+            self, closure, loss, params, q, Gq, DG, inverse_step
         )

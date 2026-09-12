@@ -1,0 +1,11 @@
+# Registered model: signed network with profile insertion.
+#
+# The file carries only what makes this a distinct model variant. Objective and
+# study parameters (activation, power, alpha, gamma, moment_order, loss_weights)
+# belong to the study and are set in conf/experiment/*.
+#
+# The loop-side axes of Algorithm 1 -- insert_init, insert_mode,
+# correction_guard, loop_order, radial_cap -- live under `training`, not here,
+# and are set by the paper_* experiment configs.
+kind: signed
+insertion: profile

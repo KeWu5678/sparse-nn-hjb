@@ -1,0 +1,35 @@
+# @package _global_
+# Algorithm 1 of paper/paper_0805.tex: normalized-measure objective,
+# candidate-specific insertion coefficient, guarded correction, insertion-first
+# loop, computable search radius.
+#
+# moment_order is fixed at 2.01 here; the p-study varies it separately.
+
+name: ${hydra:runtime.choices.data}_log_penalty
+
+model:
+  power: 1.0
+  alpha: 1e-5
+  moment_order: 2.01
+
+training:
+  insert_init: guaranteed
+  correction_guard: true
+  loop_order: insertion_first
+  radial_cap: theorem
+
+data:
+  normalize: true
+
+hydra:
+  sweep:
+    # One subtree per activation: the activation is this experiment's main axis.
+    subdir: ${hydra:runtime.choices.data}/${hydra:runtime.choices.experiment}/${model.activation}/${hydra.job.num}
+  sweeper:
+    params:
+      +model: profile
+      +data: vdp,pendulum
+      model.activation: leaky_relu,softplus,tanh,gaussian,gausscent_1,matern52,gelu_squared
+      model.alpha: 1e-2,1e-3,1e-4,1e-5
+      model.gamma: 0,0.1,1,10
+      model.loss_weights: "[1.0,0.0],[1.0,1.0]"

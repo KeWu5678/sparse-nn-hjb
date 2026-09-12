@@ -68,6 +68,17 @@ Reference implementation: `/Users/ruizhechao/Documents/NonConvexSparseNN/`
 
 ## Critical implementation notes
 
+### SSN step control (clarified 2026-09-09)
+
+The project's SSN correction does not use a tunable learning rate. Step control
+comes from adaptive Levenberg–Marquardt damping or the Steihaug trust-region
+radius. The redundant `training.lr` / `SolverConfig.lr` / `SSN(lr=...)` plumbing
+has been removed. This preserves the former `lr=1` behavior used by the tracked
+experiments. The separate `training.lbfgs_lr` still controls the insertion
+search's L-BFGS optimizer.
+
+### Numerical safeguards
+
 1. **Fractional SSN requires a nonzero warm start**: Algorithm 2 first computes
    the exact one-atom coefficient. Its smallest nonzero magnitude fixes the
    proximal scale for the entire correction.

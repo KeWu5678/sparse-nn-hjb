@@ -30,7 +30,7 @@ __all__ = ["solve_levenberg_marquardt", "solve_steihaug_cg"]
 def solve_levenberg_marquardt(
     opt, closure: Callable[[], Tensor], loss: Tensor,
     params: Tensor, q: Tensor, Gq: Tensor, DG: Tensor,
-    inverse_step: float, lr: float,
+    inverse_step: float,
 ) -> Tensor:
     """Damped-Newton step with backtracking on the damping ``theta``."""
     group = opt.param_groups[0]
@@ -62,7 +62,7 @@ def solve_levenberg_marquardt(
     while (torch.isnan(loss_new) or loss_new > tolerance_ls * loss) and iter_ls < max_ls_iter:
         try:
             theta_safe = max(theta, min_theta)
-            qnew = q - lr * torch.linalg.solve(DG + (1 / theta_safe) * I, Gq)
+            qnew = q - torch.linalg.solve(DG + (1 / theta_safe) * I, Gq)
             _, loss_new = opt._trial(closure, qnew, inverse_step)
             theta = max(theta / 4.0, min_theta)
         except Exception as e:  # noqa: BLE001
@@ -89,7 +89,7 @@ def solve_levenberg_marquardt(
 def solve_steihaug_cg(
     opt, closure: Callable[[], Tensor], loss: Tensor,
     params: Tensor, q: Tensor, Gq: Tensor, DG: Tensor,
-    inverse_step: float, lr: float,
+    inverse_step: float,
 ) -> Tensor:
     """Trust-region step via a truncated/Steihaug CG solve (mpcg) with radius sigma."""
     group = opt.param_groups[0]
@@ -103,7 +103,7 @@ def solve_steihaug_cg(
 
     dq, tr_flag, pred, _, _ = mpcg(DG, -Gq, 1e-3, kmaxit, sigma, DP)
 
-    qnew: Tensor = q + lr * dq
+    qnew: Tensor = q + dq
     _, loss_new = opt._trial(closure, qnew, inverse_step)
 
     if not torch.isfinite(loss_new) or (loss_new > loss + 1e-10 * torch.abs(loss)):

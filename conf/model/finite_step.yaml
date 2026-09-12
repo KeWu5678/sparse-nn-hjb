@@ -1,0 +1,5 @@
+# Registered model: signed network with finite-step insertion.
+#
+# See conf/model/profile.yaml for why only kind and insertion live here.
+kind: signed
+insertion: finite_step

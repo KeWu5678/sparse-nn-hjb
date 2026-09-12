@@ -19,11 +19,9 @@ it is an unnormalized profile comparator rather than an Algorithm 1 cell.
 | `model.loss_weights` | [1,0] (value only), [1,1] (value and gradient) |
 
 Fixed settings include `model.power=1`, normalized data, the pendulum region
-evaluation, and seed 42. Run into an empty record root with:
-
-```sh
-make sweep EXPERIMENT=pendulum/log_penalty
-```
+evaluation, and seed 42. This sweep's config (`conf/experiment/pendulum/log_penalty.yaml`) was retired on 2026-09-10;
+only the `paper_*` experiments are runnable now. The archived records under
+`rawdata/logs/multirun/pendulum/log_penalty/` remain readable by `analysis.py`.
 
 The former report and figures used the retired unweighted objective and are not
 current evidence; they remain available from Git history.

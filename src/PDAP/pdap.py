@@ -155,7 +155,7 @@ class PDAP:
             moment_order=m.moment_order, normalized=normalized,
         )
         self.solver = SolverConfig(
-            lr=t.lr, method=t.method, max_ls_iter=t.max_ls_iter,
+            method=t.method, max_ls_iter=t.max_ls_iter,
             tolerance_ls=t.tolerance_ls, tolerance_grad=t.tolerance_grad, sigmamax=t.sigmamax,
         )
         # outer-loop + insertion settings

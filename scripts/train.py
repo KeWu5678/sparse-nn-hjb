@@ -3,12 +3,12 @@
 
 A run = pick a registered model + a data source, override the rest::
 
-    python scripts/train.py model=log_penalty model.activation=softplus model.gamma=10
-    python scripts/train.py -m model.gamma=0,1e-2,1e-1,1,10 env.seed=42,43,44
+    python scripts/train.py +model=profile +data=vdp model.activation=softplus
+    python scripts/train.py -m +experiment=log_penalty
 
 This entry is domain-agnostic — it loads a ``.npy``/``.npz`` with keys ``x, v, dv`` and
-fits the PDAP model described by the config. The default ``data=vdp`` reproduces a
-single VDP signed-profile run.
+fits the PDAP model described by the config. With no group selected, the schema
+defaults reproduce a single VDP signed-profile run.
 """
 
 from __future__ import annotations
@@ -33,13 +33,14 @@ if hasattr(argparse.ArgumentParser, "_check_help"):
 import hydra
 import numpy as np
 import torch
+from hydra.core.config_store import ConfigStore
 from hydra.core.hydra_config import HydraConfig
 from omegaconf import DictConfig, ListConfig, OmegaConf
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-import src.config.store  # noqa: F401  — registers `config_schema` with Hydra's ConfigStore
+from src.config.schema import ExperimentConfig
 from src.data import load_value_samples, normalize_value_samples, split_value_samples
 from src.eval import distance_binned_error, region_split_errors
 from src.experiment_logging import ExperimentRun
@@ -49,7 +50,6 @@ from src.paths import DATA_DIR
 from src.PDAP import PDAP
 
 logger = logging.getLogger(__name__)
-
 
 def _slug(value: object) -> str:
     slug = re.sub(r"[^A-Za-z0-9]+", "", str(value).lower())
@@ -162,6 +162,9 @@ def region_split_metrics(cfg, model, data, normalizer) -> dict:
         )
     return metrics
 
+# `conf/config.yaml` pulls in `config_schema` via its defaults list, so the typed
+# base must be in the ConfigStore before @hydra.main composes below.
+ConfigStore.instance().store(name="config_schema", node=ExperimentConfig)
 
 @hydra.main(version_base=None, config_path="../conf", config_name="config")
 def main(cfg: DictConfig) -> None:

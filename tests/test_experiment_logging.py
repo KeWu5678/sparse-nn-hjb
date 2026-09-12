@@ -144,6 +144,10 @@ def test_experiment_run_preserves_runner_summary_fields(tmp_path):
         name="activation_search",
         run_id="relu_seed42",
         config={"activation": "relu", "seed": 42},
+        provenance={
+            "coefficient_solver": "global_prox_warmstart_scale",
+            "rho": 0.9,
+        },
     )
 
     path = run.finish(summary={"activation": "relu", "seed": 42, "best_score": 18.3})
