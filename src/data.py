@@ -96,6 +96,13 @@ class ValueSampleNormalizer:
         gradient_phys = np.asarray(gradient, dtype=np.float64) * (self.v_scale / self.x_scale)
         return value_phys, gradient_phys
 
+    def denormalize_tensors(
+        self, value: torch.Tensor, gradient: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Recover original V and dV units, preserving dtype, device, and autograd."""
+        gradient_scale = gradient.new_tensor(self.v_scale / self.x_scale)
+        return value * self.v_scale, gradient * gradient_scale
+
     def to_dict(self) -> dict[str, Any]:
         return {"x_scale": self.x_scale.tolist(), "v_scale": self.v_scale}
 

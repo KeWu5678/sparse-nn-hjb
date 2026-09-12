@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Centralized plotting helpers for value-function / experiment visualization.
+"""Shared rendering for value-function experiments and current-paper figures.
 
-All figure-producing helpers live here. Tabular summaries live in
-``src/metric.py``; the shared result loader ``_load_results`` is imported from
-there to avoid duplication.
+Current-paper renderers accept prepared arrays; ``src.results`` owns saved-model
+loading and physical prediction. Legacy convenience wrappers remain available.
+Renderers are limited to the manuscript's included figures.
+Tabular summaries live in ``src/metric.py``.
 """
 
 import logging
 import os
+from pathlib import Path
 from typing import Any, Optional, Sequence, Tuple
 
 _REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
@@ -24,7 +26,166 @@ import numpy as np
 import torch
 from matplotlib.colors import LinearSegmentedColormap
 
-from .metric import _load_results
+from .plotstyle import FRONTIER_RC, PALETTE, apply_publication_style, style_frontier_axes
+from .results import history_atoms, model_from_history
+
+
+def save_figure(fig, path, *, dpi=300, tight=True, pad=2.0, close=True,
+                formats=None, palette_colors=None, **kwargs):
+    """Save a publication figure without changing the arrays used to draw it.
+
+    Layout and bbox choices are explicit so existing figure implementations keep
+    their geometry. ``formats`` is retained for legacy callers; new callers use
+    a PNG path. Returns the saved paths.
+    """
+    path = Path(path)
+    formats = formats or [path.suffix.lstrip(".") or "png"]
+    if tight:
+        fig.tight_layout(pad=pad)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    saved = []
+    for fmt in formats:
+        out = path.with_suffix(f".{fmt}")
+        fig.savefig(out, dpi=dpi, **kwargs)
+        if palette_colors is not None:
+            from PIL import Image
+            with Image.open(out) as image:
+                image.convert("P", palette=Image.Palette.ADAPTIVE,
+                              colors=palette_colors).save(out, optimize=True)
+        saved.append(out)
+    if close:
+        plt.close(fig)
+    return saved
+
+
+def plot_activation_curves(x, curves, styles, panels):
+    """Value/derivative panels from precomputed activation curves."""
+    apply_publication_style()
+    fig, axes = plt.subplots(1, 3, figsize=(15, 4.6))
+    for col, (key, ylabel) in enumerate(panels):
+        ax = axes[col]
+        if key in ("deriv", "curv"):
+            ax.axhline(0.0, color=PALETTE["neutral"], lw=1.4, zorder=1)
+        for name, values in curves.items():
+            label, color, ls = styles[name]
+            ax.plot(x, values[col], color=color, ls=ls, lw=2.6,
+                    label=label, zorder=3, clip_on=False)
+        ax.set_xlabel(r"$x$  (pre-activation)")
+        ax.set_ylabel(ylabel)
+        ax.set_xlim(-4, 4)
+        if col == 0:
+            ax.legend(loc="upper left")
+    return fig, axes
+
+
+def plot_summary_frontier(series):
+    """Preserve the summary frontier's index-spaced markers and 8.5x6 layout."""
+    apply_publication_style()
+    fig, ax = plt.subplots(figsize=(8.5, 6))
+    for s in series:
+        ax.plot(s["ns"], s["h1"], color=s["color"], ls=s["ls"], lw=1.6,
+                label=s["label"], marker="o", ms=6.0, mec="0.15", mew=0.8,
+                markevery=max(1, len(s["ns"]) // 12))
+    ax.set_xlabel("number of neurons")
+    ax.set_ylabel(r"best relative $H^1$ error")
+    ax.set_yscale("log")
+    style_frontier_axes(ax, legend_ncol=3)
+    return fig, ax
+
+
+def plot_feedback_trace(series, *, ylabel, time_limit):
+    """One VDP feedback panel; inputs already contain the desired quantity."""
+    apply_publication_style()
+    fig, ax = plt.subplots(figsize=(7, 5))
+    for s in series:
+        ax.plot(s["t"], s["y"], color=s["color"], ls=s["ls"],
+                lw=s["lw"], label=s["label"])
+    ax.set_xlabel(r"time $t$")
+    ax.set_ylabel(ylabel)
+    ax.set_xlim(0.0, time_limit)
+    ax.set_ylim(bottom=0.0)
+    ax.legend(loc="upper right")
+    return fig, ax
+
+
+def plot_normal_cross_section(s, truth, series, *, ylabel):
+    """Draw a prepared reference and predictions; no branch selection here."""
+    apply_publication_style()
+    fig, ax = plt.subplots(figsize=(8.5, 4.4))
+    ax.axvline(0.0, color="0.8", lw=1.0, ls="--", zorder=0)
+    ax.plot(s, truth, color="0.0", ls="-", lw=2.6, label="true PMP", zorder=3)
+    for item in series:
+        ax.plot(s, item["y"], color=item["color"], ls=item["ls"], lw=2.0,
+                label=item["label"], zorder=2)
+    all_y = np.concatenate([truth, *(item["y"] for item in series)])
+    ymin, ymax = float(np.nanmin(all_y)), float(np.nanmax(all_y))
+    pad = 0.06 * max(ymax - ymin, 1.0)
+    ax.set_ylim(ymin - pad, ymax + pad)
+    ax.set_xlabel(r"$s$")
+    ax.set_ylabel(ylabel)
+    ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.0), ncol=3,
+              fontsize=10, borderaxespad=0.0)
+    return fig, ax
+
+
+def plot_regional_dumbbell(series, *, threshold):
+    """Draw caller-ordered physical-coordinate regional scores."""
+    from matplotlib.lines import Line2D
+    apply_publication_style()
+    fig, ax = plt.subplots(figsize=(8.0, 4.2))
+    for y, item in enumerate(series):
+        color = item["color"]
+        ax.plot([item["rest"], item["tube"]], [y, y], color=color, lw=2.0, zorder=1)
+        ax.scatter([item["rest"]], [y], s=70, facecolor="white", edgecolor=color,
+                   lw=2.0, zorder=2)
+        ax.scatter([item["tube"]], [y], s=70, color=color, zorder=2)
+    ax.set_xscale("log")
+    ax.set_yticks(range(len(series)))
+    ax.set_yticklabels([item["label"] for item in series])
+    ax.set_xlabel(r"relative $H^1$ error")
+    ax.legend(handles=[
+        Line2D([], [], marker="o", ls="", markerfacecolor="0.3", color="0.3",
+               label=f"switching tube ($d\\leq{threshold:g}$)"),
+        Line2D([], [], marker="o", ls="", markerfacecolor="white",
+               markeredgecolor="0.3", color="0.3", label="rest"),
+    ], loc="lower left", fontsize=10)
+    return fig, ax
+
+
+def plot_feedback_phase(curve, paths, starts, *, xlim, ylim):
+    apply_publication_style()
+    fig, ax = plt.subplots(figsize=(5.2, 4.2))
+    ax.scatter(curve[:, 0], curve[:, 1], s=3, color="0.1", zorder=3)
+    for side, color in (("A", PALETTE["blue_main"]), ("B", PALETTE["red_strong"])):
+        xs = paths[side]
+        ax.plot(xs[:, 0], xs[:, 1], color=color, lw=2.2, label=f"start {side}", zorder=2)
+        ax.scatter([starts[side][0]], [starts[side][1]], s=80, color=color,
+                   marker="x", lw=2.2, zorder=4)
+    ax.set_xlabel(r"$\theta$")
+    ax.set_ylabel(r"$\dot{\theta}$")
+    ax.set_xlim(*xlim)
+    ax.set_ylim(*ylim)
+    ax.legend(loc="upper right", fontsize=9)
+    return fig, ax
+
+
+def plot_pendulum_control(reference, series, *, time_limit):
+    apply_publication_style()
+    fig, ax = plt.subplots(figsize=(6.4, 4.4))
+    t_true, us_true = reference
+    all_us = np.concatenate([us_true, *(item["y"] for item in series)])
+    ylo, yhi = all_us.min() - 1.0, all_us.max() + 1.0
+    ax.plot(t_true, us_true, color="0.0", ls="-", lw=3.2, zorder=2, label="true PMP")
+    for item in series:
+        ax.plot(item["t"], item["y"], color=item["color"], ls=item["ls"],
+                lw=1.9, zorder=3, label=item["label"])
+    ax.axhline(0.0, color="0.85", lw=0.8, zorder=0)
+    ax.set_xlabel(r"time $t$")
+    ax.set_ylabel(r"feedback control $u(t)$")
+    ax.set_xlim(0, time_limit)
+    ax.set_ylim(ylo, yhi)
+    ax.legend(loc="upper right", fontsize=9)
+    return fig, ax
 
 # Default colormap for learned value surfaces — the "MATLAB surf" blue→yellow ramp
 # shared across all the experiment surface plots (see ``plot_model_value_surface``).
@@ -43,65 +204,6 @@ logger = logging.getLogger(__name__)
 # ============================================================================ #
 # INTERNAL HELPERS
 # ============================================================================ #
-def _repel_labels(ax, xs, ys, labels, *, fontsize=7, max_iter=300, pad=1.5,
-                  max_radius=48.0, spring=0.08):
-    """Annotate each (x, y) with its label, then iteratively push the text boxes
-    apart in display space so they don't overlap. A thin leader line tethers each
-    label back to its point. Each label is clamped within ``max_radius`` points of
-    its anchor (so dense clusters can't push labels off to infinity) and pulled
-    back toward a baseline offset by a weak ``spring``. Pure matplotlib."""
-    base = (0.0, 9.0)
-    anns = [
-        ax.annotate(
-            text, xy=(x, y), xytext=base, textcoords="offset points",
-            fontsize=fontsize, ha="center", va="center", zorder=4,
-            arrowprops=dict(arrowstyle="-", lw=0.4, color="0.6", shrinkA=0, shrinkB=2),
-        )
-        for x, y, text in zip(xs, ys, labels)
-    ]
-    fig = ax.figure
-    fig.canvas.draw()
-    if len(anns) < 2:
-        return anns
-    pt_per_px = 72.0 / fig.dpi
-    renderer = fig.canvas.get_renderer()
-    for _ in range(max_iter):
-        bboxes = [a.get_window_extent(renderer) for a in anns]
-        shifts = [[0.0, 0.0] for _ in anns]
-        overlap = False
-        for i in range(len(anns)):
-            bi = bboxes[i]
-            cix, ciy = (bi.x0 + bi.x1) / 2, (bi.y0 + bi.y1) / 2
-            for j in range(i + 1, len(anns)):
-                bj = bboxes[j]
-                ox = min(bi.x1, bj.x1) - max(bi.x0, bj.x0) + 2 * pad
-                oy = min(bi.y1, bj.y1) - max(bi.y0, bj.y0) + 2 * pad
-                if ox > 0 and oy > 0:
-                    overlap = True
-                    cjx, cjy = (bj.x0 + bj.x1) / 2, (bj.y0 + bj.y1) / 2
-                    ddx, ddy = cix - cjx, ciy - cjy
-                    if ddx == 0 and ddy == 0:
-                        ddy = 1.0
-                    dist = (ddx ** 2 + ddy ** 2) ** 0.5 or 1.0
-                    mag = min(ox, oy) / 2.0
-                    ux, uy = ddx / dist, ddy / dist
-                    shifts[i][0] += ux * mag; shifts[i][1] += uy * mag
-                    shifts[j][0] -= ux * mag; shifts[j][1] -= uy * mag
-        if not overlap:
-            break
-        for a, (sx, sy) in zip(anns, shifts):
-            px, py = a.get_position()
-            # repulsion (px -> pt) + weak spring back toward the baseline offset
-            nx = px + sx * pt_per_px + spring * (base[0] - px)
-            ny = py + sy * pt_per_px + spring * (base[1] - py)
-            # hard clamp so a crowded cluster can never push a label to infinity
-            r = (nx ** 2 + ny ** 2) ** 0.5
-            if r > max_radius:
-                nx, ny = nx * max_radius / r, ny * max_radius / r
-            a.set_position((nx, ny))
-    return anns
-
-
 def _get_field(dataset: Any, name: str) -> np.ndarray:
     """Extract a field from a structured array or dict-like dataset."""
     if isinstance(dataset, np.ndarray) and dataset.dtype.fields is not None:
@@ -118,24 +220,6 @@ def _get_field(dataset: Any, name: str) -> np.ndarray:
     )
 
 
-def _extract_active_weights(run: dict, u_thresh: float = 1e-4) -> dict:
-    """Return active (a, b, u) at the best iteration of one run.
-
-    Active means |u| > u_thresh.  Returns a dict with keys:
-        'a'     : np.ndarray (n_active, d)
-        'b'     : np.ndarray (n_active,)
-        'u'     : np.ndarray (n_active,)
-        'gamma' : float
-    """
-    it = run["best_iteration"]
-    iw = run["inner_weights"][it]
-    a = np.asarray(iw["weight"])               # (n, d)
-    b = np.asarray(iw["bias"])                 # (n,)
-    u = np.asarray(run["outer_weights"][it]).flatten()  # (n,)
-    mask = np.abs(u) > u_thresh
-    return {"a": a[mask], "b": b[mask], "u": u[mask], "gamma": run["gamma"]}
-
-
 def _best_iteration_atoms(history: Any, run_index: int = 0) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Best-iteration ``(a, b, u)`` from a fit result, robust to its container.
 
@@ -143,25 +227,7 @@ def _best_iteration_atoms(history: Any, run_index: int = 0) -> Tuple[np.ndarray,
     list/tuple of either (selecting ``run_index``). Returns inner weights ``a``
     (n, d), inner bias ``b`` (n,), and outer weights ``u`` (1, n).
     """
-    if isinstance(history, (list, tuple)):
-        history = history[run_index]
-
-    def field(name: str) -> Any:
-        if hasattr(history, name):
-            return getattr(history, name)
-        if hasattr(history, "__getitem__"):
-            try:
-                return history[name]
-            except (KeyError, TypeError, IndexError):
-                pass
-        raise AttributeError(f"fit result exposes no '{name}' (got {type(history).__name__})")
-
-    best_it = int(field("best_iteration"))
-    iw = field("inner_weights")[best_it]
-    a = np.asarray(iw["weight"])                       # (n, d)
-    b = np.asarray(iw["bias"])                         # (n,)
-    u = np.asarray(field("outer_weights")[best_it])    # (1, n)
-    return a, b, u
+    return history_atoms(history, run_index=run_index)
 
 
 # ---------------------------------------------------------------------------- #
@@ -170,15 +236,123 @@ def _best_iteration_atoms(history: Any, run_index: int = 0) -> Tuple[np.ndarray,
 # Shared publication style for frontier plots (boxed variant — see
 # src.plotstyle.style_frontier_axes). Applied via rc_context so the module
 # leaves global rcParams untouched.
-_FRONTIER_RC = {
-    "font.family": ["serif"],
-    "font.serif": ["CMU Serif", "Computer Modern Roman", "cmr10", "DejaVu Serif"],
-    "font.size": 12,
-    "axes.linewidth": 1.0,
-    "mathtext.fontset": "cm",
-    "axes.formatter.use_mathtext": True,
-    "text.usetex": False,
-}
+_FRONTIER_RC = FRONTIER_RC  # compatibility name; typography belongs to plotstyle
+
+
+
+
+def plot_weight_portrait(a, b, u, *, limit=4.0):
+    """Raw inner-parameter portrait with the existing signed-size encoding."""
+    apply_publication_style()
+    lim = limit
+    th = np.linspace(0, 2 * np.pi, 200)
+    cx, cy, cz = np.cos(th), np.sin(th), np.zeros_like(th)
+    u = np.asarray(u).reshape(-1)
+    sizes = np.abs(u) / (np.abs(u).max() or 1.0) * 130 + 12
+    colors = np.where(u >= 0, "#001BF8", "#FFFD3A")
+    fig = plt.figure(figsize=(4.6, 4.4))
+    ax = fig.add_subplot(111, projection="3d")
+    ax.plot(cx, cy, cz, color="#4BFE52", lw=1.0)
+    ax.scatter(a[:, 0], a[:, 1], b, s=sizes, c=colors,
+               alpha=0.85, edgecolors="k", linewidths=0.3)
+    ax.set_xlim(-lim, lim); ax.set_ylim(-lim, lim); ax.set_zlim(-lim, lim)
+    ax.set_xticks([-lim, 0, lim]); ax.set_yticks([-lim, 0, lim]); ax.set_zticks([-lim, 0, lim])
+    ax.set_xlabel(""); ax.set_ylabel(""); ax.set_zlabel("")
+    # House 3D style: vertical axis on the left, no grey pane walls, faint grid.
+    for axis in (ax.xaxis, ax.yaxis, ax.zaxis):
+        axis.pane.set_facecolor((1, 1, 1, 0)); axis.pane.set_edgecolor((0, 0, 0, 0))
+        axis._axinfo["grid"].update(color="0.85", linewidth=0.5)
+    ax.view_init(elev=15, azim=-105)
+    return fig, ax
+
+
+def plot_moment_order_panels(panels, orders, *, ylabel):
+    """Moment-order study with the current two-panel, shared-axis geometry."""
+    apply_publication_style()
+    fig, axes = plt.subplots(2, 1, figsize=(6.4, 6.4), sharex=True)
+    for ax, series in zip(axes, panels):
+        for item in series:
+            ax.plot(orders, item["y"], color=item["color"], marker=item["marker"],
+                    ls=item["ls"], lw=1.4, markersize=4.5,
+                    markeredgecolor="0.2", markeredgewidth=0.5)
+        ax.set_xticks(orders)
+        ax.set_xticklabels([f"{p:g}" for p in orders])
+        ax.set_yscale("log")
+        ax.set_ylabel(ylabel)
+    axes[1].set_xlabel(r"moment order $p$")
+    return fig, axes
+
+
+def style_vdp_reference_axes(ax, x) -> None:
+    """Match the reference value-surface style: no axis names, sparse x/y ticks, and
+    the shared 0/10/20 vertical-axis range."""
+    def _sparse(lo: float, hi: float) -> list[float]:
+        mid = 0.0 if lo < 0.0 < hi else round((lo + hi) / 2.0, 2)
+        return sorted({round(lo, 2), mid, round(hi, 2)})
+
+    ax.set_xlabel(""); ax.set_ylabel(""); ax.set_zlabel("")
+    ax.set_title("")
+    ax.set_xticks(_sparse(float(x[:, 0].min()), float(x[:, 0].max())))
+    ax.set_yticks(_sparse(float(x[:, 1].min()), float(x[:, 1].max())))
+    ax.set_zticks([0, 10, 20])
+    ax.set_zlim(0.0, 20.0)
+
+
+
+def _reference_sparse_ticks(lo: float, hi: float) -> list[float]:
+    mid = 0.0 if lo < 0.0 < hi else 0.5 * (lo + hi)
+    return [round(float(lo), 2), round(float(mid), 2), round(float(hi), 2)]
+
+
+def style_pendulum_reference_axes(ax, *, xlim: tuple[float, float], ylim: tuple[float, float],
+                   zlim: tuple[float, float] | None = None,
+                   box_aspect: tuple[float, float, float] = (1.0, 1.0, 0.55),
+                   axis_linewidth: float = 1.0) -> None:
+    ax.set_xlabel(""); ax.set_ylabel(""); ax.set_zlabel("")
+    ax.set_xlim(*xlim); ax.set_ylim(*ylim)
+    ax.set_xticks(_reference_sparse_ticks(*xlim)); ax.set_yticks(_reference_sparse_ticks(*ylim))
+    if zlim is not None:
+        ax.set_zlim(*zlim)
+        ax.set_zticks(_reference_sparse_ticks(*zlim))
+    ax.view_init(elev=15, azim=-105)
+    ax.set_box_aspect(box_aspect)
+    for a in (ax.xaxis, ax.yaxis, ax.zaxis):
+        a.pane.set_facecolor((1, 1, 1, 0))
+        a.pane.set_edgecolor((0, 0, 0, 0))
+        a._axinfo["grid"].update(color="0.85", linewidth=0.5)
+        a.line.set_linewidth(axis_linewidth)
+    ax.tick_params(labelsize=9, pad=1, width=axis_linewidth)
+
+
+
+def plot_pendulum_reference_scatter(x, v, *, cmap):
+    fig = plt.figure(figsize=(8.5, 6.0))
+    ax = fig.add_subplot(111, projection="3d")
+    ax.scatter(x[:, 0], x[:, 1], v, c=v, cmap=cmap, s=9.0, alpha=0.86,
+               depthshade=False, edgecolors="none")
+    style_pendulum_reference_axes(ax, xlim=(-8.0, 8.0), ylim=(-8.0, 8.0), zlim=(0.0, 60.0))
+    ax.set_zticks([0, 30, 60])
+    return fig, ax
+
+def plot_pendulum_reference_surface(GX, GY, Z, *, cmap):
+    fig = plt.figure(figsize=(4.2, 4.0))
+    ax = fig.add_subplot(111, projection="3d")
+    ax.plot_surface(GX, GY, Z, cmap=cmap, rcount=480, ccount=480, linewidth=0,
+                    antialiased=True, vmin=0.0, vmax=60.0)
+    style_pendulum_reference_axes(ax, xlim=(-8.0, 8.0), ylim=(-8.0, 8.0), zlim=(0.0, 60.0),
+                   box_aspect=(1.0, 1.0, 0.5), axis_linewidth=0.6)
+    return fig, ax
+
+def plot_periodic_regions(GX, GY, reg, *, colors, periods):
+    from matplotlib.colors import ListedColormap
+    fig, ax = plt.subplots(figsize=(9.6, 6.0))
+    ax.pcolormesh(GX, GY, reg, cmap=ListedColormap(colors[:2 * periods + 1]),
+                  shading="auto", rasterized=True)
+    ax.contour(GX, GY, reg, levels=np.arange(0.5, 2 * periods + 0.5),
+               colors="k", linewidths=0.7)        # switching-set spiral boundaries
+    ax.set_xlabel(r"$\theta$"); ax.set_ylabel(r"$\dot\theta$")
+    ax.set_xlim(-12, 12); ax.set_ylim(-8, 8); ax.set_aspect("equal")
+    return fig, ax
 
 
 def penalty_symbol(insertion: str) -> str:
@@ -212,64 +386,6 @@ def frontier_penalty_label(activation_tex: str, *, insertion: str,
 # ============================================================================ #
 # PLOTTING FUNCTIONS
 # ============================================================================ #
-def plot_score_tradeoff(
-    rows: Sequence[dict[str, Any]],
-    *,
-    x: str,
-    y: str,
-    label: str,
-    color: str | None = None,
-    title: str = "Score tradeoff",
-    xlabel: str | None = None,
-    ylabel: str | None = None,
-    save_path: str | os.PathLike[str] | None = None,
-    show_plot: bool = False,
-):
-    """Scatter of experiment summary rows (x vs y), labeled and optionally colored by a third column."""
-    fig, ax = plt.subplots(figsize=(8, 5), dpi=150)
-    if color:
-        color_values = [str(row.get(color, "")) for row in rows]
-        categories = list(dict.fromkeys(color_values))
-        cmap = plt.get_cmap("tab10" if len(categories) <= 10 else "tab20")
-        palette = {cat: cmap(i % cmap.N) for i, cat in enumerate(categories)}
-        colors = [palette[value] for value in color_values]
-    else:
-        categories = []
-        palette = {}
-        colors = "#4c78a8"
-
-    xs = [float(row[x]) for row in rows]
-    ys = [float(row[y]) for row in rows]
-    ax.scatter(xs, ys, s=52, c=colors, edgecolor="white", linewidth=0.7,
-               alpha=0.9, zorder=3)
-    _repel_labels(ax, xs, ys, [str(row.get(label, "")) for row in rows])
-    if categories:
-        handles = [
-            plt.Line2D([0], [0], marker="o", color="w", markerfacecolor=palette[cat],
-                       markeredgecolor="white", markersize=7, label=f"{color}={cat}")
-            for cat in categories
-        ]
-        ax.legend(handles=handles, fontsize=8, frameon=False, loc="upper left",
-                  bbox_to_anchor=(1.01, 1.0), borderaxespad=0.0)
-    ax.set_title(title)
-    ax.set_xlabel(xlabel or x)
-    ax.set_ylabel(ylabel or y)
-    ax.grid(True, alpha=0.25)
-    if not categories:
-        # tight_layout can't account for a legend placed outside the axes;
-        # bbox_inches="tight" at savefig handles that case instead.
-        fig.tight_layout()
-    if save_path is not None:
-        save_path = os.fspath(save_path)
-        os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        fig.savefig(save_path, bbox_inches="tight")
-    if show_plot:
-        plt.show()
-    else:
-        plt.close(fig)
-    return fig, ax
-
-
 def plot_value_scatter3d(
     dataset: Any,
     *,
@@ -331,95 +447,7 @@ def plot_value_scatter3d(
     fig.tight_layout()
 
     if save_path:
-        fig.savefig(save_path, dpi=300, bbox_inches="tight")
-    if show:
-        plt.show()
-    return fig, ax
-
-
-def plot_nonsmooth_curve(
-    curve: "str | os.PathLike[str] | dict[str, Any]",
-    *,
-    dataset: Any = None,
-    distance: Optional[np.ndarray] = None,
-    near_percentile: float = 10.0,
-    ax: Optional[plt.Axes] = None,
-    title: str = "Switching set & smooth basin",
-    curve_color: str = "k",
-    save_path: Optional[str] = None,
-    show: bool = True,
-) -> Tuple[plt.Figure, plt.Axes]:
-    """2D switching-set arms + smooth basin over the state plane.
-
-    Reproduces the middle panel of Fig. 2 in Han & Yang (arXiv:2312.17467) — the
-    nonsmooth curves of the pendulum value function and the smooth region of
-    attraction to the upright equilibrium. ``curve`` is a path to (or mapping of) a
-    nonsmooth-curve ``npz`` exposing ``points`` (n, 2) spiral-arm samples, optional
-    ``value_levels`` (n,), and ``basin`` (m, 2) boundary ring (see
-    ``src.OpenLoop.pendulum.nonsmooth.NonsmoothCurve``).
-
-    If ``dataset`` (and optionally per-sample ``distance`` to the switching set) is
-    given, the value samples are overlaid: the lowest ``near_percentile``% by
-    distance are highlighted as the near region, the rest drawn faintly. Pass
-    ``ax`` to compose into a multi-panel figure.
-    """
-    if hasattr(curve, "keys"):
-        points = np.asarray(curve["points"])
-        value_levels = np.asarray(curve["value_levels"]) if "value_levels" in curve else None
-        basin = np.asarray(curve["basin"]) if "basin" in curve else None
-    else:
-        with np.load(os.fspath(curve)) as data:
-            points = np.asarray(data["points"])
-            value_levels = np.asarray(data["value_levels"]) if "value_levels" in data.files else None  # noqa: F841
-            basin = np.asarray(data["basin"]) if "basin" in data.files else None
-
-    if ax is None:
-        fig, ax = plt.subplots(figsize=(6.5, 6))
-    else:
-        fig = ax.figure
-
-    # Optional sample overlay, split near/far by distance to the switching set.
-    if dataset is not None:
-        x = np.asarray(_get_field(dataset, "x"))
-        if distance is not None:
-            d = np.asarray(distance).reshape(-1)
-            thresh = float(np.percentile(d, near_percentile))
-            near = d <= thresh
-            ax.scatter(x[~near, 0], x[~near, 1], s=4, c="0.8", label="far samples", zorder=1)
-            ax.scatter(x[near, 0], x[near, 1], s=7, c="#d62728",
-                       label=f"near (≤{near_percentile:g}%)", zorder=2)
-        else:
-            ax.scatter(x[:, 0], x[:, 1], s=4, c="0.8", label="samples", zorder=1)
-
-    # Smooth basin boundary (closed ring).
-    if basin is not None and basin.shape[0] >= 3:
-        ring = np.vstack([basin, basin[:1]])
-        ax.plot(ring[:, 0], ring[:, 1], "-", color="#1f77b4", lw=1.8,
-                label="smooth basin", zorder=3)
-
-    # Switching-set spiral arms drawn as connected curves (the nonsmooth curves the
-    # value function is non-differentiable across). The arms are stored as 4 equal
-    # blocks tracked across value levels (see NonsmoothCurve), so connect each block
-    # in stored order; fall back to a single polyline if the layout differs.
-    if points.size:
-        n = points.shape[0]
-        arm_len = n // 4
-        arms = ([points[i * arm_len:(i + 1) * arm_len] for i in range(4)]
-                if arm_len >= 2 and n == 4 * arm_len else [points])
-        for k, arm in enumerate(arms):
-            ax.plot(arm[:, 0], arm[:, 1], "-", color=curve_color, lw=2.2, zorder=4,
-                    label="switching set" if k == 0 else None)
-
-    ax.set_xlabel("x[0]")
-    ax.set_ylabel("x[1]")
-    ax.set_title(title)
-    ax.set_aspect("equal", adjustable="datalim")
-    ax.legend(fontsize=8, loc="best", framealpha=0.9)
-    ax.grid(True, alpha=0.25)
-    fig.tight_layout()
-
-    if save_path:
-        fig.savefig(save_path, dpi=300, bbox_inches="tight")
+        save_figure(fig, save_path, tight=False, close=False, bbox_inches="tight")
     if show:
         plt.show()
     return fig, ax
@@ -544,208 +572,7 @@ def plot_vdp_value_with_gradient_arrows2d(
     plt.tight_layout()
 
     if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches="tight")
-    if show:
-        plt.show()
-    return fig, ax
-
-
-def plot_inner_weight_3d_scatter(
-    results: "Sequence[dict] | str | os.PathLike[str]",
-    *,
-    u_thresh: float = 1e-4,
-    elev: float = 25.0,
-    azim: float = 45.0,
-    save_path: Optional[str] = None,
-    show: bool = True,
-) -> Tuple[plt.Figure, list]:
-    """3D scatter of active inner weights (a₁, a₂, b) per gamma; size ∝ |u|, color = u."""
-    from mpl_toolkits.mplot3d import Axes3D  # noqa: F401
-
-    result_list = _load_results(results)
-    n = len(result_list)
-    fig = plt.figure(figsize=(4 * n, 4.5))
-    axes: list = []
-
-    for col, run in enumerate(result_list):
-        rec = _extract_active_weights(run, u_thresh)
-        a, b, u, gamma = rec["a"], rec["b"], rec["u"], rec["gamma"]
-
-        ax = fig.add_subplot(1, n, col + 1, projection="3d")
-        axes.append(ax)
-
-        if len(u) == 0:
-            ax.set_title(f"gamma={gamma:g}\n(no active neurons)")
-            continue
-
-        sizes = (np.abs(u) / np.abs(u).max()) * 120 + 10
-        sc = ax.scatter(
-            a[:, 0], a[:, 1], b,
-            s=sizes, c=u, cmap="RdBu_r",
-            vmin=-np.abs(u).max(), vmax=np.abs(u).max(),
-            alpha=0.85, edgecolors="k", linewidths=0.3,
-        )
-        fig.colorbar(sc, ax=ax, pad=0.1, shrink=0.55, label="$u$")
-        ax.set_xlabel("$a_1$", labelpad=1)
-        ax.set_ylabel("$a_2$", labelpad=1)
-        ax.set_zlabel("$b$",   labelpad=1)
-        ax.set_title(f"$\\gamma={gamma:g}$\n({len(u)} active)", fontsize=9)
-        ax.view_init(elev=elev, azim=azim)
-
-    fig.suptitle(
-        "Inner weights $(a_1, a_2, b)$ — 3D scatter\n"
-        "(size $\\propto |u|$, color $= u$)",
-        fontsize=10,
-    )
-    fig.tight_layout()
-    if save_path:
-        plt.savefig(save_path, dpi=150, bbox_inches="tight")
-    if show:
-        plt.show()
-    return fig, axes
-
-
-def plot_inner_weight_pairwise_distance(
-    results: "Sequence[dict] | str | os.PathLike[str]",
-    *,
-    u_thresh: float = 1e-4,
-    save_path: Optional[str] = None,
-    show: bool = True,
-) -> Tuple[plt.Figure, list]:
-    """Heatmap of pairwise ‖wᵢ - wⱼ‖ among active neurons (sorted by |u|), one subplot per gamma."""
-    result_list = _load_results(results)
-    n = len(result_list)
-    fig, axes_list = plt.subplots(1, n, figsize=(4 * n, 4))
-
-    if n == 1:
-        axes_list = [axes_list]
-
-    for ax, run in zip(axes_list, result_list):
-        rec = _extract_active_weights(run, u_thresh)
-        a, b, u, gamma = rec["a"], rec["b"], rec["u"], rec["gamma"]
-
-        if len(u) == 0:
-            ax.set_title(f"gamma={gamma:g}\n(no active neurons)")
-            continue
-
-        # sort by descending |u| so the most important neurons come first
-        order = np.argsort(-np.abs(u))
-        a_s, b_s, u_s = a[order], b[order], u[order]
-
-        w = np.column_stack([a_s, b_s])                          # (n, 3)
-        D = np.linalg.norm(w[:, None, :] - w[None, :, :], axis=-1)  # (n, n)
-
-        im = ax.imshow(D, cmap="viridis_r", aspect="auto",
-                       vmin=0, vmax=D.max())
-        fig.colorbar(im, ax=ax, shrink=0.85, label="$\\|w_i - w_j\\|_2$")
-
-        n_act = len(u)
-        ax.set_xticks(range(n_act))
-        ax.set_yticks(range(n_act))
-        if n_act <= 20:
-            ax.set_xticklabels([f"{v:.2f}" for v in u_s], rotation=90, fontsize=6)
-            ax.set_yticklabels([f"{v:.2f}" for v in u_s], fontsize=6)
-        else:
-            ax.tick_params(labelsize=6)
-        ax.set_xlabel("neuron index (sorted by $|u|$ desc)")
-        ax.set_ylabel("neuron index")
-        ax.set_title(f"$\\gamma={gamma:g}$  ({n_act} active)", fontsize=9)
-
-    fig.suptitle(
-        "Pairwise Euclidean distance $\\|w_i - w_j\\|_2$  in $(a_1, a_2, b)$ space\n"
-        "(neurons sorted by $|u|$ descending — dark = close)",
-        fontsize=10,
-    )
-    fig.tight_layout()
-    if save_path:
-        plt.savefig(save_path, dpi=150, bbox_inches="tight")
-    if show:
-        plt.show()
-    return fig, axes_list
-
-
-def plot_regions_of_attraction(
-    points: np.ndarray,
-    labels: np.ndarray,
-    *,
-    curve_arms: "Optional[Sequence[np.ndarray]]" = None,
-    region_labels: "Optional[Sequence[str]]" = None,
-    curve_label: str = "switching set",
-    ax: Optional[plt.Axes] = None,
-    domain: Tuple[float, float, float, float] = (-10.0, 10.0, -8.0, 8.0),
-    grid_n: int = 400,
-    region_colors: Sequence[str] = ("#c9b3de", "#f3b0a0", "#a9c8e8", "#f3e0a0", "#a9dca0", "#f0c0e0"),
-    curve_color: str = "k",
-    curve_lw: float = 0.9,
-    title: str = "Regions of attraction & switching set",
-    save_path: Optional[str] = None,
-    show: bool = True,
-) -> Tuple[plt.Figure, plt.Axes]:
-    """Filled regions of attraction (nearest-point fill) + switching curves.
-
-    Reproduces the middle panel of Fig. 2 in Han & Yang (arXiv:2312.17467): the
-    colored regions of attraction to the (periodic) equilibria, separated by the
-    nonsmooth switching curves. ``points`` (N, 2) are scattered samples — e.g. PMP
-    trajectory states tiled across periods — and ``labels`` (N,) their integer
-    region id; each grid cell is colored by its nearest point's label, a Voronoi
-    fill that turns the characteristics into solid basins. ``curve_arms`` is an
-    optional iterable of (m, 2) polylines (the switching-set arms, tiled) drawn on
-    top. ``region_labels[i]`` names region id ``i`` in a legend (with the switching
-    set, ``curve_label``); omit for no legend. Pass ``ax`` to compose into a
-    multi-panel figure.
-    """
-    from matplotlib.colors import ListedColormap
-    from matplotlib.lines import Line2D
-    from matplotlib.patches import Patch
-    from scipy.spatial import cKDTree
-
-    points = np.asarray(points, dtype=np.float64)
-    labels = np.asarray(labels)
-    x0, x1, y0, y1 = domain
-
-    if ax is None:
-        fig, ax = plt.subplots(figsize=(7, 5))
-    else:
-        fig = ax.figure
-
-    nx = int(grid_n)
-    ny = max(2, int(round(grid_n * (y1 - y0) / (x1 - x0))))
-    gx = np.linspace(x0, x1, nx)
-    gy = np.linspace(y0, y1, ny)
-    GX, GY = np.meshgrid(gx, gy)
-    _, idx = cKDTree(points).query(np.column_stack([GX.ravel(), GY.ravel()]), k=1)
-    region = labels[idx].reshape(GX.shape)
-
-    n_regions = int(labels.max()) + 1 if labels.size else 1
-    colors = [region_colors[i % len(region_colors)] for i in range(n_regions)]
-    ax.pcolormesh(GX, GY, region, cmap=ListedColormap(colors), shading="auto",
-                  vmin=-0.5, vmax=n_regions - 0.5)
-
-    drew_curve = False
-    for arm in curve_arms or ():
-        arm = np.asarray(arm)
-        if arm.shape[0] >= 2:
-            ax.plot(arm[:, 0], arm[:, 1], "-", color=curve_color, lw=curve_lw, zorder=4)
-            drew_curve = True
-
-    if region_labels is not None:
-        handles = [Patch(facecolor=colors[i], edgecolor="none", label=region_labels[i])
-                   for i in range(min(n_regions, len(region_labels)))]
-        if drew_curve:
-            handles.append(Line2D([0], [0], color=curve_color, lw=curve_lw, label=curve_label))
-        ax.legend(handles=handles, fontsize=7, loc="upper right", framealpha=0.9,
-                  title="region of attraction →")
-
-    ax.set_xlim(x0, x1)
-    ax.set_ylim(y0, y1)
-    ax.set_aspect("equal")
-    ax.set_xlabel("x[0]")
-    ax.set_ylabel("x[1]")
-    ax.set_title(title)
-    fig.tight_layout()
-
-    if save_path:
-        fig.savefig(save_path, dpi=300, bbox_inches="tight")
+        save_figure(fig, save_path, tight=False, close=False, bbox_inches="tight")
     if show:
         plt.show()
     return fig, ax
@@ -805,32 +632,11 @@ def plot_model_value_surface(
     (and re-evaluate the surface over it).
 
     """
-    import pickle
-
-    from src.models.net import ShallowNetwork
-
-    if isinstance(history, (str, os.PathLike)):
-        with open(os.fspath(history), "rb") as f:
-            history = pickle.load(f)
-
-    a, b, u = _best_iteration_atoms(history, run_index)
-    n_neurons, d = a.shape
+    net = model_from_history(history, activation=activation, power=power,
+                             run_index=run_index)
+    d = int(net.hidden.weight.shape[1])
     if d != 2:
         raise ValueError(f"Expected 2D input, got d={d}. This function only supports 2D plots.")
-
-    if isinstance(activation, str):
-        from src.config.activations import get_activation
-        activation = get_activation(activation)
-
-    net = ShallowNetwork(
-        layer_sizes=[d, n_neurons, 1],
-        activation=activation,
-        p=power,
-        inner_weights=a,
-        inner_bias=b,
-        outer_weights=u,
-    )
-    net.eval()
 
     # Determine grid range (physical units).
     if x_range is None or y_range is None:
@@ -856,6 +662,31 @@ def plot_model_value_surface(
         V = net(torch.tensor(grid_points / scale, dtype=torch.float64)).numpy().reshape(grid_n, grid_n)
     V = V * float(v_scale)
 
+    return plot_value_surface(
+        X0, X1, V, ax=ax, title=title, cmap=cmap, clip=(0.0, vmax),
+        xticks=xticks, yticks=yticks, zticks=zticks, elev=elev, azim=azim,
+        colorbar=colorbar, save_path=save_path, show=show,
+    )
+
+
+def plot_value_surface(
+    X0, X1, V, *, ax=None, title=None, cmap=None, clip=(0.0, None),
+    xticks=None, yticks=None, zticks=None, elev=15.0, azim=-105.0,
+    colorbar=False, save_path=None, show=False,
+):
+    """Draw a prepared physical-coordinate value grid; clipping is display-only.
+
+    The supplied V array is never modified. Model loading, checkpoint selection
+    and physical-coordinate evaluation belong to src.results.
+    """
+    X0, X1, V = np.asarray(X0), np.asarray(X1), np.asarray(V)
+    if X0.shape != X1.shape or X0.shape != V.shape or V.ndim != 2:
+        raise ValueError("surface coordinates and values must have matching 2D shapes")
+    floor, vmax = clip
+    if floor != 0.0:
+        raise ValueError("value-surface display clipping uses a zero floor")
+    x_range = (float(np.min(X0)), float(np.max(X0)))
+    y_range = (float(np.min(X1)), float(np.max(X1)))
     if ax is None:
         fig = plt.figure(figsize=(8, 6.5))
         ax = fig.add_subplot(111, projection="3d")
@@ -866,13 +697,13 @@ def plot_model_value_surface(
     # wildly off-support; the surface plot is a visual comparison, not a signed
     # residual diagnostic.
     if vmax is not None:
-        V = np.clip(V, 0.0, vmax)
+        V = np.clip(V, floor, vmax)
     else:
-        V = np.maximum(V, 0.0)
+        V = np.maximum(V, floor)
     zmax = float(vmax) if vmax is not None else float(np.nanmax(V))
     cmap = cmap if cmap is not None else _SURFACE_CMAP
     surf = ax.plot_surface(X0, X1, V, cmap=cmap, vmin=0.0, vmax=zmax, alpha=0.95,
-                           edgecolor="none", rcount=grid_n, ccount=grid_n)
+                           edgecolor="none", rcount=X0.shape[0], ccount=X0.shape[1])
     for a in (ax.xaxis, ax.yaxis, ax.zaxis):
         a.pane.set_facecolor((1, 1, 1, 0)); a.pane.set_edgecolor((0, 0, 0, 0))
         a._axinfo["grid"].update(color="0.85", linewidth=0.5)
@@ -896,7 +727,7 @@ def plot_model_value_surface(
     fig.tight_layout()
 
     if save_path:
-        fig.savefig(save_path, dpi=300, bbox_inches="tight")
+        save_figure(fig, save_path, tight=False, close=False, bbox_inches="tight")
     if show:
         plt.show()
     return fig, ax
@@ -960,8 +791,7 @@ def plot_neuron_h1_frontier(
         fig.tight_layout(pad=2.0)
         if save_path is not None:
             save_path = os.fspath(save_path)
-            os.makedirs(os.path.dirname(save_path), exist_ok=True)
-            fig.savefig(save_path, dpi=300, bbox_inches="tight")
+            save_figure(fig, save_path, tight=False, close=False, bbox_inches="tight")
         if show_plot:
             plt.show()
         else:

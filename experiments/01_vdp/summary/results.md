@@ -17,7 +17,7 @@ Champion runs (lowest rel-H1 validation error at the fixed point)
 
 ## Frontier — sparsity at equal accuracy
 
-![frontier](figures/frontier.png)
+![frontier](../../../outdated/experiment-code-cleanup-2026-09-12/unreferenced_pngs/experiments/01_vdp/summary/figures/frontier.png)
 
 Each curve is a champion's insertion growth trajectory (neurons vs cumulative-min
 rel-H1). **Algorithm 2 (ReLU^k) reaches the best gradient accuracy (rel H1 ≈ 0.10)
@@ -29,7 +29,7 @@ atoms.
 
 | ‖y(t)‖ | \|u(t)\| |
 | --- | --- |
-| ![state](figures/feedback_state.png) | ![control](figures/feedback_control.png) |
+| ![state](../../../outdated/experiment-code-cleanup-2026-09-12/unreferenced_pngs/experiments/01_vdp/summary/figures/feedback_state.png) | ![control](../../../outdated/experiment-code-cleanup-2026-09-12/unreferenced_pngs/experiments/01_vdp/summary/figures/feedback_control.png) |
 
 Closed-loop rollout from y₀=(2, 1) under the synthesized feedback û(x) =
 −∂_{x₂}V̂/(2β), beside the true control.
@@ -57,11 +57,11 @@ sphere; green circle = equator):
 
 | gaussian (φ_log, γ=1) | softplus (φ_log, γ=1) | ReLU^5 (|c|^q, q=1/3) |
 | --- | --- | --- |
-| ![gaussian](figures/weights_stereo_gaussian.png) | ![softplus](figures/weights_stereo_softplus.png) | ![relu5](figures/weights_stereo_relu5.png) |
+| ![gaussian](../../../outdated/experiment-code-cleanup-2026-09-12/unreferenced_pngs/experiments/01_vdp/summary/figures/weights_stereo_gaussian.png) | ![softplus](../../../outdated/experiment-code-cleanup-2026-09-12/unreferenced_pngs/experiments/01_vdp/summary/figures/weights_stereo_softplus.png) | ![relu5](../../../outdated/experiment-code-cleanup-2026-09-12/unreferenced_pngs/experiments/01_vdp/summary/figures/weights_stereo_relu5.png) |
 
 **Variant B — raw (a₁, a₂, b) with unit-sphere wireframe** (ReLU on the sphere,
 Algo-1 scattered off it):
 
 | gaussian (φ_log, γ=1) | softplus (φ_log, γ=1) | ReLU^5 (|c|^q, q=1/3) |
 | --- | --- | --- |
-| ![gaussian](figures/weights_raw3d_gaussian.png) | ![softplus](figures/weights_raw3d_softplus.png) | ![relu5](figures/weights_raw3d_relu5.png) |
+| ![gaussian](../../../outdated/experiment-code-cleanup-2026-09-12/unreferenced_pngs/experiments/01_vdp/summary/figures/weights_raw3d_gaussian.png) | ![softplus](../../../outdated/experiment-code-cleanup-2026-09-12/unreferenced_pngs/experiments/01_vdp/summary/figures/weights_raw3d_softplus.png) | ![relu5](../../../outdated/experiment-code-cleanup-2026-09-12/unreferenced_pngs/experiments/01_vdp/summary/figures/weights_raw3d_relu5.png) |

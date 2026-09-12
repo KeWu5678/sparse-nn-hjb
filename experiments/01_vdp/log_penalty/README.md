@@ -1,29 +1,19 @@
-# Log-penalty activation search — Van der Pol
+# Historical log_penalty — Van der Pol
 
-This Hydra study compares activation functions on the smooth Van der Pol value
-function with signed profile insertion. For every nonhomogeneous activation,
-PDAP uses the current normalized-measure Algorithm 1 objective
+The old unweighted objective is the retired moment_beta=0 special case described
+in [ADR 0010](../../../docs/adr/0010-use-only-the-normalized-algorithm-1-objective.md).
+These historical results must not be relabeled as normalized-measure Algorithm 1.
 
-`l^M + alpha * sum phi_gamma(w_p(omega_n) * |c_n|)`.
+Historical report numbers are unchanged. Available unreferenced PNGs now live in
+[the image archive](../../../outdated/experiment-code-cleanup-2026-09-12/unreferenced_pngs/).
+Report links use those archived paths.
 
-The retained `leaky_relu` cell is positively homogeneous and sphere-gauged, so
-it is an unnormalized profile comparator rather than an Algorithm 1 cell.
+The local
+analyzer was already absent at cleanup; its executable source is not in this
+archive. The previous README is preserved under
+[`outdated/experiment-code-cleanup-2026-09-12/`](../../../outdated/experiment-code-cleanup-2026-09-12/experiments/01_vdp/log_penalty/).
+This archive is for recovery, not an alternative executable pipeline.
 
-## Sweep axes
-
-| axis | values |
-|---|---|
-| `model.activation` | leaky_relu, softplus, tanh, gaussian, gausscent_1, matern52, gelu_squared |
-| `model.alpha` | 1e-2, 1e-3, 1e-4, 1e-5 |
-| `model.gamma` | 0, 0.1, 1, 10 |
-| `model.loss_weights` | [1,0] (value only), [1,1] (value and gradient) |
-
-Fixed settings include `model.power=1`, normalized data, and seed 42. Run into
-an empty record root with:
-
-This sweep's config (`conf/experiment/vdp/log_penalty.yaml`) was retired on 2026-09-10;
-only the `paper_*` experiments are runnable now. The archived records under
-`rawdata/logs/multirun/vdp/log_penalty/` remain readable by `analysis.py`.
-
-The former report and figures used the retired unweighted objective and are not
-current evidence; they remain available from Git history.
+For current results, use [paper_log_penalty](../paper_log_penalty/README.md) and the
+[current-paper commands](../../../scripts/paper/README.md). Shared training
+presets are in `conf/experiment/`; see the [experiment index](../../README.md).

@@ -15,6 +15,7 @@ from typing import Dict, List
 import torch
 from torch.nn.utils import parameters_to_vector
 
+from ..data import ValueSampleNormalizer
 from ..eval import data_loss_terms, relative_errors
 from .moment import (
     amplitude_mass_radius,
@@ -83,7 +84,11 @@ def objective_value(model, objective: Objective, data) -> float:
 
 @dataclass
 class History:
-    """Per-iteration losses, relative errors, and support snapshots."""
+    """Per-iteration losses, relative errors, and support snapshots.
+
+    ``reporting_normalizer`` reverses a caller-applied data transform for relative
+    errors only; losses and checkpoint selection always use the training data.
+    """
 
     train_loss: List[float] = field(default_factory=list)
     val_loss: List[float] = field(default_factory=list)
@@ -120,6 +125,7 @@ class History:
     best_iteration: int = 0
     best_train_loss: float = float("inf")
     final_neurons: int = 0
+    reporting_normalizer: ValueSampleNormalizer | None = None
 
     def record(
         self, model, objective: Objective, data_train, data_valid,
@@ -163,8 +169,15 @@ class History:
         self.radius_theorem_applied.append(None if theorem_applied is None else float(theorem_applied))
         self.penalty_exponent = float(model.q)
         self.loss_weights = tuple(float(weight) for weight in objective.loss_weights)
-        l2t, gt, h1t = relative_errors(*train_pred, *data_train[1:])
-        l2v, gv, h1v = relative_errors(*valid_pred, *data_valid[1:])
+        # Only reporting errors undo the data transform. Fidelity, regularizer,
+        # and best-checkpoint selection above stay in the training objective.
+        train_target, valid_target = data_train[1:], data_valid[1:]
+        if self.reporting_normalizer is not None:
+            denormalize = self.reporting_normalizer.denormalize_tensors
+            train_pred, train_target = denormalize(*train_pred), denormalize(*train_target)
+            valid_pred, valid_target = denormalize(*valid_pred), denormalize(*valid_target)
+        l2t, gt, h1t = relative_errors(*train_pred, *train_target)
+        l2v, gv, h1v = relative_errors(*valid_pred, *valid_target)
         self.err_l2_train.append(l2t); self.err_l2_val.append(l2v)
         self.err_grad_train.append(gt); self.err_grad_val.append(gv)
         self.err_h1_train.append(h1t); self.err_h1_val.append(h1v)

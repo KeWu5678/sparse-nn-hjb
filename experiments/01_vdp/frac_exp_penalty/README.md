@@ -1,18 +1,18 @@
-# Fractional-power penalty — Van der Pol
+# Historical frac_exp_penalty — Van der Pol
 
-This Hydra study exercises the current Algorithm 2 solver on the Van der Pol
-data. It uses ReLU powers `k={2,3}`, corresponding to `q={2/3,1/2}`, four values
-of `alpha`, and both value-only and value-plus-gradient losses. The ReLU--L1
-endpoint is run separately by the paper workflow.
+The old analyzer includes powers outside the current solver's supported fractional
+powers {2, 3} and duplicates saved-model reconstruction and plotting. Its outputs
+must not be treated as evidence from the current Algorithm 2 solver.
 
-Insertion minimizes the actual one-atom objective increment with the selected
-global scalar prox. The coefficient correction uses the global-prox normal map
-with the warm-start-derived fixed scale documented in
-`vault/power_q_penalty.md`.
+Historical report numbers are unchanged. Available unreferenced PNGs now live in
+[the image archive](../../../outdated/experiment-code-cleanup-2026-09-12/unreferenced_pngs/).
+Report links use those archived paths.
 
-This sweep's config (`conf/experiment/vdp/frac_exp_penalty.yaml`) was retired on 2026-09-10;
-only the `paper_*` experiments are runnable now. The archived records under
-`rawdata/logs/multirun/vdp/frac_exp_penalty/` remain readable by `analysis.py`.
+Obsolete
+source and the previous README are preserved under
+[`outdated/experiment-code-cleanup-2026-09-12/`](../../../outdated/experiment-code-cleanup-2026-09-12/experiments/01_vdp/frac_exp_penalty/).
+This archive is for recovery, not an alternative executable pipeline.
 
-The validated manuscript-facing run set and current numerical report stay local
-under `../paper_frac_exp_penalty/`.
+For current results, use [paper_frac_exp_penalty](../paper_frac_exp_penalty/README.md) and the
+[current-paper commands](../../../scripts/paper/README.md). Shared training
+presets are in `conf/experiment/`; see the [experiment index](../../README.md).

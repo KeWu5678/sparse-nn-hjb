@@ -3,25 +3,22 @@
 
 Visualises the open-loop training data only — the backward-PMP value samples and
 the switching-set geometry they trace out (``src/OpenLoop/pendulum``), no learned
-model. Adds a raw sample scatter alongside the three panels of Fig. 2 in Han &
-Yang (arXiv:2312.17467).
+model. Produces only the three reference-data panels included in paper_0805.tex.
 Titles are intentionally omitted; see ``README.md`` for what each figure is:
 
-    figures/value_scatter.png         raw sample scatter (theta, theta-dot, V)
-    figures/value_surface.png         V(x) over the (theta, theta-dot) plane
-    figures/trajectories.png          full backward-PMP characteristics, multicolored
-    figures/regions_of_attraction.png basins of the periodic uprights + switching set
+    paper/plot/pendulum_value_scatter.png  raw sample scatter (theta, theta-dot, V)
+    paper/plot/pendulum_value_surface.png  V(x) over the state plane
+    paper/plot/pendulum_regions.png        periodic upright basins + switching set
 
-The trajectory figure follows the paper's method (github_main_nosat.m, lines 42-90): each
-backward characteristic is plotted whole as a line ``plot(theta, theta-dot)`` — the curves
-spiral into the centers. The regions figure colors each point by the upright it belongs to
+The regions figure colors each point by the upright it belongs to
 (nearest basin-cut characteristic, tiled by 2*pi*k); the boundaries are the switching-set
 spirals. The surface is built from the wired 3000-sample training set: the value function is
 2*pi-periodic in theta, so all samples are folded into one fundamental cell [-pi, pi],
 interpolated once (denser), then tiled by 2*pi across [-8, 8] — a seamless evaluation of the
 same periodic V (no per-grid seam artifact).
 
-Run: ``../../../.venv/bin/python generate.py`` (from this folder) or ``make openloop``.
+Run: ``uv run python experiments/00_openloop/pendulum/generate.py`` from the repo root,
+or ``make openloop``.
 """
 from __future__ import annotations
 
@@ -39,9 +36,8 @@ if str(REPO_ROOT) not in sys.path:
 import matplotlib as mpl
 
 mpl.use("Agg")
-import matplotlib.pyplot as plt  # noqa: E402
 import yaml  # noqa: E402
-from matplotlib.colors import LinearSegmentedColormap, ListedColormap  # noqa: E402
+from matplotlib.colors import LinearSegmentedColormap  # noqa: E402
 from scipy.interpolate import (  # noqa: E402
     CloughTocher2DInterpolator,
     NearestNDInterpolator,
@@ -54,14 +50,19 @@ from src.OpenLoop.pendulum.nonsmooth import (  # noqa: E402
     compute_nonsmooth_curve,
     restrict_trajectory_to_curve,
 )
+from src.plots import (
+    plot_pendulum_reference_scatter,
+    plot_pendulum_reference_surface,
+    plot_periodic_regions,
+    save_figure,
+)
+from src.plotstyle import apply_publication_style as _apply_publication_style
 
 # Resolve the wired pendulum dataset from the Hydra config so these figures always
 # track whatever conf/data/pendulum.yaml points at.
 _CFG = yaml.safe_load((REPO_ROOT / "conf" / "data" / "pendulum.yaml").read_text())
 SAMPLES = DATA_DIR / _CFG["data"]["path"]
 DATASET_DIR = SAMPLES.parent
-BASE = SAMPLES.stem
-CURVE = DATASET_DIR / f"{BASE}_nonsmooth_curve.npz"
 
 
 def _raw_trajectory_pickle() -> Path:
@@ -71,8 +72,7 @@ def _raw_trajectory_pickle() -> Path:
     return cands[0] if cands else DATA_DIR / "_debug_raw_trajectories_256.pkl"
 
 
-FIG = HERE / "figures"
-FIG.mkdir(exist_ok=True)
+FIG = REPO_ROOT / "paper" / "plot"
 
 _TWO_PI = 2.0 * np.pi
 _OMEGA_CAP = 7.7                       # basin theta-dot extent
@@ -83,10 +83,6 @@ _N_PERIODS = 3                         # +/- periods to tile for the regions plo
 # this is for visualisation only — it does not affect the wired training samples.
 _REGIONS_CAP = 80.0
 
-from src.plotstyle import apply_publication_style as _apply_publication_style
-
-# MATLAB default line-color cycle (the paper cycles these per trajectory).
-_MATLAB_CYCLE = ["#0072BD", "#D95319", "#EDB120", "#7E2F8E", "#77AC30", "#4DBEEE", "#A2142F"]
 # Soft fills for the regions of attraction (one per tiled upright).
 _REGION_COLS = ["#c9b3de", "#f3b0a0", "#a9c8e8", "#f3e0a0", "#a9dca0", "#d7b5e0", "#bfe0c0"]
 
@@ -94,49 +90,6 @@ _PARULA = LinearSegmentedColormap.from_list("parula", [
     (0.2422, 0.1504, 0.6603), (0.2780, 0.3556, 0.9777), (0.1129, 0.5500, 0.8901),
     (0.0488, 0.6981, 0.7327), (0.2161, 0.7843, 0.5923), (0.6473, 0.7456, 0.4188),
     (0.9856, 0.7372, 0.2537), (0.9763, 0.9831, 0.0538)])
-
-
-def _finalize_figure(fig, out_path, formats=None, dpi: int = 300, close: bool = True,
-                     pad: float = 2.0, tight: bool = True, **kwargs) -> list[Path]:
-    out_path = Path(out_path)
-    if formats is None:
-        formats = [out_path.suffix.lstrip(".")] if out_path.suffix else ["png"]
-    if tight:
-        fig.tight_layout(pad=pad)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    saved = []
-    for fmt in formats:
-        path = out_path.with_suffix(f".{fmt}")
-        fig.savefig(path, dpi=dpi, **kwargs)
-        saved.append(path)
-    if close:
-        plt.close(fig)
-    return saved
-
-
-def _sparse_ticks(lo: float, hi: float) -> list[float]:
-    mid = 0.0 if lo < 0.0 < hi else 0.5 * (lo + hi)
-    return [round(float(lo), 2), round(float(mid), 2), round(float(hi), 2)]
-
-
-def _style_3d_axes(ax, *, xlim: tuple[float, float], ylim: tuple[float, float],
-                   zlim: tuple[float, float] | None = None,
-                   box_aspect: tuple[float, float, float] = (1.0, 1.0, 0.55),
-                   axis_linewidth: float = 1.0) -> None:
-    ax.set_xlabel(""); ax.set_ylabel(""); ax.set_zlabel("")
-    ax.set_xlim(*xlim); ax.set_ylim(*ylim)
-    ax.set_xticks(_sparse_ticks(*xlim)); ax.set_yticks(_sparse_ticks(*ylim))
-    if zlim is not None:
-        ax.set_zlim(*zlim)
-        ax.set_zticks(_sparse_ticks(*zlim))
-    ax.view_init(elev=15, azim=-105)
-    ax.set_box_aspect(box_aspect)
-    for a in (ax.xaxis, ax.yaxis, ax.zaxis):
-        a.pane.set_facecolor((1, 1, 1, 0))
-        a.pane.set_edgecolor((0, 0, 0, 0))
-        a._axinfo["grid"].update(color="0.85", linewidth=0.5)
-        a.line.set_linewidth(axis_linewidth)
-    ax.tick_params(labelsize=9, pad=1, width=axis_linewidth)
 
 
 def _value_scatter() -> Path:
@@ -147,15 +100,10 @@ def _value_scatter() -> Path:
         x = np.asarray(d["x"])
         v = np.asarray(d["v"]).reshape(-1)
 
-        fig = plt.figure(figsize=(8.5, 6.0))
-        ax = fig.add_subplot(111, projection="3d")
-        ax.scatter(x[:, 0], x[:, 1], v, c=v, cmap=_PARULA, s=9.0, alpha=0.86,
-                   depthshade=False, edgecolors="none")
-        _style_3d_axes(ax, xlim=(-8.0, 8.0), ylim=(-8.0, 8.0), zlim=(0.0, 60.0))
-        ax.set_zticks([0, 30, 60])
-        _finalize_figure(fig, FIG / "value_scatter", formats=["png"],
-                         dpi=300, tight=False, bbox_inches="tight")
-    return FIG / "value_scatter.png"
+        fig, _ = plot_pendulum_reference_scatter(x, v, cmap=_PARULA)
+        save_figure(fig, FIG / "pendulum_value_scatter", formats=["png"],
+                    dpi=300, tight=False, bbox_inches="tight")
+    return FIG / "pendulum_value_scatter.png"
 
 
 def _surface() -> Path:
@@ -190,41 +138,16 @@ def _surface() -> Path:
 
     with mpl.rc_context():
         _apply_publication_style()
-        fig = plt.figure(figsize=(4.2, 4.0))
-        ax = fig.add_subplot(111, projection="3d")
-        ax.plot_surface(GX, GY, Z, cmap=_PARULA, rcount=480, ccount=480, linewidth=0,
-                        antialiased=True, vmin=0.0, vmax=60.0)
-        _style_3d_axes(ax, xlim=(-8.0, 8.0), ylim=(-8.0, 8.0), zlim=(0.0, 60.0),
-                       box_aspect=(1.0, 1.0, 0.5), axis_linewidth=0.6)
-        _finalize_figure(fig, FIG / "value_surface", formats=["png"],
-                         dpi=300, tight=False, bbox_inches="tight")
-    return FIG / "value_surface.png"
+        fig, _ = plot_pendulum_reference_surface(GX, GY, Z, cmap=_PARULA)
+        save_figure(fig, FIG / "pendulum_value_surface", formats=["png"],
+                    dpi=300, tight=False, bbox_inches="tight")
+    return FIG / "pendulum_value_surface.png"
 
 
 def _raw_trajectories() -> list:
     """The ordered backward-PMP trajectory objects (each with a (theta, theta-dot) path)."""
     with open(_raw_trajectory_pickle(), "rb") as f:
         return pickle.load(f)
-
-
-def _trajectories() -> Path:
-    """Full backward-PMP characteristics, multicolored (paper github_main_nosat.m l.42-90).
-
-    Each trajectory is plotted whole — ``plot(theta, theta-dot)`` — spiralling into the
-    centers; colors cycle per trajectory (MATLAB default), giving the dense spiral web."""
-    raw = _raw_trajectories()
-    fig, ax = plt.subplots(figsize=(9.5, 5.4))
-    for i, t in enumerate(raw):
-        s = np.asarray(t.state)
-        ax.plot(s[:, 0], s[:, 1], lw=0.35,
-                color=_MATLAB_CYCLE[i % len(_MATLAB_CYCLE)], alpha=0.7)
-    ax.set_xlabel(r"$\theta$"); ax.set_ylabel(r"$\dot\theta$")
-    ax.set_xlim(-10, 10); ax.set_ylim(-8, 8); ax.set_aspect("equal")
-    ax.set_xticks([-10, -5, 0, 5, 10])
-    out = FIG / "trajectories.png"
-    fig.savefig(out, dpi=200, bbox_inches="tight")
-    plt.close(fig)
-    return out
 
 
 def _regions() -> Path:
@@ -258,25 +181,17 @@ def _regions() -> Path:
     _, idx = cKDTree(pts).query(np.column_stack([GX.ravel(), GY.ravel()]))
     reg = lab[idx].reshape(GX.shape)
 
-    fig, ax = plt.subplots(figsize=(9.6, 6.0))
-    ax.pcolormesh(GX, GY, reg, cmap=ListedColormap(_REGION_COLS[:2 * _N_PERIODS + 1]),
-                  shading="auto", rasterized=True)
-    ax.contour(GX, GY, reg, levels=np.arange(0.5, 2 * _N_PERIODS + 0.5),
-               colors="k", linewidths=0.7)        # switching-set spiral boundaries
-    ax.set_xlabel(r"$\theta$"); ax.set_ylabel(r"$\dot\theta$")
-    ax.set_xlim(-12, 12); ax.set_ylim(-8, 8); ax.set_aspect("equal")
-    out = FIG / "regions_of_attraction.png"
-    fig.savefig(out, dpi=200, bbox_inches="tight")
-    plt.close(fig)
+    fig, _ = plot_periodic_regions(GX, GY, reg, colors=_REGION_COLS, periods=_N_PERIODS)
+    out = FIG / "pendulum_regions.png"
+    save_figure(fig, out, dpi=200, tight=False, bbox_inches="tight")
     return out
 
 
 def main() -> int:
     _value_scatter()
     _surface()
-    _trajectories()
     _regions()
-    print(f"wrote 4 figures to {FIG}")
+    print(f"wrote 3 figures to {FIG}")
     return 0
 
 

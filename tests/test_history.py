@@ -1,7 +1,11 @@
 import math
 
+import numpy as np
+import pytest
 import torch
 
+from src.data import ValueSampleNormalizer
+from src.eval import relative_errors
 from src.models.signed import SignedModel
 from src.PDAP.history import History
 from src.PDAP.ssn_solve import Objective
@@ -114,3 +118,48 @@ def test_history_summary_records_normalized_objective_decomposition() -> None:
         + metrics["alpha_phi_1"],
         rel_tol=1e-12,
     )
+
+
+def test_physical_reporting_does_not_change_objectives_snapshots_or_selection():
+    normalizer = ValueSampleNormalizer(np.array([2.0, 8.0]), 5.0)
+    model = SignedModel(activation=torch.tanh, power=1.0, verbose=False)
+    x = torch.tensor([[0.2, -0.3], [0.5, 0.7]], dtype=torch.float64)
+    v = torch.tensor([[2.0], [3.0]], dtype=torch.float64)
+    dv = torch.tensor([[0.7, -0.6], [1.2, 0.5]], dtype=torch.float64)
+    data = x, v, dv
+    objective = Objective(alpha=0.1, gamma=0.2, normalized=True)
+    unchanged = History()
+    physical = History(reporting_normalizer=normalizer)
+    for coefficient in (1.0, 2.0):
+        model.set_atoms(
+            torch.tensor([[1.0, 0.5]], dtype=torch.float64),
+            torch.tensor([0.1], dtype=torch.float64),
+            torch.tensor([coefficient], dtype=torch.float64),
+        )
+        unchanged.record(model, objective, data, data)
+        physical.record(model, objective, data, data)
+        expected = relative_errors(
+            *normalizer.denormalize_tensors(*model.predict_tensors(x)),
+            *normalizer.denormalize_tensors(v, dv),
+        )
+        assert (physical.err_l2_val[-1], physical.err_grad_val[-1], physical.err_h1_val[-1]) == expected
+
+    assert physical.err_grad_val != pytest.approx(unchanged.err_grad_val)
+    assert physical.err_h1_val != pytest.approx(unchanged.err_h1_val)
+    for name in (
+        "train_loss", "val_loss", "data_loss_train", "data_loss_val",
+        "value_loss_train", "value_loss_val", "gradient_loss_train", "gradient_loss_val",
+        "sparsity_functional", "psi_p", "alpha_phi", "total_variation", "radius_r95", "radius_max",
+        "best_iteration", "best_train_loss", "best_neurons",
+    ):
+        assert getattr(physical, name) == getattr(unchanged, name)
+    assert physical.best_iteration == int(np.argmin(physical.train_loss))
+    for expected_state, state in zip(unchanged.model_states, physical.model_states):
+        assert state.keys() == expected_state.keys()
+        for name in state:
+            assert torch.equal(state[name], expected_state[name])
+    for expected_weights, weights in zip(unchanged.outer_weights, physical.outer_weights):
+        assert torch.equal(weights, expected_weights)
+    for expected_weights, weights in zip(unchanged.inner_weights, physical.inner_weights):
+        assert torch.equal(weights["weight"], expected_weights["weight"])
+        assert torch.equal(weights["bias"], expected_weights["bias"])
