@@ -28,6 +28,7 @@ Two loop orders, selected by ``training.loop_order``:
 from __future__ import annotations
 
 import logging
+import math
 from typing import Tuple
 
 import torch
@@ -36,7 +37,7 @@ from ..config.activations import get_activation, get_growth, get_use_sphere
 from ..SSN import SUPPORTED_ACTIVATION_POWERS
 from .history import History, objective_value
 from .insertion import finite_step, profile_threshold
-from .radius import certificate_radius, sample_extent
+from .radius import FIXED_LOG_CLAMP, certificate_radius, sample_extent
 from .ssn_solve import Objective, SolverConfig, ssn_solve
 from .warmstart import warm_start
 
@@ -82,6 +83,12 @@ class PDAP:
         self.correction_guard = bool(t.correction_guard)
         self.loop_order = t.loop_order
         self.radial_cap = t.radial_cap
+        # The cap the last insertion search used, and whether the theorem
+        # supplied it. Recorded per iteration so a `radial_cap=theorem` run
+        # whose hypothesis p > s1 fails stays distinguishable from `fixed`:
+        # both search inside exp(5), so the metrics are otherwise identical.
+        self._last_search_radius: float | None = None
+        self._last_theorem_applied: float | None = None
 
         # The coefficient correction uses closed-form proximal maps.  Reject an
         # unsupported exponent here for every insertion strategy, rather than
@@ -192,6 +199,8 @@ class PDAP:
         and the samples.
         """
         if self.radial_cap != "theorem" or self._use_sphere:
+            self._last_search_radius = 1.0 if self._use_sphere else math.exp(FIXED_LOG_CLAMP)
+            self._last_theorem_applied = -1.0
             return None
         res_v, res_dv = residual
         w1, w2 = self.objective.loss_weights
@@ -202,13 +211,20 @@ class PDAP:
                 (w1 * res_v.pow(2).sum() + w2 * res_dv.pow(2).sum()) / max(M, 1)
             )
         )
-        return certificate_radius(
+        radius = certificate_radius(
             self._growth,
             extent=sample_extent(data_train[0]),
             residual_norm=residual_norm,
             alpha=self.objective.alpha,
             moment_order=self.objective.moment_order,
         )
+        # `None` means the hypothesis failed and insertion falls back to exp(5);
+        # record which of the two produced the cap actually searched.
+        self._last_search_radius = (
+            math.exp(FIXED_LOG_CLAMP) if radius is None else float(radius)
+        )
+        self._last_theorem_applied = 0.0 if radius is None else 1.0
+        return radius
 
     def _warm_start(self, model, data_train, residual, W, b, verbose: bool) -> torch.Tensor:
         """Coordinate-descent initial outer weights for new atoms (W, b)."""
@@ -362,6 +378,9 @@ class PDAP:
             raise ValueError(
                 f"model power={model.power} does not match configured power={self._power}"
             )
+        # A trainer can be reused; a zero-iteration fit has no search to report.
+        self._last_search_radius = None
+        self._last_theorem_applied = None
         history = History()
         o = self.objective
         if verbose:
@@ -393,7 +412,11 @@ class PDAP:
             # regularization the zero measure is a valid terminal PDAP result,
             # not a training failure; record it once and skip the SSN loop,
             # which requires a nonempty outer-parameter vector.
-            history.record(model, self.objective, data_train, data_valid)
+            history.record(
+                model, self.objective, data_train, data_valid,
+                search_radius=self._last_search_radius,
+                theorem_applied=self._last_theorem_applied,
+            )
             history.final_neurons = 0
             if verbose:
                 logger.info("Initial insertion accepted no atoms; returning the zero measure")
@@ -419,7 +442,11 @@ class PDAP:
             pruned = self._prune(model, amp_tol)
 
             # 3. record (evaluation lives in History.record, not the loop)
-            history.record(model, self.objective, data_train, data_valid)
+            history.record(
+                model, self.objective, data_train, data_valid,
+                search_radius=self._last_search_radius,
+                theorem_applied=self._last_theorem_applied,
+            )
 
             if verbose:
                 if supp_before != model.n_neurons:
@@ -486,7 +513,11 @@ class PDAP:
             pruned = self._prune(model, amp_tol)
 
             # 4. record
-            history.record(model, self.objective, data_train, data_valid)
+            history.record(
+                model, self.objective, data_train, data_valid,
+                search_radius=self._last_search_radius,
+                theorem_applied=self._last_theorem_applied,
+            )
             if verbose:
                 logger.info(
                     "  | %-7s | %7d | %6d | %6d | %12.3e | %12.3e | %10.3e | %10.3e |",
@@ -497,7 +528,11 @@ class PDAP:
 
         if not history.train_loss:
             # Nothing was ever inserted: the zero measure is the terminal result.
-            history.record(model, self.objective, data_train, data_valid)
+            history.record(
+                model, self.objective, data_train, data_valid,
+                search_radius=self._last_search_radius,
+                theorem_applied=self._last_theorem_applied,
+            )
         history.final_neurons = int(model.n_neurons)
         if verbose:
             logger.info("  +---------+---------+--------+--------+--------------+--------------+------------+------------+")
