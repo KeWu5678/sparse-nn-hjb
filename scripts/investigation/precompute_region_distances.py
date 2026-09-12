@@ -41,7 +41,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from src.OpenLoop.pendulum.nonsmooth import NonsmoothCurve  # noqa: E402
-from src.paths import DATA_DIR  # noqa: E402
+from src.data import DATA_DIR  # noqa: E402
 
 
 def parse_args() -> argparse.Namespace:

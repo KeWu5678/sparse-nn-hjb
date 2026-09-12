@@ -17,7 +17,6 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from src.SSN.prox import power_prox
-from src.paths import PLOTS_DIR
 
 
 alpha = 1e-5
@@ -108,6 +107,7 @@ fig.suptitle(
     f"(q={q:g}, scale={mu:.2e}, warm factor={rho_prox:g})"
 )
 fig.tight_layout()
-output = PLOTS_DIR / "proximal_deadzone.png"
+output = REPO_ROOT / "rawdata" / "plots" / "proximal_deadzone.png"
+output.parent.mkdir(parents=True, exist_ok=True)
 fig.savefig(output, dpi=180, bbox_inches="tight")
 print(f"figure saved to {output}")

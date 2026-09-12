@@ -47,7 +47,7 @@ testpaths = ["tests"]
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-extend-exclude = ["outdated", "rawdata", "notebook", "papar", "deploy"]
+extend-exclude = ["outdated", "rawdata", "papar", "deploy"]
 
 [tool.ruff.lint]
 # Correctness-focused: pyflakes/pycodestyle errors, bugbear, import sorting.

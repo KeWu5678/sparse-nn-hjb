@@ -10,9 +10,8 @@ from hydra.core.hydra_config import HydraConfig
 
 from src.config import get_activation, get_use_sphere
 from src.config.schema import ExperimentConfig
-from src.data import load_value_samples
+from src.data import DATA_DIR, load_value_samples
 from src.models import build_model
-from src.paths import DATA_DIR
 from src.PDAP import PDAP
 
 # Must be registered before any compose() call below.

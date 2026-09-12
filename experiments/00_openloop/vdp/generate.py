@@ -29,7 +29,7 @@ mpl.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 from scipy.interpolate import griddata  # noqa: E402
 
-from src.paths import DATA_DIR  # noqa: E402
+from src.data import DATA_DIR  # noqa: E402
 from src.plots import (  # noqa: E402
     plot_value_scatter3d,
     plot_vdp_value_with_gradient_arrows2d,

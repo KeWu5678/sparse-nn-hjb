@@ -25,7 +25,6 @@ from src.OpenLoop.pendulum.trajectories import (
     uniform_boundary_angles,
 )
 from src.OpenLoop.value_samples import ValueSamples
-from src.paths import DATA_DIR
 
 
 @dataclass(frozen=True)
@@ -111,7 +110,7 @@ class PendulumValueSolution:
 
     def save_dataset(
         self,
-        output_dir: str | Path = DATA_DIR,
+        output_dir: str | Path,
         *,
         date_tag: str | None = None,
     ) -> dict[str, Path]:

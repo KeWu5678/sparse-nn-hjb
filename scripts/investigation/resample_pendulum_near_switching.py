@@ -32,7 +32,7 @@ from src.OpenLoop.pendulum.nonsmooth import (  # noqa: E402
     restrict_trajectory_to_curve,
 )
 from src.OpenLoop.value_samples import ValueSamples  # noqa: E402
-from src.paths import DATA_DIR  # noqa: E402
+from src.data import DATA_DIR  # noqa: E402
 
 
 def _current_pendulum_dataset() -> Path:
