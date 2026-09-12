@@ -123,7 +123,7 @@ arrays, not separately supplied activations or re-fitted normalizers.
 
 ## Reproduction and scope
 
-See the local [paper pipeline](../scripts/paper/README.md) for current manuscript
+See the local-only `scripts/paper/README.md` for current manuscript
 commands. Its VDP Algorithm 2 frontier comparison uses alpha=1e-6; the surface/table comparison
 uses alpha=1e-5. These are deliberately distinct. Existing run selection stays
 fixed during rescoring; retuning is a separate experiment.
