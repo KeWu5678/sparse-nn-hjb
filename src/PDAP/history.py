@@ -105,6 +105,13 @@ class History:
     total_variation: List[float] = field(default_factory=list)
     radius_r95: List[float] = field(default_factory=list)
     radius_max: List[float] = field(default_factory=list)
+    #: Radius used this iteration: min(theorem radius, exp(5)), the numerical
+    #: fallback exp(5), or 1 for a unit-sphere dictionary. None means no search.
+    search_radius: List[float | None] = field(default_factory=list)
+    #: 1 = theorem radius available, 0 = requested but a required hypothesis
+    #: failed (fallback used), -1 = not requested (radial_cap=fixed, or a
+    #: sphere activation, where there is no radial search to bound).
+    radius_theorem_applied: List[float | None] = field(default_factory=list)
     inner_weights: List[Dict[str, torch.Tensor]] = field(default_factory=list)
     outer_weights: List[torch.Tensor] = field(default_factory=list)
     model_states: List[Dict[str, torch.Tensor]] = field(default_factory=list)
@@ -114,8 +121,19 @@ class History:
     best_train_loss: float = float("inf")
     final_neurons: int = 0
 
-    def record(self, model, objective: Objective, data_train, data_valid) -> None:
-        """Evaluate the current model and append one iteration's record."""
+    def record(
+        self, model, objective: Objective, data_train, data_valid,
+        *,
+        search_radius: float | None = None,
+        theorem_applied: float | None = None,
+    ) -> None:
+        """Evaluate the current model and append one iteration's record.
+
+        ``search_radius``/``theorem_applied`` describe the insertion search cap
+        this iteration used. They are what separates a ``radial_cap=theorem``
+        run whose hypothesis failed from a ``radial_cap=fixed`` run: both search
+        inside ``exp(5)``, and without these the records are identical.
+        """
         train_pred = model.predict_tensors(data_train[0])
         valid_pred = model.predict_tensors(data_valid[0])
         train_terms = data_loss_terms(
@@ -141,6 +159,8 @@ class History:
         self.total_variation.append(regularizer["total_variation"])
         self.radius_r95.append(regularizer["radius_r95"])
         self.radius_max.append(regularizer["radius_max"])
+        self.search_radius.append(None if search_radius is None else float(search_radius))
+        self.radius_theorem_applied.append(None if theorem_applied is None else float(theorem_applied))
         self.penalty_exponent = float(model.q)
         self.loss_weights = tuple(float(weight) for weight in objective.loss_weights)
         l2t, gt, h1t = relative_errors(*train_pred, *data_train[1:])
@@ -235,4 +255,9 @@ class History:
             if self.penalty_exponent == 1.0:
                 metrics["phi_1"] = float(self.sparsity_functional[i])
                 metrics["alpha_phi_1"] = float(self.alpha_phi[i])
+        # Old fit pickles have no search telemetry; do not invent provenance.
+        for name in ("search_radius", "radius_theorem_applied"):
+            values = getattr(self, name, [])
+            if len(values) > i and values[i] is not None:
+                metrics[name] = float(values[i])
         return metrics
