@@ -2885,7 +2885,7 @@ satisfies $\phi'(0)<\infty$ as in Assumption~\ref{pen1}; Algorithm~\ref{alg:q}
 is an adaptation of it to the penalty $\psi_k$, whose infinite slope at the
 origin is explicitly excluded by that reference.
 
-In both algorithms the insertion step freezes the locations
+In both algorithms the coefficient-correction step freezes the locations
 $\boldsymbol\omega$ and applies a semismooth Newton method to the resulting
 finite-dimensional coefficient problem. They are specified in
 their respective subsections below. In either case the method is local and its
@@ -2955,7 +2955,8 @@ satisfies
 \end{theorem}
 
 \begin{proof}
-We first establish attainment of the certificate maximum $B_p$.
+We first establish attainment of the certificate maximum
+$\|P_{p,\mu}\|_\infty$ when $\Delta(\mu)>0$.
 $p>s_1$ and \eqref{eq:H1-growth} give
 $K_p\in C_0(\Omega;H^1(D))$, hence $B_p<\infty$ and
 $P_{p,\mu}\in C_0(\Omega)$.  If $\Delta(\mu)>0$, then
@@ -3047,7 +3048,7 @@ accepting the corrected iterate only if it does not increase the objective. Then
 	\qquad(n\ge1).
 \end{align*}
 These conclusions do not assert convergence of $(\mu_k)$ to a global
-minimizer.
+minimizer or an objective-gap rate.
 \end{corollary}
 
 \begin{proof}
@@ -3095,7 +3096,8 @@ Theorem~\ref{thm:quantitative-insertion} and
 Corollary~\ref{cor:certificate-rate} apply verbatim with the sampled
 value--gradient inner product in place of the $H^1(D)$ inner product. The
 empirical search radius is therefore given by
-\eqref{eq:explicit-certificate-radius}, using the sampled residual norm.
+\eqref{eq:explicit-certificate-radius}, using the sampled residual norm and
+the corresponding sampled feature-growth constants.
 
 
 
@@ -3115,8 +3117,9 @@ candidate $\omega$ is therefore accepted when
 
 Theorem~\ref{thm:quantitative-insertion} provides two additional pieces of
 information. First, it gives the bound $R(\mu_t)$ for sampling the initial
-points at each iteration. Second, it overcomes the locality of the semismooth Newton method
-by giving an initial outer weight that already guarantees a decrease.
+points at each iteration. Second, it gives an initial outer weight that
+guarantees a single-atom insertion decrease before the local semismooth Newton
+correction.
 
 For a nonhomogeneous activation set
 $R_{\mathrm{search}}(\mu_t):=\min\{R(\mu_t),e^5\}$.

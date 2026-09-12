@@ -10,7 +10,8 @@ owns the research question, canonical command, analysis script, promoted final
 figures, and Markdown summaries. Executable experiment config lives in
 `conf/experiment/<experiment_name>.yaml` so Hydra composition remains centralized.
 Raw datasets, logs, run records, Hydra output, and intermediate plots stay under
-`rawdata/` using the central paths in `src.paths`.
+`rawdata/`. Dataset paths resolve through `src.data.DATA_DIR`, independently of
+the working directory; Hydra configuration owns the run-output paths.
 
 Top-level `scripts/` is reserved for generic reusable entry points.
 Domain-specific runners may remain in `scripts/` while they are legacy and

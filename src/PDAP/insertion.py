@@ -177,8 +177,8 @@ def _generate_candidates(
                         keep[j] = False
         return a_cands[keep], b_cands[keep]
 
-    # Homogeneuous models use the sampled directions directly;
-    # Nonhomogeneous models give each direction a log-uniform radius.
+    # Homogeneous models use the sampled directions directly;
+    # nonhomogeneous models give each direction a log-uniform radius (ADR 0006).
     a_t, b_t = sample_sphere(N)
     existing_unit = None
     if not use_sphere:
@@ -261,6 +261,8 @@ def profile_threshold(
     Normalized Algorithm 1 accepts ``|P(omega)| / w_p(omega) > alpha``.
     The ReLU--L1 baseline has sphere-normalized inner parameters but no moment
     normalization, so it accepts ``|P(omega)| > alpha``.
+    Both use the implemented log/L1 family with ``L_phi = phi'(0+) = 1``;
+    for a general penalty the threshold would be ``alpha * L_phi``.
 
     Candidates are ranked by their margin above the applicable threshold. For
     Algorithm 1 this is the certificate violation

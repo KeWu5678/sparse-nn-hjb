@@ -14,7 +14,7 @@ name: run
 
 hydra:
   job:
-    # Keep CWD = repo root so src.paths (REPO_ROOT-relative) keeps working.
+    # Keep relative output paths rooted at the repo; DATA_DIR is CWD-independent.
     chdir: false
   sweep:
     # Only the sweep root is shared; each conf/experiment/<name>.yaml sets its own

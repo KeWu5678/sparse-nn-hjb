@@ -62,8 +62,10 @@ deduplication is not implemented.
 ## State And Versions
 
 State lives in `deploy/docker/mlflow-data/` (gitignored) and survives
-`docker compose down`. To discard the local run history, remove that directory
-and re-import from Run Records.
+`docker compose down`. Both the SQLite database and any server-uploaded artifacts
+(`mlartifacts/`) use this bind mount; the current importer still uploads only
+metadata. Re-importing Run Records restores the dashboard metadata, not uploaded
+artifact bytes, so preserve those files if artifact uploads are used.
 
 The image tag in `compose.yaml` is pinned; keep it aligned with the resolved
 `mlflow` version in `uv.lock`.

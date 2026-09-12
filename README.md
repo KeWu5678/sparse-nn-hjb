@@ -109,8 +109,8 @@ make help                    # list experiment targets
 The experiment definitions are tracked Hydra configs. For example:
 
 ```bash
-uv run python scripts/train.py -m +experiment=vdp/paper_log_penalty
-uv run python scripts/train.py -m +experiment=pendulum/paper_frac_exp_penalty
+uv run python scripts/train.py -m +experiment=log_penalty +data=vdp
+uv run python scripts/train.py -m +experiment=frac_exp_penalty +data=pendulum
 ```
 
 Their run records and derived artifacts are written only to local ignored

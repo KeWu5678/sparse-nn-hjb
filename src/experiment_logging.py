@@ -188,6 +188,7 @@ def _summary_metrics(record: dict[str, Any]) -> list[tuple[str, Real]]:
         "elapsed_s",
         "error",
         "hydra",
+        "normalization",
     }
     return [
         (key, value)

@@ -16,7 +16,8 @@ docker compose -f deploy/docker/compose.yaml up -d
 
 `restart: unless-stopped` keeps it running across reboots without a terminal, so
 this is normally a one-time command. The server listens on `127.0.0.1:5000`
-only. Backend store is SQLite under `deploy/docker/mlflow-data/` (gitignored).
+only. The SQLite backend and server-uploaded artifacts (`mlartifacts/`) both
+live under `deploy/docker/mlflow-data/` (gitignored).
 
 ### Normal Workflow
 
@@ -74,11 +75,19 @@ uv run mlflow server --backend-store-uri sqlite:///mlflow.db --host 127.0.0.1 --
 
 ### Resetting
 
-The dashboard store is disposable — Run Records are the source of truth:
+Run Records can restore dashboard metadata, but not uploaded artifact bytes.
+Stop the server before resetting:
 
 ```bash
 docker compose -f deploy/docker/compose.yaml down
-rm -rf deploy/docker/mlflow-data
+```
+
+Move the entire `deploy/docker/mlflow-data/` directory to a backup location
+outside the repository. Keep the database and `mlartifacts/` together so the
+original run-to-artifact associations can be restored. Then start a fresh store
+and re-import the Run Records:
+
+```bash
 docker compose -f deploy/docker/compose.yaml up -d
 ```
 
