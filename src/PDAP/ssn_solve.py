@@ -31,7 +31,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-ALGORITHM2_COEFFICIENT_SOLVER = "global_prox_warmstart_scale"
 # Selected by the 24-cell VDP/pendulum pilot in experiments/algorithm2_rho_pilot.md.
 ALGORITHM2_PROX_RHO = 0.5
 

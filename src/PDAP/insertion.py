@@ -32,12 +32,11 @@ from .moment import moment_weight
 
 logger = logging.getLogger(__name__)
 
-ALGORITHM2_CANDIDATE_STARTS = "random_sphere_multistart"
+# Two candidates count as the same atom when their unit inner parameters differ by
+# less than this cosine gap; see the filter in `_generate_candidates`.
 ALGORITHM2_EXISTING_SUPPORT_COSINE_GAP_TOL = 1e-8
 
 __all__ = [
-    "ALGORITHM2_CANDIDATE_STARTS",
-    "ALGORITHM2_EXISTING_SUPPORT_COSINE_GAP_TOL",
     "profile_threshold",
     "finite_step",
     "solve_insertion_weight",

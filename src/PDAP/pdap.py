@@ -35,20 +35,9 @@ import torch
 from ..config.activations import get_activation, get_growth, get_use_sphere
 from ..SSN import SUPPORTED_ACTIVATION_POWERS
 from .history import History, objective_value
-from .insertion import (
-    ALGORITHM2_CANDIDATE_STARTS,
-    ALGORITHM2_EXISTING_SUPPORT_COSINE_GAP_TOL,
-    finite_step,
-    profile_threshold,
-)
+from .insertion import finite_step, profile_threshold
 from .radius import certificate_radius, sample_extent
-from .ssn_solve import (
-    ALGORITHM2_COEFFICIENT_SOLVER,
-    ALGORITHM2_PROX_RHO,
-    Objective,
-    SolverConfig,
-    ssn_solve,
-)
+from .ssn_solve import Objective, SolverConfig, ssn_solve
 from .warmstart import warm_start
 
 logger = logging.getLogger(__name__)
@@ -93,7 +82,6 @@ class PDAP:
         self.correction_guard = bool(t.correction_guard)
         self.loop_order = t.loop_order
         self.radial_cap = t.radial_cap
-        self.algorithm_provenance: dict[str, str | float] = {}
 
         # The coefficient correction uses closed-form proximal maps.  Reject an
         # unsupported exponent here for every insertion strategy, rather than
@@ -116,21 +104,6 @@ class PDAP:
                     "finite_step insertion minimizes the power penalty and requires "
                     f"gamma == 0; got gamma={m.gamma}"
                 )
-            if m.power == 1.0:
-                self.algorithm_provenance = {
-                    "candidate_starts": ALGORITHM2_CANDIDATE_STARTS,
-                    "coefficient_solver": "soft_threshold",
-                }
-            else:
-                self.algorithm_provenance = {
-                    "candidate_starts": ALGORITHM2_CANDIDATE_STARTS,
-                    "coefficient_solver": ALGORITHM2_COEFFICIENT_SOLVER,
-                    "existing_support_filter": "numerical_repeat_only",
-                    "existing_support_cosine_gap_tol": (
-                        ALGORITHM2_EXISTING_SUPPORT_COSINE_GAP_TOL
-                    ),
-                    "rho": ALGORITHM2_PROX_RHO,
-                }
 
         # A signed profile model with a nonhomogeneous activation is Algorithm 1.
         # Its normalized-measure objective is determined by that identity rather
