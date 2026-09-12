@@ -32,10 +32,6 @@ from .moment import moment_weight
 
 logger = logging.getLogger(__name__)
 
-# Two candidates count as the same atom when their unit inner parameters differ by
-# less than this cosine gap; see the filter in `_generate_candidates`.
-ALGORITHM2_EXISTING_SUPPORT_COSINE_GAP_TOL = 1e-8
-
 __all__ = [
     "profile_threshold",
     "finite_step",
@@ -63,7 +59,10 @@ def _neuron_value_grad(
 
 
 def _profile_value(
-    X, a, b, activation, power, w1, w2, Kx, res_v, res_dv, two_sided: bool,
+    X: torch.Tensor, a: torch.Tensor, b: torch.Tensor,
+    activation: Callable[[torch.Tensor], torch.Tensor], power: float,
+    w1: float, w2: float, Kx: int,
+    res_v: torch.Tensor, res_dv: torch.Tensor, two_sided: bool,
 ) -> torch.Tensor:
     """Empirical fidelity derivative P_mu^M(omega), absolute when two-sided."""
     neuron_v, neuron_dv = _neuron_value_grad(X, a, b, activation, power)
@@ -77,11 +76,21 @@ def _profile_value(
 # Shared candidate generation
 # ---------------------------------------------------------------------------- #
 def _generate_candidates(
-    X, residual_v, residual_dv, *,
-    activation, power, loss_weights, sample_sphere, N,
-    merge_tol, two_sided, use_sphere, existing_atoms,
-    lbfgs_lr=1e-2, lbfgs_steps=200, moment_order=2.0,
-    normalized=False, radius=None,
+    X: torch.Tensor, residual_v: torch.Tensor, residual_dv: torch.Tensor, *,
+    activation: Callable[[torch.Tensor], torch.Tensor],
+    power: float,
+    loss_weights: Tuple[float, float],
+    sample_sphere: Callable[[int], Tuple[torch.Tensor, torch.Tensor]],
+    N: int,
+    merge_tol: float,
+    two_sided: bool,
+    use_sphere: bool,
+    existing_atoms: Optional[Tuple[torch.Tensor, torch.Tensor]],
+    lbfgs_lr: float = 1e-2,
+    lbfgs_steps: int = 200,
+    moment_order: float = 2.0,
+    normalized: bool = False,
+    radius: Optional[float] = None,
 ) -> Tuple[torch.Tensor, torch.Tensor, int, int]:
     """Return distinct locally refined maximizers of the configured search score.
 
@@ -105,7 +114,10 @@ def _generate_candidates(
     res_v_n = residual_v / res_norm
     res_dv_n = residual_dv / res_norm
 
-    def maximize_batch(a_batch, b_batch, steps=200, lr=1e-2, eps=1e-12):
+    def maximize_batch(
+        a_batch: torch.Tensor, b_batch: torch.Tensor,
+        steps: int = 200, lr: float = 1e-2, eps: float = 1e-12,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Locally maximize the configured profile score from each starting point.
 
         For a positively homogeneous activation the parameter is gauge-fixed to
@@ -128,23 +140,26 @@ def _generate_candidates(
 
             def closure():
                 opt.zero_grad()
-                joint = not use_sphere
-                w_s = w if joint else w / w.norm().clamp_min(eps)
+                w_s = w / w.norm().clamp_min(eps) if use_sphere else w
                 obj = _profile_value(X, w_s[:d_dim], w_s[d_dim], activation, power,
                                      w1, w2, Kx, res_v_n, res_dv_n, two_sided)
-                if joint and normalized:
+                if normalized and not use_sphere:
                     obj = obj / moment_weight(w_s[:d_dim], w_s[d_dim], moment_order)
                 (-obj).backward()
                 return -obj
 
             opt.step(closure)
-            joint = not use_sphere
-            w_s = w.detach() if joint else (w / w.norm().clamp_min(eps)).detach()
+            w_s = (w / w.norm().clamp_min(eps)).detach() if use_sphere else w.detach()
             results_a.append(w_s[:d_dim])
             results_b.append(w_s[d_dim:d_dim + 1])
         return torch.stack(results_a), torch.stack(results_b).reshape(-1)
 
-    def merge(a_cands, b_cands):
+    def merge(
+        a_cands: torch.Tensor, b_cands: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Merge the duplicated (close) atoms.
+        """
         n = a_cands.shape[0]
         if n <= 1:
             return a_cands, b_cands
@@ -162,21 +177,8 @@ def _generate_candidates(
                         keep[j] = False
         return a_cands[keep], b_cands[keep]
 
-    # Step 1: random starts.  Existing support points are not injected into the
-    # multistart search; for Algorithm 2 they are retained only to reject final
-    # candidates that return to the current support.
-    #
-    # The homogeneous search is posed on the sphere, so its starting points live
-    # there.  The nonhomogeneous search ranges over the ball of radius
-    # ``radius``, and its starting points carry a radius too -- starting every
-    # trajectory at |omega| = 1 would bias the search toward that shell.
-    #
-    # The radius is drawn log-uniformly, not uniformly in volume.  Uniform in
-    # the ball puts r = R * U^(1/(d+1)), whose median already sits at ~0.79 R;
-    # with R = e^5 nearly every start lands in the far field, where the
-    # normalized profile |P|/w_p is flat and vanishing, and the local solve
-    # cannot climb back.  Scale, not volume, is the meaningful spread for a
-    # shape parameter that ranges over decades.
+    # Homogeneuous models use the sampled directions directly;
+    # Nonhomogeneous models give each direction a log-uniform radius.
     a_t, b_t = sample_sphere(N)
     existing_unit = None
     if not use_sphere:
@@ -186,6 +188,8 @@ def _generate_candidates(
         r = torch.exp(lo + (hi - lo) * u)
         a_t = a_t * r.unsqueeze(1)
         b_t = b_t * r
+    # Existing atoms are used only to reject numerical repeats after refinement;
+    # they are not added to the optimization starts.
     if use_sphere and existing_atoms is not None:
         W_exist, b_exist = existing_atoms
         if W_exist.shape[0] > 0:
@@ -222,8 +226,9 @@ def _generate_candidates(
         U = torch.cat([a_t, b_t.reshape(-1, 1)], dim=1)
         U = U / U.norm(dim=1, keepdim=True).clamp_min(1e-12)
         distinct = torch.all(
-            U @ existing_unit.T
-            <= 1.0 - ALGORITHM2_EXISTING_SUPPORT_COSINE_GAP_TOL,
+            # 1e-8 is a numerical-repeat gap only, deliberately far tighter than
+            # merge_tol, the candidate-to-candidate deduplication (ADR 0013).
+            U @ existing_unit.T <= 1.0 - 1e-8,
             dim=1,
         )
         a_t, b_t = a_t[distinct], b_t[distinct]
@@ -236,25 +241,30 @@ def _generate_candidates(
 # Strategy 1: profile-threshold acceptance
 # ---------------------------------------------------------------------------- #
 def profile_threshold(
-    X, residual_v, residual_dv, *,
-    activation, power, loss_weights, alpha, sample_sphere, N,
-    max_insert=15, merge_tol=1e-2, two_sided=True, use_sphere=True,
-    existing_atoms=None, verbose=True,
-    lbfgs_lr=1e-2, lbfgs_steps=200, moment_order=2.0,
-    normalized=False, insert_init="warm_start", radius=None,
+    X: torch.Tensor, residual_v: torch.Tensor, residual_dv: torch.Tensor, *,
+    activation: Callable[[torch.Tensor], torch.Tensor],
+    power: float,
+    loss_weights: Tuple[float, float],
+    alpha: float,
+    sample_sphere: Callable[[int], Tuple[torch.Tensor, torch.Tensor]],
+    N: int,
+    max_insert: int = 15, merge_tol: float = 1e-2,
+    two_sided: bool = True, use_sphere: bool = True,
+    existing_atoms: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+    verbose: bool = True,
+    lbfgs_lr: float = 1e-2, lbfgs_steps: int = 200, moment_order: float = 2.0,
+    normalized: bool = False, insert_init: str = "warm_start",
+    radius: Optional[float] = None,
 ) -> Tuple[np.ndarray, np.ndarray, Optional[np.ndarray]]:
-    """Accept atoms whose derivative magnitude clears the insertion threshold.
+    """Select candidates for Algorithm 1 or the ReLU--L1 baseline.
 
-    Two model families use this search:
+    Normalized Algorithm 1 accepts ``|P(omega)| / w_p(omega) > alpha``.
+    The ReLU--L1 baseline has sphere-normalized inner parameters but no moment
+    normalization, so it accepts ``|P(omega)| > alpha``.
 
-      * normalized Algorithm 1 uses
-        ``|P_p(omega)| > alpha*L_phi`` with ``P_p = P/w_p``.  ``L_phi = phi'(0+) = 1``
-        for the whole log family, so the threshold is just ``alpha``.
-      * an unnormalized profile model uses the classical ``|P(omega)| > alpha``.
-
-    Candidates are ranked by their margin above the threshold, which in the
-    normalized case is the certificate violation
-    ``Delta(mu,omega) = max{|P_p(omega)| - alpha*L_phi, 0}``.
+    Candidates are ranked by their margin above the applicable threshold. For
+    Algorithm 1 this is the certificate violation
+    ``Delta(mu, omega) = |P(omega)| / w_p(omega) - alpha``.
 
     Returns ``(W, b, c)``; ``c`` is ``None`` unless ``insert_init="guaranteed"``,
     in which case it carries the theorem's per-atom coefficient.
@@ -373,7 +383,10 @@ def profile_threshold(
 # Strategy 2: finite-step acceptance
 # ---------------------------------------------------------------------------- #
 def solve_insertion_weight(
-    p_omega: float, S_sq: float, alpha: float, q: float,
+    p_omega: float,
+    S_sq: float,
+    alpha: float,
+    q: float,
 ) -> Optional[Tuple[float, float]]:
     """Minimize the actual one-atom objective increment.
 
@@ -400,12 +413,18 @@ def solve_insertion_weight(
 
 
 def finite_step(
-    X, residual_v, residual_dv, *,
-    activation, power, loss_weights, alpha, sample_sphere, N,
-    max_insert=15, merge_tol=1e-2, use_sphere=True,
-    existing_atoms=None, verbose=True,
-    lbfgs_lr=1e-2, lbfgs_steps=200,
-    radius=None,
+    X: torch.Tensor, residual_v: torch.Tensor, residual_dv: torch.Tensor, *,
+    activation: Callable[[torch.Tensor], torch.Tensor],
+    power: float,
+    loss_weights: Tuple[float, float],
+    alpha: float,
+    sample_sphere: Callable[[int], Tuple[torch.Tensor, torch.Tensor]],
+    N: int,
+    max_insert: int = 15, merge_tol: float = 1e-2, use_sphere: bool = True,
+    existing_atoms: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+    verbose: bool = True,
+    lbfgs_lr: float = 1e-2, lbfgs_steps: int = 200,
+    radius: Optional[float] = None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Accept atoms with a profitable finite step (Delta J(c*) < 0); return c* too."""
     K, d_dim = X.shape
