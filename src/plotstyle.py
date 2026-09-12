@@ -16,6 +16,18 @@ PALETTE = {
     "violet": "#9A4D8E",
 }
 
+_TYPOGRAPHY = {
+    "font.family": ["serif"],
+    "font.serif": ["CMU Serif", "Computer Modern Roman", "cmr10", "DejaVu Serif"],
+    "mathtext.fontset": "cm",
+    "axes.formatter.use_mathtext": True,
+    "text.usetex": False,
+}
+
+# The legacy frontier applies only this subset inside its local rc_context.
+# Keep the subset explicit so centralization does not alter its geometry.
+FRONTIER_RC = {**_TYPOGRAPHY, "font.size": 12, "axes.linewidth": 1.0}
+
 
 def style_frontier_axes(ax, *, legend_ncol: int | None = None) -> None:
     """Boxed variant used by every neuron/H1 frontier plot.
@@ -40,15 +52,11 @@ def style_frontier_axes(ax, *, legend_ncol: int | None = None) -> None:
 def apply_publication_style(font_size: int = 12, axes_linewidth: float = 1.0) -> None:
     """Set the house-style matplotlib rcParams (call once before plotting)."""
     mpl.rcParams.update({
-        "font.family": ["serif"],
-        "font.serif": ["CMU Serif", "Computer Modern Roman", "cmr10", "DejaVu Serif"],
+        **_TYPOGRAPHY,
         "font.size": font_size,
         "axes.spines.right": False,
         "axes.spines.top": False,
         "axes.linewidth": axes_linewidth,
         "legend.frameon": False,
-        "mathtext.fontset": "cm",
-        "axes.formatter.use_mathtext": True,
         "svg.fonttype": "none",
-        "text.usetex": False,
     })

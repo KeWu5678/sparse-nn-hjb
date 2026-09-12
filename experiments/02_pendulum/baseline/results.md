@@ -7,4 +7,4 @@ Best achievable relative H1 error vs. network size (number of neurons), pendulum
 3. **softplus + alpha*phi_gamma** — activationsearch, softplus, gamma=10 (non-convex log); best classical/monotone activation.
 4. **gaussian + alpha*phi_gamma** — activationsearch, gaussian, gamma=10 (non-convex log); a radial kernel activation (same family as the thesis's Matern 5/2).
 
-![neuron/H1 frontier (pendulum)](figures/neuron_h1_frontier_pendulum.png)
+![neuron/H1 frontier (pendulum)](../../../outdated/experiment-code-cleanup-2026-09-12/unreferenced_pngs/experiments/02_pendulum/baseline/figures/neuron_h1_frontier_pendulum.png)

@@ -34,6 +34,7 @@ from typing import Tuple
 import torch
 
 from ..config.activations import get_activation, get_growth, get_use_sphere
+from ..data import ValueSampleNormalizer
 from ..SSN import SUPPORTED_ACTIVATION_POWERS
 from .history import History, objective_value
 from .insertion import finite_step, profile_threshold
@@ -367,8 +368,14 @@ class PDAP:
         max_insert: int = 15,
         amp_tol: float = 1e-8,
         verbose: bool = True,
+        reporting_normalizer: ValueSampleNormalizer | None = None,
     ) -> History:
-        """Train a model matching the configured activation and power in place."""
+        """Train in place; optionally undo data scaling for reporting errors only.
+
+        ``reporting_normalizer`` must be the transform already applied to the
+        supplied samples. It never changes the objective or checkpoint selection.
+        With no transform, errors use the supplied samples' units as before.
+        """
         if model.activation is not self._activation:
             raise ValueError(
                 f"model activation must match configured activation={self._activation_name!r}; "
@@ -381,7 +388,7 @@ class PDAP:
         # A trainer can be reused; a zero-iteration fit has no search to report.
         self._last_search_radius = None
         self._last_theorem_applied = None
-        history = History()
+        history = History(reporting_normalizer=reporting_normalizer)
         o = self.objective
         if verbose:
             logger.info("PDAP run")

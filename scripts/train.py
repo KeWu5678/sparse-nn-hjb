@@ -112,7 +112,8 @@ def region_split_metrics(cfg, model, data, normalizer) -> dict:
     dataset-aligned distance cache).
 
     The caller supplies the model restored from ``History`` at the same selected
-    iteration used by the run's global validation metrics.
+    iteration used by the run's global validation metrics. Predictions and
+    targets are scored in original V and gradient units, not training units.
     """
     if not cfg.eval.eval_pool:
         raise ValueError("eval.kind=region_split requires eval.eval_pool")
@@ -121,18 +122,18 @@ def region_split_metrics(cfg, model, data, normalizer) -> dict:
         v_pool = np.asarray(pool["v"], dtype=np.float64).reshape(-1, 1)
         dv_pool = np.asarray(pool["dv"], dtype=np.float64)
         distance_pool = np.asarray(pool["distance"], dtype=np.float64)
-    # The model is fit in normalized coordinates; score the pool in the same
-    # coordinates (all reported quantities are ratios over the same pool).
+    # Normalize model inputs only; evaluation compares original V and gradient
+    # units. In particular, anisotropic input scaling changes H1/gradient ratios.
     if normalizer is not None:
         x_pool = x_pool / normalizer.x_scale
-        v_pool = v_pool / normalizer.v_scale
-        dv_pool = dv_pool * (normalizer.x_scale / normalizer.v_scale)
     tube_mask = torch.from_numpy(distance_pool <= cfg.eval.tube_radius)
 
     v_pred_chunks, dv_pred_chunks = [], []
     for lo in range(0, len(x_pool), 100_000):
         xb = torch.as_tensor(x_pool[lo:lo + 100_000], dtype=torch.float64)
         vb, dvb = model.predict_tensors(xb)
+        if normalizer is not None:
+            vb, dvb = normalizer.denormalize_tensors(vb, dvb)
         v_pred_chunks.append(vb)
         dv_pred_chunks.append(dvb)
     v_pred = torch.cat(v_pred_chunks)
@@ -156,6 +157,9 @@ def region_split_metrics(cfg, model, data, normalizer) -> dict:
         v = torch.as_tensor(data["v"], dtype=torch.float64)
         dv = torch.as_tensor(data["dv"], dtype=torch.float64)
         v_pred_d, dv_pred_d = model.predict_tensors(x)
+        if normalizer is not None:
+            v_pred_d, dv_pred_d = normalizer.denormalize_tensors(v_pred_d, dv_pred_d)
+            v, dv = normalizer.denormalize_tensors(v, dv)
         metrics.update(
             distance_binned_error(v_pred_d, dv_pred_d, v, dv, torch.from_numpy(distance))
         )
@@ -205,6 +209,7 @@ def main(cfg: DictConfig) -> None:
         num_insertion=cfg.training.num_insertion,
         max_insert=cfg.training.max_insert,
         amp_tol=cfg.training.prune_amp_tol,
+        reporting_normalizer=normalizer,
         # Always emit the progress tables to the logger so every run's log file is
         # complete. `env.verbose` only controls whether they also stream to the
         # console (configure_logging above) — which interleaves under parallel
@@ -247,7 +252,10 @@ def main(cfg: DictConfig) -> None:
     run.log_metrics(metrics)
     record = run.finish(
         status="completed",
-        summary={"normalization": normalizer.to_dict() if normalizer is not None else None},
+        summary={
+            "normalization": normalizer.to_dict() if normalizer is not None else None,
+            "metric_coordinates": "physical",
+        },
     )
     logger.info("run record: %s", record)
 

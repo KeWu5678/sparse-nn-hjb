@@ -1,16 +1,19 @@
 import importlib.util
 import json
 import logging
+import pickle
 import sys
 from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
 import pytest
+import torch
 from omegaconf import OmegaConf
 
 from src.config.schema import ExperimentConfig
-from src.data import ValueSampleNormalizer
+from src.data import ValueSampleNormalizer, split_value_samples
+from src.eval import distance_binned_error, region_split_errors, relative_errors
 from src.experiment_logging import ExperimentRun
 from src.logging_config import configure_logging
 
@@ -243,10 +246,25 @@ def test_training_record_preserves_fitted_normalization(tmp_path, monkeypatch, n
     cfg.training.num_iterations = 0
     cfg.env.verbose = False
 
+    # A nonzero fixed model exposes the metric's units without performing an
+    # optimizer step. The zero network has relative error 1 in either convention.
+    build_model = train.build_model
+
+    def initialized_model(cfg, input_dim):
+        model = build_model(cfg, input_dim)
+        model.set_atoms(
+            torch.tensor([[0.5, -0.2]], dtype=torch.float64),
+            torch.tensor([1.0], dtype=torch.float64),
+            torch.tensor([0.7], dtype=torch.float64),
+        )
+        return model
+
+    monkeypatch.setattr(train, "build_model", initialized_model)
     train.main.__wrapped__(cfg)
 
     record = json.loads(next(run_dir.glob("*.json")).read_text())
     assert record["config"]["data"]["normalize"] is normalize
+    assert record["metric_coordinates"] == "physical"
     if normalize:
         assert record["normalization"] == {"x_scale": [2.0, 4.0], "v_scale": 8.0}
         saved = record["normalization"]
@@ -257,6 +275,59 @@ def test_training_record_preserves_fitted_normalization(tmp_path, monkeypatch, n
         np.testing.assert_allclose(gradient, samples["dv"])
     else:
         assert record["normalization"] is None
+
+    with next(run_dir.glob("result_*.pkl")).open("rb") as file:
+        history = pickle.load(file)
+    assert (history.reporting_normalizer is not None) is normalize
+    model = history.restore_model(build_model(cfg, input_dim=2))
+    train.set_seed(cfg.env.seed)
+    _, (x, v, dv) = split_value_samples(samples, cfg.data.train_fraction)
+    if normalize:
+        x = x / torch.as_tensor(saved["x_scale"], dtype=torch.float64)
+    vp, dvp = model.predict_tensors(x)
+    if normalize:
+        vp, dvp = restored.denormalize_tensors(vp, dvp)
+    expected = relative_errors(vp, dvp, v, dv)
+    metrics = record["metrics"][-1]["values"]
+    assert [metrics[f"rel_{name}_val"] for name in ("l2", "grad", "h1")] == pytest.approx(expected)
+
+
+@pytest.mark.parametrize("normalize", [True, False])
+def test_region_reporting_scores_original_value_units(tmp_path, normalize):
+    train = load_train_module()
+    samples = {
+        "x": np.array([[2.0, -4.0], [1.0, 3.0], [-1.0, 2.0], [0.0, 1.0]]),
+        "v": np.array([[8.0], [4.0], [2.0], [1.0]]),
+        "dv": np.array([[3.0, 5.0], [2.0, 1.0], [1.0, 1.0], [0.0, 1.0]]),
+    }
+    distance = np.array([0.0, 0.1, 0.3, 0.4])
+    pool_path, cache_path = tmp_path / "pool.npz", tmp_path / "distance.npz"
+    np.savez(pool_path, **samples, distance=distance)
+    np.savez(cache_path, distance=distance)
+    cfg = OmegaConf.structured(ExperimentConfig())
+    cfg.eval.eval_pool = str(pool_path)
+    cfg.eval.distance_cache = str(cache_path)
+    cfg.eval.tube_radius = 0.2
+    model = train.build_model(cfg, input_dim=2)
+    model.set_atoms(
+        torch.tensor([[0.5, -0.2]], dtype=torch.float64),
+        torch.tensor([1.0], dtype=torch.float64),
+        torch.tensor([0.7], dtype=torch.float64),
+    )
+    normalizer = ValueSampleNormalizer.fit(samples) if normalize else None
+    data = normalizer.normalize(samples) if normalizer is not None else samples
+
+    got = train.region_split_metrics(cfg, model, data, normalizer)
+
+    vp, dvp = model.predict_tensors(torch.as_tensor(data["x"], dtype=torch.float64))
+    if normalizer is not None:
+        # Independent chain-rule calculation, not the reporting implementation.
+        vp = vp * normalizer.v_scale
+        dvp = dvp * torch.as_tensor(normalizer.v_scale / normalizer.x_scale)
+    target = torch.as_tensor(samples["v"]), torch.as_tensor(samples["dv"])
+    expected = region_split_errors(vp, dvp, *target, torch.from_numpy(distance <= 0.2))
+    expected.update(distance_binned_error(vp, dvp, *target, torch.from_numpy(distance)))
+    assert got == pytest.approx(expected, nan_ok=True)
 
 
 def test_failed_training_keeps_logs_without_a_run_record(tmp_path, monkeypatch):

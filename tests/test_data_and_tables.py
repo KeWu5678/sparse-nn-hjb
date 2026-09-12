@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 import torch
 
 from src.data import ValueSampleNormalizer, load_value_samples, split_value_samples
@@ -35,6 +36,23 @@ def test_value_sample_normalizer_uses_chain_rule_for_gradient():
     np.testing.assert_allclose(normalized["x"], [[1.0, -1.0]])
     np.testing.assert_allclose(normalized["v"], [[1.0]])
     np.testing.assert_allclose(normalized["dv"], [[0.75, 2.5]])
+
+
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+def test_tensor_denormalization_preserves_dtype_device_and_autograd(dtype):
+    normalizer = ValueSampleNormalizer(np.array([2.0, 4.0]), 8.0)
+    v = torch.tensor([[1.0]], dtype=dtype, requires_grad=True)
+    dv = torch.tensor([[0.75, 2.5]], dtype=dtype, requires_grad=True)
+
+    v_phys, dv_phys = normalizer.denormalize_tensors(v, dv)
+
+    assert v_phys.dtype == dv_phys.dtype == dtype
+    assert v_phys.device == v.device and dv_phys.device == dv.device
+    torch.testing.assert_close(v_phys, torch.tensor([[8.0]], dtype=dtype))
+    torch.testing.assert_close(dv_phys, torch.tensor([[3.0, 5.0]], dtype=dtype))
+    (v_phys.sum() + dv_phys.sum()).backward()
+    torch.testing.assert_close(v.grad, torch.tensor([[8.0]], dtype=dtype))
+    torch.testing.assert_close(dv.grad, torch.tensor([[4.0, 2.0]], dtype=dtype))
 
 
 def test_split_converts_samples_to_float64():
