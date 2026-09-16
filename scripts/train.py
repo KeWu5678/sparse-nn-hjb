@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import pickle
 import random
 import re
@@ -96,6 +97,28 @@ def run_id_from_config(
     return "_".join([_slug(cfg.name), _slug(data_choice), run_date, run_suffix])
 
 
+def require_mlflow_tracking() -> None:
+    """Fail before training when the tracking server is not reachable.
+
+    ``publish_record_to_mlflow`` returns False when ``MLFLOW_TRACKING_URI`` is
+    unset, so an entire sweep can complete with nothing published. Checked here,
+    at startup, rather than at ``run.finish()``.
+    """
+    uri = os.environ.get("MLFLOW_TRACKING_URI")
+    if not uri:
+        raise RuntimeError(
+            "env.require_mlflow=true but MLFLOW_TRACKING_URI is unset; "
+            "start the server (docker compose -f deploy/docker/compose.yaml up -d) "
+            "and export MLFLOW_TRACKING_URI=http://127.0.0.1:5000"
+        )
+    import mlflow
+
+    try:
+        mlflow.MlflowClient(tracking_uri=uri).search_experiments(max_results=1)
+    except Exception as error:  # noqa: BLE001 -- any failure to reach it is fatal here
+        raise RuntimeError(f"MLflow tracking server unreachable at {uri}: {error}") from error
+
+
 def set_seed(seed: int) -> None:
     random.seed(seed)
     np.random.seed(seed)
@@ -175,6 +198,8 @@ def main(cfg: DictConfig) -> None:
     # workers (joblib) don't interleave their progress tables on the shared
     # console. `env.verbose` still controls console streaming; `env.log_file`
     # overrides the per-run default when set.
+    if cfg.env.require_mlflow:
+        require_mlflow_tracking()
     hydra_cfg = HydraConfig.get()
     run_dir = Path(hydra_cfg.runtime.output_dir)
     log_file = cfg.env.log_file or (run_dir / "run.log")

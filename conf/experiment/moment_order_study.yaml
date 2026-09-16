@@ -1,0 +1,50 @@
+# @package _global_
+# Effect of the moment order p (paper_0805.tex:3394, "Effect of the moment order p").
+#
+# p enters the objective through the weight w_p(omega) = 1 + |omega|^p, so an atom is
+# charged phi_gamma(w_p(omega)|c|): a fixed coefficient costs more the further the atom
+# sits from the origin. The measured quantity is the observed support radius R_max,
+# recorded per iteration by History as `radius_max`.
+#
+# The set {2.01, 2.5, 3, 4} is the paper's. Every point clears the sufficient condition
+# p > s1 (paper:2161) for all four activations -- gelu_squared has s1 = 2, which is why
+# the low end is 2.01 and not 2: at p = 2 the exponent 1/(p - s1) is 1/0 and the
+# certificate radius does not exist, so radial_cap=theorem would silently fall back to
+# the exp(5) clamp for that activation alone.
+
+name: ${hydra:runtime.choices.data}_moment_order_study
+
+model:
+  power: 1.0
+  gamma: 1.0
+  # Base value only; `moment_order` is this experiment's swept axis.
+  moment_order: 2.01
+  alpha: 1e-4
+  loss_weights: [1.0, 1.0]
+
+training:
+  # Same run settings as log_penalty: this is Algorithm 1 with p as the swept axis,
+  # so the certificate radius must actually be in play for R_max to mean anything.
+  num_iterations: 150
+  insert_mode: sequential
+  insert_init: guaranteed
+  correction_guard: true
+  loop_order: insertion_first
+  radial_cap: theorem
+
+data:
+  normalize: true
+
+hydra:
+  sweep:
+    # One subtree per moment order: p is this experiment's only real axis.
+    subdir: ${hydra:runtime.choices.data}/${hydra:runtime.choices.experiment}/p_${model.moment_order}/${hydra.job.num}
+  sweeper:
+    params:
+      +model: profile
+      +data: vdp,pendulum
+      model.activation: softplus,tanh,gaussian,gelu_squared
+      model.alpha: 1e-4,1e-5
+      model.moment_order: 2.01,2.5,3.0,4.0
+      model.gamma: 1
+      model.loss_weights: "[1.0,1.0]"

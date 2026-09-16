@@ -1,0 +1,42 @@
+# @package _global_
+# Table 4 (tab:rs_oversampling), Gaussian block: does densifying samples near the
+# switching set reduce the error on S_0.3?
+#
+# gamma = 1, not 0: gamma = 0 makes phi_gamma the identity, which is the convex L1
+# penalty, not the log penalty this row is meant to illustrate. The published caption
+# says (gamma, p) = (0, 2.01) and is wrong; the runs behind it used gamma = 1.
+#
+# model.power stays 1.0 -- the Gaussian is nonhomogeneous, so profile insertion is
+# Algorithm 1 and pdap.py requires power == 1. The 2.01 is the moment order.
+
+name: ${hydra:runtime.choices.data}_oversampling_gaussian
+
+model:
+  power: 1.0
+  gamma: 1.0
+  moment_order: 2.01
+  loss_weights: [1.0, 1.0]
+
+training:
+  num_iterations: 150
+  insert_mode: sequential
+  insert_init: guaranteed
+  correction_guard: true
+  loop_order: insertion_first
+  radial_cap: theorem
+
+data:
+  normalize: true
+
+hydra:
+  sweep:
+    # <data>/<experiment>/<axis>/<job>, matching every other experiment.
+    subdir: ${hydra:runtime.choices.data}/${hydra:runtime.choices.experiment}/alpha_${model.alpha}/${hydra.job.num}
+  sweeper:
+    params:
+      +model: profile
+      +data: pendulum_base6k,pendulum_band40,pendulum_band60,pendulum_add2k
+      model.activation: gaussian
+      model.alpha: 1e-3,1e-4,1e-5
+      model.gamma: 1
+      model.loss_weights: "[1.0,1.0]"

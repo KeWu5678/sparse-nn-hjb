@@ -81,6 +81,9 @@ experiments/algorithm2_rho_pilot.md
 scripts/paper/
 tests/test_paper_artifact_preflight.py
 
+# Hydra's default single-run output dir (sweeps go to rawdata/logs/multirun/).
+outputs/
+
 # ---- paper/ (LaTeX working dir) ----
 # Only the current source and compiled publication are version-controlled.
 # Bibliography, figures, auxiliary files, and working notes stay local.

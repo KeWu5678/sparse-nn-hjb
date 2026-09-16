@@ -12,6 +12,9 @@ model:
   loss_weights: [1.0, 1.0]
 
 training:
+  # paper_0805.tex:3386, "All experiments" -- governs both algorithms.
+  num_iterations: 150
+  insert_mode: sequential
   correction_guard: true
   loop_order: insertion_first
 

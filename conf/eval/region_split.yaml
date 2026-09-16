@@ -5,5 +5,9 @@
 # The distance cache (dataset-aligned) remains for the binned error profile.
 kind: region_split
 tube_radius: 0.3
-eval_pool: Pendulum_20260703_ada466c6182948469a197282906c3b6c/Pendulum_pmp_value_samples_2000_20260703_region_eval_pool.npz
+# ONE pool shared by every pendulum training set, built by excluding the union of
+# all of their rows (build_region_eval_pool.py --exclude). A per-dataset pool would
+# make the oversampling comparison incomparable; the previous single-dataset pool
+# left the oversampled variants scored partly on rows they trained on.
+eval_pool: Pendulum_20260703_ada466c6182948469a197282906c3b6c/Pendulum_region_eval_pool_shared_20260913.npz
 distance_cache: Pendulum_20260703_ada466c6182948469a197282906c3b6c/Pendulum_pmp_value_samples_2000_20260703_region_distances.npz
