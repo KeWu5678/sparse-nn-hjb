@@ -1,0 +1,11 @@
+# @package _global_
+# Pendulum switching-band oversampling variant: 6k, 60% near S (Table 4, tab:rs_oversampling).
+# Same switching-set structure as conf/data/pendulum.yaml, so it opts into the same
+# region_split eval and the same shared out-of-sample pool; only the training set and
+# its dataset-aligned distance cache differ.
+defaults:
+  - /eval: region_split
+data:
+  path: Pendulum_2sided_oversample_20260704/band60.npz
+eval:
+  distance_cache: Pendulum_2sided_oversample_20260704/band60_region_distances.npz

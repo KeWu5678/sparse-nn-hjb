@@ -1,0 +1,33 @@
+# @package _global_
+# Table 4 (tab:rs_oversampling), ReLU^2 block: Algorithm 2 with psi_2 (q = 2/3).
+# gamma = 0 is required here -- finite_step minimizes the power penalty.
+
+name: ${hydra:runtime.choices.data}_oversampling_relu2
+
+model:
+  power: 2.0
+  gamma: 0.0
+  loss_weights: [1.0, 1.0]
+
+training:
+  num_iterations: 150
+  insert_mode: sequential
+  correction_guard: true
+  loop_order: insertion_first
+
+data:
+  normalize: true
+
+hydra:
+  sweep:
+    # <data>/<experiment>/<axis>/<job>, matching every other experiment.
+    subdir: ${hydra:runtime.choices.data}/${hydra:runtime.choices.experiment}/alpha_${model.alpha}/${hydra.job.num}
+  sweeper:
+    params:
+      +model: finite_step
+      +data: pendulum_base6k,pendulum_band40,pendulum_band60,pendulum_add2k
+      model.activation: relu
+      model.power: 2.0
+      model.alpha: 1e-4,1e-5,1e-6
+      model.gamma: 0
+      model.loss_weights: "[1.0,1.0]"

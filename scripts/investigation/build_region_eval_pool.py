@@ -42,7 +42,18 @@ from src.data import DATA_DIR  # noqa: E402
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data", type=str, required=True,
-                        help="value-sample .npz under DATA_DIR")
+                        help="value-sample .npz under DATA_DIR; supplies the raw "
+                             "trajectories and the switching curve")
+    parser.add_argument("--exclude", type=str, action="append", default=[],
+                        help="additional value-sample .npz under DATA_DIR whose rows "
+                             "are also removed. Repeatable. Use it when several training "
+                             "sets are drawn from the same certified point set and must "
+                             "share ONE out-of-sample pool: per-dataset pools would make "
+                             "their scores incomparable, and a pool that excludes only "
+                             "--data leaves the others scored partly on seen rows.")
+    parser.add_argument("--out", type=str, default=None,
+                        help="output .npz under DATA_DIR (default: "
+                             "<data stem>_region_eval_pool.npz)")
     return parser.parse_args()
 
 
@@ -68,10 +79,13 @@ def main() -> int:
     v = np.concatenate([body.v, pad.v, collar.v])
     dv = np.vstack([body.dv, pad.dv, collar.dv])
 
-    # Remove the emitted training rows (exact matches — thinning copies rows).
-    with np.load(data_path) as d:
-        x_train = np.asarray(d["x"], dtype=np.float64)
-    pool_keys = {t.tobytes() for t in np.ascontiguousarray(x_train)}
+    # Remove every emitted training row (exact matches — thinning copies rows),
+    # across --data and each --exclude, so the pool is out-of-sample for all of them.
+    pool_keys: set[bytes] = set()
+    for rel in [args.data, *args.exclude]:
+        with np.load(DATA_DIR / rel) as d:
+            rows = np.ascontiguousarray(np.asarray(d["x"], dtype=np.float64))
+        pool_keys |= {t.tobytes() for t in rows}
     keep = np.fromiter(
         (row.tobytes() not in pool_keys for row in np.ascontiguousarray(x)),
         bool, len(x),
@@ -85,7 +99,9 @@ def main() -> int:
     )
     distance, _ = cKDTree(ridge_tiled).query(x, k=1)
 
-    out = data_path.with_name(data_path.stem + "_region_eval_pool.npz")
+    out = (DATA_DIR / args.out) if args.out else data_path.with_name(
+        data_path.stem + "_region_eval_pool.npz"
+    )
     np.savez(out, x=x, v=v, dv=dv, distance=distance.astype(np.float64))
     print(f"pool: {len(x)} points (body {body.size} + pad {pad.size} + collar "
           f"{collar.size}, {n_removed} training rows removed)")

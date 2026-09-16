@@ -185,6 +185,10 @@ class EnvConfig:
     """
 
     seed: int = 42
+    # Abort at startup when MLflow is not reachable, instead of training for hours
+    # and discovering at run.finish() that publish_record_to_mlflow silently
+    # returned False because MLFLOW_TRACKING_URI was unset. Sweeps set it.
+    require_mlflow: bool = False
     verbose: bool = True
     log_level: str = "INFO"
     log_file: Optional[str] = None
