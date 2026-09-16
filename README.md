@@ -2,159 +2,157 @@
 
 [![CI](https://github.com/KeWu5678/sparse-nn-hjb/actions/workflows/ci.yml/badge.svg)](https://github.com/KeWu5678/sparse-nn-hjb/actions/workflows/ci.yml)
 
-**A 16-neuron softplus network stabilizes the Van der Pol system at the
-reference rollout cost (6.48), with original-coordinate relative $H^1$
-error 0.241.**
+**An 18-neuron softplus network stabilizes the Van der Pol system at a
+closed-loop cost of 6.68, against 6.48 for an interpolated reference controller.**
 
-Closed-loop rollout of the Van der Pol oscillator from $y_0=(2,1)$ shows that
-the fitted feedback laws stabilize the system with different support sizes but
-nearly the same cost. The complete tables and figures are in the
-[current paper](paper/paper_0805.pdf).
+Learning a value function is easy to score and easy to get wrong. This project
+learns one from trajectory data and then *flies* it — the reported result is the
+behaviour of the closed loop, not a regression error.
 
 ## The problem
 
 Optimal feedback control has a classical answer: solve the
-Hamilton–Jacobi–Bellman (HJB) equation for the value function $V(x)$, and the
-optimal controller follows from its gradient, for example
-$\hat u(x)=-\partial_{x_2}\hat V(x)/(2\eta)$. The catch is that $V$ is
-expensive to compute globally—and if it is learned from data instead, the
-controller quality depends on $\nabla\hat V$, not only on $\hat V$. A model
-with an excellent value fit and a mediocre gradient field can produce a
-controller that oscillates, saturates, or diverges.
+Hamilton–Jacobi–Bellman equation for the value function $V(x)$, and read the
+optimal controller off its gradient — for the Van der Pol system,
+$\hat u(x) = -\partial_{x_2}\hat V(x)/(2\eta)$.
 
-This repository learns $V$ from open-loop trajectory data: value and gradient
-samples generated through Pontryagin's principle. It fits shallow networks
-$\sum_k c_k\sigma(a_k\cdot x+b_k)$ in Sobolev ($H^1$) loss so the gradient is
-a first-class training target. Sparsity is not post-hoc pruning. Neurons are
-inserted by a Primal-Dual Active Point method (PDAP) over the measure-space
-formulation and penalized by either a log penalty on the normalized measure or
-a fractional power $|c|^q$ for positively homogeneous activations.
+Two things make that hard. $V$ is expensive to compute globally, and if it is
+learned from data instead, **controller quality depends on $\nabla\hat V$, not on
+$\hat V$**. A model with an excellent value fit and a mediocre gradient field
+produces a controller that oscillates, saturates, or diverges. Most of the
+engineering here follows from taking that second point seriously.
 
-The resulting outer-weight problem is nonsmooth and nonconvex. It is corrected
-with a guarded **semismooth Newton normal-map method implemented as a native
-PyTorch optimizer**. For the fractional penalties used in the paper, the
-scalar global proximal maps are evaluated in closed form and the normal-map
-scale is chosen from the insertion warm start. A correction is retained only
-when it does not increase the objective.
+The approach: sample value *and* gradient data from open-loop solves via
+Pontryagin's principle, then fit a shallow network
+$\sum_k c_k\sigma(a_k\cdot x + b_k)$ under an $H^1$ loss, so the gradient is a
+first-class training target. Width is not fixed in advance and sparsity is not
+post-hoc pruning — neurons are **inserted one at a time** by a Primal–Dual Active
+Point method over a measure-space formulation, each insertion certified to
+decrease the objective.
 
-## Main result: accuracy per neuron
+## Result
 
-Representative $H^1$-trained Van der Pol runs reported in the paper are:
+<p align="center">
+  <img src="docs/figures/readme/vdp_frontier.png" width="520"
+       alt="Relative H1 error against number of neurons on Van der Pol">
+</p>
+
+Accuracy against width on Van der Pol. The displayed sparse nonconvex models
+reach lower error with fewer neurons. The conventional ReLU + $\ell^1$ network
+approaches their error as its support grows, but remains above them through
+the plotted budget of 150 neurons.
+
+Representative $H^1$-trained checkpoints, selected by minimum training
+objective:
 
 | activation | penalty | neurons | rel. $H^1$ error |
 | --- | --- | ---: | ---: |
-| softplus | normalized log penalty | **16** | 0.241 |
-| Gaussian | normalized log penalty | 34 | 0.236 |
-| tanh | normalized log penalty | 38 | 0.237 |
-| ReLU<sup>2</sup> | $|c|^{2/3}$ | 45 | 0.236 |
-| ReLU<sup>3</sup> | $|c|^{1/2}$ | 28 | **0.235** |
+| softplus | normalized log penalty | **18** | 0.243 |
+| tanh | normalized log penalty | 33 | 0.237 |
+| Gaussian | normalized log penalty | 39 | 0.236 |
+| ReLU<sup>2</sup> | $\sum_i \lvert c_i\rvert^{2/3}$ | 53 | 0.235 |
+| ReLU<sup>3</sup> | $\sum_i \lvert c_i\rvert^{1/2}$ | 26 | **0.235** |
 
-These are the paper's activation-comparison checkpoints, selected by minimum
-training objective. The first three use $\alpha=10^{-4}$, $\gamma=10$,
-$p=2.01$; the two fractional-power runs use $\alpha=10^{-5}$.
-Reported $H^1$ errors combine errors in the original-scale $V$ and its gradient
-with respect to the original state variables, not the normalized training
-coordinates. They supersede the earlier approximately 0.10 figures.
+The first three use $\alpha=10^{-4}$, $\gamma=10$, and $p=2.01$; the
+fractional-power fits use $\alpha=10^{-5}$.
 
-The nonconvex models reach a similar error scale with different support sizes.
-In the paper's support-budget comparison they have lower error at small support
-budgets, while the traditional ReLU+$\ell^1$ network reaches a lower error with
-a larger support. This is not a claim of dominance at every support budget.
+Errors are relative $H^1$ in original coordinates — the fitted $V$ and its
+gradient with respect to the original state variables, after undoing the
+training normalization.
 
-The two algorithm families also leave different geometric signatures in the
-learned parameters. The fractional-power formulation constrains its atoms to
-the unit sphere, whereas the normalized log-penalty formulation operates on an
-unbounded parameter domain. Their insertion frontiers and weight portraits are
-shown in Section 6 of the [paper](paper/paper_0805.pdf).
+Closed-loop rollout from $y_0 = (2,1)$ over $T=12$. The ReLU<sup>3</sup>
+controller uses a separate $\alpha=10^{-6}$ checkpoint:
 
-Run records, derived reports, and figures remain local. The tracked manuscript
-and compiled PDF are the publication record.
+| controller | neurons | stabilizes | cost |
+| --- | ---: | :---: | ---: |
+| interpolated reference | — | yes | 6.48 |
+| softplus | 18 | yes | 6.68 |
+| Gaussian | 39 | yes | 6.49 |
+| ReLU<sup>3</sup> | 36 | yes | 6.50 |
 
-## Probing the limit: value functions with nonsmooth gradients
+The reference interpolates the dataset's time-zero costates with a stationary
+Clough–Tocher interpolant. The data horizon is $T=3$, so the reference rollout
+cost is not an exact finite-horizon optimum for this $T=12$ comparison.
 
-The Van der Pol value function is smooth. HJB value functions can instead have
-**gradient jumps across switching sets**, where the optimal strategy changes
-branch. The pendulum swing-up benchmark targets this regime deliberately: its
-switching curve separates braking to the upright at $\theta=0$ from swinging
-over the top to $\theta=2\pi$, and the training data contains samples on both
-sides of the jump.
+## Engineering
 
-The findings are sharp:
+**A semismooth Newton optimizer, written as a native PyTorch optimizer.** The
+outer-weight problem is nonsmooth and nonconvex. `src/SSN/` is a
+`torch.optim.Optimizer` subclass implementing a normal-map semismooth Newton
+method with matrix-free CG for the Newton system, closed-form global proximal
+maps for the fractional penalties $q\in\{1/2,\ 2/3,\ 1\}$, and a guard that
+discards a correction which increases the objective — the property that keeps
+the outer loop monotone.
 
-- **The switching region is harder for four of the five reported models.**
-  ReLU<sup>3</sup> is the exception, with similarly high error in both regions.
-  The Gaussian has the smallest regional errors, 0.304 near the switching set
-  and 0.191 elsewhere. Adding samples near the switching set gives no
-  systematic or material reduction at the tested widths.
-- **No model reproduces the full gradient jump.** ReLU<sup>2</sup> develops
-  the sharpest fitted change of slope, while the smooth activations interpolate
-  through the discontinuity.
-- **Regional error and feedback quality rank the models differently.**
-  Softplus and ReLU<sup>3</sup> reach an upright neighbourhood from both tested
-  starts. From the harder start their costs are 69.8 and 110.9, respectively,
-  against the reference cost 26.2. Gaussian, tanh, and ReLU<sup>2</sup> succeed
-  only from the easier start; there ReLU<sup>2</sup> reaches cost 10.5 against
-  the reference 10.2.
+**Golden-output tests.** Refactors of the numerical core are checked against
+stored reference solutions, not just unit assertions. A change in solver
+behaviour shows up as a diff in neuron counts and errors, not as a silently
+different answer. The suite is 216 tests and runs on every push alongside
+`ruff`.
 
-A parallel local theory program studies why activation regularity matters for
-such targets. Its notes and claims registry under `docs/research/` are not
-distributed with a clean checkout.
+**Runs are records.** Every completed training run writes a self-describing JSON
+record — full resolved config, summary metrics, artifact paths — next to its
+checkpoint. Per-iteration history stays in the checkpoint. Records are the
+source of truth; when tracking is configured, completed records are published
+to MLflow after they are written locally. The dashboard can be rebuilt from
+disk at any time. The tracking server is a container in [`deploy/`](deploy).
 
-## Reproduce it
+**Experiments are configs, not scripts.** Each study is one tracked Hydra file
+declaring its own sweep axes and its own output layout, so a sweep is a single
+command and the record tree is self-organizing:
 
 ```bash
-uv sync --extra dev          # install (Python ≥ 3.12)
-uv run pytest                # test suite
-make help                    # list experiment targets
+make sweep EXPERIMENT=log_penalty        # 448 runs across two datasets
 ```
 
-The experiment definitions are tracked Hydra configs. For example:
+Records land under `rawdata/logs/multirun/<dataset>/<experiment>/<axis>/<job>/`.
+The target refuses to start if that subtree already holds records, and aborts
+immediately if the tracking server is unreachable rather than training for hours
+unpublished.
+
+**Reproducibility is checked, not assumed.** Runs are deterministic under a
+fixed seed — re-running a completed configuration reproduces its metrics to
+seven digits. Solver changes that move results are recorded as ADRs in
+[`docs/adr/`](docs/adr) with an explicit instruction to re-run affected studies.
+
+## Reproduce
 
 ```bash
-uv run python scripts/train.py -m +experiment=log_penalty +data=vdp
-uv run python scripts/train.py -m +experiment=frac_exp_penalty +data=pendulum
+uv sync --extra dev          # Python >= 3.12
+uv run pytest
+make help
 ```
 
-Their run records and derived artifacts are written only to local ignored
-paths.
+Training requires the existing benchmark datasets, which are not included in
+the repository. Place them under `rawdata/data/` at the paths specified by
+[`conf/data/`](conf/data). Pendulum runs also require the evaluation pool and
+distance caches named in [`conf/eval/region_split.yaml`](conf/eval/region_split.yaml).
+With those inputs available, a single run picks a model family and a dataset:
 
-`make sweep EXPERIMENT=<name>` runs training and saves run records; it does not
-run analysis scripts or generate reports. Pendulum runs include switching-region
-and rest-region evaluation metrics. Tables and figures are generated separately.
+```bash
+uv run python scripts/train.py +model=profile +data=vdp model.activation=softplus
+```
 
-### Under the hood
+With the existing benchmark data and pendulum raw PMP paths available,
+regenerate the reference-data figures with:
 
-- **`src/SSN/` — a semismooth Newton optimizer in PyTorch**: a
-  `torch.optim.Optimizer` subclass with matrix-free CG for the Newton system
-  and proximal handling of the nonconvex penalties. Algorithm 2 uses the
-  closed-form global scalar proximal maps for $q\in\{1/2,2/3,1\}$
-  ([ADR-0009](docs/adr/0009-use-verified-closed-form-global-proximal-maps.md)),
-  while the outer acceptance guard prevents a local coefficient correction
-  from increasing the objective
-  ([ADR-0004](docs/adr/0004-model-trainer-eval-separation.md)).
-- **Golden-output tests** guard the PDAP solver: refactors of the numerical
-  core are checked against stored reference solutions, not just unit
-  assertions (`tests/`).
-- **Runs are records**: each training run writes a JSON record under
-  `rawdata/logs/multirun/`; those records are the source of truth, and
-  `scripts/upload_run_records_to_mlflow.py` projects them into the MLflow
-  dashboard defined in [`deploy/`](deploy). See
-  [docs/adr/mlflow.md](docs/adr/mlflow.md).
-- **Paper inputs stay local**: current experiment run records, generated paper
-  reports, figures, and paper-support scripts are intentionally not tracked.
-  Historical curated summaries remain tracked and are marked as superseded.
-  The manuscript source and compiled PDF are the publication record.
-- CI runs the test suite and `ruff` on every push.
+```bash
+make openloop
+```
 
-## Repository layout
+This command reads existing data; it does not generate the datasets.
+
+## Layout
 
 | Path | Contents |
 | --- | --- |
-| `src/` | Library code: signed shallow networks, `PDAP/`, `SSN/`, data/evaluation/plotting |
-| `conf/` | Hydra configs: data, model, evaluation, experiment sweeps |
-| `scripts/` | Training entry point (`train.py`), dataset generators, MLflow importer |
-| `experiments/` | Experiment definitions and legacy curated studies; current paper outputs stay local |
+| `src/` | Library: shallow networks, `PDAP/` insertion, `SSN/` optimizer, data/eval/plotting |
+| `conf/` | Hydra configs — model families, datasets, evaluation, experiment sweeps |
+| `scripts/` | `train.py` entry point, dataset generators, MLflow importer |
+| `experiments/` | Study definitions and curated results |
 | `tests/` | pytest suite, including golden-output solver tests |
-| `docs/` | Research program, claims registry, ADRs, and MLflow guide |
+| `docs/` | ADRs, MLflow guide, research notes |
 | `deploy/` | Containerized MLflow tracking server |
 | `vault/` | Deeper implementation notes |
+
+Generated run records, figures, and reports are written to ignored local paths.
