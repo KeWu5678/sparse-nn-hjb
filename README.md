@@ -3,7 +3,7 @@
 [![CI](https://github.com/KeWu5678/sparse-nn-hjb/actions/workflows/ci.yml/badge.svg)](https://github.com/KeWu5678/sparse-nn-hjb/actions/workflows/ci.yml)
 
 **An 18-neuron softplus network stabilizes the Van der Pol system at a
-closed-loop cost of 6.68, against 6.48 for the exact optimal control.**
+closed-loop cost of 6.68, against 6.48 for an interpolated reference controller.**
 
 Learning a value function is easy to score and easy to get wrong. This project
 learns one from trajectory data and then *flies* it — the reported result is the
@@ -37,10 +37,10 @@ decrease the objective.
        alt="Relative H1 error against number of neurons on Van der Pol">
 </p>
 
-Accuracy against width on Van der Pol. The sparse nonconvex models reach a given
-error with fewer neurons at small budgets; the conventional ReLU + $\ell^1$
-network overtakes them once the support is allowed to grow. This is a
-small-width trade-off, not dominance everywhere.
+Accuracy against width on Van der Pol. The displayed sparse nonconvex models
+reach lower error with fewer neurons. The conventional ReLU + $\ell^1$ network
+approaches their error as its support grows, but remains above them through
+the plotted budget of 150 neurons.
 
 Representative $H^1$-trained checkpoints, selected by minimum training
 objective:
@@ -50,21 +50,29 @@ objective:
 | softplus | normalized log penalty | **18** | 0.243 |
 | tanh | normalized log penalty | 33 | 0.237 |
 | Gaussian | normalized log penalty | 39 | 0.236 |
-| ReLU<sup>2</sup> | $\|c\|^{2/3}$ | 53 | 0.235 |
-| ReLU<sup>3</sup> | $\|c\|^{1/2}$ | 26 | **0.235** |
+| ReLU<sup>2</sup> | $\sum_i \lvert c_i\rvert^{2/3}$ | 53 | 0.235 |
+| ReLU<sup>3</sup> | $\sum_i \lvert c_i\rvert^{1/2}$ | 26 | **0.235** |
+
+The first three use $\alpha=10^{-4}$, $\gamma=10$, and $p=2.01$; the
+fractional-power fits use $\alpha=10^{-5}$.
 
 Errors are relative $H^1$ in original coordinates — the fitted $V$ and its
 gradient with respect to the original state variables, after undoing the
 training normalization.
 
-Closed-loop rollout from $y_0 = (2,1)$, which is what the value function is for:
+Closed-loop rollout from $y_0 = (2,1)$ over $T=12$. The ReLU<sup>3</sup>
+controller uses a separate $\alpha=10^{-6}$ checkpoint:
 
 | controller | neurons | stabilizes | cost |
 | --- | ---: | :---: | ---: |
-| exact optimal control | — | yes | 6.48 |
+| interpolated reference | — | yes | 6.48 |
 | softplus | 18 | yes | 6.68 |
 | Gaussian | 39 | yes | 6.49 |
 | ReLU<sup>3</sup> | 36 | yes | 6.50 |
+
+The reference interpolates the dataset's time-zero costates with a stationary
+Clough–Tocher interpolant. The data horizon is $T=3$, so the reference rollout
+cost is not an exact finite-horizon optimum for this $T=12$ comparison.
 
 ## Engineering
 
@@ -82,11 +90,12 @@ behaviour shows up as a diff in neuron counts and errors, not as a silently
 different answer. The suite is 216 tests and runs on every push alongside
 `ruff`.
 
-**Runs are records.** Every training run writes a self-describing JSON record —
-full resolved config, per-iteration metrics, artifact paths — next to its
-checkpoint. Records are the source of truth; the MLflow dashboard is a
-projection of them, published live during a run, and rebuildable from disk at
-any time. The tracking server is a container in [`deploy/`](deploy).
+**Runs are records.** Every completed training run writes a self-describing JSON
+record — full resolved config, summary metrics, artifact paths — next to its
+checkpoint. Per-iteration history stays in the checkpoint. Records are the
+source of truth; when tracking is configured, completed records are published
+to MLflow after they are written locally. The dashboard can be rebuilt from
+disk at any time. The tracking server is a container in [`deploy/`](deploy).
 
 **Experiments are configs, not scripts.** Each study is one tracked Hydra file
 declaring its own sweep axes and its own output layout, so a sweep is a single
@@ -114,17 +123,24 @@ uv run pytest
 make help
 ```
 
-A single run picks a model family and a dataset; everything else has a default:
+Training requires the existing benchmark datasets, which are not included in
+the repository. Place them under `rawdata/data/` at the paths specified by
+[`conf/data/`](conf/data). Pendulum runs also require the evaluation pool and
+distance caches named in [`conf/eval/region_split.yaml`](conf/eval/region_split.yaml).
+With those inputs available, a single run picks a model family and a dataset:
 
 ```bash
 uv run python scripts/train.py +model=profile +data=vdp model.activation=softplus
 ```
 
-Datasets are generated from the open-loop solves:
+With the existing benchmark data and pendulum raw PMP paths available,
+regenerate the reference-data figures with:
 
 ```bash
 make openloop
 ```
+
+This command reads existing data; it does not generate the datasets.
 
 ## Layout
 
