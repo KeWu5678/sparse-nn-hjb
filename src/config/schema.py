@@ -145,7 +145,7 @@ class DataConfig:
     ``scripts/train.py``), not the trainer.
     """
 
-    path: str = "VDP_beta_0.1_grid_30x30.npy"
+    path: str = "VDP_20260924_62305c7ac2534952a7c85d6c4656a491/VDP_pmp_grid_30x30_20260924.npz"
     train_fraction: float = 0.9
     normalize: bool = True
 

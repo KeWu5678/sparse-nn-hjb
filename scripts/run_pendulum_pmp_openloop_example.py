@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 import time
@@ -27,7 +28,7 @@ from src.OpenLoop.value_samples import ValueSamples  # noqa: E402
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--num-trajectories", type=int, default=256)
+    parser.add_argument("--num-trajectories", type=int, default=2000)
     parser.add_argument("--epsilon", type=float, default=2e-4)
     parser.add_argument("--value-max", type=float, default=100.0)
     parser.add_argument("--t-final", type=float, default=50.0)
@@ -38,17 +39,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--uniform-boundary-sampling", action="store_true")
     parser.add_argument("--reference-value", type=float, default=None)
     parser.add_argument("--boundary-distance-power", type=float, default=0.8)
-    parser.add_argument("--contour-delta", type=float, default=1.0)
-    parser.add_argument("--basin-value-max", type=float, default=50.0,
-                        help="value cap on the basin arms (reference ~57; 35 is too small) — issue #18")
+    parser.add_argument("--contour-delta", type=float, default=0.05)
+    parser.add_argument("--basin-value-max", type=float, default=70.0,
+                        help="value extent of the switching arms used to construct the basin")
     parser.add_argument("--periodic-copies", type=int, default=0)
     parser.add_argument("--collar-width", type=float, default=0.5,
                         help="switching-set band half-width around the tiled ridge (0 disables)")
-    parser.add_argument("--collar-fraction", type=float, default=1.0 / 6.0,
+    parser.add_argument("--collar-fraction", type=float, default=2.0 / 13.0,
                         help="share of --level-set-samples drawn from the far-side collar")
-    parser.add_argument("--pad-fraction", type=float, default=1.0 / 12.0,
+    parser.add_argument("--pad-fraction", type=float, default=1.0 / 13.0,
                         help="share of --level-set-samples drawn from the near-side pad")
-    parser.add_argument("--level-set-samples", type=int, default=2000)
+    parser.add_argument("--level-set-samples", type=int, default=3900)
     parser.add_argument("--output-dir", type=Path, default=DATA_DIR)
     parser.add_argument("--tag", type=str, default=None)
     parser.add_argument("--quiet", action="store_true")
@@ -115,8 +116,7 @@ def main() -> None:
         # collar/pad harvest — the emitted samples would be the raw chaotic region.
         raise RuntimeError(
             "basin assembly produced an empty ring: restriction and switching-band "
-            "harvest are no-ops. Re-run the post-processing with a validated basin "
-            "injected (issue #18 workaround; see the 20260630 dataset's basin_source)."
+            "harvest are no-ops. No dataset has been emitted."
         )
     raw_sample_count = solution.value_samples.size
     collar_pool = solution.collar_samples or ValueSamples.concatenate([])
@@ -124,8 +124,10 @@ def main() -> None:
     # Thin the in-basin body, near-side pad, and far-side collar pools separately
     # so the emitted dataset hits the requested near-switch shares (uniform
     # thinning would give the band only its pool proportion).
-    collar_target = min(round(args.collar_fraction * args.level_set_samples), collar_pool.size)
-    pad_target = min(round(args.pad_fraction * args.level_set_samples), pad_pool.size)
+    collar_target = round(args.collar_fraction * args.level_set_samples)
+    pad_target = round(args.pad_fraction * args.level_set_samples)
+    if collar_pool.size < collar_target or pad_pool.size < pad_target:
+        raise RuntimeError("insufficient switching-band samples for the requested composition")
     basin_samples = thin_value_samples(
         solution.value_samples, args.level_set_samples - collar_target - pad_target
     )
@@ -140,6 +142,8 @@ def main() -> None:
         else ValueSamples.concatenate([])
     )
     value_samples = ValueSamples.concatenate([basin_samples, pad_samples, collar_samples])
+    if value_samples.size != args.level_set_samples:
+        raise RuntimeError("insufficient body samples for the requested dataset size")
     solution = replace(
         solution,
         value_samples=value_samples,
@@ -151,6 +155,7 @@ def main() -> None:
         "source_paper": "https://arxiv.org/pdf/2312.17467",
         "description": "Backward-PMP infinite-horizon pendulum ValueSamples.",
         "data_path": str(paths["data"]),
+        "data_sha256": hashlib.sha256(paths["data"].read_bytes()).hexdigest(),
         "curve_path": str(paths["curve"]),
         "failed_path": str(paths["failed"]),
         "run_dir": str(paths["run_dir"]),
@@ -163,6 +168,7 @@ def main() -> None:
         "pad_pool_points": pad_pool.size,
         "pad_samples": pad_samples.size,
         "pad_fraction": args.pad_fraction,
+        "body_branch_screen": {"neighbors": 32, "radius": 0.1, "margin": 0.3},
         "problem": {
             "mass": problem.mass,
             "length": problem.length,

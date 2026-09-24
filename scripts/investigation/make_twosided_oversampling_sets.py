@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Two-sided oversampling dataset variants for the region-split §3 control.
 
-Rebuilds, from the production 2000-path raw trajectories and the validated
-basin (issue #18 workaround), four training-set variants that vary only in the
-switching-band share, so the §3 question can be asked on two-sided data:
+Rebuilds, from the production 2000-path raw trajectories and their reconstructed
+basin, four training-set variants that vary only in the
+augmentation share, so the §3 question can be asked on two-sided data:
 does spending more samples on the switching band improve the switching fit?
 
   base6k : 6,000 at the production band share (~23%: 4,615 body + 462 pad + 923 collar)
@@ -11,6 +11,8 @@ does spending more samples on the switching band improve the switching fit?
   band60 : 6,000 reallocated to a 60% band (2,400 body + 1,200 pad + 2,400 collar)
   add2k  : base6k + 2,000 extra band samples (8,000: 4,615 body + 1,129 pad + 2,256 collar)
 
+Shares refer to pad/collar augmentation pools within distance 0.5, not the
+fraction of all samples inside the evaluation tube of radius 0.3.
 Each variant gets its own ``.npz`` + sibling ``_nonsmooth_curve.npz`` (the
 validated curve, copied so the distance-cache script resolves it) under one
 run dir; caches are built separately by ``precompute_region_distances.py``.
@@ -20,7 +22,11 @@ from __future__ import annotations
 
 import pickle
 import sys
+import argparse
+from datetime import date
 from pathlib import Path
+
+import numpy as np
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
@@ -40,10 +46,6 @@ from src.data import DATA_DIR  # noqa: E402
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 from run_pendulum_pmp_openloop_example import thin_value_samples  # noqa: E402
 
-SOURCE = DATA_DIR / "Pendulum_20260703_ada466c6182948469a197282906c3b6c"
-STEM = "Pendulum_pmp_value_samples_2000_20260703"
-OUT_DIR = DATA_DIR / "Pendulum_2sided_oversample_20260704"
-
 # variant -> (body, pad, collar) sample targets
 VARIANTS = {
     "base6k": (4615, 462, 923),
@@ -53,10 +55,34 @@ VARIANTS = {
 }
 
 
+def additional_samples(pool: ValueSamples, existing: ValueSamples, count: int) -> ValueSamples:
+    """Select additional distinct states while preserving every existing sample."""
+    seen = {row.tobytes() for row in np.ascontiguousarray(existing.x)}
+    available = []
+    for i, row in enumerate(np.ascontiguousarray(pool.x)):
+        key = row.tobytes()
+        if key not in seen:
+            available.append(i)
+            seen.add(key)
+    if len(available) < count:
+        raise ValueError(f"need {count} new states, have {len(available)}")
+    indices = np.asarray(available)[np.linspace(0, len(available) - 1, count, dtype=int)]
+    return ValueSamples(pool.x[indices], pool.v[indices], pool.dv[indices])
+
+
 def main() -> int:
-    curve = NonsmoothCurve.load_npz(SOURCE / f"{STEM}_nonsmooth_curve.npz")
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--data", required=True, help="fresh production dataset under rawdata/data")
+    parser.add_argument("--tag", default=date.today().strftime("%Y%m%d"))
+    args = parser.parse_args()
+    source = DATA_DIR / args.data
+    output_dir = DATA_DIR / f"Pendulum_2sided_oversample_{args.tag}"
+    curve = NonsmoothCurve.load_npz(source.with_name(f"{source.stem}_nonsmooth_curve.npz"))
     assert curve.basin.shape[0] > 3, "validated basin missing from source curve"
-    with open(SOURCE / "Pendulum_pmp_raw_trajectories_2000_20260703.pkl", "rb") as f:
+    raw_files = list(source.parent.glob("*raw_trajectories*.pkl"))
+    if len(raw_files) != 1:
+        raise ValueError("expected exactly one raw-trajectory artifact beside the fresh dataset")
+    with raw_files[0].open("rb") as f:
         raw = pickle.load(f)
 
     restricted = tuple(restrict_trajectory_to_curve(tr, curve)[0] for tr in raw)
@@ -65,18 +91,30 @@ def main() -> int:
         for tr in restricted if tr.state.size
     ])
     solver = PendulumPmpSolver(config=PendulumPmpSolverConfig(num_trajectories=2000))
+    body_pool = solver.screen_body_samples(body_pool, tuple(raw))
     pad_pool, collar_pool = solver.build_collar_samples(tuple(raw), restricted, curve)
     print(f"pools: body {body_pool.size}, pad {pad_pool.size}, collar {collar_pool.size}")
 
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    output_dir.mkdir(parents=True, exist_ok=False)
+    base = None
     for name, (n_body, n_pad, n_collar) in VARIANTS.items():
-        samples = ValueSamples.concatenate([
-            thin_value_samples(body_pool, n_body),
-            thin_value_samples(pad_pool, n_pad),
-            thin_value_samples(collar_pool, n_collar),
-        ])
-        data_path = samples.save_npz(OUT_DIR / f"{name}.npz")
-        curve.save_npz(OUT_DIR / f"{name}_nonsmooth_curve.npz")
+        if name == "add2k":
+            pad_extra = additional_samples(pad_pool, base, 667)
+            existing = ValueSamples.concatenate([base, pad_extra])
+            collar_extra = additional_samples(collar_pool, existing, 1333)
+            samples = ValueSamples.concatenate([existing, collar_extra])
+        else:
+            samples = ValueSamples.concatenate([
+                thin_value_samples(body_pool, n_body),
+                thin_value_samples(pad_pool, n_pad),
+                thin_value_samples(collar_pool, n_collar),
+            ])
+        if samples.size != n_body + n_pad + n_collar:
+            raise ValueError(f"insufficient samples for {name}")
+        if name == "base6k":
+            base = samples
+        data_path = samples.save_npz(output_dir / f"{name}.npz")
+        curve.save_npz(output_dir / f"{name}_nonsmooth_curve.npz")
         share = 100.0 * (n_pad + n_collar) / samples.size
         print(f"{name}: {samples.size} samples "
               f"({n_body} body + {n_pad} pad + {n_collar} collar, band {share:.0f}%) "

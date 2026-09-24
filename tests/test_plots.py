@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from src.plots import (
+    plot_feedback_trace,
     plot_model_value_surface,
     plot_normal_cross_section,
     plot_summary_frontier,
@@ -71,4 +72,15 @@ def test_summary_frontier_preserves_distinct_marker_policy():
     assert ax.lines[0].get_markevery() == 4
     assert ax.lines[0].get_markersize() == 6
     assert ax.get_yscale() == "log"
+    plt.close(fig)
+
+
+def test_signed_control_trace_displays_negative_controls():
+    control = np.array([-2., 1., -.5])
+    fig, ax = plot_feedback_trace(
+        [dict(t=np.arange(3), y=control, color="black", ls="-", lw=2, label="controller")],
+        ylabel="u(t)", time_limit=2., nonnegative=False,
+    )
+    np.testing.assert_array_equal(ax.lines[0].get_ydata(), control)
+    assert ax.get_ylim()[0] <= -2.
     plt.close(fig)

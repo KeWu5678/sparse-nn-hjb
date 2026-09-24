@@ -1,3 +1,4 @@
+import hashlib
 import json
 import pickle
 from types import SimpleNamespace
@@ -55,6 +56,20 @@ def record_path(tmp_path):
     }
     path.write_text(json.dumps(record))
     return path
+
+
+def test_loading_rejects_dataset_changed_since_training(record_path):
+    record = json.loads(record_path.read_text())
+    data_path = record_path.parent / "data.npz"
+    record["data_sha256"] = hashlib.sha256(data_path.read_bytes()).hexdigest()
+    record_path.write_text(json.dumps(record))
+    load_run(record_path)
+    with np.load(data_path) as stored:
+        arrays = {name: stored[name] for name in stored.files}
+    arrays["v"] = arrays["v"] + 1.0
+    np.savez(data_path, **arrays)
+    with pytest.raises(ValueError, match="dataset differs"):
+        load_run(record_path)
 
 
 def test_saved_run_uses_recorded_scaling_not_dataset_maxima(record_path):

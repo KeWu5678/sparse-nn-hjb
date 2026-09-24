@@ -1,111 +1,118 @@
-# Research Directions
+# Experiment workflow
 
-Current paper run records, generated reports, and figures are local artifacts
-and are not version-controlled. Their Hydra definitions remain under `conf/`,
-while `paper/paper_0805.tex` and its compiled PDF are the publication record.
-The active plotting pipeline is restricted to the PNGs included by that TeX source;
-historical reports remain available separately from their archived images.
+Current datasets were generated on September 24, 2026. Their paths are selected
+by `conf/data/*.yaml`; training settings and sweep axes live in
+`conf/experiment/*.yaml`. All 588 configured fits and the 43 manuscript figures
+have been regenerated. Numerical conclusions in the current paper use these runs.
 
-## Current executable paths
+Datasets, run records, fits, reports, and figures are local, ignored artifacts.
+The manuscript source and compiled PDF are tracked under `paper/`.
 
-The cleanup on 2026-09-12 audited all 26 Python/shell source files, including
-ignored local scripts. Seven entry points remain:
+## Generate and configure the data
 
-| Path | Responsibility |
-| --- | --- |
-| `00_openloop/{vdp,pendulum}/generate.py` | Five reference PNGs directly in `paper/plot/`; also called by `make openloop` |
-| `{01_vdp,02_pendulum}/paper_log_penalty/analysis.py` | Thin entry points for the benchmark's shared full-scope generator |
-| `{01_vdp,02_pendulum}/paper_frac_exp_penalty/analysis.py` | The same full-scope generators; both algorithm families share each benchmark's pipeline |
-| `01_vdp/paper_log_penalty/p_study_figure.py` | Joint moment-order support statistics and the single included `p_study.png` |
+| Input | Current location under `rawdata/data/` | Generator |
+| --- | --- | --- |
+| Van der Pol | `VDP_20260924_62305c7ac2534952a7c85d6c4656a491/` | `scripts/generate_vdp_data.py` |
+| Pendulum production data, raw paths, and switching curve | `Pendulum_20260924_ebf42e75ab9748aa855f44aa2387b6df/` | `scripts/run_pendulum_pmp_openloop_example.py` |
+| Pendulum sampling variants | `Pendulum_2sided_oversample_20260924/` | `scripts/investigation/make_twosided_oversampling_sets.py` |
 
-The neutral VDP and pendulum generators emit 13 and 17 PNGs, respectively.
-Together with the five reference images and one p-study image, these are exactly
-the manuscript's 36 PNGs. Neither the study wrappers nor `scripts/paper/` generate
-surplus diagnostic plots. Both VDP wrappers use alpha=1e-6 for the frontier/feedback
-comparison, while the separate homogeneous surface/table comparison stays at 1e-5.
+The [VDP](00_openloop/vdp/README.md) and
+[pendulum](00_openloop/pendulum/README.md) guides describe the objectives,
+generation commands, and reference-data plots. A new generation creates a new
+run directory. Update the data configurations to those exact artifacts before
+training; changing a date in a filename does not regenerate data.
 
-After regeneration, check both the provenance and TeX-derived image allowlist:
+For pendulum, build the four sampling variants, their distance caches, and one
+shared evaluation pool before training. Exclude the union of the production
+set and all four variants from that pool. `conf/eval/region_split.yaml` selects
+the common pool; each data configuration selects its own aligned distance
+cache. The switching tube is distance at most 0.3 from the tiled switching-set
+points.
+
+## Train the current grids
+
+The six presets currently define 588 experiment cells:
+
+| Preset | VDP runs | Pendulum runs, including variants |
+| --- | ---: | ---: |
+| `log_penalty` | 224 | 224 |
+| `frac_exp_penalty` | 16 | 16 |
+| `moment_order_study` | 32 | 32 |
+| `relu_l1_baseline` | 10 | 10 |
+| `oversampling_gaussian` | 0 | 12 |
+| `oversampling_relu2` | 0 | 12 |
+
+Start the local [MLflow service](../deploy/README.md), then run each preset once:
 
 ```sh
-uv run python scripts/paper/preflight.py --require-sidecars --require-figures
+make sweep EXPERIMENT=log_penalty
+make sweep EXPERIMENT=frac_exp_penalty
+make sweep EXPERIMENT=moment_order_study
+make sweep EXPERIMENT=relu_l1_baseline
+make sweep EXPERIMENT=oversampling_gaussian
+make sweep EXPERIMENT=oversampling_relu2
 ```
 
-The figure check rejects missing included images and unreferenced PNGs in
-`experiments/` and `paper/plot/`; it does not certify the reference calculations.
+`make sweep` refuses to run when that experiment already has records under
+`rawdata/logs/multirun/`. Existing artifacts must be deliberately archived
+before a replacement sweep. Records are stored at
+`rawdata/logs/multirun/<dataset>/<experiment>/<axis>/<job>/`, with a run-adjacent
+`result_<run_id>.pkl` fit. Every run uses seed 42 and a 90% training split.
+The runner records training-data and evaluation-input SHA-256 hashes before
+fitting and reports errors in physical coordinates.
 
-Saved-run reconstruction/evaluation belongs to `src/results.py`; rendering and
-export belong to `src/plots.py`. Paper-specific selection and feedback logic live
-in the local `scripts/paper/` workspace. See [plotting](../docs/plotting.md) and
-the local-only command guide `scripts/paper/README.md`. Those local paper paths
-require the original datasets, records and sidecars; they are not a clean-checkout
-reproduction guarantee.
+Algorithms 1 and 2, the moment-order study, and the oversampling studies use
+150 outer iterations with sequential insertion. The traditional ReLU–L1
+baseline has its own correction-first, batch-insertion settings; its preset
+must not be substituted with Algorithm 2 at power one.
 
-Training uses only the shared `conf/experiment/{log_penalty,frac_exp_penalty,
-relu_l1_baseline}.yaml` presets through `make sweep EXPERIMENT=<name>`. Dataset-
-prefixed presets and the former study-specific Make targets no longer exist.
-New generic sweeps do not refresh the separately reviewed paper record trees.
+## Validate and generate the manuscript figures
 
-## Historical artifacts and source recovery
+The following paper scripts are local/ignored and require the datasets,
+completed records, and fit files above:
 
-The `baseline`, `log_penalty`, `frac_exp_penalty`, `moment_penalty`, VDP `summary`
-and pendulum `region_split` directories retain their historical reports. Their
-unreferenced PNGs are archived locally and are not distributed with the
-repository; tracked reports do not embed or link to those unavailable images.
-These directories are not current regeneration entry points.
+```sh
+uv run python scripts/paper/preflight.py
+make openloop
+uv run python experiments/01_vdp/paper_log_penalty/p_study_figure.py
+uv run python scripts/paper/vdp_full_scope.py --homogeneous-alpha 1e-6
+uv run python scripts/paper/pendulum_full_scope.py
+uv run python scripts/paper/preflight.py --require-figures --write-manifest
+```
 
-Nineteen obsolete source files (5,709 lines) were moved, without changing their
-bytes, to the local archive
-`outdated/experiment-code-cleanup-2026-09-12/` (not included in a clean checkout).
-It contains the original paths, SHA-256 manifest, old READMEs and stale bytecode.
-The fourteen additive-moment files depend on the retired objective/configuration;
-the other five are historical analyzers with obsolete metric/solver contracts,
-including two identical baseline analyzers. No current-paper executable depends
-on them. Reproduction of retired studies requires the historical implementation,
-not restoring compatibility branches to current code.
+Preflight derives the expected cells from the current Hydra presets. It rejects
+missing or duplicate cells, obsolete dataset paths, mismatched recorded input
+hashes, incomplete runs, missing fit files, and incompatible training settings.
+It requires physical-coordinate metrics and the configured shared pendulum
+pool. A partial benchmark check is available with `--problem vdp` or
+`--problem pendulum`; publication manifest creation requires both benchmarks.
 
-The subsequent paper-only trim archived `scripts/paper/log_penalty_analysis.py`
-and preserved copies of the narrowed generators and shared renderer under
-`paper_pipeline_before/`. It also moved 170 unreferenced PNGs unchanged to
-`unreferenced_pngs/`, preserving repository-relative paths. Verify the images with
-`shasum -a 256 -c PNG_SHA256SUMS` from that archive subdirectory. The 36 included
-PNGs, datasets, run records, and historical report numbers were preserved;
-historical reports now label superseded training-coordinate metrics and remove
-links to unavailable images. Current physical-coordinate results are in the
-[tracked paper](../paper/paper_0805.pdf).
+The final command writes `scripts/paper/current_run_manifest.json`, recording
+SHA-256 hashes for records, fit files, datasets, evaluation inputs, and included
+figures. The figure allowlist is derived from `paper/paper_0805.tex`; missing
+included PNGs and unreferenced PNGs in `experiments/` or `paper/plot/` fail the
+check. Provenance checks do not establish numerical correctness by themselves.
 
-Figure 12's known reference-selection defect is still a separate scientific
-correction. Its retained PNGs were not silently changed by this cleanup.
+The two open-loop plotters write five reference PNGs to `paper/plot/`.
+`vdp_full_scope.py` and `pendulum_full_scope.py` write the learned-model figures
+and reports under their benchmark's `paper_log_penalty/` and
+`paper_frac_exp_penalty/` output directories. Those names identify report
+locations; the training record roots are `log_penalty` and `frac_exp_penalty`.
+The local `analysis.py` wrappers delegate to the same benchmark generators.
+The joint moment-order plot reads the two `moment_order_study` record roots.
 
-## Research directions
+Signed-control and cumulative-cost comparisons use each controller's own
+trajectory: VDP has horizon 3; pendulum has horizon 10 for both starts. The
+separate VDP stabilization diagnostic has horizon 12. Rollout arrays and final
+costs are preserved beside the reports as NPZ and CSV files. See
+[plotting and evaluation](../docs/plotting.md) for the numerical and rendering
+contracts.
 
-1. Normalized-measure activation search.
-   Algorithm 1 compares nonhomogeneous activations under the normalized-moment
-   objective, using the joint candidate search and guarded coefficient
-   correction described in the manuscript.
+## Archive boundary
 
-2. Finite-step fractional penalties.
-   Algorithm 2 currently supports `k=2,3`, hence `q=2/3,1/2`, plus the separate
-   `k=1` ReLU--L1 endpoint. Insertion minimizes the actual one-atom increment
-   through the selected global scalar prox; the correction uses the same global
-   prox with a warm-start-derived fixed scale.
-
-3. Discontinuous-gradient activation search.
-   On the analytic discontinuous-gradient study, the best near-jump behavior
-   comes from leaky squared-ReLU / squared-ReLU families with spherical
-   parameterization. They beat smooth activations in near-discontinuity error
-   and preserve the expected near/far localization pattern.
-   Local-only summary: `docs/research/D3_harmonic_analysis/refs/legacy-analytical-search.md`.
-
-4. Archived semiconcave-versus-signed comparison.
-   This historical study found no consistent advantage from the semiconcave
-   parametrization. The implementation was retired by ADR 0012 because it is
-   unused by the manuscript and current experiments; Git history preserves it.
-   Local-only summary: `docs/research/D4_max_plus/refs/legacy-semiconcave-comparison.md`.
-
-## Migration Note
-
-The old `autoresearch` summaries were consolidated into the curated experiment
-tree and the Markdown experiment readouts; the two still-cited legacy summaries
-(directions 3–4) were migrated verbatim into `docs/research/*/refs/` and the
-remaining `autoresearch/` tree was archived under `outdated/` (2026-07-02).
-New work should extend the curated experiment paths.
+Superseded datasets, run records, reports, figures, obsolete pipeline files,
+and the old `00_openloop/DIAGNOSIS.md` are preserved under the ignored
+`outdated/experiment-refresh-20260924/` directory. Its JSON manifests record
+original paths and SHA-256 hashes. Retired report directories are no longer
+active paths under `experiments/`, and the current generators do not read the
+archive. Archived artifacts are not distributed with a clean checkout.

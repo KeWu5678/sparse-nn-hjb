@@ -30,7 +30,10 @@ def test_compose_defaults() -> None:
     assert cfg.training.num_iterations == 10
     assert cfg.training.max_ls_iter == 500
     assert cfg.training.ins_merge_tol == 1e-2
-    assert cfg.data.path.endswith("VDP_beta_0.1_grid_30x30.npy")
+    with initialize(version_base=None, config_path="../conf"):
+        selected = compose(config_name="config", overrides=["+data=vdp"])
+    assert cfg.data.path == selected.data.path
+    assert cfg.data.path.endswith(".npz")
     assert cfg.data.normalize is True
     assert cfg.env.seed == 42
 
