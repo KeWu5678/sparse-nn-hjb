@@ -6,6 +6,6 @@
 defaults:
   - /eval: region_split
 data:
-  path: Pendulum_2sided_oversample_20260704/add2k.npz
+  path: Pendulum_2sided_oversample_20260924/add2k.npz
 eval:
-  distance_cache: Pendulum_2sided_oversample_20260704/add2k_region_distances.npz
+  distance_cache: Pendulum_2sided_oversample_20260924/add2k_region_distances.npz

@@ -93,8 +93,8 @@ def plot_summary_frontier(series):
     return fig, ax
 
 
-def plot_feedback_trace(series, *, ylabel, time_limit):
-    """One VDP feedback panel; inputs already contain the desired quantity."""
+def plot_feedback_trace(series, *, ylabel, time_limit, nonnegative=True):
+    """One feedback panel from prepared controls, state norms, or running costs."""
     apply_publication_style()
     fig, ax = plt.subplots(figsize=(7, 5))
     for s in series:
@@ -103,7 +103,8 @@ def plot_feedback_trace(series, *, ylabel, time_limit):
     ax.set_xlabel(r"time $t$")
     ax.set_ylabel(ylabel)
     ax.set_xlim(0.0, time_limit)
-    ax.set_ylim(bottom=0.0)
+    if nonnegative:
+        ax.set_ylim(bottom=0.0)
     ax.legend(loc="upper right")
     return fig, ax
 
@@ -113,7 +114,7 @@ def plot_normal_cross_section(s, truth, series, *, ylabel):
     apply_publication_style()
     fig, ax = plt.subplots(figsize=(8.5, 4.4))
     ax.axvline(0.0, color="0.8", lw=1.0, ls="--", zorder=0)
-    ax.plot(s, truth, color="0.0", ls="-", lw=2.6, label="true PMP", zorder=3)
+    ax.plot(s, truth, color="0.0", ls="-", lw=2.6, label="PMP reference", zorder=3)
     for item in series:
         ax.plot(s, item["y"], color=item["color"], ls=item["ls"], lw=2.0,
                 label=item["label"], zorder=2)
@@ -175,7 +176,7 @@ def plot_pendulum_control(reference, series, *, time_limit):
     t_true, us_true = reference
     all_us = np.concatenate([us_true, *(item["y"] for item in series)])
     ylo, yhi = all_us.min() - 1.0, all_us.max() + 1.0
-    ax.plot(t_true, us_true, color="0.0", ls="-", lw=3.2, zorder=2, label="true PMP")
+    ax.plot(t_true, us_true, color="0.0", ls="-", lw=3.2, zorder=2, label="PMP reference")
     for item in series:
         ax.plot(item["t"], item["y"], color=item["color"], ls=item["ls"],
                 lw=1.9, zorder=3, label=item["label"])

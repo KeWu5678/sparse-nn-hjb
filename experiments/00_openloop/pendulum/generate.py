@@ -12,7 +12,7 @@ Titles are intentionally omitted; see ``README.md`` for what each figure is:
 
 The regions figure colors each point by the upright it belongs to
 (nearest basin-cut characteristic, tiled by 2*pi*k); the boundaries are the switching-set
-spirals. The surface is built from the wired 3000-sample training set: the value function is
+spirals. The surface is built from the configured training set: the value function is
 2*pi-periodic in theta, so all samples are folded into one fundamental cell [-pi, pi],
 interpolated once (denser), then tiled by 2*pi across [-8, 8] — a seamless evaluation of the
 same periodic V (no per-grid seam artifact).
@@ -47,7 +47,7 @@ from scipy.spatial import cKDTree  # noqa: E402
 
 from src.data import DATA_DIR  # noqa: E402
 from src.OpenLoop.pendulum.nonsmooth import (  # noqa: E402
-    compute_nonsmooth_curve,
+    NonsmoothCurve,
     restrict_trajectory_to_curve,
 )
 from src.plots import (
@@ -66,10 +66,11 @@ DATASET_DIR = SAMPLES.parent
 
 
 def _raw_trajectory_pickle() -> Path:
-    """Ordered backward-PMP paths for the line figures: prefer a raw-trajectory
-    pickle co-located with the dataset, else the legacy 256-path debug pickle."""
+    """Ordered backward-PMP paths from the configured dataset's own generation."""
     cands = sorted(DATASET_DIR.glob("*raw_trajectories*.pkl"))
-    return cands[0] if cands else DATA_DIR / "_debug_raw_trajectories_256.pkl"
+    if len(cands) != 1:
+        raise ValueError("expected exactly one raw-trajectory artifact beside the dataset")
+    return cands[0]
 
 
 FIG = REPO_ROOT / "paper" / "plot"
@@ -77,11 +78,6 @@ FIG = REPO_ROOT / "paper" / "plot"
 _TWO_PI = 2.0 * np.pi
 _OMEGA_CAP = 7.7                       # basin theta-dot extent
 _N_PERIODS = 3                         # +/- periods to tile for the regions plot
-# The regions figure needs the switching set tracked deeper than the training cap
-# (basin_value_max=50, which only resolves ~half a spiral turn). cap=80 keeps the
-# stable assembly while recovering the multi-winding spiral (the paper's Fig. 2 left);
-# this is for visualisation only — it does not affect the wired training samples.
-_REGIONS_CAP = 80.0
 
 # Soft fills for the regions of attraction (one per tiled upright).
 _REGION_COLS = ["#c9b3de", "#f3b0a0", "#a9c8e8", "#f3e0a0", "#a9dca0", "#d7b5e0", "#bfe0c0"]
@@ -107,7 +103,7 @@ def _value_scatter() -> Path:
 
 
 def _surface() -> Path:
-    """V(x) surface from the 3000-sample set: fold into one period, interp, tile."""
+    """V(x) surface from configured samples: fold into one period, interp, tile."""
     d = np.load(SAMPLES)
     th, om, v = d["x"][:, 0], d["x"][:, 1], d["v"].reshape(-1)
     keep = np.abs(om) <= _OMEGA_CAP
@@ -155,11 +151,11 @@ def _regions() -> Path:
 
     Each backward characteristic, cut at the switching set, lies in one upright's basin;
     tiling by 2*pi*k and coloring each grid cell by its nearest cut point gives the basins,
-    whose boundaries are the switching-set spirals. The switching set is tracked deep
-    (``_REGIONS_CAP``) so the spiral winds several times around the hanging points, as in
-    the paper's Fig. 2 (left); the shallow training cap would only show ~half a turn."""
+    whose boundaries approximate the configured dataset's switching-set spirals."""
     raw = tuple(_raw_trajectories())
-    curve = compute_nonsmooth_curve(raw, 0.1, basin_value_max=_REGIONS_CAP)
+    curve = NonsmoothCurve.load_npz(
+        SAMPLES.with_name(SAMPLES.stem + "_nonsmooth_curve.npz")
+    )
     cut = []
     for t in raw:
         c, _ = restrict_trajectory_to_curve(t, curve)
@@ -183,7 +179,7 @@ def _regions() -> Path:
 
     fig, _ = plot_periodic_regions(GX, GY, reg, colors=_REGION_COLS, periods=_N_PERIODS)
     out = FIG / "pendulum_regions.png"
-    save_figure(fig, out, dpi=200, tight=False, bbox_inches="tight")
+    save_figure(fig, out, dpi=300, tight=False, bbox_inches="tight")
     return out
 
 

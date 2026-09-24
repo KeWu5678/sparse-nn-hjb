@@ -2,12 +2,17 @@
 
 [![CI](https://github.com/KeWu5678/sparse-nn-hjb/actions/workflows/ci.yml/badge.svg)](https://github.com/KeWu5678/sparse-nn-hjb/actions/workflows/ci.yml)
 
-**An 18-neuron softplus network stabilizes the Van der Pol system at a
-closed-loop cost of 6.68, against 6.48 for an interpolated reference controller.**
+**A 14-neuron softplus controller reaches a small terminal neighbourhood on
+Van der Pol at cost 6.461, against 6.455 for an interpolated reference controller.**
 
 Learning a value function is easy to score and easy to get wrong. This project
 learns one from trajectory data and then *flies* it — the reported result is the
 behaviour of the closed loop, not a regression error.
+
+All 588 configured experiments have been rerun on the September 24, 2026
+datasets. The [experiment workflow](experiments/README.md) identifies the
+current data, run configurations, and publication checks. The refreshed
+[paper](paper/paper_0805.pdf) contains the complete comparisons.
 
 ## The problem
 
@@ -26,9 +31,8 @@ The approach: sample value *and* gradient data from open-loop solves via
 Pontryagin's principle, then fit a shallow network
 $\sum_k c_k\sigma(a_k\cdot x + b_k)$ under an $H^1$ loss, so the gradient is a
 first-class training target. Width is not fixed in advance and sparsity is not
-post-hoc pruning — neurons are **inserted one at a time** by a Primal–Dual Active
-Point method over a measure-space formulation, each insertion certified to
-decrease the objective.
+post-hoc pruning — neurons are inserted adaptively by a Primal–Dual Active
+Point method over a measure-space formulation.
 
 ## Result
 
@@ -39,19 +43,20 @@ decrease the objective.
 
 Accuracy against width on Van der Pol. The displayed sparse nonconvex models
 reach lower error with fewer neurons. The conventional ReLU + $\ell^1$ network
-approaches their error as its support grows, but remains above them through
-the plotted budget of 150 neurons.
+remains above these three nonconvex models at their selected operating points.
+The plot uses $\alpha=10^{-6}$ for ReLU<sup>2</sup>; the table below uses
+$\alpha=10^{-5}$ for both rectified powers.
 
 Representative $H^1$-trained checkpoints, selected by minimum training
 objective:
 
 | activation | penalty | neurons | rel. $H^1$ error |
 | --- | --- | ---: | ---: |
-| softplus | normalized log penalty | **18** | 0.243 |
-| tanh | normalized log penalty | 33 | 0.237 |
-| Gaussian | normalized log penalty | 39 | 0.236 |
-| ReLU<sup>2</sup> | $\sum_i \lvert c_i\rvert^{2/3}$ | 53 | 0.235 |
-| ReLU<sup>3</sup> | $\sum_i \lvert c_i\rvert^{1/2}$ | 26 | **0.235** |
+| softplus | normalized log penalty | **14** | 0.0311 |
+| tanh | normalized log penalty | 29 | 0.0218 |
+| Gaussian | normalized log penalty | 32 | **0.0111** |
+| ReLU<sup>2</sup> | $\sum_i \lvert c_i\rvert^{2/3}$ | 39 | 0.0114 |
+| ReLU<sup>3</sup> | $\sum_i \lvert c_i\rvert^{1/2}$ | 24 | 0.0140 |
 
 The first three use $\alpha=10^{-4}$, $\gamma=10$, and $p=2.01$; the
 fractional-power fits use $\alpha=10^{-5}$.
@@ -63,16 +68,29 @@ training normalization.
 Closed-loop rollout from $y_0 = (2,1)$ over $T=12$. The ReLU<sup>3</sup>
 controller uses a separate $\alpha=10^{-6}$ checkpoint:
 
-| controller | neurons | stabilizes | cost |
+| controller | neurons | terminal norm < 0.2 | cost |
 | --- | ---: | :---: | ---: |
-| interpolated reference | — | yes | 6.48 |
-| softplus | 18 | yes | 6.68 |
-| Gaussian | 39 | yes | 6.49 |
-| ReLU<sup>3</sup> | 36 | yes | 6.50 |
+| interpolated reference | — | yes | 6.4551 |
+| softplus | 14 | yes | 6.4612 |
+| Gaussian | 32 | yes | 6.4552 |
+| ReLU<sup>3</sup> | 30 | yes | 6.4840 |
 
 The reference interpolates the dataset's time-zero costates with a stationary
 Clough–Tocher interpolant. The data horizon is $T=3$, so the reference rollout
 cost is not an exact finite-horizon optimum for this $T=12$ comparison.
+
+The matching finite-horizon control/cost comparison uses $T=3$ and a direct
+numerical open-loop solve. All learned-controller costs are accumulated along
+each controller's own trajectory. Reaching a terminal neighbourhood does not
+establish asymptotic stability.
+
+The pendulum benchmark tests value functions with gradient jumps. It compares
+regional errors, alternative training-sample allocations, and feedback from
+two initial states over $T=10$. All five selected nonconvex controllers reach
+the upright neighbourhood from the easier start; only ReLU<sup>2</sup> does so
+from the harder start. The ReLU–$\ell^1$ baseline also reaches it from both
+starts. All training variants share an evaluation pool excluding their sample
+states; model selection uses switching-region error on that pool.
 
 ## Engineering
 
@@ -87,8 +105,7 @@ the outer loop monotone.
 **Golden-output tests.** Refactors of the numerical core are checked against
 stored reference solutions, not just unit assertions. A change in solver
 behaviour shows up as a diff in neuron counts and errors, not as a silently
-different answer. The suite is 216 tests and runs on every push alongside
-`ruff`.
+different answer. The suite runs in CI alongside `ruff`.
 
 **Runs are records.** Every completed training run writes a self-describing JSON
 record — full resolved config, summary metrics, artifact paths — next to its
@@ -141,6 +158,8 @@ make openloop
 ```
 
 This command reads existing data; it does not generate the datasets.
+Dataset generation, evaluation-pool construction, and plotting are separate
+steps documented in [experiments/README.md](experiments/README.md).
 
 ## Layout
 
@@ -149,10 +168,15 @@ This command reads existing data; it does not generate the datasets.
 | `src/` | Library: shallow networks, `PDAP/` insertion, `SSN/` optimizer, data/eval/plotting |
 | `conf/` | Hydra configs — model families, datasets, evaluation, experiment sweeps |
 | `scripts/` | `train.py` entry point, dataset generators, MLflow importer |
-| `experiments/` | Study definitions and curated results |
+| `experiments/` | Current workflows, reference-data plotters, and local paper outputs |
 | `tests/` | pytest suite, including golden-output solver tests |
 | `docs/` | ADRs, MLflow guide, research notes |
 | `deploy/` | Containerized MLflow tracking server |
 | `vault/` | Deeper implementation notes |
 
 Generated run records, figures, and reports are written to ignored local paths.
+
+Superseded data, records, scripts, and reports are preserved under the ignored
+`outdated/experiment-refresh-20260924/` archive. The current pipeline does not
+read them. Paper-support scripts, figures, and audit notes remain local under
+[ADR 0011](docs/adr/0011-track-only-the-manuscript-source-and-pdf.md).

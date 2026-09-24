@@ -16,7 +16,7 @@ help:
 	@printf 'Usage: make <target> [VAR=value]\n\n'
 	@printf 'Targets:\n'
 	@printf '  %-12s %s\n' 'sweep'    'train one experiment sweep and save run records'
-	@printf '  %-12s %s\n' 'openloop' 'regenerate the VDP and pendulum datasets and figures'
+	@printf '  %-12s %s\n' 'openloop' 'plot the currently configured VDP and pendulum datasets'
 	@printf '\nVariables for sweep:\n'
 	@printf '  %-12s %-44s %s\n' 'EXPERIMENT' 'conf/experiment/<name>.yaml' '(default: $(EXPERIMENT))'
 	@printf '  %-12s %-44s %s\n' 'JOBS'       'parallel workers'            '(default: $(JOBS))'

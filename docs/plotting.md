@@ -1,23 +1,22 @@
 # Saved-run evaluation and plotting
 
-The current-paper generators share model reconstruction through `src.results`
-and rendering through `src.plots`. Their existing numerical implementations,
-layouts and manuscript figure names are retained. The active generators now
-produce only the 36 PNGs included by `paper/paper_0805.tex`; surplus diagnostic
-renderers and their images are archived, not regenerated.
+Current-paper generators reconstruct models through `src.results` and render
+prepared arrays through `src.plots`. They consume the dated datasets selected
+by `conf/data/*.yaml` and the current experiment records. Publication output
+is restricted to PNGs included by `paper/paper_0805.tex`.
 
 ## Ownership
 
 | Module | Responsibility |
 | --- | --- |
-| `src.results` | Read fits, restore checkpoints, predict physical V/dV, orchestrate historical rescoring; no artifact writes |
-| `src.data` | Load value samples and apply/reverse the data transform |
-| `src.eval` | Pure error calculations on prediction/target tensors; no coordinate guessing or regularizer |
-| `src.plots` | Render prepared arrays and save figures |
-| `src.plotstyle` | Shared palette and axes/typography conventions |
-| Paper scripts | Select runs/evaluation sets, construct references, simulate feedback, choose labels and paths |
+| `src.results` | Load recorded fits, restore checkpoints, and evaluate physical values/gradients |
+| `src.data` | Load value samples and apply/reverse data normalization |
+| `src.eval` | Compute errors from prediction/target tensors |
+| `src.plots` | Render prepared arrays and export figures |
+| `src.plotstyle` | Shared palette, typography, and axes conventions |
+| Paper scripts | Select runs and evaluation inputs, construct references, simulate feedback, and write reports |
 
-## Evaluate one saved fit
+## Evaluate a current saved fit
 
 ```python
 from src.results import load_run, predict_physical, validation_samples
@@ -29,63 +28,46 @@ v_pred, dv_pred = predict_physical(run, x)
 l2, gradient, h1 = relative_errors(v_pred, dv_pred, v_true, dv_true)
 ```
 
-`load_run` reads activation, power and fitted data scaling from the Run Record
-and restores its saved `best_iteration`. `predict_physical` accepts physical
-states `(N,d)` and returns detached float64 tensors `(N,1)` and `(N,d)`. Its
-optional `iteration` argument evaluates another checkpoint without changing
-the selected model. Predictions are not clipped. Loading/evaluation leave the
-caller's random-number generators unchanged.
+`load_run` restores the saved `best_iteration` using the recorded model and
+normalization. Current fits are stored beside their records as
+`result_<run_id>.pkl`. `predict_physical` accepts physical states `(N,d)` and
+returns detached float64 tensors `(N,1)` and `(N,d)`. An optional `iteration`
+evaluates another checkpoint without changing the selected model. Predictions
+are not clipped, and loading/evaluation preserve the caller's random state.
 
-`validation_samples` reproduces the runner's original split using its recorded
-seed and train fraction, not a fresh split. The recorded dataset must remain
-available. `evaluate_history(run)` rescores every checkpoint on that holdout,
-returning arrays `iteration`, `neurons`, `rel_l2`, `rel_grad`, `rel_h1` in
-iteration order. Sorting a frontier and taking its lower envelope remain
-reporting choices, not a change of the selected checkpoint.
+`validation_samples` reproduces the recorded seed and training fraction.
+`evaluate_history(run)` scores all checkpoints on that same holdout and returns
+`iteration`, `neurons`, `rel_l2`, `rel_grad`, and `rel_h1` in iteration order.
+A sorted support frontier is a reporting view, not a different checkpoint
+selection rule.
 
-### Objective normalization is not evaluation normalization
+### Normalization and regional evaluation
 
-Training retains its normalized objective, fidelity, regularizer, acceptance
-decisions, and best-checkpoint selection. Approximation errors compare the
-original-scale V and gradient, without regularizer or moment-weight factors.
+Training uses its normalized objective, fidelity, and regularizer. Reported
+approximation errors compare physical values and gradients, with no
+regularization or moment-weight factors. For `x_n=x/s_x` and `V_n=V/s_v`, the
+inverse transform is `V=s_v V_n` and `dV=(s_v/s_x) dV_n`, implemented by
+`ValueSampleNormalizer`. Input scaling can change a relative H1 error even when
+a common value scale leaves relative L2 unchanged.
 
-For data scaling `x_n=x/s_x`, `V_n=V/s_v`, the inverse prediction transform is
-`V=s_v V_n`, `dV=(s_v/s_x) dV_n`. It lives in `ValueSampleNormalizer`, including
-`denormalize_tensors`. H1 remains the paper's relative error. Relative L2 can
-be unchanged by a common value scale while H1 changes with input scaling.
+Current records include explicit normalization and
+`metric_coordinates: physical`. The runner passes `reporting_normalizer` to
+`PDAP.fit`; direct callers that normalize samples should do the same. Current
+publication preflight rejects missing normalization and nonphysical metrics.
+Archived normalization recovery is not part of the fresh publication workflow.
 
-The generic runner passes `reporting_normalizer` to `PDAP.fit`; new records
-declare `metric_coordinates: physical`. Direct trainer callers that normalize
-their samples should supply that same transform. The default `None` preserves
-the untransformed caller contract. Historical errors are never relabeled or
-overwritten by reporting.
+Pendulum regional scores use the shared pool in `conf/eval/region_split.yaml`.
+The pool excludes the union of the production dataset and all four sampling
+variants. The switching tube has distance at most 0.3 to the saved switching
+points and their adjacent periodic translates. The dataset-aligned distance
+cache serves distance-binned diagnostics. These artifacts are hashed before
+training and their hashes are recorded. Current records already contain
+physical regional metrics; no rescoring sidecar is required.
 
-`run.stored_metric_coordinates` identifies the convention of the saved errors.
-An absent `metric_coordinates` tag means `training`, including records that
-already contain `normalization`; unknown labels are rejected. Loading a
-normalized run with training-coordinate metrics warns about this distinction.
-Use `validation_metrics(run)` or `evaluate_history(run)` to obtain physical
-errors instead of comparing those results with stored training-coordinate H1
-values. Loading does not alter the original record or its saved errors.
-
-### Historical records without normalization metadata
-
-The current paper's old sweeps use an explicit compatibility opt-in:
-
-```python
-run = load_run(record_path, recover_legacy_normalization=True)
-```
-
-Recovery reconstructs the historical max-absolute transform from the recorded
-dataset and must reproduce all three saved validation errors at the saved
-checkpoint, in the old training coordinates. It rejects disagreement,
-contradictory/null metadata, and records declaring another metric-coordinate
-convention. It does not change the old record; `run.normalization_recovered`
-marks the recovery. Default loading remains strict.
-
-This consistency check does not independently prove the original dataset's
-provenance. Retain original datasets and record/artifact provenance checks;
-a matching filename alone is not sufficient evidence.
+Within each run, the selected checkpoint minimizes the training objective.
+Pendulum cross-run selection uses switching-region H1 error on the same shared
+pool reported in the regional comparison. Interpret those scores as model
+selection results, not as an independent test of a previously fixed model.
 
 ## Render prepared arrays
 
@@ -98,71 +80,94 @@ fig, ax = plot_value_surface(*grid, clip=(0, 60))
 save_figure(fig, output_path, tight=False, bbox_inches="tight")
 ```
 
-Surface clipping changes a display copy, never the arrays used for metrics or
-feedback. Existing colormaps, sparse ticks, camera angles and panes are retained.
-Plotters return figure/axes; `save_figure` handles export and closing. Layout
-and bounding-box options remain explicit to preserve geometry. New exports use
-PNG at 300 dpi; legacy wrappers retain their existing return shapes.
+Clipping and interpolation used for a surface are display operations. They do
+not change metric targets, predictions used for scoring, or feedback laws.
+Display windows need not equal dataset support; the current pendulum data
+extend beyond `[-9,9]^2`. The reference-surface construction and its cropped
+window are documented in the [pendulum data guide](../experiments/00_openloop/pendulum/README.md).
 
-Batch experiment/paper entry points select Matplotlib's Agg backend before
-importing pyplot-dependent helpers. Backend selection affects text layout and
-tight bounding boxes even for PNG export: the macOS desktop backend produced
-different VDP image dimensions with the same font and numerical data. Shared
-plotting functions remain usable from interactive callers without forcing their
-backend.
+Import the palette and publication style from `src.plotstyle`; renderers return
+figure/axes and `save_figure` handles export and closing. New exports use PNG at
+300 dpi, without in-figure titles. Preserve the explicit layout and bounding-box
+options. Batch generators select Matplotlib's Agg backend before importing
+pyplot helpers so text layout does not depend on a desktop backend. Shared
+renderers remain usable interactively.
 
-`plot_neuron_h1_frontier` retains its series-dictionary interface. The summary
-frontier has a separate renderer because its dimensions and marker placement
-differ. Cross-sections, feedback paths, weight portraits, regional comparisons
-and reference-data figures use extracted renderers in the same module.
-Reference/PMP calculations stay outside them.
+## Signed controls and realized costs
 
-Legacy `plot_model_value_surface` and `_best_iteration_atoms` imports remain
-compatibility wrappers. New callers should use bound SavedRuns and prepared
-arrays, not separately supplied activations or re-fitted normalizers.
+The two benchmarks compare all five selected activations. Each learned law is
+simulated along its own state trajectory from the same initial state as its
+numerical open-loop reference. The comparison horizons and steps are:
 
-## Reproduction and scope
+| Comparison | Horizon | Step |
+| --- | ---: | ---: |
+| Van der Pol control/cost | 3 | 0.01 |
+| Pendulum control/cost, each of two starts | 10 | 0.005 |
 
-See the local-only `scripts/paper/README.md` for current manuscript
-commands. Its VDP Algorithm 2 frontier comparison uses alpha=1e-6; the surface/table comparison
-uses alpha=1e-5. These are deliberately distinct. Existing run selection stays
-fixed during rescoring; retuning is a separate experiment.
+The separate VDP stabilization diagnostic runs to time 12. It is not the
+finite-horizon benchmark cost comparison.
 
-The VDP and pendulum full-scope generators emit 13 and 17 PNGs respectively.
-The open-loop generators write five reference images directly to `paper/plot/`,
-and the joint moment-order study writes one `p_study.png`. Both Algorithm 1 and
-Algorithm 2 study `analysis.py` wrappers delegate to the same full-scope generator
-for their benchmark. They no longer produce separate all-grid or diagnostic plots.
+`src.OpenLoop.comparison.accumulated_cost` integrates running costs at the
+held-control RK4 stages of each learned rollout. It does not substitute a
+network's value prediction. The numerical reference uses three-point Gauss
+quadrature on its dense PMP boundary-value solution. Older diagnostic rollout
+summaries use their own integration convention and are identified separately.
 
-After regeneration, check the TeX-derived image allowlist as well as provenance:
+`solve_openloop_reference` fixes the initial state and comparison horizon,
+with a free terminal state and zero terminal cost. It retains the least-cost
+converged solve initialized from the supplied rollouts. This is a numerical
+reference, not a global-optimality certificate. Reference controls are
+unconstrained, matching the OCP; learned rollouts use their configured numerical
+control guards. Pendulum's finite-horizon comparison is a truncation of the
+infinite-horizon problem used for its training data.
+
+`scripts/paper/control_comparison.py` writes signed-control and cumulative-cost
+PNGs, preserves time/state/control/cost arrays in NPZ files, and writes final
+costs to CSV files beside the reports.
+
+## Current publication pipeline
+
+The [experiment workflow](../experiments/README.md) describes dataset generation
+and the six current sweep presets. Local/ignored paper commands are:
 
 ```sh
-uv run python scripts/paper/preflight.py --require-sidecars --require-figures
+uv run python scripts/paper/preflight.py
+make openloop
+uv run python experiments/01_vdp/paper_log_penalty/p_study_figure.py
+uv run python scripts/paper/vdp_full_scope.py --homogeneous-alpha 1e-6
+uv run python scripts/paper/pendulum_full_scope.py
+uv run python scripts/paper/preflight.py --require-figures --write-manifest
 ```
 
-This rejects missing included images and surplus PNGs in `experiments/` and
-`paper/plot/`. It does not check the mathematical correctness of their contents.
+The VDP command explicitly uses homogeneous alpha `1e-6` for frontier/feedback
+comparisons; its separate surface/table comparison uses `1e-5`. The two benchmark
+generators read current `log_penalty`, `frac_exp_penalty`, and relevant baseline
+or oversampling record roots. They validate the corresponding benchmark before
+writing outputs. The moment-order figure reads both `moment_order_study` roots.
+The local Algorithm 1/2 `analysis.py` wrappers delegate to those same generators.
+
+Preflight constructs the expected grid dynamically from `conf/experiment/`
+(currently 588 cells). It checks cell completeness/uniqueness, current dataset
+paths and recorded hashes, completed status, physical metrics, normalization,
+fit-file presence, training settings, and pendulum evaluation-input hashes.
+It rejects the legacy VDP dataset hash.
+
+`--require-figures` derives the allowed paths from TeX and rejects missing
+included PNGs or unreferenced PNGs under `experiments/` and `paper/plot/`.
+`--write-manifest` writes `scripts/paper/current_run_manifest.json` with exact
+SHA-256 hashes of records, adjacent fits, datasets, evaluation inputs, and the
+checked figures. Numerical correctness still requires separate verification.
+
+Relevant checks include:
 
 ```sh
 uv run pytest tests/test_results.py tests/test_history.py tests/test_experiment_logging.py
-uv run pytest
+uv run pytest tests/test_control_comparison.py tests/test_paper_feedback_results.py
 ```
 
-Checks cover anisotropic scaling, metadata recovery/failure, holdout and RNG
-preservation, unchanged training decisions, and display-only clipping.
-The earlier physical-metric correction changed error frontiers. The subsequent
-paper-only cleanup preserves all 36 included outputs byte-for-byte against
-controlled post-correction, pre-trim generator baselines, and leaves the stored
-manuscript PNGs untouched. Snapshot equality does not certify a reference solution:
-Figure 12's known reference-selection defect remains a separate correction.
-
-Per ADR 0011, reusable code/tests are tracked; paper-specific generators and
-artifacts remain local/ignored. Only manuscript TeX/PDF are tracked in `paper/`.
-The subsequent [cleanup](../experiments/README.md) also trimmed `scripts/paper/`
-to the manuscript pipeline. Nineteen retired experiment source files, the shared
-all-grid analyzer, pre-trim source/documentation copies, and 170 unreferenced PNGs
-are recoverable under `outdated/experiment-code-cleanup-2026-09-12/`. The images
-retain their bytes and repository-relative paths under `unreferenced_pngs/`;
-its `PNG_SHA256SUMS` verifies them. Historical reports label superseded metrics
-and note locally archived images without linking to unavailable files.
-Investigation scripts outside the manuscript pipeline were not removed.
+Reusable code and tests are tracked; paper-specific generators and artifacts
+remain local/ignored under ADR 0011. Superseded inputs, records, reports,
+figures, pipeline files, and diagnosis notes are preserved with hash manifests
+under `outdated/experiment-refresh-20260924/`. The current pipeline does not
+load that archive. An empty checkout requires data generation and training
+before these local publication commands can run.

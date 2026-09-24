@@ -76,16 +76,29 @@ def test_paper_entrypoints_delegate_to_shared_implementation(monkeypatch, group,
         assert calls[1].homogeneous_alpha == 1e-4
 
 
-def test_p_study_loads_only_the_support_statistics_it_uses(tmp_path):
+def test_p_study_requires_a_complete_unique_grid(tmp_path, monkeypatch):
     path = ROOT / "experiments/01_vdp/paper_log_penalty/p_study_figure.py"
     if not path.exists():
         pytest.skip("paper-workspace entry points are local/ignored under ADR 0011")
-    record = {
-        "config": {"model": {"activation": "tanh", "moment_order": 2.01, "alpha": 1e-4}},
-        "metrics": [{"values": {"radius_max": 5.0, "radius_r95": 3.0, "best_neurons": 4}}],
-    }
-    (tmp_path / "run.json").write_text(json.dumps(record))
+    # Isolate grid completeness from the input-byte validation tested separately.
+    preflight = importlib.import_module("scripts.paper.preflight")
+    monkeypatch.setattr(preflight, "validate_record", lambda p: json.loads(p.read_text()))
     namespace = runpy.run_path(str(path))
-    assert namespace["load"](tmp_path) == {
-        ("tanh", 2.01, 1e-4): {"max_radius": 5.0, "r95": 3.0, "neurons": 4.0}
-    }
+    with pytest.raises(ValueError, match="incomplete"):
+        namespace["load"](tmp_path)
+    expected = {}
+    for activation in ("softplus", "tanh", "gaussian", "gelu_squared"):
+        for order in (2.01, 2.5, 3., 4.):
+            for alpha in (1e-4, 1e-5):
+                record = {
+                    "config": {"model": {"activation": activation,
+                                         "moment_order": order, "alpha": alpha}},
+                    "metrics": [{"values": {"radius_max": 5., "radius_r95": 3.,
+                                               "best_neurons": 4}}],
+                }
+                (tmp_path / f"{activation}_{order}_{alpha}.json").write_text(json.dumps(record))
+                expected[activation, order, alpha] = {"max_radius": 5., "r95": 3., "neurons": 4.}
+    assert namespace["load"](tmp_path) == expected
+    (tmp_path / "duplicate.json").write_text(json.dumps(record))
+    with pytest.raises(ValueError, match="duplicate"):
+        namespace["load"](tmp_path)

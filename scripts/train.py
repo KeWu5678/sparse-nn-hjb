@@ -14,6 +14,7 @@ defaults reproduce a single VDP signed-profile run.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import logging
 import os
 import pickle
@@ -219,6 +220,13 @@ def main(cfg: DictConfig) -> None:
 
     # Data preprocessing lives in the script: load, normalize, split.  The model
     # is built by build_model; the trainer holds only config and returns a History.
+    with (DATA_DIR / cfg.data.path).open("rb") as source:
+        data_sha256 = hashlib.file_digest(source, "sha256").hexdigest()
+    evaluation_data_sha256 = {}
+    if cfg.eval.kind == "region_split":
+        for name in ("eval_pool", "distance_cache"):
+            with (DATA_DIR / cfg.eval[name]).open("rb") as source:
+                evaluation_data_sha256[name] = hashlib.file_digest(source, "sha256").hexdigest()
     data = load_value_samples(cfg.data.path)
     normalizer = None
     if cfg.data.normalize:
@@ -278,6 +286,8 @@ def main(cfg: DictConfig) -> None:
     record = run.finish(
         status="completed",
         summary={
+            "data_sha256": data_sha256,
+            "evaluation_data_sha256": evaluation_data_sha256,
             "normalization": normalizer.to_dict() if normalizer is not None else None,
             "metric_coordinates": "physical",
         },

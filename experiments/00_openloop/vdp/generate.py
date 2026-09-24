@@ -2,7 +2,7 @@
 """Generate the Van der Pol open-loop value-data figures.
 
 Visualises the open-loop training data only — the value/gradient samples produced
-by the backward-characteristics solver (``src/OpenLoop/vdp``), no learned model.
+by the finite-horizon PMP solver (``src/OpenLoop/vdp``), no learned model.
 Two manuscript figures (titles intentionally omitted; see ``README.md``):
 
     paper/plot/v.png   3D scatter of the (x, V) samples
@@ -17,6 +17,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import yaml
 
 HERE = Path(__file__).resolve().parent
 REPO_ROOT = HERE.parents[2]
@@ -34,7 +35,8 @@ from src.plots import (  # noqa: E402
     style_vdp_reference_axes,
 )
 
-DATA = DATA_DIR / "VDP_beta_0.1_grid_30x30.npy"
+_CFG = yaml.safe_load((REPO_ROOT / "conf/data/vdp.yaml").read_text())
+DATA = DATA_DIR / _CFG["data"]["path"]
 FIG = REPO_ROOT / "paper" / "plot"
 
 
