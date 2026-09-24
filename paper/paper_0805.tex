@@ -270,8 +270,8 @@ The convex penalty may retain redundant neurons whose inner parameters cluster.
 Pieper and Petrosyan \cite{pieper2022nonconvex} showed that convex penalties
 cannot effectively eliminate this redundancy when neurons cluster in a small
 neighborhood and introduced a concave nonconvex functional for this purpose.
-However this formulation does not extend to the gradient fitting since the formulation is restricted to the ReLU setting. 
-The second-order weak derivative of ReLU does not exist as a function while it is a distribution, and we cannot
+However this formulation does not extend to the gradient fitting since the formulation is restricted to the ReLU setting: 
+the second-order weak derivative of ReLU does not exist as a function while it is a distribution, and we cannot
 use it to approximate high-order derivatives. 
 We need to extend to the smooth activation functions. 
 
@@ -291,102 +291,79 @@ function, as shown in Section~\ref{sec:escape}. We adress those difficulties in 
 The contributions are the following.
 \begin{enumerate}
 	\item \emph{Nonhomogeneous activations on the unbounded parameter domain.}
-	For concave scalar penalties with finite positive right slope, 
-	we introduce a concave measure formulation to gradient-augmented 
-	fitting with an unbounded, nonhomogeneous dictionary.
+	We adopt the objective function with gradient information from \cite{azmi2021optimal} and the nonconvex penalty from \cite{pieper2022nonconvex}. 
+	Like in \cite{pieper2022nonconvex}, we require the concave scalar penalties to have finite positive right slope.
+	However, unlike the original paper which only considers the ReLU case, we allow the activation functions to be nonhomogeneous defined on the unbounded domain.
 	We prove a weak representation of the formulation and derive weak-* lower semicontinuity
 	(Theorem~\ref{thm:phi-lsc} and Corollary~\ref{cor:phi-lsc-sublevels}).
-	In Theorem~\ref{thm:normalization} we use the normalized atom $K_p$,
-	which gives a global minimizer on $\Omega=\mathbb R^{d+1}$ for continuous activations 
+	In Theorem~\ref{thm:normalization} with the normalized atom $K_p$,
+	we extend the existence result of a global minimizer from the value loss with ReLU activation function
+	to the gradient-augmented loss with any continuous activations on $\Omega=\mathbb R^{d+1}$
 	of implied polynomial growth condition (Theorem~\ref{thm:existence}). 
 	Under strong concavity of the penalty on every bounded interval,
-	every local minimizer is finite atomic, its normalized atoms are
-	quantitatively separated, and its width is bounded by a covering number
-	(Theorem~\ref{thm:finite_support}). Corollary~\ref{cor:finite-global-minimizer}
-	gives an attained finite-network problem and an a priori neuron bound.
-	The normalized optimality system is Theorem~\ref{opt_cdt}. 
-	Theorem~\ref{thm:quantitative-insertion} gives algorithm
-	and Corollary~\ref{cor:certificate-rate} gives an $n^{-1/2}$ best-iterate
-	rate for the excess above the insertion threshold.
+	we proved that every local minimizer is finite atomic as in \cite{pieper2022nonconvex}.
+	However, we further extend the result and prove that the number of neurons of optimal network admits an a priori bound
+	(Theorem~\ref{thm:finite_support}, Corollary~\ref{cor:finite-global-minimizer}). 
+	Based on that, we propose a new version of the PDAP algorithm with $n^{-1/2}$ best-iterate rate
+	(Theorem~\ref{thm:quantitative-insertion}, Corollary~\ref{cor:certificate-rate}).
 	\item \emph{The $k$-homogeneous formulation.} Extending the degree-one
 	ReLU rescaling equivalence of Pieper and Petrosyan
 	\cite[Appendix~F, Proposition~3]{pieper2022nonconvex}, we show that for
 	positively $k$-homogeneous activations, minimizing a separable penalty on
 	the inner and outer parameters over radial representations induces the
 	fractional-power penalty $|c|^{2/(k+1)}$ on the unit sphere
-	(Lemma~\ref{lem:homogeneous-penalty}), and the resulting problem is posed
-	over all of $\mathcal M(\mathbb S^d)$, which has the same infimum as the finite-network problem
-	(Proposition~\ref{prop:homogeneous_reduction}). We derive the atomwise
-	optimality conditions and a positive lower bound on the weights of every
-	total-variation local minimizer
-	(Theorem~\ref{thm:homogeneous_optimality}). A global
-	minimizer exists, that every global minimizer is a finite network obeying
-	an explicit a priori width bound
+	(Lemma~\ref{lem:homogeneous-penalty}).
+	The resulting problem is posed over all of $\mathcal M(\mathbb S^d)$, 
+	which has the same infimum as the finite-network problem (Proposition~\ref{prop:homogeneous_reduction}). 
+	We prove that a global minimizer exists, and every global minimizer is a finite network obeying an explicit a priori width bound
 	(Theorem~\ref{thm:homogeneous_existence}).
-	Every local minimizer has finite support
-	(Corollary~\ref{cor:homogeneous_local_support}).
+	We derive the atomwise optimality conditions and a positive lower bound on the weights of every
+	total-variation local minimizer (Theorem~\ref{thm:homogeneous_optimality}). 
+	Every local minimizer has finite support (Corollary~\ref{cor:homogeneous_local_support}).
+	An insertion algorithm is proposed based on the optimality condition (Algorithm~\ref{alg:q}).
 \end{enumerate}
 
 Figure~\ref{fig:neuron_h1_frontier}\subref{fig:frontier_vdp} compares the traditional ReLU network with
 an $\ell^1$ penalty against representative models from the two formulations
-on the Van der Pol problem.
-The displayed nonconvex models reach lower error with fewer neurons. The
-traditional $\ell^1$ network approaches their error as its support grows, but
-remains above them through the plotted budget of $150$ neurons.
-Figure~\ref{fig:neuron_h1_frontier}\subref{fig:feedback_cost_a}
-reports the complementary closed-loop test on the pendulum problem. Only
-$\mathrm{ReLU}^{3}$ reaches the upright neighbourhood from that start; the
-remaining selected models do not. The start $A$ lies at distance $0.247$ from
-the switching set, inside the neighbourhood $S_{0.3}$ where all five fits have
-higher relative $H^1$ error than away from the switching set. The feedback law
-depends on the learned gradient, so the outcome tests its accuracy near the
-gradient discontinuity. Rollout costs must be read together with the terminal
-criterion: a lower cost does not by itself establish stabilization.
+on the Van der Pol numerical reference data.
+At the selected checkpoints, all three plotted nonconvex models have lower
+error and fewer atoms than the traditional $\ell^1$ model, which has $144$
+atoms and relative $H^1$ error $0.0414$. These comparisons use
+the stated operating points, rather than an optimized baseline envelope.
+Figure~\ref{fig:neuron_h1_frontier}\subref{fig:frontier_pendulum}
+shows the corresponding accuracy--width comparison for the pendulum.
+The Gaussian and $\mathrm{ReLU}^{2}$ attain best observed relative $H^1$
+errors of $0.209$ and $0.208$, respectively, with fewer neurons than the
+ReLU--$\ell^1$ baseline, whose error is $0.300$ at $150$ neurons.
+The softplus fit has a larger error of $0.469$.
 
 \begin{figure}[htbp]
 \centering
-\begin{subfigure}[b]{0.50\textwidth}
+\begin{subfigure}[b]{0.49\textwidth}
 \centering
 \includegraphics[width=\textwidth]{../experiments/01_vdp/paper_log_penalty/figures/frontier_intro.png}
 \caption{Van der Pol accuracy against width.}
 \label{fig:frontier_vdp}
 \end{subfigure}
 \hfill
-\begin{subfigure}[b]{0.47\textwidth}
+\begin{subfigure}[b]{0.49\textwidth}
 \centering
-\small
-\setlength{\tabcolsep}{4pt}
-\renewcommand{\arraystretch}{1.18}
-\begin{tabular}{lcc}
-\toprule
-Feedback law & cost & upright \\
-\midrule
-reference (PMP) & $26.2$ & yes \\
-\midrule
-Gaussian & $14927.1$ & no \\
-softplus & $39391.8$ & no \\
-$\tanh$ & $1478.1$ & no \\
-\midrule
-$\mathrm{ReLU}^{2} + \psi_{2}$ & $641.3$ & no \\
-$\mathrm{ReLU}^{3} + \psi_{3}$ & $230.7$ & yes \\
-\bottomrule
-\end{tabular}
-\caption{Pendulum feedback from start $A$.}
-\label{fig:feedback_cost_a}
+\includegraphics[width=\textwidth]{../experiments/02_pendulum/paper_log_penalty/figures/frontier_intro.png}
+\caption{Pendulum accuracy against width.}
+\label{fig:frontier_pendulum}
 \end{subfigure}
-\caption{Panel (a) shows the best observed relative $H^1$ validation error
-at each support budget. Panel (b) gives
-the closed-loop rollout cost from $A=(0.71,0.68)$ over $T=10$ and whether the
-terminal state reaches the upright neighbourhood, defined by
-$\operatorname{dist}(\theta,2\pi\mathbb Z)<0.4$ and $|\dot\theta|<0.4$.
-The nonhomogeneous models use Algorithm~\ref{alg:log}
-with $(\alpha,\gamma,p)=(10^{-4},10,2.01)$. The ReLU--$\ell^1$ baseline in
-panel (a) uses classical profile-threshold insertion with a convex $\ell^1$
-penalty at $\alpha=10^{-5}$; the homogeneous model in that panel uses
-$\alpha=10^{-6}$. The homogeneous models in panel (b) use $\alpha=10^{-5}$,
-selected by the smallest relative $H^1$ error on $S_{0.3}$ among the tested
-values $\{10^{-3},10^{-4},10^{-5},10^{-6}\}$. Each feedback law uses its run's
-minimum-training-objective iterate. These are benchmark-specific comparisons.}
+\caption{Best observed relative $H^1$ validation error at each support budget
+for (a) Van der Pol and (b) the pendulum, with the same model families and
+colors in both panels. The softplus and Gaussian models use
+Algorithm~\ref{alg:log} with $(\alpha,\gamma,p)=(10^{-4},10,2.01)$;
+the ReLU--$\ell^1$ baseline uses profile insertion with the linear penalty
+and $\alpha=10^{-5}$; the $\mathrm{ReLU}^{2}$ model uses $\psi_2$ with
+$\alpha=10^{-6}$. The pendulum baseline has the lowest validation error
+among its five tested $\alpha$ values, scored at each run's
+minimum-training-objective iterate; the pendulum $\mathrm{ReLU}^{2}$ run
+is selected by switching-region error. Each curve is the lower envelope
+of validation errors over the saved iterates of that run. These are
+benchmark-specific operating points, not a matched-$\alpha$ comparison.}
 \label{fig:neuron_h1_frontier}
 \end{figure}
 
@@ -511,7 +488,7 @@ If $\omega_n\to\omega$, their pre-activations lie in a common compact
 interval on $D$. Uniform continuity of $\rho$ and $\rho'$ on that interval,
 together with $a_n\to a$, therefore gives
 $K(\omega_n)\to K(\omega)$ in $H^1(D)$. Thus
-$K:\Omega\to H^1(D)$ is continuous and, in particular, strongly measurable.
+$K:\Omega\to H^1(D)$ is continuous and, in particular, strongly measurable by Pettis.
 
 For $\mu\in\mathcal M(\Omega)$ satisfying
 \begin{equation}
@@ -532,7 +509,7 @@ Fubini's theorem and gives
 	&=-\int_D\left(\int_\Omega\partial_iK(\omega)\,d\mu(\omega)\right)
 	\psi\,dx.
 \end{align*}
-Consequently,
+Consequently, 
 \begin{equation*}
 	\nabla(\mathcal N\mu)
 	=\int_\Omega\nabla K(\omega)\,d\mu(\omega)
@@ -616,6 +593,7 @@ $\phi''(z)=-\frac12z^{-1/2}$; it can be extended linearly after a small
 positive point so as to remain nondecreasing, concave, and coercive.
 \end{remark}
 
+The following result follows from standard concavity estimates; see \cite{pieper2022nonconvex}.
 \begin{lemma}\label{firstorderestimate}
 Let $\phi:[0,\infty)\to[0,\infty)$ be concave with
 $\phi(0)=0$. Then
@@ -701,8 +679,10 @@ the finite right derivative and $\phi(0)=0$ give
 	\phi(z)-L_\phi z
 	=\int_0^z[\phi'(s)-L_\phi]\,ds.
 \end{equation*}
-The first conclusion follows from Assumption~\ref{pen3}(1). For the second,
-Assumption~\ref{pen3}(2) gives
+
+The first conclusion follows from Assumption~\ref{pen3}(1); see also \cite{pieper2022nonconvex}.
+
+For the second, Assumption~\ref{pen3}(2) gives
 $\phi''(t)\le-\gamma_A$ on $(0,A]$. Integrating from $\varepsilon$ to $s$
 and then letting $\varepsilon\downarrow0$ gives
 $\phi'(s)-L_\phi\le-\gamma_A s$ for $0<s\le A$. Integration proves the
@@ -720,6 +700,10 @@ Define
 		\phi\bigl(|\mu(\{\omega\})|\bigr),
 	\qquad \mu\in\mathcal M(\Omega).
 \end{equation}
+
+We give a self-contained representation and proof of weak-* lower
+semicontinuity for this specialization of the nonconvex functional in Bouchitt\'e--Buttazzo
+ \cite[Theorem~3.3 and Remark~3.5]{bouchitte1990new}.
 
 \begin{lemma}
 \label{lem:phi-coercivity}
@@ -3317,10 +3301,9 @@ width $N(t+1)$).
 
 
 \section{Numerical examples}
-The examples compare the activation functions and regularizers on a smooth
-value function and on a value function with a discontinuous gradient. All runs
-use seed $42$. Each reported parameter choice is run once, and the validation
-sets are random subsets of the PMP samples. Input normalization is computed
+The experiments use seed $42$. Each reported parameter choice is run once, and the validation
+sets are random subsets of the stored sample rows, with $90\%$ used for
+training and $10\%$ for validation. Input and value normalization are computed
 from the full sample before the split.
 
 For a fitted value function $\widehat V$, the relative errors are
@@ -3333,11 +3316,7 @@ For a fitted value function $\widehat V$, the relative errors are
 	{\big(\|V\|_{L^2}^2+\|\nabla V\|_{L^2}^2\big)^{1/2}}.
 \end{align*}
 Both norms are computed empirically on the validation or evaluation set
-specified for each experiment, using the original-scale values and gradients
-with respect to the original state variables after undoing data preprocessing.
-The measure/dictionary normalization and penalty in the training objective do
-not enter these reporting errors. Except for the best-error frontiers, we
-evaluate the recorded iterate with the smallest training objective.
+specified for each experiment with the original scale before normalization.
 For a frontier, support sizes are sorted and the reported error is the
 smallest among recorded iterates with no more atoms; it is not an iteration
 trace.
@@ -3380,33 +3359,39 @@ The two-point boundary value problem \eqref{TPBVP} becomes
 \end{aligned}
 \right.
 \end{equation}
-For each initial condition $x = (x_1, x_2)$ sampled on a $30 \times 30$ grid of $[-3, 3]^2$, we solve \eqref{TPBVP_VDP} using a Barzilai--Borwein gradient method with backtracking line search.
-The control is represented in a Legendre polynomial basis $u(t) = \sum_{i=0}^{N_b - 1} c_i P_i(t)$ with $N_b = 30$ coefficients.
-The optimization yields the dataset
-$\{x^m,V(x^m),g^m\}_{m=1}^M$, where
-$V(x^m)=\mathcal C(u^*;0,x^m)$ and $g^m:=p^{*,m}(0)$; at differentiability
-points, $g^m=\nabla V(x^m)$.
+We solve \eqref{TPBVP_VDP} by adaptive collocation at each point of a
+$30\times30$ grid on $[-3,3]^2$, using a residual tolerance of $10^{-8}$.
+At each state we retain the lower-cost converged solution from two initial
+guesses. Three-point Gauss quadrature on each adaptive mesh interval gives
+the value label, using the full running cost stated above; the initial
+costate gives the gradient label $g=p(0)$. These are numerical PMP
+references, without a certificate of global optimality.
+All $900$ solves converge. The resulting dataset is split into $810$
+training and $90$ validation rows.
 
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=0.48\textwidth]{plot/v.png}
 \hfill
 \includegraphics[width=0.48\textwidth]{plot/dv.png}
-\caption{Left: value function $V(x)$ over $[-3,3]^2$. Right: $V(x)$ (dot
-color) and costate labels $g^m$ (arrows); arrow color indicates $|g^m|$.}
+\caption{Van der Pol numerical value and gradient samples over $[-3,3]^2$. Left: value labels
+$v^m$. Right: $v^m$ (dot color) and costate labels $g^m$ (arrows); arrow color
+indicates $|g^m|$.}
 \label{fig:vdp_data}
 \end{figure}
 
-Both algorithms use $T_{\mathrm{out}} = 150$ outer iterations and
+The Algorithm~\ref{alg:log}, Algorithm~\ref{alg:q}, and moment-order fits use
+at most $T_{\mathrm{out}} = 150$ outer iterations and
 $N_{\mathrm{trial}} = 50$ sampled candidate nodes per iteration. Each iteration
 inserts the single selected candidate ($N_{\mathrm{ins}} = 1$), so the
-one-candidate decrease statement applies. The ReLU--$\ell^1$ baseline keeps its
-own established settings: batch insertion with $N_{\mathrm{ins}} = 15$ over
-$T_{\mathrm{out}} = 10$ iterations and an unguarded correction, which admits the
-same maximum width of $150$ atoms. Corollary~\ref{cor:certificate-rate}
+one-candidate decrease statement applies. Corollary~\ref{cor:certificate-rate}
 remains conditional on the selected
 candidate being an exact global maximizer and is not claimed for the multistart
 search. The loop terminates when no candidate clears the insertion threshold.
+The separate traditional ReLU--$\ell^1$ comparators use $10$ outer iterations
+with batch insertion of at most $15$ candidates per iteration, from $50$
+candidate starts. Their insertion schedule therefore differs from the
+sequential nonconvex fits.
 
 \subsubsection{Effect of the moment order \texorpdfstring{$p$}{p}}
 \label{sec:effect-of-p}
@@ -3424,10 +3409,11 @@ For a finite atomic $\mu$ write
 \begin{equation*}
 	R_{\max}(\mu):=\max\{|\omega| : \omega\in\atom\mu\}
 \end{equation*}
-for the radius of its support. Lemma~\ref{lem:support-bound} places that
-support in a compact superlevel set of $|\bar P_p|$, so $R_{\max}$ is finite;
-the lemma does not itself supply a numerical radius, and the values below are
-measured. We use Algorithm~\ref{alg:log} with
+for the radius of its support. Lemma~\ref{lem:support-bound} localizes the
+support of local minimizers under its assumptions, motivating this
+measurement. The finite empirical fits below are not certified local
+minimizers of that problem; their reported radii are measured directly.
+We use Algorithm~\ref{alg:log} with
 $\gamma=1$, equal value and gradient weights, and seed $42$, for softplus,
 $\tanh$, the Gaussian and $\mathrm{GELU}^2$, over
 \begin{equation*}
@@ -3436,11 +3422,11 @@ $\tanh$, the Gaussian and $\mathrm{GELU}^2$, over
 	p\in\{2.01,2.5,3,4\},
 \end{equation*}
 on both benchmarks. Figure~\ref{fig:p_study} shows the resulting sixteen
-(problem, activation, $\alpha$) families. In fourteen families $R_{\max}$
+(problem, activation, $\alpha$) families. In fifteen families $R_{\max}$
 decreases monotonically over the tested orders. The largest absolute
-contraction is for softplus on the pendulum at $\alpha=10^{-5}$, from
-$147.34$ at $p=2.01$ to $5.08$ at $p=4$; across all families the largest
-radius at $p=4$ is $12.88$.
+contraction is for $\mathrm{GELU}^2$ on the pendulum at $\alpha=10^{-5}$,
+from $148.06$ at $p=2.01$ to $7.87$ at $p=4$; across all families the
+largest radius at $p=4$ is $14.80$.
 
 We also record the radius $R_{0.95}$, defined for a discrete
 measure $\mu=\sum_jc_j\delta_{\omega_j}$ by
@@ -3449,9 +3435,9 @@ measure $\mu=\sum_jc_j\delta_{\omega_j}$ by
 	|\mu|(B_R)\ge0.95\,|\mu|(\Omega)\right\},
 \end{equation*}
 and the support size $N$. Unlike $R_{\max}$, both depend on the fitted
-coefficient distribution. They decrease monotonically in ten and twelve of
-the sixteen families, respectively, so their behavior is reported separately
-rather than inferred from the support theorem.
+coefficient distribution. The radius $R_{0.95}$ decreases monotonically in
+thirteen of the sixteen families, and the support size in twelve, so their behavior is reported
+separately rather than inferred from the support theorem.
 
 \begin{figure}[htbp]
 \centering
@@ -3459,9 +3445,10 @@ rather than inferred from the support theorem.
 \caption{Support radius $R_{\max}$ against the moment order $p$, for softplus,
 $\tanh$, the Gaussian and $\mathrm{GELU}^2$ at $\alpha=10^{-4}$ and
 $\alpha=10^{-5}$; upper panel Van der Pol, lower panel pendulum swing-up.
-Colour identifies the activation and line style the value of $\alpha$.
-Fourteen of the sixteen support-radius curves decrease monotonically; all
-use seed $42$.}
+Blue circles denote softplus, teal squares $\tanh$, red triangles the
+Gaussian, and purple diamonds $\mathrm{GELU}^2$. Solid lines use
+$\alpha=10^{-5}$ and dashed lines $\alpha=10^{-4}$. All curves use seed $42$;
+fifteen of the sixteen decrease monotonically.}
 \label{fig:p_study}
 \end{figure}
 
@@ -3475,22 +3462,23 @@ remaining factor follows from the sample extent, so
 $C=C_\rho\bigl(A_M^{s_0}+A_M^{s_1-1}\bigr)$ with
 $A_M=\max\{1,\max_m\sqrt{1+|x^m|^2}\}$. Nothing is calibrated from the fit.
 
-On the Van der Pol data ($A_M=\sqrt3$, hence $C=2.73$ for softplus) the radius
-is $56.5$ at $p=4$, $\alpha=10^{-4}$ and $121.7$ at $p=4$, $\alpha=10^{-5}$,
-while for $p\le3$ it exceeds the implementation's own bound $\lambda\le e^5$.
-The radius is therefore informative only at the largest tested $p$, and only
-for the activations with $s_1=1$; for $\mathrm{GELU}^2$, where $s_1=2$, the
-exponent $1/(p-s_1)$ never becomes small enough on this grid.
+On the normalized Van der Pol training inputs ($A_M=\sqrt3$, hence
+$C=2.73$ for softplus), the search radius at initialization is $48.09$ at
+$p=4$, $\alpha=10^{-4}$ and $103.61$ at $p=4$, $\alpha=10^{-5}$.
+It decreases during these fits to $22.05$ and $43.89$, respectively.
+The implementation also imposes the fixed bound $\lambda\le e^5$, so the
+theorem radius changes the search only when it is smaller than that bound.
 
-The fixed-versus-theorem ablation shows a small but nonzero effect. Among the
-thirty-two paired sequential-insertion Van der Pol runs, eight change when
-$\min\{R(\mu_t),e^5\}$ replaces the fixed $e^5$ search filter: two at $p=3$
-and six at $p=4$. The relative $H^1$ differences are at most
-$1.1\times10^{-3}$, and their sign is mixed. Because the radius determines
-both the distribution of random starts and the admissible final candidates,
-the change does not require a retained atom to sit on the boundary. The
-computable radius becomes operational only at the largest moment orders on
-this grid; it does not systematically improve or degrade the fit.
+The recorded search-radius histories fall below $e^5$ in thirteen of the
+thirty-two Van der Pol moment-order runs: one at $p=2.5$, five at $p=3$,
+and seven at $p=4$. The $p=2.5$ case is the Gaussian at $\alpha=10^{-4}$.
+At $p=3$, both $\tanh$ and the Gaussian activate the smaller cap at both
+values of $\alpha$, as does softplus at $\alpha=10^{-4}$. At $p=4$, all
+three activate it at both values of $\alpha$, together with
+$\mathrm{GELU}^2$ at $\alpha=10^{-4}$.
+These runs do not include a paired fixed-cap comparison, so they do not
+establish an improvement or degradation in fit caused by applying the
+theorem radius.
 
 \subsubsection{Algorithm~\ref{alg:log}: the log penalty on the normalized measure}
 
@@ -3513,9 +3501,9 @@ per-activation tuning.}
 \toprule
 Activation & $L^2$ trained & $H^1$ trained \\
 \midrule
-softplus & $1.06 \times 10^{-1}$ & $4.26 \times 10^{-1}$ \\
-tanh & $7.86 \times 10^{-2}$ & $4.17 \times 10^{-1}$ \\
-Gaussian & $7.39 \times 10^{-2}$ & $4.17 \times 10^{-1}$ \\
+softplus & $8.38 \times 10^{-2}$ & $1.24 \times 10^{-2}$ \\
+tanh & $7.59 \times 10^{-2}$ & $5.85 \times 10^{-3}$ \\
+Gaussian & $5.28 \times 10^{-2}$ & $2.09 \times 10^{-3}$ \\
 \bottomrule
 \end{tabular}
 \caption{Effect of gradient training on $\mathrm{Err}_{L^2}$ }
@@ -3530,9 +3518,9 @@ Gaussian & $7.39 \times 10^{-2}$ & $4.17 \times 10^{-1}$ \\
 \toprule
 Activation & $L^2$ trained & $H^1$ trained \\
 \midrule
-softplus & $5.00 \times 10^{-1}$ & $2.43 \times 10^{-1}$ \\
-tanh & $4.77 \times 10^{-1}$ & $2.37 \times 10^{-1}$ \\
-Gaussian & $4.76 \times 10^{-1}$ & $2.36 \times 10^{-1}$ \\
+softplus & $2.23 \times 10^{-1}$ & $3.11 \times 10^{-2}$ \\
+tanh & $2.41 \times 10^{-1}$ & $2.18 \times 10^{-2}$ \\
+Gaussian & $1.82 \times 10^{-1}$ & $1.11 \times 10^{-2}$ \\
 \bottomrule
 \end{tabular}
 \caption{Effect of gradient training on $\mathrm{Err}_{H^1}$}
@@ -3562,8 +3550,9 @@ the first derivative is the basis that reconstructs $\nabla V$.}
 \label{fig:activation_shapes}
 \end{figure}
 
-For the tested parameters, the Gaussian has the smallest relative $H^1$ error.
-All three approximate the smooth value function, with different support sizes.
+For the tested parameters, the Gaussian has the smallest relative $H^1$
+validation error, while softplus uses the fewest atoms. Thus accuracy and
+support size give different rankings.
 
 \begin{figure}[htbp]
 \centering
@@ -3571,27 +3560,27 @@ All three approximate the smooth value function, with different support sizes.
 \begin{subfigure}[t]{0.32\textwidth}
 \centering
 \includegraphics[width=\textwidth]{../experiments/01_vdp/paper_log_penalty/figures/value_surface_softplus.png}
-\caption{softplus\\ ($N=18$, $\mathrm{Err}_{H^1} = 0.243$).}
+\caption{softplus\\ ($N=14$, $\mathrm{Err}_{H^1} = 0.0311$).}
 \label{fig:h1_activation_softplus}
 \end{subfigure}
 \hfill
 \begin{subfigure}[t]{0.32\textwidth}
 \centering
 \includegraphics[width=\textwidth]{../experiments/01_vdp/paper_log_penalty/figures/value_surface_tanh.png}
-\caption{$\tanh$\\ ($N=33$, $\mathrm{Err}_{H^1} = 0.237$).}
+\caption{$\tanh$\\ ($N=29$, $\mathrm{Err}_{H^1} = 0.0218$).}
 \label{fig:h1_activation_tanh}
 \end{subfigure}
 \hfill
 \begin{subfigure}[t]{0.32\textwidth}
 \centering
 \includegraphics[width=\textwidth]{../experiments/01_vdp/paper_log_penalty/figures/value_surface_gaussian.png}
-\caption{Gaussian\\ ($N=39$, $\mathrm{Err}_{H^1} = 0.236$).}
+\caption{Gaussian\\ ($N=32$, $\mathrm{Err}_{H^1} = 0.0111$).}
 \label{fig:h1_activation_gaussian}
 \end{subfigure}
 \caption{Learned value functions under the $H^1$ loss using the parameter
 values in Table~\ref{tab:alg1_gradient}. All three
-approximate the smooth value surface; they differ in support size and
-accuracy. Predictions are clipped to $[0,20]$ for visualization;
+fit the numerical reference data; they differ in support size and
+validation error. Predictions are clipped to $[0,20]$ for visualization;
 the reported errors use the unclipped network outputs.}
 \label{fig:h1_activation}
 \end{figure}
@@ -3609,9 +3598,9 @@ Table~\ref{tab:alg1_gradient}.}
 \toprule
 Activation & $N$ & $\mathrm{Err}_{L^2}$ \\
 \midrule
-softplus & 6 & $1.06 \times 10^{-1}$ \\
-tanh & 10 & $7.86 \times 10^{-2}$ \\
-Gaussian & 9 & $7.39 \times 10^{-2}$ \\
+softplus & 6 & $8.38 \times 10^{-2}$ \\
+tanh & 10 & $7.59 \times 10^{-2}$ \\
+Gaussian & 10 & $5.28 \times 10^{-2}$ \\
 \bottomrule
 \end{tabular}
 \caption{$L^2$ trained}
@@ -3626,9 +3615,9 @@ Gaussian & 9 & $7.39 \times 10^{-2}$ \\
 \toprule
 Activation & $N$ & $\mathrm{Err}_{H^1}$ \\
 \midrule
-softplus & 18 & $2.43 \times 10^{-1}$ \\
-tanh & 33 & $2.37 \times 10^{-1}$ \\
-Gaussian & 39 & $2.36 \times 10^{-1}$ \\
+softplus & 14 & $3.11 \times 10^{-2}$ \\
+tanh & 29 & $2.18 \times 10^{-2}$ \\
+Gaussian & 32 & $1.11 \times 10^{-2}$ \\
 \bottomrule
 \end{tabular}
 \caption{$H^1$ trained}
@@ -3636,19 +3625,12 @@ Gaussian & 39 & $2.36 \times 10^{-1}$ \\
 \end{subtable}
 \end{table}
 
-With the $H^1$ loss, all three gradient errors fall substantially: from
-$5.96\times10^{-1}$ to $4.36\times10^{-2}$ for softplus, from
-$6.12\times10^{-1}$ to $4.22\times10^{-2}$ for $\tanh$, and from
-$5.51\times10^{-1}$ to $3.57\times10^{-2}$ for the Gaussian. Fitting values
-alone therefore gives substantially poorer gradient approximations, which
-can compromise feedback synthesis. These gradient gains come at the expense
-of value accuracy (Table~\ref{tab:alg1_gradient}).
-
-The Gaussian is most accurate ($2.36\times10^{-1}$) and uses $34$ atoms;
-$\tanh$ reaches $2.37\times10^{-1}$ with $38$, and softplus
-$2.41\times10^{-1}$ with only $16$. The three are separated by less in
-accuracy than in support size, so the ordering by
-$\mathrm{Err}_{H^1}$ alone understates the difference between them.
+With the $H^1$ loss, all three relative gradient errors fall substantially:
+from $0.328$ to $0.0453$ for softplus, from $0.358$ to $0.0327$ for $\tanh$,
+and from $0.273$ to $0.0169$ for the Gaussian. Value accuracy improves as
+well (Table~\ref{tab:alg1_gradient}). The Gaussian reaches relative $H^1$
+error $0.0111$ with $32$ atoms; $\tanh$ reaches $0.0218$ with $29$, and
+softplus $0.0311$ with $14$.
 
 \subsubsection{Algorithm~\ref{alg:q}: $|c|^q$-penalty with $\reluk$ activation}
 
@@ -3665,14 +3647,14 @@ $\alpha = 10^{-5}$.
 \begin{subfigure}[t]{0.48\textwidth}
 \centering
 \includegraphics[width=\textwidth]{../experiments/01_vdp/paper_frac_exp_penalty/figures/value_surface_p2.png}
-\caption{$k=2$\\ ($N=53$, $\mathrm{Err}_{H^1} = 0.235$).}
+\caption{$k=2$\\ ($N=39$, $\mathrm{Err}_{H^1} = 0.0114$).}
 \label{fig:H1_power_p2}
 \end{subfigure}
 \hfill
 \begin{subfigure}[t]{0.48\textwidth}
 \centering
 \includegraphics[width=\textwidth]{../experiments/01_vdp/paper_frac_exp_penalty/figures/value_surface_p3.png}
-\caption{$k=3$\\ ($N=26$, $\mathrm{Err}_{H^1} = 0.235$).}
+\caption{$k=3$\\ ($N=24$, $\mathrm{Err}_{H^1} = 0.0140$).}
 \label{fig:H1_power_p3}
 \end{subfigure}
 \caption{$H^1$-trained networks with $\alpha = 10^{-5}$ for
@@ -3682,12 +3664,11 @@ the reported errors use the unclipped network outputs.}
 \end{figure}
 
 For these fixed-$\alpha$, single-seed fits, adding gradient data lowers the
-combined value--gradient error from
-$\mathrm{Err}_{H^1}\approx 3.5\times10^{-1}$ to
-$\approx 2.4\times10^{-1}$ for both powers, a factor of about $1.5$
-(Table~\ref{tab:alg2_gradient}). This improvement comes with larger support
-and higher value error $\mathrm{Err}_{L^2}$; the comparison alone does not
-establish better closed-loop performance.
+combined value--gradient error from $0.0813$ to $0.0114$ for $k=2$, and
+from $0.0875$ to $0.0140$ for $k=3$, factors of about $7.13$ and $6.26$,
+respectively (Table~\ref{tab:alg2_gradient}). Value error also decreases,
+while the support becomes larger. This comparison alone does not establish
+better closed-loop performance.
 
 \begin{table}[htbp]
 \centering
@@ -3701,8 +3682,8 @@ establish better closed-loop performance.
 \toprule
 Power & $N$ & $\mathrm{Err}_{L^2}$ & $\mathrm{Err}_{H^1}$ \\
 \midrule
-$k = 2$ & 15 & $2.77 \times 10^{-2}$ & $3.59 \times 10^{-1}$ \\
-$k = 3$ & 13 & $3.37 \times 10^{-2}$ & $3.91 \times 10^{-1}$ \\
+$k = 2$ & 14 & $2.55 \times 10^{-2}$ & $8.13 \times 10^{-2}$ \\
+$k = 3$ & 13 & $2.79 \times 10^{-2}$ & $8.75 \times 10^{-2}$ \\
 \bottomrule
 \end{tabular}
 \caption{$L^2$ trained}
@@ -3717,8 +3698,8 @@ $k = 3$ & 13 & $3.37 \times 10^{-2}$ & $3.91 \times 10^{-1}$ \\
 \toprule
 Power & $N$ & $\mathrm{Err}_{L^2}$ & $\mathrm{Err}_{H^1}$ \\
 \midrule
-$k = 2$ & 53 & $4.16 \times 10^{-1}$ & $2.35 \times 10^{-1}$ \\
-$k = 3$ & 26 & $4.15 \times 10^{-1}$ & $2.35 \times 10^{-1}$ \\
+$k = 2$ & 39 & $2.75 \times 10^{-3}$ & $1.14 \times 10^{-2}$ \\
+$k = 3$ & 24 & $5.24 \times 10^{-3}$ & $1.40 \times 10^{-2}$ \\
 \bottomrule
 \end{tabular}
 \caption{$H^1$ trained}
@@ -3727,22 +3708,20 @@ $k = 3$ & 26 & $4.15 \times 10^{-1}$ & $2.35 \times 10^{-1}$ \\
 \end{table}
 
 Changing $k$ changes both the activation and the induced exponent
-$q=2/(k+1)$. At the same $H^1$ error scale, the $k=3$ fit uses $28$ atoms
-instead of $45$ for $k=2$.
-Under the $L^2$ loss both fits use $13$ atoms and have
-$\mathrm{Err}_{H^1} \approx 3.5 \times 10^{-1}$
+$q=2/(k+1)$. At comparable $H^1$ error, the $k=3$ fit uses $24$ atoms
+instead of $39$ for $k=2$. Under the $L^2$ loss the fits use $14$ and $13$
+atoms, respectively, with relative $H^1$ errors $0.0813$ and $0.0875$
 (Table~\ref{tab:alg2_gradient}\,(a)).
 
 \subsubsection{Summary}
 
 Figure~\ref{fig:summary_frontier} plots the best observed relative $H^1$ error
-at each support budget along the selected fits. At the shared Algorithm~1 operating point, softplus
-uses $16$ atoms at error $2.41\times10^{-1}$ and the Gaussian uses $34$ at
-$2.36\times10^{-1}$. The selected minimum-training-objective Algorithm~2
-checkpoints use $91$ atoms at $2.35\times10^{-1}$ for $\mathrm{ReLU}^2$
-and $37$ atoms at $2.35\times10^{-1}$ for $\mathrm{ReLU}^3$.
-Thus all four reach the same
-accuracy scale, with different support sizes.
+at each support budget along the selected fits. At the shared Algorithm~1
+operating point, softplus uses $14$ atoms at error $0.0311$ and the Gaussian
+uses $32$ at $0.0111$. At $\alpha=10^{-6}$, the selected
+minimum-training-objective Algorithm~2 checkpoints use $70$ atoms at
+$0.00559$ for $\mathrm{ReLU}^2$ and $30$ atoms at $0.00860$ for
+$\mathrm{ReLU}^3$.
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=0.8\textwidth]{../experiments/01_vdp/paper_log_penalty/figures/frontier.png}
@@ -3753,14 +3732,18 @@ $\alpha=10^{-6}$ for both $k=2$ and $k=3$.}
 \label{fig:summary_frontier}
 \end{figure}
 
-We synthesize feedback laws from $y_0 = (2, 1)$ and roll them out over the horizon $T = 12$ with fixed-step RK4, zero-order-hold controls clipped to $|u| \le 50$ as a numerical guard.
+For a separate long-horizon stabilization diagnostic, we synthesize feedback laws from $y_0 = (2, 1)$ and roll them out over $T = 12$ with fixed-step RK4, zero-order-hold controls clipped to $|u| \le 50$ as a numerical guard.
 The reference law interpolates the time-zero costate component of the dataset
 with a $C^1$ Clough--Tocher interpolant and applies it as a stationary
 feedback. The finite-horizon optimal feedback is time-dependent and the
 rollout horizon exceeds the data horizon $T=3$. Therefore its rollout cost
-$6.48$ is not $V(0,y_0)$, and the comparison is not a test of finite-horizon
+$6.46$ is not $V(0,y_0)$, and the comparison is not a test of finite-horizon
 optimality.
-Figure~\ref{fig:summary_feedback} shows $\|y(t)\|$ and $|u(t)|$ for softplus, the Gaussian, and $\reluk$ ($k = 3$), beside this reference. All three drive the state to the origin, with closed-loop costs $6.68$, $6.49$, and $6.50$, respectively, compared with the reference cost $6.48$.
+Figure~\ref{fig:summary_feedback} shows $\|y(t)\|$ and $|u(t)|$ for softplus,
+the Gaussian, and $\reluk$ ($k = 3$), beside this reference. All three reach
+$\|y(T)\|<0.2$, with RK4-stage rollout costs $6.46$, $6.46$, and $6.48$,
+respectively, compared with $6.46$ for the interpolated reference. This
+terminal-neighbourhood criterion does not imply convergence to the origin.
 \begin{figure}[htbp]
 \centering
 \captionsetup[subfigure]{justification=centering}
@@ -3777,10 +3760,52 @@ Figure~\ref{fig:summary_feedback} shows $\|y(t)\|$ and $|u(t)|$ for softplus, th
 \caption{Control $|u(t)|$.}
 \label{fig:summary_feedback_control}
 \end{subfigure}
-\caption{Evolution of the state and control from $y_0=(2,1)$ under the
+\caption{First three seconds of the $T=12$ stabilization diagnostic from
+$y_0=(2,1)$ under the
 feedback synthesized from each fitted value function and under the stationary
 reference law obtained from the time-zero costates.}
 \label{fig:summary_feedback}
+\end{figure}
+
+We additionally compare all five fitted controllers with a numerical
+open-loop solve from the same initial state over the original benchmark horizon $T=3$
+(Figure~\ref{fig:vdp_openloop_comparison}). Each fitted law is evaluated
+along its own simulated trajectory. The reference solves the finite-horizon
+PMP boundary-value problem with free terminal state and zero terminal cost,
+so that $p(T)=0$. We initialize the solve from the learned and
+dataset-feedback rollouts and retain the least-cost converged solution;
+this procedure does not certify global optimality.
+
+The compared networks have $29$ neurons for $\tanh$, $14$ for softplus, $32$ for the Gaussian,
+$70$ for $\mathrm{ReLU}^{2}$, and $30$ for $\mathrm{ReLU}^{3}$.
+The nonhomogeneous fits use $(\alpha,\gamma,p)=(10^{-4},10,2.01)$,
+and both homogeneous fits use $\alpha=10^{-6}$.
+The same checkpoints supply the summary widths and feedback diagnostics above.
+
+\begin{figure}[htbp]
+\centering
+\begin{subfigure}[b]{0.48\textwidth}
+\centering
+\includegraphics[width=\textwidth]{../experiments/01_vdp/paper_log_penalty/figures/openloop_control.png}
+\caption{Signed control.}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.48\textwidth}
+\centering
+\includegraphics[width=\textwidth]{../experiments/01_vdp/paper_log_penalty/figures/openloop_cost.png}
+\caption{Accumulated running cost.}
+\end{subfigure}
+\caption{Van der Pol controls and realized costs from $y_0=(2,1)$ over
+$T=3$. The black curve is the numerical open-loop reference. Each colored
+curve uses its own state-control trajectory, with zero-order-hold controls
+and the numerical bound $|u|\le50$. The accumulated cost
+$J(t)=\int_0^t\ell(y(s),u(s))\,ds$ uses the held-control RK4 stages
+with $\Delta t=0.01$ for learned laws and three-point Gauss quadrature on the
+dense PMP solution for the reference. It has no learned terminal-value
+contribution. The preceding stabilization diagnostic instead uses $T=12$
+with the same quadrature.
+Controls at equal times are generally evaluated at different states.}
+\label{fig:vdp_openloop_comparison}
 \end{figure}
 
 Figure~\ref{fig:summary_weights_raw} shows the inner parameters for the
@@ -3879,41 +3904,45 @@ For $\varepsilon>0$, we define the local LQR sublevel set and boundary by
 	\partial\mathcal E_\varepsilon
 	=\{\widetilde x:V^\infty(\widetilde x)=\varepsilon\}.
 \end{equation*}
-The corresponding state-costate system becomes
+We integrate the nonlinear PMP equations with a numerical LQR terminal
+initialization:
 \begin{equation}
 \label{TPBVP_pendulum}
 \left\{
 \begin{aligned}
-	& m\ell^2\,\ddot{\theta}^* = -b\dot{\theta}^* + mg\ell\sin\theta^* + u^*,\\
-	& -\dot{p}_1^* = 2\sin\theta^* + \frac{g}{\ell}\cos\theta^*\,p_2^*,\\
-	& -\dot{p}_2^* = 2\dot{\theta}^* + p_1^* - \frac{b}{m\ell^2}p_2^*,\\
-	& x^*(0)=x,\quad x^*(T_x)-x_U\in\partial\mathcal E_\varepsilon,
-	\quad p^*(T_x)=\nabla V^\infty(x^*(T_x)-x_U).
+	& m\ell^2\,\ddot{\theta} = -b\dot{\theta} + mg\ell\sin\theta + u,\\
+	& -\dot{p}_1 = 2\sin\theta + \frac{g}{\ell}\cos\theta\,p_2,\\
+	& -\dot{p}_2 = 2\dot{\theta} + p_1 - \frac{b}{m\ell^2}p_2,\\
+	& x(0)=x,\quad x(T_x)-x_U\in\partial\mathcal E_\varepsilon,
+	\quad p(T_x)=\nabla V^\infty(x(T_x)-x_U).
 \end{aligned}
 \right.
 \end{equation}
-In the experiment we use $\varepsilon=2\times 10^{-4}$, and on
-$\partial\mathcal E_\varepsilon$ the terminal costate is
+Here the terminal condition approximates the nonlinear value gradient by
+the LQR gradient. In the experiment we use $\varepsilon=2\times10^{-4}$ and
+initialize the backward costate on $\partial\mathcal E_\varepsilon$ by
 \begin{equation*}
-	p^*(T_x)=\nabla V^\infty(\widetilde x^*(T_x))
-	=2P\widetilde x^*(T_x).
+	p(T_x)=\nabla V^\infty(\widetilde x(T_x))
+	=2P\widetilde x(T_x).
 \end{equation*}
 For the data generation, we integrate $2000$ PMP paths backward from the local
 LQR boundary $\partial\mathcal E_\varepsilon$. Along each path, the accumulated
-running cost plus the boundary value $\varepsilon$ gives $V(x)$, and the
-costate gives the label $g=p$. At differentiability points, $g=\nabla V(x)$.
-The backward integration stops when the
-accumulated value reaches $100$; the training samples are restricted to
-values below $50$.
+running cost plus the boundary value $\varepsilon$ gives a numerical branch
+value label $v$, and the costate gives the gradient label $g=p$.
+These approximate the nonlinear value and gradient; the LQR matching is
+not an exact free-arrival terminal condition for the nonlinear problem.
+The backward integration stops when the accumulated value reaches $100$.
+We use adaptive boundary angles, a maximum integration step of $0.005$,
+and relative and absolute tolerances of $10^{-10}$ and $10^{-12}$.
 This yields the dataset
 \begin{equation*}
-\{x^m,V(x^m),g^m\}_{m=1}^M.
+\{x^m,v^m,g^m\}_{m=1}^M.
 \end{equation*}
 
 The construction provides samples on both sides of the gradient
 discontinuity. For $j\in\mathbb Z$, let $V_{2j\pi}(x)$ be the fixed-target
-value obtained by minimizing over paths that reach the local LQR
-neighbourhood of $(2j\pi,0)$. The stationary value is
+infinite-horizon value obtained by minimizing over paths converging to
+$(2j\pi,0)$. The stationary value is
 \begin{equation*}
 	V(x)=\min_{j\in\mathbb Z}V_{2j\pi}(x).
 \end{equation*}
@@ -3923,30 +3952,46 @@ switching set between these adjacent targets by
 \begin{equation*}
 	S_{0,2\pi}:=\{x\in\mathbb R^2:V_0(x)=V_{2\pi}(x)=V(x)\}.
 \end{equation*}
-On the numerical domain $D=[-8,8]^2$, the periodic switching set and its
-closed $\delta$-neighbourhood are
+The periodic switching set and its closed $\delta$-neighbourhood are
 \begin{equation*}
-	S:=D\cap\bigcup_{j\in\mathbb Z}
+	S:=\bigcup_{j\in\mathbb Z}
 	\bigl(S_{0,2\pi}+(2j\pi,0)\bigr),
 	\qquad
-	S_\delta:=\{x\in D:\operatorname{dist}(x,S)\le\delta\},
+	S_\delta:=\{x\in\mathbb R^2:\operatorname{dist}(x,S)\le\delta\},
 	\qquad \delta>0.
 \end{equation*}
-The regional errors below use $\delta=0.3$.
+The regional errors below use $\delta=0.3$ and are empirical errors on
+evaluation samples inside and outside this tube. Numerically, distances
+are measured to the reconstructed switching points and their $\pm2\pi$
+translations. The square $[-8,8]^2$ is
+the visualization window, not a filter on the training or evaluation data;
+some augmented and evaluation states lie slightly outside it.
 At points of $S$, two adjacent fixed-target values agree while their gradients
 may differ; the sampled PMP costates provide the corresponding one-sided
 gradients, without asserting a classical gradient on $S$.
 
 To reconstruct $S_{0,2\pi}$, fix a value level $\ell$ and interpolate one
 state with value $\ell$ on each raw PMP path. Ordering these states by their
-terminal-boundary angle gives a polygonal approximation of
-$\{x:V_0(x)=\ell\}$. By periodicity, translating this contour by
-$(2\pi,0)$ gives the corresponding approximation of
-$\{x:V_{2\pi}(x)=\ell\}$. Every intersection of the two contours therefore
-satisfies $V_0(x)=V_{2\pi}(x)=\ell$. Repeating the construction over the
-sampled value levels and tracking the four intersections nearest $(\pi,0)$
-produces the four arms of $S_{0,2\pi}$; their $2\pi$-translates give $S$ in
-$D$.
+terminal-boundary angle gives a polygonal characteristic contour.
+By periodicity, translating it by $(2\pi,0)$ gives a contour for the
+adjacent target. Their intersections are numerical candidates for equal
+branch values. Repeating this construction over the sampled levels and
+tracking the four intersections nearest $(\pi,0)$ produces an approximation
+of the four switching arms; their $2\pi$-translates approximate $S$.
+Raw characteristics can include dominated branches, so the contour
+construction is followed by the branch screen described below.
+We use value levels spaced by $0.05$ up to $70$ to reconstruct the basin
+from the same $2000$ paths, and retain each characteristic up to its first
+exit from this basin. The level $70$ is a geometry-construction parameter,
+not a hard cap on the sampled values.
+
+To remove characteristic segments that have become more expensive than a
+nearby branch, we compare their values with local first-order estimates
+from the $32$ nearest samples within radius $0.1$. Body samples must lie
+within $0.3$ of the lower estimate for their own target and, whenever an
+adjacent-target estimate is available, at least $0.3$ below it. This
+numerical branch screen retains $881{,}672$ candidate body samples; it does
+not certify global minimality of the characteristic construction.
 
 After reconstructing $S$, we augment the dataset with samples from both value
 branches. By periodicity, translating a raw PMP path by $\pm2\pi$ in $\theta$
@@ -3954,23 +3999,25 @@ produces a path associated with an adjacent upright. Not every translated
 state belongs to the optimal branch, so we keep only states within distance
 $0.5$ of $S$ for which a local first-order comparison identifies the branch as
 strictly cheaper than its competitor.
-Together with the $3{,}000$ original PMP samples, the final dataset contains
-$3{,}900$ samples and costate labels from both sides of the gradient
-discontinuity. Figure~\ref{fig:pendulum_data} shows the resulting dataset.
+The final dataset consists of $3{,}000$ original body samples, $300$
+near-side padding samples, and $600$ translated opposite-side collar
+samples. Its $3{,}900$ rows supply costate labels from both sides of the
+gradient discontinuity, with values up to $68.67$. Figure~\ref{fig:pendulum_data}
+shows the resulting dataset.
 \begin{figure}[htbp]
 \centering
 \captionsetup[subfigure]{justification=centering}
 \begin{subfigure}[b]{0.32\textwidth}
 \centering
 \includegraphics[width=\textwidth]{plot/pendulum_value_scatter.png}
-\caption{value samples $\{x^m, V(x^m)\}$.}
+\caption{value samples $\{x^m,v^m\}$.}
 \label{fig:pendulum_data_scatter}
 \end{subfigure}
 \hfill
 \begin{subfigure}[b]{0.32\textwidth}
 \centering
 \includegraphics[width=\textwidth]{plot/pendulum_value_surface.png}
-\caption{value surface $V(x)$.}
+\caption{interpolated reference value.}
 \label{fig:pendulum_data_surface}
 \end{subfigure}
 \hfill
@@ -3980,11 +4027,12 @@ discontinuity. Figure~\ref{fig:pendulum_data} shows the resulting dataset.
 \caption{regions associated with the periodic targets.}
 \label{fig:pendulum_data_regions}
 \end{subfigure}
-\caption{Optimal value function $V(x)$ over the $(\theta, \dot\theta)$ plane,
-$2\pi$-periodic in $\theta$. (a) The raw $(x, V)$ samples produced by the PMP
-generator. (b) The reconstructed value surface. (c) Regions where $V_0$ or
-another periodic fixed-target value is minimal; their boundaries form $S$,
-across which $\nabla V$ may be discontinuous.}
+\caption{Numerical pendulum reference data over the $(\theta,\dot\theta)$
+plane. (a) Selected value samples from the PMP generator. (b) A periodic
+interpolation of those samples. (c) Target-region visualization obtained
+by assigning each grid point to the nearest sampled first-exit
+characteristic and its periodic copies. This coloring approximates the
+target regions; it does not compare branch costs at every grid point.}
 \label{fig:pendulum_data}
 \end{figure}
 
@@ -4038,23 +4086,22 @@ unclipped fitted function.
 The $\reluk$ models are trained with the fractional-exponent penalty $\psi_k$,
 and the nonhomogeneous models with \eqref{eq:empirical-log-objective} using the
 parameter values reported in
-Figure~\ref{fig:neuron_h1_frontier}\subref{fig:feedback_cost_a}.}
+Figure~\ref{fig:neuron_h1_frontier}\subref{fig:frontier_pendulum}.}
 \label{fig:rs_surfaces}
 \end{figure}
 
-Let $x_S$ be the selected regular point of $S$ in the region,
-and let $n$ be a unit normal to $S$ at $x_S$.
-Figure~\ref{fig:rs_transect} shows the cross-section
-$x(s)=x_S+sn$. Along this section,
-$V=\min\{V_0,V_{2\pi}\}$. It has a kink at $s=0$, and the normal gradient
-$n\cdot\nabla V$ jumps there.
-No fitted model reproduces the magnitude of the jump: all undershoot the steep
-gradient on the side $s<0$. Among the rectified powers,
-$\mathrm{ReLU}^{2}$ has the smaller error on $S_{0.3}$ and develops the
-sharpest change of slope near $s=0$; the smooth Gaussian, softplus, and $\tanh$
-fits interpolate through the discontinuity.
-The higher rectified powers remain smooth enough in their first derivative to
-miss the jump.
+Let $x_S$ be a point on the polygonal approximation of $S$ in the
+most densely sampled neighbourhood, and let $n$ be its estimated unit normal.
+Figure~\ref{fig:rs_transect} shows the cross-section $x(s)=x_S+sn$.
+For each point, we solve two PMP boundary-value problems over $T=10$,
+with terminal LQR cost centred at $(0,0)$ and $(2\pi,0)$, respectively.
+Each branch is continued from the end of the section nearer its target.
+We select the lower computed cost and its initial costate at every point.
+This yields a numerical approximation of $\min\{V_0,V_{2\pi}\}$;
+the cost crossing need not coincide exactly with the polygonal location $s=0$.
+The smooth profiles have continuous fitted gradients, as do the rectified
+powers $k\ge2$, so none can reproduce a classical gradient jump exactly.
+For $k=2$ the fitted normal gradient is piecewise linear.
 
 \begin{figure}[htbp]
 \centering
@@ -4072,24 +4119,25 @@ miss the jump.
 \caption{normal gradient $n\cdot\nabla V$ along the normal.}
 \label{fig:rs_transect_gradient}
 \end{subfigure}
-\caption{Normal cross-section of the switching curve, parametrized by the normal
-distance $s$. Left: the true value (dashed)
-is $\min\{V_0,V_{2\pi}\}$ on this cross-section and has a kink at $s=0$.
-Right: the true normal
-gradient jumps at $s=0$; $\mathrm{ReLU}^{2}$ develops the sharpest fitted
-change of slope, while the smooth models interpolate through the
-discontinuity. The rectangular
-excursion of the reference curve near $s\approx-0.3$ is a nearest-neighbor
-artifact in the evaluation of $\min\{V_0,V_{2\pi}\}$, not a feature of $V$.}
+\caption{Normal cross-section of the reconstructed switching curve, parametrized
+by signed distance $s$. The black curve selects the lower-cost of two
+continued PMP solutions with terminal LQR costs. Left: the reference value
+and fitted values. Right: the selected branch costate projected onto the
+normal and the fitted normal gradients. The reference changes branch near
+$s=0$, producing a kink in the value and a jump in its normal derivative.}
 \label{fig:rs_transect}
 \end{figure}
 
 
 We next ask whether adding samples near $S$ reduces the error on $S_{0.3}$.
-We compare $6{,}000$-sample sets containing $23\%$, $40\%$, or $60\%$ of
-their samples near $S$ with a set obtained by adding $2{,}000$ such samples
-to the first set. The Gaussian and $\mathrm{ReLU}^2$ networks are evaluated
-on the same disjoint set of approximately $9.4\times10^5$ points.
+We compare $6{,}000$-sample sets with augmentation-pool shares of
+approximately $23\%$, $40\%$, and $60\%$, and a set that retains every row
+of the first set and adds $2{,}000$ distinct augmentation samples.
+These shares count padding and collar samples selected within distance
+$0.5$ of $S$; the actual fractions inside the narrower evaluation tube
+$S_{0.3}$ are $15.0\%$, $23.3\%$, $32.4\%$, and $23.3\%$, respectively.
+All models use the same disjoint evaluation set of $994{,}558$ points,
+including $91{,}104$ inside $S_{0.3}$.
 
 \begin{table}[htbp]
 \centering
@@ -4097,36 +4145,36 @@ on the same disjoint set of approximately $9.4\times10^5$ points.
 \renewcommand{\arraystretch}{1.25}
 \begin{tabular}{llcc}
 \toprule
-Model & Training set & $S_{0.3}$ & $D\setminus S_{0.3}$ \\
+Model & Training set & $S_{0.3}$ & outside $S_{0.3}$ \\
 \midrule
-Gaussian & 6k, $23\%$ near $S$ & $2.38 \times 10^{-1}$ & $1.37 \times 10^{-1}$ \\
- & 6k, $40\%$ near $S$ & $2.75 \times 10^{-1}$ & $1.50 \times 10^{-1}$ \\
- & 6k, $60\%$ near $S$ & $3.08 \times 10^{-1}$ & $2.54 \times 10^{-1}$ \\
- & 6k $+$ 2k near $S$ & $2.85 \times 10^{-1}$ & $1.85 \times 10^{-1}$ \\
+Gaussian & 6k, $23\%$ augmented & $3.03 \times 10^{-1}$ & $2.12 \times 10^{-1}$ \\
+ & 6k, $40\%$ augmented & $3.15 \times 10^{-1}$ & $1.98 \times 10^{-1}$ \\
+ & 6k, $60\%$ augmented & $3.38 \times 10^{-1}$ & $2.61 \times 10^{-1}$ \\
+ & 6k $+$ 2k augmented & $3.21 \times 10^{-1}$ & $2.48 \times 10^{-1}$ \\
 \midrule
-$\mathrm{ReLU}^{2}$ & 6k, $23\%$ near $S$ & $2.62 \times 10^{-1}$ & $1.68 \times 10^{-1}$ \\
- & 6k, $40\%$ near $S$ & $2.98 \times 10^{-1}$ & $1.72 \times 10^{-1}$ \\
- & 6k, $60\%$ near $S$ & $3.08 \times 10^{-1}$ & $2.36 \times 10^{-1}$ \\
- & 6k $+$ 2k near $S$ & $2.50 \times 10^{-1}$ & $1.64 \times 10^{-1}$ \\
+$\mathrm{ReLU}^{2}$ & 6k, $23\%$ augmented & $2.62 \times 10^{-1}$ & $1.55 \times 10^{-1}$ \\
+ & 6k, $40\%$ augmented & $2.82 \times 10^{-1}$ & $1.87 \times 10^{-1}$ \\
+ & 6k, $60\%$ augmented & $3.34 \times 10^{-1}$ & $2.85 \times 10^{-1}$ \\
+ & 6k $+$ 2k augmented & $2.63 \times 10^{-1}$ & $1.75 \times 10^{-1}$ \\
 \bottomrule
 \end{tabular}
-\caption{Relative $H^1$ error on $S_{0.3}$ and $D\setminus S_{0.3}$. For each
+\caption{Relative $H^1$ error on evaluation samples inside and outside $S_{0.3}$. For each
 model and training set, the table reports the result with the smallest error on
 $S_{0.3}$ among the three tested values of $\alpha$, with every entry in that
 row taken from the same run. The Gaussian uses $(\gamma,p)=(1,2.01)$ and
 $\alpha\in\{10^{-3},10^{-4},10^{-5}\}$; $\mathrm{ReLU}^2$ uses $\psi_2$ and
 $\alpha\in\{10^{-4},10^{-5},10^{-6}\}$. Errors are computed after
-un-normalizing, so the two blocks share one definition. All four training sets
-are scored on one common evaluation pool, formed by removing the union of their
-sampled points from the certified two-sided point set, so the rows are mutually
-comparable and each is out-of-sample.}
+un-normalizing, so the two blocks share one definition.}
 \label{tab:rs_oversampling}
 \end{table}
 
-For the tested sets, increasing the proportion of samples near $S$ produces no
-systematic or material reduction in the error on $S_{0.3}$
-(Table~\ref{tab:rs_oversampling}). Thus the observed difficulty is not resolved
-by additional local samples.
+For the tested sets, increasing the augmentation share from approximately
+$23\%$ to $40\%$ or $60\%$ does not reduce the error on $S_{0.3}$
+(Table~\ref{tab:rs_oversampling}). The fully nested addition of $2{,}000$
+samples changes the $\mathrm{ReLU}^{2}$ error from $0.262$ to
+$0.263$, and the Gaussian error from $0.303$ to $0.321$. Thus adding
+or reallocating samples near the switching set does not by itself remove
+the approximation difficulty in these single-seed fits.
 
 \subsubsection{Validation and regional errors}
 \label{sec:switching-comparison}
@@ -4135,12 +4183,11 @@ Figure~\ref{fig:rs_frontier}
 tracks the best observed relative $H^{1}$ validation error at each support
 budget, for each activation paired with its penalty. The three
 nonhomogeneous activations use the parameter values in
-Figure~\ref{fig:neuron_h1_frontier}\subref{fig:feedback_cost_a};
-the rectified powers use $\psi_k$ with $\alpha=10^{-5}$ for both $k=2$ and
-$k=3$. The $k=2$ fit reaches the smallest validation error, approximately
-$3.00\times10^{-1}$, followed by the Gaussian at $3.23\times10^{-1}$,
-$\mathrm{ReLU}^{3}$ at $3.32\times10^{-1}$, $\tanh$ at
-$3.74\times10^{-1}$, and softplus at $4.74\times10^{-1}$.
+Figure~\ref{fig:neuron_h1_frontier}\subref{fig:frontier_pendulum};
+the rectified powers use $\psi_k$ with $\alpha=10^{-6}$ for both $k=2$ and
+$k=3$. The smallest observed validation errors are $0.208$ for
+$\mathrm{ReLU}^{2}$, $0.209$ for the Gaussian, $0.246$ for
+$\mathrm{ReLU}^{3}$, $0.290$ for $\tanh$, and $0.469$ for softplus.
 
 \begin{figure}[htbp]
 \centering
@@ -4148,26 +4195,27 @@ $3.74\times10^{-1}$, and softplus at $4.74\times10^{-1}$.
 \caption{Best relative $H^{1}$ validation error against
 neuron count. The nonhomogeneous activations use
 \eqref{eq:empirical-log-objective}; the homogeneous activations use
-$J^M_{\psi_k}$ with $\alpha=10^{-5}$ for both $k=2$ and $k=3$.}
+$J^M_{\psi_k}$ with $\alpha=10^{-6}$ for both $k=2$ and $k=3$.}
 \label{fig:rs_frontier}
 \end{figure}
 
 Figure~\ref{fig:rs_dumbbell} reports
-the relative $H^{1}$ error on a separate evaluation set of approximately
-$9.4\times10^{5}$ points. The union of the five pendulum datasets' sampled
-rows is excluded, and for each run we use
+the relative $H^{1}$ error on a shared evaluation set of $994{,}558$ points.
+The union of training rows across the production and oversampling datasets
+is excluded, and for each run we use
 the recorded iterate with the smallest training objective. Errors are reported
-on $S_{0.3}$ and $D\setminus S_{0.3}$. The $\mathrm{ReLU}^{2}$ fit has the
-smallest errors in both regions ($0.310$ and $0.180$). The corresponding
-values are $0.335$ and $0.195$ for the Gaussian, $0.336$ and $0.216$ for
-$\mathrm{ReLU}^{3}$, $0.387$ and $0.206$ for $\tanh$, and $0.479$ and
-$0.389$ for softplus.
+on the subsets inside and outside $S_{0.3}$. The $\mathrm{ReLU}^{2}$ fit has the
+smallest errors in both regions ($0.275$ and $0.155$). The corresponding
+values are $0.290$ and $0.175$ for the Gaussian, $0.331$ and $0.194$ for
+$\mathrm{ReLU}^{3}$, $0.360$ and $0.222$ for $\tanh$, and $0.521$ and
+$0.511$ for softplus. Every selected model has a larger relative error
+inside the switching tube than outside it.
 
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=0.8\textwidth]{../experiments/02_pendulum/paper_log_penalty/figures/near_far_dumbbell.png}
 \caption{Relative $H^{1}$ error on $S_{0.3}$ (filled markers) and
-$D\setminus S_{0.3}$ (open markers), with rows ordered by the latter error.}
+the remaining evaluation points (open markers), with rows ordered by the latter error.}
 \label{fig:rs_dumbbell}
 \end{figure}
 
@@ -4180,16 +4228,14 @@ u(x) = -\frac{1}{2\,\eta\,m\ell^{2}}\,\partial_{\dot{\theta}}V(x);
 \end{equation*}
 replacing $V$ by a fitted $\widehat V$ yields a candidate feedback law. We test
 each law in closed loop from two initial states placed on either side of the
-switching curve, $A=(0.71,\,0.68)$ and $B=(0.23,\,0.53)$, integrating the
+switching curve, $A=(0.74,\,0.61)$ and $B=(0.26,\,0.46)$, integrating the
 dynamics over the horizon $T=10$ with fixed-step RK4 ($\Delta t = 5\times10^{-3}$),
 zero-order-hold controls, and the numerical bound $|u|\le30$ (the OCP itself
-is unconstrained). The optimal paths from the two starts are different. From
-$A$, the optimal law swings the pendulum over the top to the
-upright at $\theta=2\pi$, while from $B$ it brakes directly to the upright at
-$\theta=0$. Thus it must select the path associated with $V_{2\pi}$ at
-$A$ and the path associated with $V_0$ at $B$. The reference law uses
-the $40$ nearest raw PMP samples to compare $V_0$ and $V_{2\pi}$ and applies
-the feedback formula using the costate associated with the smaller value.
+is unconstrained). The sampled-PMP reference feedback searches the $40$
+nearest raw samples, including their shifts by $-4\pi,-2\pi,0,2\pi,4\pi$,
+and uses the costate of the neighbour with the smallest stored value.
+This nearest-sample rule is a feedback heuristic; the separate open-loop
+comparison below solves the PMP boundary-value problem from each start.
 
 \begin{figure}[htbp]
 \centering
@@ -4239,23 +4285,53 @@ the feedback formula using the costate associated with the smaller value.
 two starts $A$ (blue) and $B$ (red) on either side of the switching curve
 (black), one panel per feedback law; all panels share the same axes. The
 reference law swings over the top from $A$ and brakes to $\theta=0$ from $B$.
-Only $\mathrm{ReLU}^{3}$ among the fitted laws reaches an upright
-neighbourhood from both starts; the Gaussian, softplus, $\tanh$, and
-$\mathrm{ReLU}^{2}$ reach one only from $B$.}
+Only $\mathrm{ReLU}^{2}$ among these five learned laws reaches the stated
+upright neighbourhood from both starts; the other four do so only from $B$.
+Trajectories that leave the common plotting window continue to be integrated
+for the reported costs and terminal tests.}
 \label{fig:rs_feedback}
 \end{figure}
 
-From the harder start $A$, only $\mathrm{ReLU}^{3}$ among the fitted laws
-reaches the upright neighbourhood, at cost $230.7$ against the reference
-cost $26.2$ (Figure~\ref{fig:neuron_h1_frontier}\subref{fig:feedback_cost_a}).
-The Gaussian, softplus, $\tanh$, and $\mathrm{ReLU}^{2}$ laws do not satisfy
-the terminal criterion from this start. All five fitted laws reach the upright
-neighbourhood from $B$, at costs $10.2$, $13.7$, $10.3$, $10.2$, and $10.3$,
-respectively, against the reference cost $10.2$.
-Figure~\ref{fig:rs_feedback_control} shows the control signal from $A$.
-The reference starts with a control close to zero, whereas every fitted law
-starts with a substantially larger negative control and consequently follows
-a different closed-loop trajectory.
+\begin{table}[htbp]
+\centering
+\begin{tabular}{lcc}
+\toprule
+Feedback law & cost & upright \\
+\midrule
+reference (PMP) & $26.2$ & yes \\
+ReLU $+\ell^1$ & $87.8$ & yes \\
+\midrule
+Gaussian & $361.4$ & no \\
+softplus & $6999.6$ & no \\
+$\tanh$ & $708.3$ & no \\
+\midrule
+$\mathrm{ReLU}^{2} + \psi_{2}$ & $85.3$ & yes \\
+$\mathrm{ReLU}^{3} + \psi_{3}$ & $69306.3$ & no \\
+\bottomrule
+\end{tabular}
+\caption{Pendulum feedback from start $A=(0.74,0.61)$ over $T=10$.
+Costs use the held-control RK4 stages. The upright criterion is
+$\operatorname{dist}(\theta,2\pi\mathbb Z)<0.4$ and $|\dot\theta|<0.4$
+at the terminal time. The reference is the sampled-PMP feedback heuristic.
+The nonhomogeneous models use $(\alpha,\gamma,p)=(10^{-4},10,2.01)$.
+The ReLU--$\ell^1$ baseline uses $\alpha=10^{-5}$, selected by validation
+error among $\alpha\in\{10^{-2},10^{-3},10^{-4},10^{-5},10^{-6}\}$.
+The rectified-power fits use $\alpha=10^{-6}$, selected by switching-region
+error. Each law uses its run's minimum-training-objective checkpoint.}
+\label{tab:pendulum_feedback_a}
+\end{table}
+
+From the harder start $A$, only $\mathrm{ReLU}^{2}$ among the five nonconvex
+fits reaches the upright neighbourhood, at RK4-stage cost $85.3$.
+The ReLU--$\ell^1$ baseline also reaches it, at cost $87.8$, compared with
+$26.2$ for the sampled-PMP reference
+(Table~\ref{tab:pendulum_feedback_a}). Reaching the
+neighbourhood does not imply exact stabilization or near-optimal cost:
+the $\mathrm{ReLU}^{2}$ trajectory settles near $\theta=6.239$, retaining
+a nonzero running cost. Figure~\ref{fig:rs_feedback_control} shows the
+control signals from $A$. Each fitted law initially applies a larger
+negative control than the sampled-PMP reference, and the trajectories
+subsequently separate.
 
 \begin{figure}[htbp]
 \centering
@@ -4282,14 +4358,76 @@ errors at a common state.}
 \label{fig:rs_feedback_control}
 \end{figure}
 
-The $\mathrm{ReLU}^{2}$ fit has the smallest validation and regional errors,
-yet fails the terminal criterion from $A$. The $\mathrm{ReLU}^{3}$ fit has
-higher regional errors but reaches an upright neighbourhood from both starts.
-The regional approximation error and the binary terminal outcome therefore
-rank the models differently. Error near the switching set diagnoses the
-difficulty of approximating the discontinuous gradient, while feedback
-assessment still requires a closed-loop test.
+Figure~\ref{fig:pendulum_openloop_comparison} compares all five learned
+controllers with numerical open-loop references from both starts. As in
+the Van der Pol comparison, the reference for each start is the least-cost
+converged finite-horizon PMP solve initialized from the learned and
+dataset-feedback rollouts. It uses $T=10$, a free terminal state, and zero
+terminal cost. This compares the realized truncated running costs directly;
+it does not estimate an infinite-horizon tail cost or certify global
+optimality of the reference.
 
+The Gaussian, softplus, and $\tanh$ networks have $88$, $30$, and $70$
+neurons, respectively, with $(\alpha,\gamma,p)=(10^{-4},10,2.01)$.
+The selected $\mathrm{ReLU}^{2}$ and $\mathrm{ReLU}^{3}$ fits have $120$ and
+$105$ neurons and both use $\alpha=10^{-6}$, selected by switching-region
+error. For these checkpoints, only $\mathrm{ReLU}^{2}$ reaches the stated
+upright neighbourhood from $A$; all five do from $B$.
+These are the same checkpoints used in the surfaces, regional comparisons,
+and feedback table. With the RK4-stage cost integration used in these
+panels, the costs from $A$ are $361.4$, $6999.6$, $708.3$, $85.3$, and
+$69306.3$ for the Gaussian, softplus, $\tanh$, $\mathrm{ReLU}^{2}$, and
+$\mathrm{ReLU}^{3}$, respectively, versus $26.02$ for the numerical open-loop
+reference. From $B$ the learned costs range from $10.12$ to $11.57$, versus
+$10.10$ for the reference. The large costs from $A$ reflect trajectories
+that fail the terminal criterion, despite the numerical control guard.
+
+\begin{figure}[htbp]
+\centering
+\begin{subfigure}[b]{0.48\textwidth}
+\centering
+\includegraphics[width=\textwidth]{../experiments/02_pendulum/paper_log_penalty/figures/openloop_a_control.png}
+\caption{Control from $A$.}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.48\textwidth}
+\centering
+\includegraphics[width=\textwidth]{../experiments/02_pendulum/paper_log_penalty/figures/openloop_a_cost.png}
+\caption{Accumulated cost from $A$.}
+\end{subfigure}
+\par\medskip
+\begin{subfigure}[b]{0.48\textwidth}
+\centering
+\includegraphics[width=\textwidth]{../experiments/02_pendulum/paper_log_penalty/figures/openloop_b_control.png}
+\caption{Control from $B$.}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.48\textwidth}
+\centering
+\includegraphics[width=\textwidth]{../experiments/02_pendulum/paper_log_penalty/figures/openloop_b_cost.png}
+\caption{Accumulated cost from $B$.}
+\end{subfigure}
+\caption{Pendulum controls and realized costs over $T=10$. Each learned
+feedback law is simulated on its own trajectory with $\Delta t=0.005$ and
+the numerical control bound $|u|\le30$. The black curves are numerical
+open-loop references with matching initial states and horizons. Costs
+$J(t)=\int_0^t\ell(x(s),u(s))\,ds$ use the held-control RK4 stages for
+learned laws and three-point Gauss quadrature on the dense PMP solutions for
+the references. The feedback table uses the same RK4-stage costs. No predicted
+value or terminal-value estimate enters the new cost curves. For start $A$,
+the cost axis is linear below $J=1$ and logarithmic above it to display the
+large differences between the controllers.}
+\label{fig:pendulum_openloop_comparison}
+\end{figure}
+
+The $\mathrm{ReLU}^{2}$ fit has the smallest reported regional errors and
+reaches the upright neighbourhood from both starts. Nevertheless,
+approximation accuracy alone does not guarantee the terminal outcome:
+the Gaussian has smaller global validation error than the ReLU--$\ell^1$
+baseline ($0.209$ versus $0.300$), yet only the latter reaches the upright
+neighbourhood from $A$. All five selected nonconvex laws reach it from $B$.
+Feedback synthesis near a switching set therefore requires a direct
+closed-loop assessment in addition to value and gradient errors.
 
 \FloatBarrier
 
@@ -4311,11 +4449,14 @@ rigorous foundation for constructing sparse networks that approximate both a
 value function and its gradient.
 
 The numerical studies illustrate the role and the boundary of this framework.
-On the smooth Van der Pol problem, the proposed formulations produce sparse
-approximants whose gradients define stabilizing feedback laws. On the
-pendulum problem, they remain effective in the presence of a switching set,
-but the experiments also show that regional $H^1$ error alone does not
-determine the closed-loop branch decision. Thus gradient-augmented fitting is
+On the Van der Pol problem, the learned feedback trajectories reach a
+small terminal neighbourhood of the origin.
+On the pendulum problem, all five selected laws reach the
+upright neighbourhood from the easier start. Among these five laws, only
+$\mathrm{ReLU}^{2}$ does so from the harder start; the traditional
+ReLU--$\ell^1$ baseline also succeeds there. The Gaussian has lower validation
+error than that baseline but fails the same terminal test, so approximation
+accuracy alone does not determine the closed-loop outcome. Thus gradient-augmented fitting is
 a useful bridge from PMP data to feedback synthesis, while feedback
 performance must still be assessed directly when the value gradient is
 discontinuous.
