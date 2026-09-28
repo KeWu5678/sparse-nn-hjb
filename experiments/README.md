@@ -2,7 +2,7 @@
 
 Current datasets were generated on September 24, 2026. Their paths are selected
 by `conf/data/*.yaml`; training settings and sweep axes live in
-`conf/experiment/*.yaml`. All 588 configured fits and the 43 manuscript figures
+`conf/experiment/*.yaml`. All 588 configured fits and the 31 manuscript image panels
 have been regenerated. Numerical conclusions in the current paper use these runs.
 
 Datasets, run records, fits, reports, and figures are local, ignored artifacts.
@@ -76,7 +76,9 @@ uv run python scripts/paper/preflight.py
 make openloop
 uv run python experiments/01_vdp/paper_log_penalty/p_study_figure.py
 uv run python scripts/paper/vdp_full_scope.py --homogeneous-alpha 1e-6
+uv run python scripts/paper/pendulum_selection.py
 uv run python scripts/paper/pendulum_full_scope.py
+uv run python scripts/paper/pendulum_stability.py
 uv run python scripts/paper/preflight.py --require-figures --write-manifest
 ```
 
@@ -102,11 +104,22 @@ The local `analysis.py` wrappers delegate to the same benchmark generators.
 The joint moment-order plot reads the two `moment_order_study` record roots.
 
 Signed-control and cumulative-cost comparisons use each controller's own
-trajectory: VDP has horizon 3; pendulum has horizon 10 for both starts. The
-separate VDP stabilization diagnostic has horizon 12. Rollout arrays and final
-costs are preserved beside the reports as NPZ and CSV files. See
+trajectory: all VDP evaluations have horizon 3; pendulum has horizon 40 for
+both starts. Rollout arrays and final costs are preserved beside the reports
+as NPZ and CSV files. See
 [plotting and evaluation](../docs/plotting.md) for the numerical and rendering
 contracts.
+
+The [pendulum stability protocol](../docs/pendulum_stability.md) replaces the
+terminal-only upright test with a two-second numerical stabilization check and
+evaluates horizon sensitivity at 10, 20, and 40 seconds. Its numerical report
+and full traces are saved as `stability.md`, `stability.json`, and
+`stability_rollouts.npz` beside the pendulum reports.
+Controller selection first requires stabilization from both starts at T = 40,
+then minimizes global H1 validation error within each family. The selection
+audit is saved as `controller_selection.json`; downstream generators reject
+stale selections. Families with no passing combination retain an explicitly
+failed comparator with the lowest global error.
 
 ## Archive boundary
 

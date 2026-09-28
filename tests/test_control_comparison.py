@@ -9,6 +9,13 @@ from src.OpenLoop.pendulum.problem import PendulumSwingUpProblem
 from src.OpenLoop.vdp.problem import VdpOptimalControlProblem
 
 
+@pytest.mark.parametrize("horizon", [3.0, 1.5])
+def test_vdp_rollout_defaults_to_the_problem_horizon(horizon):
+    problem = VdpOptimalControlProblem(T_final=horizon)
+    time, *_ = problem.rk4_rollout(lambda x: 0., [0., 0.])
+    assert time[-1] == horizon
+
+
 @pytest.mark.parametrize("problem", [VdpOptimalControlProblem(), PendulumSwingUpProblem()])
 def test_accumulated_cost_uses_own_states_controls_and_elapsed_intervals(problem):
     time = np.array([0., .01, .03])

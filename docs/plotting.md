@@ -65,9 +65,15 @@ training and their hashes are recorded. Current records already contain
 physical regional metrics; no rescoring sidecar is required.
 
 Within each run, the selected checkpoint minimizes the training objective.
-Pendulum cross-run selection uses switching-region H1 error on the same shared
-pool reported in the regional comparison. Interpret those scores as model
-selection results, not as an independent test of a previously fixed model.
+Within each pendulum activation family, cross-run selection first requires
+numerical stabilization from both A and B at T = 40, then minimizes global
+physical-coordinate H1 validation error. If none passes, the lowest-global-error
+fit is explicitly reported as a failed comparator. Regional errors describe
+these selected fits; they do not rank controllers. A/B are selection states,
+so their outcomes do not independently measure control generalization. See the
+[selection protocol](pendulum_stability.md#controller-selection).
+The separate oversampling study still compares the smallest switching-region
+error for each training set; it evaluates approximation rather than feedback.
 
 ## Render prepared arrays
 
@@ -102,16 +108,22 @@ numerical open-loop reference. The comparison horizons and steps are:
 | Comparison | Horizon | Step |
 | --- | ---: | ---: |
 | Van der Pol control/cost | 3 | 0.01 |
-| Pendulum control/cost, each of two starts | 10 | 0.005 |
+| Pendulum control/cost, each of two starts | 40 | 0.005 |
 
-The separate VDP stabilization diagnostic runs to time 12. It is not the
-finite-horizon benchmark cost comparison.
+Pendulum success uses the [numerical stabilization protocol](pendulum_stability.md):
+angle error below 0.1 rad and speed below 0.5 rad/s at every sample in the
+final 2 seconds. The same checkpoints are evaluated at 10, 20, and 40 seconds
+by `scripts/paper/pendulum_stability.py`. These are finite-horizon diagnostics,
+not asymptotic stability certificates.
+
+All VDP state, control, and cost plots use the benchmark horizon `T=3`.
+Its signed-control, state-norm, and cost panels show the same five learned
+controllers and numerical open-loop reference.
 
 `src.OpenLoop.comparison.accumulated_cost` integrates running costs at the
 held-control RK4 stages of each learned rollout. It does not substitute a
 network's value prediction. The numerical reference uses three-point Gauss
-quadrature on its dense PMP boundary-value solution. Older diagnostic rollout
-summaries use their own integration convention and are identified separately.
+quadrature on its dense PMP boundary-value solution.
 
 `solve_openloop_reference` fixes the initial state and comparison horizon,
 with a free terminal state and zero terminal cost. It retains the least-cost
@@ -122,8 +134,13 @@ control guards. Pendulum's finite-horizon comparison is a truncation of the
 infinite-horizon problem used for its training data.
 
 `scripts/paper/control_comparison.py` writes signed-control and cumulative-cost
-PNGs, preserves time/state/control/cost arrays in NPZ files, and writes final
-costs to CSV files beside the reports.
+PNGs, plus the VDP state-norm panel. It preserves time/state/control/cost arrays
+in NPZ files and writes final costs to CSV files beside the reports.
+The pendulum figure uses newly solved 40-second open-loop references; only
+complete rollouts initialize those solves. Divergent feedback traces end at
+their actual stopping time (the CSV horizon is their achieved horizon).
+Table 4 retains the cost at 10 seconds and gives separate numerical stabilization
+columns for 10 and 40 seconds; the full horizon study also reports 20 seconds.
 
 ## Current publication pipeline
 
