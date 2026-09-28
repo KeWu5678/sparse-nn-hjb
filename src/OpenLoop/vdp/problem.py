@@ -69,7 +69,7 @@ class VdpOptimalControlProblem:
         gradient = np.asarray(gradient, dtype=np.float64)
         return float(-gradient[1] / (2.0 * self.beta))
 
-    def rk4_rollout(self, u_of_x, x0, *, T: float = 12.0, dt: float = 0.01,
+    def rk4_rollout(self, u_of_x, x0, *, T: float | None = None, dt: float = 0.01,
                     u_clip: float = 50.0):
         """Closed-loop RK4 rollout of ``ẏ = f(y, u(y))`` under a state feedback law.
 
@@ -78,6 +78,7 @@ class VdpOptimalControlProblem:
         grid, state trajectory, applied controls, and accumulated running cost —
         truncated early if the closed loop diverges (non-finite or ``|y| > 1e3``).
         """
+        T = self.T_final if T is None else T
         n = int(T / dt)
         xs = np.zeros((n + 1, 2)); us = np.zeros(n + 1); xs[0] = np.asarray(x0, np.float64)
         cost = 0.0

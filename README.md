@@ -2,8 +2,8 @@
 
 [![CI](https://github.com/KeWu5678/sparse-nn-hjb/actions/workflows/ci.yml/badge.svg)](https://github.com/KeWu5678/sparse-nn-hjb/actions/workflows/ci.yml)
 
-**A 14-neuron softplus controller reaches a small terminal neighbourhood on
-Van der Pol at cost 6.461, against 6.455 for an interpolated reference controller.**
+**A 14-neuron softplus controller attains a Van der Pol running cost of
+6.419 over T=3, compared with 6.401 for a numerical open-loop reference.**
 
 Learning a value function is easy to score and easy to get wrong. This project
 learns one from trajectory data and then *flies* it — the reported result is the
@@ -65,24 +65,20 @@ Errors are relative $H^1$ in original coordinates — the fitted $V$ and its
 gradient with respect to the original state variables, after undoing the
 training normalization.
 
-Closed-loop rollout from $y_0 = (2,1)$ over $T=12$. The ReLU<sup>3</sup>
-controller uses a separate $\alpha=10^{-6}$ checkpoint:
+Feedback rollouts from $y_0=(2,1)$ over the benchmark horizon $T=3$.
+The ReLU<sup>3</sup> controller uses a separate $\alpha=10^{-6}$ checkpoint:
 
-| controller | neurons | terminal norm < 0.2 | cost |
-| --- | ---: | :---: | ---: |
-| interpolated reference | — | yes | 6.4551 |
-| softplus | 14 | yes | 6.4612 |
-| Gaussian | 32 | yes | 6.4552 |
-| ReLU<sup>3</sup> | 30 | yes | 6.4840 |
+| controller | neurons | terminal state norm | running cost |
+| --- | ---: | ---: | ---: |
+| numerical open-loop reference | — | 0.3517 | 6.4010 |
+| softplus | 14 | 0.2354 | 6.4191 |
+| Gaussian | 32 | 0.2178 | 6.4249 |
+| ReLU<sup>3</sup> | 30 | 0.1597 | 6.4487 |
 
-The reference interpolates the dataset's time-zero costates with a stationary
-Clough–Tocher interpolant. The data horizon is $T=3$, so the reference rollout
-cost is not an exact finite-horizon optimum for this $T=12$ comparison.
-
-The matching finite-horizon control/cost comparison uses $T=3$ and a direct
-numerical open-loop solve. All learned-controller costs are accumulated along
-each controller's own trajectory. Reaching a terminal neighbourhood does not
-establish asymptotic stability.
+The reference solves the finite-horizon PMP boundary-value problem with a free
+terminal state and zero terminal cost. Each learned-controller cost is
+accumulated along its own trajectory. All VDP state, control, and cost plots
+use the same horizon $T=3$.
 
 The pendulum benchmark tests value functions with gradient jumps. It compares
 regional errors, alternative training-sample allocations, and feedback from
