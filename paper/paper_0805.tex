@@ -3019,8 +3019,7 @@ $\boldsymbol\omega^{(0)},c^{(0)}$ of width $N(0)$; set $t=0$.
 \State Sample $N_{\mathrm{trial}}$ nodes randomly as the initial points.
 \State For each initial point, run unconstrained L-BFGS w.r.t. $|P|$ and
 normalize onto $\mathbb S^d$.
-\State Remove cosine near-duplicates and discard final candidates that
-coincide numerically with the current support.
+\State Remove candidates that coincide numerically with the current support.
 \State For each candidate compute $c^*(\omega)$ from
 \eqref{eq:algorithm2-insertion-weight}, and keep it when
 $\Delta J_{\psi_k}(c^*(\omega);\omega)<0$; terminate if there is none.
@@ -3178,9 +3177,7 @@ softplus $0.0311$ with $14$.
 \begin{table}[htbp]
 \centering
 \caption{Effect of gradient-augmented fitting with
-$\alpha=10^{-4}$, $\gamma=10$, $p=2.01$, seed $42$. The same parameters are
-used for all three activations, so the comparison is not confounded with
-per-activation tuning.}
+$\alpha=10^{-4}$, $\gamma=10$, $p=2.01$.}
 \label{tab:alg1_gradient}
 \begin{subtable}{0.48\textwidth}
 \centering
@@ -3267,10 +3264,7 @@ support size give different rankings.
 \label{fig:h1_activation_gaussian}
 \end{subfigure}
 \caption{Learned value functions under the $H^1$ loss using the parameter
-values in Table~\ref{tab:alg1_gradient}. All three
-fit the numerical reference data; they differ in support size and
-validation error. Predictions are clipped to $[0,20]$ for visualization;
-the reported errors use the unclipped network outputs.}
+values in Table~\ref{tab:alg1_gradient}. Predictions are clipped to $[0,20]$ for visualization.}
 \label{fig:h1_activation}
 \end{figure}
 
