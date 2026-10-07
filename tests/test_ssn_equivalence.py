@@ -15,9 +15,10 @@ from pathlib import Path
 import numpy as np
 import pytest
 import torch
+from ssn_test_problem import SyntheticProblem
 
+from src.problems.penalty import _phi
 from src.SSN import SSN
-from src.SSN.penalty import _phi
 
 GOLDEN_PATH = Path(__file__).parent / "fixtures" / "ssn_golden.npz"
 N_STEPS = 6
@@ -41,55 +42,61 @@ def _make_quadratic(P: int, Nx: int, seed: int):
     return A, y, H
 
 
-def _penalty(theta, mask, alpha, th, gamma, q):
-    """alpha * sum_{penalised} phi(|theta|^q) with nonneg clamp, matching closures."""
+def _penalty(theta, mask, alpha, gamma, q):
+    """Log or power regularizer with the legacy nonnegative clamp."""
     sel = theta[mask]
     sel = sel.clamp_min(0.0)
     arg = sel if q == 1.0 else sel.clamp_min(1e-30) ** q
-    return alpha * torch.sum(_phi(arg, th, gamma))
+    return alpha * torch.sum(_phi(arg, gamma))
+
+
+class _LegacyProblem(SyntheticProblem):
+    """Preserve the clamped loss and signed gradient subtraction of the fixtures."""
+
+    def loss(self, u):
+        return self.obj(u) + _penalty(u, self._masks(u)[0], self._alpha, self._gamma, self.penalty_exponent)
 
 
 def _run_trajectory(config: dict) -> np.ndarray:
     """Run one optimizer config for N_STEPS, returning the (N_STEPS, P) theta trace."""
     torch.manual_seed(0)
     P, Nx = config["P"], config["Nx"]
-    alpha, gamma, th = config["alpha"], config["gamma"], config["th"]
+    alpha, gamma = config["alpha"], config["gamma"]
     power = config["power"]
-    q = 2.0 / (power + 1.0)
 
     A, y, H = _make_quadratic(P, Nx, seed=config["seed"])
     theta = torch.nn.Parameter(config["theta0"].clone())
 
     pen_mask = config.get("penalized_mask", torch.ones(P, dtype=torch.bool))
 
+    def data_loss(u):
+        r = A @ u - y
+        return 0.5 / Nx * (r @ r)
+
+    # The historical optimizer subtracted the signed penalty gradient from the
+    # clamped loss, including on negative coordinates. Preserve that test problem
+    # rather than silently changing its objective or regenerating its fixtures.
+    problem = _LegacyProblem(
+        data_loss, H, alpha=alpha, gamma=gamma, power=power,
+        penalized_mask=pen_mask, nonneg_mask=config.get("nonneg_mask"),
+    )
     kind = config["kind"]
     if kind == "ssn":
         opt = SSN(
-            [theta], alpha=alpha, gamma=gamma, th=th, power=power,
+            [theta], problem,
             prox_scale=config.get("prox_scale"),
         )
     elif kind == "ssn_tr":
         # folded into the base SSN: trust-region (Steihaug-CG) globalization
-        opt = SSN([theta], alpha=alpha, gamma=gamma, th=th, power=power,
-                  method="steihaug_cg")
+        opt = SSN([theta], problem, method="steihaug_cg")
     elif kind == "ssn_masked":
-        opt = SSN(
-            [theta], alpha=alpha, gamma=gamma, th=th, power=power,
-            penalized_mask=pen_mask, nonneg_mask=config["nonneg_mask"],
-        )
+        opt = SSN([theta], problem)
     else:  # pragma: no cover
         raise ValueError(kind)
-    opt.data_hessian = H
-
-    def closure():
-        opt.zero_grad()
-        r = A @ theta.reshape(-1) - y
-        data = 0.5 / Nx * (r @ r)
-        return data + _penalty(theta.reshape(-1), pen_mask, alpha, th, gamma, q)
 
     traj = np.zeros((N_STEPS, P), dtype=np.float64)
     for k in range(N_STEPS):
-        opt.step(closure)
+        opt.step()
         traj[k] = theta.detach().reshape(-1).numpy()
     return traj
 
@@ -98,19 +105,19 @@ def _configs() -> dict[str, dict]:
     t4 = torch.tensor([0.5, -0.3, 0.4, 0.2], dtype=torch.float64)
     return {
         "ssn_signed_q1": dict(
-            kind="ssn", P=4, Nx=20, alpha=1e-2, gamma=1.0, th=0.5, power=1.0,
+            kind="ssn", P=4, Nx=20, alpha=1e-2, gamma=1.0, power=1.0,
             seed=1, theta0=t4,
         ),
         "ssn_signed_q_half": dict(
-            kind="ssn", P=4, Nx=20, alpha=1e-2, gamma=0.0, th=0.5, power=3.0,
+            kind="ssn", P=4, Nx=20, alpha=1e-2, gamma=0.0, power=3.0,
             prox_scale=1e-2, seed=2, theta0=t4,
         ),
         "ssn_tr_signed": dict(
-            kind="ssn_tr", P=4, Nx=20, alpha=1e-2, gamma=1.0, th=0.5, power=1.0,
+            kind="ssn_tr", P=4, Nx=20, alpha=1e-2, gamma=1.0, power=1.0,
             seed=3, theta0=t4,
         ),
         "ssn_masked_free_coord": dict(
-            kind="ssn_masked", P=4, Nx=20, alpha=1e-2, gamma=1.0, th=0.5,
+            kind="ssn_masked", P=4, Nx=20, alpha=1e-2, gamma=1.0,
             power=1.0, seed=4, theta0=torch.tensor([0.5, 0.5, 0.3, 0.0], dtype=torch.float64),
             penalized_mask=torch.tensor([True, True, False, False]),
             nonneg_mask=torch.tensor([True, True, True, False]),

@@ -96,7 +96,7 @@ three more steps, all bit-exact:
    `vector_to_parameters` — so `get_theta` / `set_theta` leave the contract.
 8. **The objective leaves the model.** `compute_loss` is removed; the trainer
    computes the objective (`PDAP._record_loss` for the data term via
-   `src.eval.data_loss_terms`, plus `src.PDAP.ssn_solve.nonconvex_penalty` for the
+   `src.eval.data_loss_terms`, plus `src.SSN.penalty._noncvx_penalty` for the
    regularizer — the same penalty the SSN closure uses, so it exists once).
 9. **Objective and solver hyperparameters leave the model.** `alpha, gamma, th,
    loss_weights` and `lr, method, max_ls_iter, tolerance_*, sigmamax` move into
@@ -150,3 +150,48 @@ support replacement cannot round an SSN solution through float32. This changes
 the layer-initialization random stream and supersedes the historical bit-exact
 behavior above; the PDAP reference summaries are refreshed for this deliberate
 numerical change.
+
+## Follow-up: one shared problem for PDAP and SSN
+
+`src/problems/sparse_problem.py` now defines `SparseProblem`. It owns the sample
+splits `(X, V, dV)`, neuron definition, objective weights, penalty, normalization,
+proximal and normal maps, insertion formulas, and mathematical radius bound.
+The penalty, proximal, moment, and radius helpers live inside `src/problems/`.
+The historical trainer-owned `Objective` and callable/Hessian constructor are
+replaced by this data-based interface:
+
+```python
+problem = SparseProblem.from_config(cfg.model, train_data, valid_data)
+model = build_model(cfg, problem.input_dim)
+trainer = PDAP(cfg.training, insertion=cfg.model.insertion)
+history = trainer.fit(model, problem, num_iterations=10, num_insertion=50)
+```
+
+The model owns the persistent parameters and predictions. It is passed to
+problem operations explicitly and is never retained by the problem. PDAP owns
+candidate search, insertion/pruning, warm-start direction selection, correction
+scheduling and acceptance guards. SSN owns Torch parameter integration,
+autograd of the coefficient loss, iteration, globalization and accepted updates.
+History stores metrics supplied by the problem and model snapshots; generic
+relative-error computations remain in `src/eval.py`. Persisted metric names are
+unchanged.
+
+Before each coefficient solve, `problem.prepare_coefficients(model)` refreshes
+the fixed-neuron prediction matrices, coefficient normalization, and objective
+Hessian. `ssn_solve` then creates a fresh SSN optimizer because support replacement
+replaces the model's Parameter objects. The problem is reused for the whole fit;
+full-model loss, residual, and insertion evaluations work independently of this
+cache, including on an empty support. A problem has one prepared coefficient
+system at a time, so simultaneous coefficient solves need separate instances.
+
+The mathematical API uses `obj` for the fitting objective, `obj_augmented` for
+that objective plus the nonconvex correction, and `loss` for the fitting
+objective plus the full penalty. Derivatives use `jac_` and `hess_`, including
+`jac_obj_augmented`, `hess_obj_augmented`, `jac_prox`, and `jac_normal`.
+`penalty_exponent` names the scalar exponent; `q` remains the proximal preimage.
+For the log family, `loss = obj_augmented + alpha*||u||_1`; for the fractional
+family, `obj_augmented = obj` and the prox handles the complete penalty.
+
+The mathematical radius is returned before applying a numerical cap; PDAP owns
+the existing `exp(5)` search limit and fallback. Numerical regression fixtures
+are retained unchanged by this ownership refactor.

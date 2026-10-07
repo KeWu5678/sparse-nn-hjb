@@ -49,6 +49,7 @@ from src.experiment_logging import ExperimentRun
 from src.logging_config import configure_logging
 from src.models import build_model
 from src.PDAP import PDAP
+from src.problems import SparseProblem
 
 logger = logging.getLogger(__name__)
 
@@ -206,7 +207,7 @@ def main(cfg: DictConfig) -> None:
     log_file = cfg.env.log_file or (run_dir / "run.log")
     configure_logging(verbose=cfg.env.verbose, level=cfg.env.log_level, log_file=log_file)
     set_seed(cfg.env.seed)
-    trainer = PDAP(cfg)
+    trainer = PDAP(cfg.training, insertion=cfg.model.insertion)
 
     # Create the run record before model construction/training so elapsed_s covers
     # the actual run, not only JSON serialization.
@@ -236,8 +237,9 @@ def main(cfg: DictConfig) -> None:
     train_data, valid_data = split_value_samples(data, cfg.data.train_fraction)
     model = build_model(cfg, input_dim)
 
+    problem = SparseProblem.from_config(cfg.model, train_data, valid_data)
     history = trainer.fit(
-        model, train_data, valid_data,
+        model, problem,
         num_iterations=cfg.training.num_iterations,
         num_insertion=cfg.training.num_insertion,
         max_insert=cfg.training.max_insert,

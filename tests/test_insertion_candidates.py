@@ -9,6 +9,7 @@ import pytest
 import torch
 
 import src.PDAP.insertion as insertion
+from src.problems import SparseProblem
 
 
 def _inputs():
@@ -59,7 +60,6 @@ def _generate(
     merge_tol=1e-2,
     existing_atoms=None,
     use_sphere=False,
-    normalized=None,
     power=1.0,
 ):
     if starts is None:
@@ -67,19 +67,15 @@ def _generate(
     fake = _fake_lbfgs(monkeypatch, outputs)
     X, residual_v, residual_dv = _inputs()
     a, b, n, discarded_outside = insertion._generate_candidates(
-        X,
+        SparseProblem((X, -residual_v, -residual_dv),
+                      activation="relu" if use_sphere else "tanh", power=power),
         residual_v,
         residual_dv,
-        activation=torch.tanh,
-        power=power,
-        loss_weights=(1.0, 1.0),
         sample_sphere=_starts(starts),
         N=len(starts),
         merge_tol=merge_tol,
         two_sided=True,
-        use_sphere=use_sphere,
         existing_atoms=existing_atoms,
-        normalized=(not use_sphere) if normalized is None else normalized,
         radius=radius,
     )
     return a, b, n, discarded_outside, fake
@@ -117,18 +113,13 @@ def test_algorithm1_distinguishes_radius_search_failure_from_threshold_stop(
     _fake_lbfgs(monkeypatch, [[2.0, 0.0]])
     with caplog.at_level(logging.DEBUG):
         insertion.profile_threshold(
-            X,
+            SparseProblem((X, -residual_v, -residual_dv),
+                          activation="tanh", power=1.0, alpha=1.0),
             residual_v,
             residual_dv,
-            activation=torch.tanh,
-            power=1.0,
-            loss_weights=(1.0, 1.0),
-            alpha=1.0,
             sample_sphere=_starts([[1.0, 0.0]]),
             N=1,
             max_insert=1,
-            use_sphere=False,
-            normalized=True,
             radius=1.0,
             verbose=True,
         )
@@ -140,18 +131,13 @@ def test_algorithm1_distinguishes_radius_search_failure_from_threshold_stop(
     _fake_lbfgs(monkeypatch, [[0.0, 0.0]])
     with caplog.at_level(logging.DEBUG):
         insertion.profile_threshold(
-            X,
+            SparseProblem((X, -residual_v, -residual_dv),
+                          activation="tanh", power=1.0, alpha=1.0),
             residual_v,
             residual_dv,
-            activation=torch.tanh,
-            power=1.0,
-            loss_weights=(1.0, 1.0),
-            alpha=1.0,
             sample_sphere=_starts([[1.0, 0.0]]),
             N=1,
             max_insert=1,
-            use_sphere=False,
-            normalized=True,
             radius=1.0,
             verbose=True,
         )
@@ -171,17 +157,13 @@ def test_sphere_search_reports_when_only_existing_support_is_returned(
 
     with caplog.at_level(logging.DEBUG):
         insertion.profile_threshold(
-            X,
+            SparseProblem((X, -residual_v, -residual_dv),
+                          activation="relu", power=2.0, alpha=1.0),
             residual_v,
             residual_dv,
-            activation=torch.relu,
-            power=2.0,
-            loss_weights=(1.0, 1.0),
-            alpha=1.0,
             sample_sphere=_starts([[1.0, 0.0]]),
             N=1,
             max_insert=1,
-            use_sphere=True,
             existing_atoms=existing,
             verbose=True,
         )
@@ -238,14 +220,12 @@ def test_algorithm1_optimizes_each_random_start_once(monkeypatch):
     assert len(fake.instances) == 2
 
 
-def test_unnormalized_nonhomogeneous_search_is_not_supported(monkeypatch):
-    with pytest.raises(ValueError, match="requires normalized Algorithm 1"):
-        _generate(
-            monkeypatch,
-            outputs=[[1.0, 0.0], [0.0, 1.0]],
-            starts=[[1.0, 0.0], [0.0, 1.0]],
-            normalized=False,
-        )
+def test_nonhomogeneous_search_gets_normalization_from_the_problem():
+    X, residual_v, residual_dv = _inputs()
+    problem = SparseProblem((X, -residual_v, -residual_dv), activation="tanh")
+    assert problem.normalized
+    with pytest.raises(TypeError, match="normalized"):
+        SparseProblem((X, -residual_v, -residual_dv), activation="tanh", normalized=False)
 
 
 def test_algorithm1_deduplicates_by_absolute_parameter_distance(monkeypatch):

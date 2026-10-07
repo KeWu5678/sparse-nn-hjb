@@ -1,18 +1,12 @@
-"""Globalization strategies for the SSN step.
+"""Damped-Newton and MPCG trust-region globalization for SSN.
 
-Both members of the trust-region family (scipy/Ceres classify Levenberg-Marquardt
-as a trust-region method); they differ only in how the step subproblem is solved:
-
-  * ``solve_levenberg_marquardt`` — adaptive diagonal damping ``(DG + (1/theta) I)``
-    with backtracking on ``theta`` (the historical ``SSN.step``).
-  * ``solve_steihaug_cg`` — a truncated/Steihaug CG trust-region solve via ``mpcg``
-    with an explicit radius ``sigma`` (the historical ``SSN_TR.step``).
-
-Each is a free function taking the optimizer instance ``opt`` (for its ``_prox`` /
-``_trial`` primitives, config and ``self.state``) plus the already-built system
-``(loss, params, q, Gq, DG)``.  They set ``opt.last_step_success`` and return the
-post-step loss, restoring the params snapshot on rejection.
+Strategies receive tensors, numerical settings, and a trial-loss callback.
+They return their acceptance decision; SSN commits parameters and stores the
+updated trust-region radius. Trial evaluation does not install parameters.
+The input normal_q is the normal-map value G(q) at the current iterate.
 """
+
+from __future__ import annotations
 
 import logging
 from typing import Callable
@@ -20,106 +14,95 @@ from typing import Callable
 import torch
 from torch import Tensor
 
-from .mpcg import mpcg
+from .mpcg import MPCG
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["solve_levenberg_marquardt", "solve_steihaug_cg"]
 
-
-def solve_levenberg_marquardt(
-    opt, closure: Callable[[], Tensor], loss: Tensor,
-    params: Tensor, q: Tensor, Gq: Tensor, DG: Tensor,
-    inverse_step: float,
-) -> Tensor:
-    """Damped-Newton step with backtracking on the damping ``theta``."""
-    group = opt.param_groups[0]
-    tolerance_ls: float = group["tolerance_ls"]
-    max_ls_iter: int = group["max_ls_iter"]
+def damped_newton_step(
+    q: Tensor, normal_q: Tensor, jac_normal: Tensor, loss: Tensor,
+    evaluate_trial: Callable[[Tensor], Tensor],
+    *, max_ls_iter: int, tolerance_ls: float,
+) -> tuple[Tensor, Tensor, bool]:
+    """Return (q_trial, loss_trial, accepted), increasing damping on retries."""
     iter_ls: int = 0
 
-    I: Tensor = torch.eye(params.shape[0], device=params.device, dtype=params.dtype)
-    theta0: float = 1.0 / (1e-12 * torch.norm(DG, p=float("inf")).item())
+    I: Tensor = torch.eye(q.numel(), device=q.device, dtype=q.dtype)
+    theta0: float = 1.0 / (1e-12 * torch.norm(jac_normal, p=float("inf")).item())
+    dq = _solve_damped_system(jac_normal, normal_q, theta0, I)
+    q_trial = q + dq
+    loss_trial = evaluate_trial(q_trial)
 
-    try:
-        system_matrix: Tensor = DG + (1 / theta0) * I
-        dq: Tensor = -torch.linalg.solve(system_matrix, Gq)
-    except Exception as e:  # noqa: BLE001
-        logger.error(f"Initial linear solve failed: {e}")
-        logger.error(f"Matrix condition was: {torch.linalg.cond(system_matrix).item():.2e}")
-        opt.last_step_success = False
-        return loss
-
-    qnew: Tensor = q + dq
-    _, loss_new = opt._trial(closure, qnew, inverse_step)
-
-    # Initialize the damping parameter
+    # theta is reciprocal damping; dividing it by four increases the damping.
     dq_norm: float = torch.norm(dq).item()
-    Gq_norm: float = max(torch.norm(Gq).item(), 1e-20)  # clamp to avoid div-by-zero
-    theta: float = max(dq_norm / Gq_norm, theta0)
+    normal_q_norm: float = max(torch.norm(normal_q).item(), 1e-20)  # avoid div-by-zero
+    theta: float = max(dq_norm / normal_q_norm, theta0)
 
     min_theta: float = 1e-12  # prevent theta from underflowing to zero
-    while (torch.isnan(loss_new) or loss_new > tolerance_ls * loss) and iter_ls < max_ls_iter:
-        try:
-            theta_safe = max(theta, min_theta)
-            qnew = q - torch.linalg.solve(DG + (1 / theta_safe) * I, Gq)
-            _, loss_new = opt._trial(closure, qnew, inverse_step)
-            theta = max(theta / 4.0, min_theta)
-        except Exception as e:  # noqa: BLE001
-            logger.error(f"Damped linear solve failed: {e}")
-            opt._set_flat(params)
-            opt.last_step_success = False
-            return loss
+    while not _damped_trial_acceptable(loss_trial, loss, tolerance_ls) and iter_ls < max_ls_iter:
+        theta_safe = max(theta, min_theta)
+        dq = _solve_damped_system(jac_normal, normal_q, theta_safe, I)
+        q_trial = q + dq
+        loss_trial = evaluate_trial(q_trial)
+        theta = max(theta / 4.0, min_theta)
         iter_ls += 1
 
-    if iter_ls >= max_ls_iter or torch.isnan(loss_new):
-        logger.debug(f"Line search failed after {iter_ls} iterations")
-        logger.debug(
-            f"loss={loss.item():.6e}, "
-            f"loss_new={loss_new.item() if not torch.isnan(loss_new) else 'NaN'}, "
-            f"theta={theta:.2e}"
-        )
-        opt._set_flat(params)
-        opt.last_step_success = False
-        return loss
-    opt.last_step_success = True
-    return loss_new
+    accepted = _damped_trial_acceptable(loss_trial, loss, tolerance_ls)
+    if not accepted:
+        logger.debug("Damping backtracking exhausted after %d retries", iter_ls)
+    return q_trial, loss_trial, accepted
 
 
-def solve_steihaug_cg(
-    opt, closure: Callable[[], Tensor], loss: Tensor,
-    params: Tensor, q: Tensor, Gq: Tensor, DG: Tensor,
-    inverse_step: float,
-) -> Tensor:
-    """Trust-region step via a truncated/Steihaug CG solve (mpcg) with radius sigma."""
-    group = opt.param_groups[0]
-    sigmamax: float = group["sigmamax"]
-    st = opt.state[opt._params[0]]
-    sigma: float = st.setdefault("sigma", 0.01 * sigmamax)
-
-    DP: Tensor = opt._dprox(q, inverse_step, prox_result=params)
-    I_active: Tensor = torch.diag(DP) != 0
+def trust_region_step(
+    q: Tensor, normal_q: Tensor, jac_normal: Tensor, jac_prox: Tensor, loss: Tensor,
+    evaluate_trial: Callable[[Tensor], Tensor],
+    *, sigma: float, sigmamax: float,
+) -> tuple[tuple[Tensor, Tensor, bool], float]:
+    """Return (q_trial, loss_trial, accepted) and the next trust-region radius."""
+    I_active: Tensor = torch.diag(jac_prox) != 0
     kmaxit: int = max(1, int(2 * I_active.sum().item()))
 
-    dq, tr_flag, pred, _, _ = mpcg(DG, -Gq, 1e-3, kmaxit, sigma, DP)
+    dq, stop_reason = MPCG(jac_normal, jac_prox).solve(-normal_q, rtol=1e-3, maxit=kmaxit, sigma=sigma)
 
-    qnew: Tensor = q + dq
-    _, loss_new = opt._trial(closure, qnew, inverse_step)
+    q_trial = q + dq
+    loss_trial = evaluate_trial(q_trial)
 
-    if not torch.isfinite(loss_new) or (loss_new > loss + 1e-10 * torch.abs(loss)):
-        # reject: shrink the trust region and restore params
-        st["sigma"] = 0.2 * sigma
-        logger.debug(f"TR reject: dloss={(loss_new - loss).item():.3e} {sigma:.2e}->{st['sigma']:.2e}")
-        opt._set_flat(params)
-        opt.last_step_success = False
-        return loss
+    accepted = _tr_trial_acceptable(loss_trial, loss)
+    next_sigma = _next_radius(sigma, sigmamax, accepted, stop_reason)
+    if not accepted:
+        logger.debug(
+            "TR reject: dloss=%.3e %.2e->%.2e",
+            (loss_trial - loss).item(), sigma, next_sigma,
+        )
+    return (q_trial, loss_trial, accepted), next_sigma
 
-    # Accept.  ``pred`` from mpcg is a model decrease for the Newton system, not a
-    # reliable loss-decrease prediction, so adapt sigma on acceptance / boundary hit
-    # rather than via a TR ratio (which tends to collapse sigma to ~0 and stall).
-    if tr_flag == "radius":
-        st["sigma"] = min(2.0 * sigma, sigmamax)
-    else:
-        st["sigma"] = min(1.2 * sigma, sigmamax)
-    opt.last_step_success = True
-    return loss_new
+
+def _solve_damped_system(jac_normal: Tensor, normal_q: Tensor, theta: float, I: Tensor) -> Tensor:
+    """Return dq solving (jac_normal + I/theta) dq = -normal_q."""
+    return -torch.linalg.solve(jac_normal + (1 / theta) * I, normal_q)
+
+
+def _damped_trial_acceptable(loss_trial: Tensor, loss: Tensor, tolerance_ls: float) -> bool:
+    """Check the damped-Newton loss tolerance, retaining its NaN rejection rule."""
+    return not bool(torch.isnan(loss_trial) or loss_trial > tolerance_ls * loss)
+
+
+def _tr_trial_acceptable(loss_trial: Tensor, loss: Tensor) -> bool:
+    """Check finite loss and the trust-region strategy's additive tolerance."""
+    return not bool(not torch.isfinite(loss_trial) or loss_trial > loss + 1e-10 * torch.abs(loss))
+
+
+def _next_radius(sigma: float, sigmamax: float, accepted: bool, stop_reason: str) -> float:
+    """Adapt the radius using acceptance and the MPCG truncation reason.
+
+    The CG quadratic models the normal-map Newton system; its decrease does not
+    reliably predict the loss decrease. A 'negdef' boundary step retains the
+    historical 1.2 growth factor; only 'radius' gets the factor 2.
+    """
+    if not accepted:
+        return 0.2 * sigma
+    growth = 2.0 if stop_reason == "radius" else 1.2
+    return min(growth * sigma, sigmamax)
+
+
+__all__ = ["damped_newton_step", "trust_region_step"]

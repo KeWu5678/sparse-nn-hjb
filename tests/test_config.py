@@ -7,15 +7,22 @@ import torch
 from hydra import compose, initialize
 from hydra.core.config_store import ConfigStore
 from hydra.core.hydra_config import HydraConfig
+from hydra.errors import ConfigCompositionException
 
 from src.config import get_activation, get_use_sphere
 from src.config.schema import ExperimentConfig
 from src.data import DATA_DIR, load_value_samples
 from src.models import build_model
 from src.PDAP import PDAP
+from src.problems import SparseProblem
 
 # Must be registered before any compose() call below.
 ConfigStore.instance().store(name="config_schema", node=ExperimentConfig)
+
+
+def _samples():
+    X = torch.zeros(1, 2, dtype=torch.float64)
+    return X, X[:, :1], X.clone()
 
 
 def test_compose_defaults() -> None:
@@ -27,6 +34,7 @@ def test_compose_defaults() -> None:
     assert cfg.model.power == 1.0
     assert cfg.model.alpha == 1e-5
     assert "c_init" not in cfg.model
+    assert "th" not in cfg.model
     assert cfg.training.num_iterations == 10
     assert cfg.training.max_ls_iter == 500
     assert cfg.training.ins_merge_tol == 1e-2
@@ -36,6 +44,12 @@ def test_compose_defaults() -> None:
     assert cfg.data.path.endswith(".npz")
     assert cfg.data.normalize is True
     assert cfg.env.seed == 42
+
+
+def test_log_mixture_is_not_configurable() -> None:
+    with initialize(version_base=None, config_path="../conf"):
+        with pytest.raises(ConfigCompositionException, match="model.th"):
+            compose(config_name="config", overrides=["model.th=0.5"])
 
 
 def test_model_groups() -> None:
@@ -48,7 +62,7 @@ def test_model_groups() -> None:
     # finite_step config group = signed + finite_step
     assert fs.model.kind == "signed"
     assert fs.model.insertion == "finite_step"
-    assert PDAP(alg1).objective.normalized
+    assert SparseProblem.from_config(alg1.model, _samples()).normalized
     assert "objective" not in alg1.model
     assert "moment_beta" not in alg1.model
 
@@ -116,10 +130,10 @@ def test_config_builds_trainer_and_model() -> None:
     with initialize(version_base=None, config_path="../conf"):
         cfg = compose(config_name="config", overrides=["model.gamma=0.5", "env.verbose=false"])
 
-    pdap = PDAP(cfg)
-    # objective + solver + insertion settings live on the trainer (config only)
-    assert pdap.objective.alpha == cfg.model.alpha == 1e-5
-    assert pdap.objective.gamma == 0.5
+    pdap = PDAP(cfg.training, insertion=cfg.model.insertion)
+    problem = SparseProblem.from_config(cfg.model, _samples())
+    assert problem.description()["alpha"] == cfg.model.alpha == 1e-5
+    assert problem.description()["gamma"] == 0.5
     assert pdap.insertion_kind == "profile"
     assert pdap.solver.max_ls_iter == 500
     assert pdap.fit_outer_iterations == 20
@@ -160,5 +174,5 @@ def test_use_sphere_derives_from_activation() -> None:
         smooth = compose(config_name="config",
                          overrides=["model.activation=matern52", "env.verbose=false"])
     # default activation is relu (homogeneous -> sphere); matern52 is not
-    assert PDAP(default)._use_sphere is True
-    assert PDAP(smooth)._use_sphere is False
+    assert SparseProblem.from_config(default.model, _samples()).use_sphere is True
+    assert SparseProblem.from_config(smooth.model, _samples()).use_sphere is False

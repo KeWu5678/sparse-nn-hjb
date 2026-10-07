@@ -10,12 +10,11 @@ acceptance tests differ:
     points outside that radius, remove Euclidean near-duplicates, and apply the
     configured profile threshold.  There is no direction-then-radius code path.
   * ``finite_step`` — accept candidates with a profitable finite step, i.e. where
-    min_c Delta J(c; omega) < 0 (see :func:`solve_insertion_weight`); returns the
+    min_c Delta J(c; omega) < 0 (see :meth:`SparseProblem.solve_insertion_weight`); returns the
     optimal outer weight c* alongside each atom.  Used for the q<1 penalty.
 
 The strategies are pure functions: the caller supplies the precomputed residual
-(so the "zero network" first iteration is just residual = -target) and the model
-configuration.
+(so the "zero network" first iteration is just residual = -target) and the shared problem.
 """
 
 from __future__ import annotations
@@ -27,70 +26,28 @@ from typing import Callable, List, Optional, Tuple
 import numpy as np
 import torch
 
-from ..SSN.prox import power_prox
-from .moment import moment_weight
-from .radius import FIXED_LOG_CLAMP
+from ..problems import SparseProblem
+
+# Numerical bound for random starts and final candidate filtering.
+FIXED_LOG_CLAMP = 5.0
 
 logger = logging.getLogger(__name__)
 
 __all__ = [
     "profile_threshold",
     "finite_step",
-    "solve_insertion_weight",
 ]
 
 
-# ---------------------------------------------------------------------------- #
-# Shared dual-profile evaluation
-# ---------------------------------------------------------------------------- #
-def _neuron_value_grad(
-    X: torch.Tensor, a: torch.Tensor, b: torch.Tensor,
-    activation: Callable[[torch.Tensor], torch.Tensor], power: float,
-) -> Tuple[torch.Tensor, torch.Tensor]:
-    """sigma(x.a+b)^p and its input-gradient, both differentiable w.r.t. (a, b)."""
-    X_cand = X.detach().clone().requires_grad_(True)
-    pre = X_cand @ a.reshape(-1) + b.reshape(())
-    act = activation(pre).reshape(-1, 1)
-    neuron_v = act ** power
-    neuron_dv = torch.autograd.grad(
-        outputs=neuron_v.sum(), inputs=X_cand,
-        create_graph=True, retain_graph=True,
-    )[0]
-    return neuron_v, neuron_dv
-
-
-def _profile_value(
-    X: torch.Tensor, a: torch.Tensor, b: torch.Tensor,
-    activation: Callable[[torch.Tensor], torch.Tensor], power: float,
-    w1: float, w2: float, Kx: int,
-    res_v: torch.Tensor, res_dv: torch.Tensor, two_sided: bool,
-) -> torch.Tensor:
-    """Empirical fidelity derivative P_mu^M(omega), absolute when two-sided."""
-    neuron_v, neuron_dv = _neuron_value_grad(X, a, b, activation, power)
-    val_part = (neuron_v * res_v).sum() / Kx
-    grad_part = (neuron_dv * res_dv).sum() / Kx
-    signed = w1 * val_part + w2 * grad_part
-    return torch.abs(signed) if two_sided else signed
-
-
-# ---------------------------------------------------------------------------- #
-# Shared candidate generation
-# ---------------------------------------------------------------------------- #
 def _generate_candidates(
-    X: torch.Tensor, residual_v: torch.Tensor, residual_dv: torch.Tensor, *,
-    activation: Callable[[torch.Tensor], torch.Tensor],
-    power: float,
-    loss_weights: Tuple[float, float],
+    problem: SparseProblem, residual_v: torch.Tensor, residual_dv: torch.Tensor, *,
     sample_sphere: Callable[[int], Tuple[torch.Tensor, torch.Tensor]],
     N: int,
     merge_tol: float,
     two_sided: bool,
-    use_sphere: bool,
     existing_atoms: Optional[Tuple[torch.Tensor, torch.Tensor]],
     lbfgs_lr: float = 1e-2,
     lbfgs_steps: int = 200,
-    moment_order: float = 2.0,
-    normalized: bool = False,
     radius: Optional[float] = None,
 ) -> Tuple[torch.Tensor, torch.Tensor, int, int]:
     """Return distinct locally refined maximizers of the configured search score.
@@ -102,13 +59,8 @@ def _generate_candidates(
     rather than projected back.  Homogeneous activations retain the normalized
     sphere search used by Algorithm 2.
     """
-    if not use_sphere and not normalized:
-        raise ValueError(
-            "nonhomogeneous candidate search requires normalized Algorithm 1"
-        )
-    K, d_dim = X.shape
-    Kx = K  # M, the sample count: the empirical fidelity is 1/(2M) * sum_m
-    w1, w2 = loss_weights
+    use_sphere = problem.use_sphere
+    d_dim = problem.input_dim
 
     # Normalize residual for the L-BFGS direction search (MATLAB find_max:385).
     res_norm = torch.sqrt(residual_v.pow(2).sum() + residual_dv.pow(2).sum()).clamp_min(1e-30)
@@ -142,10 +94,9 @@ def _generate_candidates(
             def closure():
                 opt.zero_grad()
                 w_s = w / w.norm().clamp_min(eps) if use_sphere else w
-                obj = _profile_value(X, w_s[:d_dim], w_s[d_dim], activation, power,
-                                     w1, w2, Kx, res_v_n, res_dv_n, two_sided)
-                if normalized and not use_sphere:
-                    obj = obj / moment_weight(w_s[:d_dim], w_s[d_dim], moment_order)
+                obj = problem.search_score(
+                    w_s[:d_dim], w_s[d_dim], (res_v_n, res_dv_n), two_sided=two_sided,
+                )
                 (-obj).backward()
                 return -obj
 
@@ -222,7 +173,7 @@ def _generate_candidates(
     # points are distinct atoms and must remain admissible.  In particular, do
     # not reuse the much wider candidate-to-candidate deduplication tolerance.
     # The k=1 ReLU--L1 baseline retains its established candidate behavior.
-    if use_sphere and power > 1.0 and existing_unit is not None and a_t.shape[0] > 0:
+    if use_sphere and problem.penalty_exponent < 1.0 and existing_unit is not None and a_t.shape[0] > 0:
         U = torch.cat([a_t, b_t.reshape(-1, 1)], dim=1)
         U = U / U.norm(dim=1, keepdim=True).clamp_min(1e-12)
         distinct = torch.all(
@@ -241,19 +192,15 @@ def _generate_candidates(
 # Strategy 1: profile-threshold acceptance
 # ---------------------------------------------------------------------------- #
 def profile_threshold(
-    X: torch.Tensor, residual_v: torch.Tensor, residual_dv: torch.Tensor, *,
-    activation: Callable[[torch.Tensor], torch.Tensor],
-    power: float,
-    loss_weights: Tuple[float, float],
-    alpha: float,
+    problem: SparseProblem, residual_v: torch.Tensor, residual_dv: torch.Tensor, *,
     sample_sphere: Callable[[int], Tuple[torch.Tensor, torch.Tensor]],
     N: int,
     max_insert: int = 15, merge_tol: float = 1e-2,
-    two_sided: bool = True, use_sphere: bool = True,
+    two_sided: bool = True,
     existing_atoms: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
     verbose: bool = True,
-    lbfgs_lr: float = 1e-2, lbfgs_steps: int = 200, moment_order: float = 2.0,
-    normalized: bool = False, insert_init: str = "warm_start",
+    lbfgs_lr: float = 1e-2, lbfgs_steps: int = 200,
+    insert_init: str = "warm_start",
     radius: Optional[float] = None,
 ) -> Tuple[np.ndarray, np.ndarray, Optional[np.ndarray]]:
     """Select candidates for Algorithm 1 or the ReLU--L1 baseline.
@@ -271,16 +218,13 @@ def profile_threshold(
     Returns ``(W, b, c)``; ``c`` is ``None`` unless ``insert_init="guaranteed"``,
     in which case it carries the theorem's per-atom coefficient.
     """
-    K, d_dim = X.shape
-    Kx = K  # M, the sample count (empirical fidelity is 1/(2M) * sum_m)
-    w1, w2 = loss_weights
+    d_dim = problem.input_dim
 
     a_t, b_t, n_after, discarded_outside = _generate_candidates(
-        X, residual_v, residual_dv, activation=activation, power=power,
-        loss_weights=loss_weights, sample_sphere=sample_sphere, N=N,
-        merge_tol=merge_tol, two_sided=two_sided, use_sphere=use_sphere,
+        problem, residual_v, residual_dv, sample_sphere=sample_sphere, N=N,
+        merge_tol=merge_tol, two_sided=two_sided,
         existing_atoms=existing_atoms, lbfgs_lr=lbfgs_lr, lbfgs_steps=lbfgs_steps,
-        moment_order=moment_order, normalized=normalized, radius=radius,
+        radius=radius,
     )
 
     guaranteed = insert_init == "guaranteed"
@@ -289,53 +233,24 @@ def profile_threshold(
             "insert_init='guaranteed' requires a two-sided signed coefficient"
         )
 
-    res_v_flat = residual_v.reshape(-1)
-    res_dv_flat = residual_dv.reshape(-1)
-
     accepted_a: List[torch.Tensor] = []
     accepted_b: List[torch.Tensor] = []
     accepted_scores: List[float] = []
     accepted_c: List[float] = []
     with torch.enable_grad():
         for a_i, b_i in zip(a_t, b_t):
-            neuron_v, neuron_dv = _neuron_value_grad(X, a_i, b_i, activation, power)
-            S_val = neuron_v.detach().reshape(-1)
-            S_grad = neuron_dv.detach().reshape(-1)
-            # P(omega): the Gateaux derivative of the fidelity in the direction
-            # delta_omega, in unnormalized (physical-coefficient) units.
-            p_signed = float(
-                (w1 / Kx) * S_val.dot(res_v_flat) + (w2 / Kx) * S_grad.dot(res_dv_flat)
+            result = problem.profile_insertion(
+                a_i, b_i, (residual_v, residual_dv),
+                two_sided=two_sided, guaranteed=guaranteed,
             )
-            v = abs(p_signed) if two_sided else p_signed
-            w_p = float(moment_weight(a_i, b_i, moment_order))
-
-            # Express the normalized condition in physical-profile units:
-            # |P|/w_p > alpha*L_phi with L_phi = phi'(0+) = 1.
-            if normalized:
-                threshold = alpha * w_p
-                score = v / w_p - alpha          # Delta(mu, omega)
-            else:
-                threshold = alpha
-                score = v - threshold
-            if v <= threshold:
+            if result is None:
                 continue
-
+            score, coefficient = result
             accepted_a.append(a_i.detach())
             accepted_b.append(b_i.detach())
             accepted_scores.append(score)
             if guaranteed:
-                # Exact minimizer of the increment bound
-                #   c*P + c^2*||K||^2/2 + (threshold)|c|,
-                # i.e. the theorem's step with the per-neuron curvature
-                # A_p = ||K_p||^2 in place of the uniform B_p^2.
-                S_sq = float(
-                    (w1 / Kx) * S_val.dot(S_val) + (w2 / Kx) * S_grad.dot(S_grad)
-                )
-                if S_sq < 1e-30:
-                    accepted_a.pop(); accepted_b.pop(); accepted_scores.pop()
-                    continue
-                magnitude = (v - threshold) / S_sq
-                accepted_c.append(-magnitude if p_signed > 0 else magnitude)
+                accepted_c.append(coefficient)
 
     if len(accepted_scores) > max_insert:
         order = sorted(range(len(accepted_scores)), key=lambda i: accepted_scores[i], reverse=True)[:max_insert]
@@ -346,13 +261,13 @@ def profile_threshold(
 
     if verbose:
         rule = (
-            "|P|/w_p above alpha*L_phi" if normalized
+            "|P|/w_p above alpha*L_phi" if problem.normalized
             else "|P| above alpha"
         )
         logger.debug(
             "Candidate search  sampled=%d  unique=%d  accepted=%d/%d  "
-            "rule=%s (alpha=%.2e, init=%s)",
-            N, n_after, len(accepted_a), max_insert, rule, alpha, insert_init,
+            "rule=%s (init=%s)",
+            N, n_after, len(accepted_a), max_insert, rule, insert_init,
         )
         if discarded_outside:
             logger.debug(
@@ -384,66 +299,25 @@ def profile_threshold(
 # ---------------------------------------------------------------------------- #
 # Strategy 2: finite-step acceptance
 # ---------------------------------------------------------------------------- #
-def solve_insertion_weight(
-    p_omega: float,
-    S_sq: float,
-    alpha: float,
-    q: float,
-) -> Optional[Tuple[float, float]]:
-    """Minimize the actual one-atom objective increment.
-
-    The increment is ``c*p_omega + S_sq*c^2/2 + alpha*|c|^q``.  After choosing
-    the sign opposite ``p_omega``, its magnitude is the global proximal point
-    at input ``|p_omega|/S_sq`` with proximal scale ``alpha/S_sq``.
-    """
-    if S_sq < 1e-30:
-        return None
-    abs_p = abs(p_omega)
-    if abs_p < 1e-30:
-        return None
-
-    prox_input = torch.tensor([abs_p / S_sq], dtype=torch.float64)
-    magnitude = float(power_prox(prox_input, alpha / S_sq, q=q)[0])
-    if magnitude <= 0.0:
-        return None
-
-    dJ = -abs_p * magnitude + 0.5 * S_sq * magnitude ** 2 + alpha * magnitude ** q
-    if dJ >= 0.0:
-        return None
-    sign = 1.0 if p_omega < 0 else -1.0
-    return (sign * magnitude, dJ)
-
-
 def finite_step(
-    X: torch.Tensor, residual_v: torch.Tensor, residual_dv: torch.Tensor, *,
-    activation: Callable[[torch.Tensor], torch.Tensor],
-    power: float,
-    loss_weights: Tuple[float, float],
-    alpha: float,
+    problem: SparseProblem, residual_v: torch.Tensor, residual_dv: torch.Tensor, *,
     sample_sphere: Callable[[int], Tuple[torch.Tensor, torch.Tensor]],
     N: int,
-    max_insert: int = 15, merge_tol: float = 1e-2, use_sphere: bool = True,
+    max_insert: int = 15, merge_tol: float = 1e-2,
     existing_atoms: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
     verbose: bool = True,
     lbfgs_lr: float = 1e-2, lbfgs_steps: int = 200,
     radius: Optional[float] = None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Accept atoms with a profitable finite step (Delta J(c*) < 0); return c* too."""
-    K, d_dim = X.shape
-    Kx = K  # M, the sample count (empirical fidelity is 1/(2M) * sum_m)
-    w1, w2 = loss_weights
-    q = 2.0 / (power + 1.0)
+    d_dim = problem.input_dim
 
     a_t, b_t, n_after, _discarded_outside = _generate_candidates(
-        X, residual_v, residual_dv, activation=activation, power=power,
-        loss_weights=loss_weights, sample_sphere=sample_sphere, N=N,
-        merge_tol=merge_tol, two_sided=True, use_sphere=use_sphere,
+        problem, residual_v, residual_dv, sample_sphere=sample_sphere, N=N,
+        merge_tol=merge_tol, two_sided=True,
         existing_atoms=existing_atoms, lbfgs_lr=lbfgs_lr, lbfgs_steps=lbfgs_steps,
         radius=radius,
     )
-
-    res_v_flat = residual_v.reshape(-1)
-    res_dv_flat = residual_dv.reshape(-1)
 
     accepted_a: List[torch.Tensor] = []
     accepted_b: List[torch.Tensor] = []
@@ -451,12 +325,7 @@ def finite_step(
     accepted_dJ: List[float] = []
     with torch.enable_grad():
         for a_i, b_i in zip(a_t, b_t):
-            neuron_v, neuron_dv = _neuron_value_grad(X, a_i, b_i, activation, power)
-            S_val = neuron_v.detach().reshape(-1)
-            S_grad = neuron_dv.detach().reshape(-1)
-            p_omega = float((w1 / Kx) * S_val.dot(res_v_flat) + (w2 / Kx) * S_grad.dot(res_dv_flat))
-            S_sq = float((w1 / Kx) * S_val.dot(S_val) + (w2 / Kx) * S_grad.dot(S_grad))
-            result = solve_insertion_weight(p_omega, S_sq, alpha, q)
+            result = problem.finite_insertion(a_i, b_i, (residual_v, residual_dv))
             if result is not None:
                 c_star, dJ = result
                 accepted_a.append(a_i.detach())
@@ -473,8 +342,8 @@ def finite_step(
     if verbose:
         logger.debug(
             "Candidate search  sampled=%d  unique=%d  accepted=%d/%d  "
-            "rule=adding atom reduces objective (alpha=%.2e, q=%.3f)",
-            N, n_after, len(accepted_a), max_insert, alpha, q,
+            "rule=adding atom reduces objective (q=%.3f)",
+            N, n_after, len(accepted_a), max_insert, problem.penalty_exponent,
         )
 
     if len(accepted_a) == 0:

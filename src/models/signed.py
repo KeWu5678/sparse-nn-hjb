@@ -6,8 +6,8 @@
 (an ``nn.Module``). Prediction is the built-in.
 ``forward`` and the weights are ordinary module parameters. It adds only the
 PDAP model contract (:class:`src.models.base.PDAPModel`): atom support,
-prediction, the linear-in-theta feature maps, and the loss objective. The SSN
-solve, warm start, and evaluation live in the trainer.
+prediction, and the linear-in-theta feature maps. ``SparseProblem`` owns the
+objective; PDAP and SSN own the optimization procedures.
 """
 
 import logging
@@ -29,15 +29,14 @@ class SignedModel(ShallowNetwork):
     ) -> None:
         """Store the forward-defining parameters; layers are built by ``set_atoms``.
 
-        The objective and SSN-solver hyperparameters are the trainer's, not the
-        model's (see :mod:`src.PDAP.ssn_solve`).  ``power`` defines the activation
+        ``SparseProblem`` owns objective specifications; SSN owns solver settings.
+        ``power`` defines the activation
         ``sigma^p`` and induces the penalty exponent ``q = 2/(power+1)``.
         """
         # Bare nn.Module init -- no atoms/layers yet (built by set_atoms).
         torch.nn.Module.__init__(self)
         self.activation = activation
         self.power = power
-        self.q = 2.0 / (power + 1.0)
         self.verbose = verbose
         self.input_dim: Optional[int] = None
 
@@ -110,8 +109,7 @@ class SignedModel(ShallowNetwork):
     # ------------------------------------------------------------------ #
     # Linear-in-theta interface for the trainer SSN solve.  theta is the output
     # weight (read/written via torch's parameters_to_vector built-ins); the
-    # feature maps are the network's value matrix and gradient kernel. All coords
-    # are penalized, none are constrained nonnegative.
+    # feature maps are the network's value matrix and gradient kernel.
     # ------------------------------------------------------------------ #
     def jacobians(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """Feature maps (Phi_v (N,n), Phi_g (N*d,n)) of V, dV w.r.t. theta."""
@@ -119,7 +117,3 @@ class SignedModel(ShallowNetwork):
             raise RuntimeError("no support yet; call set_atoms() first")
         x_det = x.detach()
         return self.forward_network_matrix(x_det), self.forward_gradient_kernel(x_det)
-
-    def penalty_masks(self) -> Tuple[torch.Tensor, torch.Tensor]:
-        n = self.n_neurons
-        return torch.ones(n, dtype=torch.bool), torch.zeros(n, dtype=torch.bool)

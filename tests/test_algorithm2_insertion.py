@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import pytest
 
-from src.PDAP import solve_insertion_weight
+from src.problems import SparseProblem
 
 
 def test_q_half_insertion_minimizes_the_actual_objective_increment() -> None:
     """For P=4.25, A=alpha=1, the exact nonzero minimizer is c=-4."""
-    result = solve_insertion_weight(4.25, 1.0, 1.0, 0.5)
+    result = SparseProblem(None, alpha=1.0, power=3.0).solve_insertion_weight(4.25, 1.0)
 
     assert result is not None
     coefficient, increment = result
@@ -20,7 +20,7 @@ def test_q_half_insertion_minimizes_the_actual_objective_increment() -> None:
 
 
 def test_q_two_thirds_insertion_minimizes_the_actual_objective_increment() -> None:
-    result = solve_insertion_weight(8.5, 1.0, 1.5, 2.0 / 3.0)
+    result = SparseProblem(None, alpha=1.5, power=2.0).solve_insertion_weight(8.5, 1.0)
 
     assert result is not None
     coefficient, increment = result
@@ -35,7 +35,7 @@ def test_q_two_thirds_insertion_minimizes_the_actual_objective_increment() -> No
 
 
 def test_q_one_insertion_keeps_the_soft_threshold_rule() -> None:
-    result = solve_insertion_weight(-3.0, 2.0, 1.0, 1.0)
+    result = SparseProblem(None, alpha=1.0).solve_insertion_weight(-3.0, 2.0)
 
     assert result is not None
     coefficient, increment = result
@@ -52,4 +52,4 @@ def test_q_one_insertion_keeps_the_soft_threshold_rule() -> None:
 def test_fractional_insertion_rejects_a_global_proximal_tie(
     profile: float, alpha: float, q: float
 ) -> None:
-    assert solve_insertion_weight(profile, 1.0, alpha, q) is None
+    assert SparseProblem(None, alpha=alpha, power=2.0 / q - 1.0).solve_insertion_weight(profile, 1.0) is None

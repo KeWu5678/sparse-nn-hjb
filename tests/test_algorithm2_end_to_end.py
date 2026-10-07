@@ -10,6 +10,7 @@ from src.config.schema import EnvConfig, ExperimentConfig, ModelConfig, Training
 from src.data import split_value_samples
 from src.models import build_model
 from src.PDAP import PDAP
+from src.problems import SparseProblem
 
 
 @pytest.mark.parametrize("power", [1.0, 2.0, 3.0])
@@ -43,10 +44,9 @@ def test_algorithm2_fits_an_exact_relu_power_atom(power: float) -> None:
     model = build_model(cfg, input_dim=2)
     train, valid = split_value_samples(data, cfg.data.train_fraction)
 
-    history = PDAP(cfg).fit(
+    history = PDAP(cfg.training, insertion=cfg.model.insertion).fit(
         model,
-        train,
-        valid,
+        SparseProblem.from_config(cfg.model, train, valid),
         num_iterations=2,
         num_insertion=20,
         max_insert=1,

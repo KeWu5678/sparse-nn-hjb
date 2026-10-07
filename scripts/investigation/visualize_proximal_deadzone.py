@@ -16,7 +16,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from src.SSN.prox import power_prox
+from src.problems.prox import power_prox
 
 
 alpha = 1e-5
@@ -91,7 +91,7 @@ inputs = np.linspace(0.0, 4.0 * switch_input, 1200)
 prox_values = power_prox(
     torch.as_tensor(inputs, dtype=torch.float64),
     mu,
-    q=q,
+    penalty_exponent=q,
 ).numpy()
 ax.plot(inputs, prox_values, lw=2.2, color="tab:green")
 ax.axvline(switch_input, color="tab:red", ls="--", lw=1.2)

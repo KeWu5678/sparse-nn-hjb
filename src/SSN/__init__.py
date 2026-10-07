@@ -1,13 +1,9 @@
-"""Sparse semismooth-Newton (SSN) optimizer package.
+"""Semismooth Newton iterations and globalization.
 
-Layout mirrors ``torch.optim``: ``optimizer.py`` holds the optimizer class,
-``penalty.py`` / ``prox.py`` hold the numerical kernels, ``mpcg.py`` holds the
-trust-region Krylov solve.  The package is a self-contained leaf (it imports
-only ``torch`` and its own submodules), so the rest of ``src`` can depend on it
-without creating an import cycle.
+Problem mathematics live in ``src.problems``; MPCG and strategies consume
+already evaluated normal-map quantities.
 """
 
 from .optimizer import SSN
-from .prox import SUPPORTED_ACTIVATION_POWERS
 
-__all__ = ["SSN", "SUPPORTED_ACTIVATION_POWERS"]
+__all__ = ["SSN"]

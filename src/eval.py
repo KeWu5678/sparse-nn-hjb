@@ -2,12 +2,7 @@
 
 Pure functions of (prediction, target) tensors with no model state: a model
 produces ``(V, dV)`` via ``predict_tensors`` and the trainer scores them here.
-This is the single home for the data-fidelity numbers: the relative errors and
-the value/gradient loss split (the data term of the training objective).
-
-The regularizer is *not* here: the nonconvex penalty lives with the trainer
-(``src.PDAP.ssn_solve.nonconvex_penalty``), which adds it to ``data_loss`` to
-form the full objective.
+Objective and regularizer calculations belong to ``src.problems.SparseProblem``.
 """
 
 from __future__ import annotations
@@ -15,29 +10,6 @@ from __future__ import annotations
 from typing import Dict, Tuple
 
 import torch
-
-
-def data_loss_terms(
-    v_pred: torch.Tensor,
-    dv_pred: torch.Tensor,
-    v_true: torch.Tensor,
-    dv_true: torch.Tensor,
-    loss_weights: Tuple[float, float],
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """Return ``(data_loss, value_loss, grad_loss)`` for the data-fidelity term.
-
-    MSE is normalized by the sample count ``M`` and halved, so that
-    ``data_loss`` is the empirical fidelity of the paper,
-    ``l^M = (1/2M) sum_m (|r(x^m)|^2 + |grad r(x^m)|^2)``, weighted by
-    ``loss_weights = (w1, w2)``.  Differentiable (plain torch ops), so it can sit
-    inside an SSN closure as well as serve evaluation.
-    """
-    m = v_true.shape[0]
-    value_loss = torch.sum((v_pred - v_true) ** 2) / (2 * m)
-    grad_loss = torch.sum((dv_pred - dv_true) ** 2) / (2 * m)
-    w1, w2 = loss_weights
-    data_loss = w1 * value_loss + w2 * grad_loss
-    return data_loss, value_loss, grad_loss
 
 
 @torch.no_grad()

@@ -8,8 +8,8 @@ import pytest
 import torch
 
 from src.config.schema import ExperimentConfig, ModelConfig
-from src.PDAP import PDAP
-from src.PDAP.moment import amplitude_mass_radius, moment_weight
+from src.problems import SparseProblem
+from src.problems.moment import amplitude_mass_radius, moment_weight
 
 
 def _cfg(**model_kwargs) -> ExperimentConfig:
@@ -78,20 +78,20 @@ def test_amplitude_mass_radius_is_zero_without_amplitude_mass() -> None:
 
 
 def test_nonhomogeneous_signed_profile_is_normalized_automatically() -> None:
-    trainer = PDAP(_cfg(activation="softplus", power=1.0, insertion="profile"))
+    problem = SparseProblem(None, activation="softplus", power=1.0)
 
-    assert trainer.objective.normalized
+    assert problem.normalized
 
 
 def test_sphere_profile_model_is_not_moment_normalized() -> None:
-    sphere = PDAP(_cfg(activation="relu", power=1.0, insertion="profile"))
+    sphere = SparseProblem(None, activation="relu", power=1.0)
 
-    assert not sphere.objective.normalized
+    assert not sphere.normalized
 
 
 def test_algorithm1_rejects_nonunit_activation_power() -> None:
     with pytest.raises(ValueError, match="Algorithm 1.*power == 1"):
-        PDAP(_cfg(activation="softplus", power=2.0, insertion="profile"))
+        SparseProblem(None, activation="softplus", power=2.0)
 
 
 def test_model_schema_has_no_additive_objective_axis() -> None:

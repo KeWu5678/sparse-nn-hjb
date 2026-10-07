@@ -2,10 +2,9 @@
 
 A model is a *parametrization*, nothing more: it owns the value/gradient
 prediction, the atom support, and -- because the outer solve is linear in the
-outer parameters ``theta`` -- the feature maps (Jacobians), the ``theta``
-packing, and the penalty masks. It owns no training algorithm: the warm start
-(:mod:`src.PDAP.warmstart`), the SSN solve (:mod:`src.PDAP.ssn_solve`), and the
-evaluation (:mod:`src.eval`) live in the trainer.
+outer parameters ``theta`` -- the feature maps (Jacobians). It owns no training algorithm or objective.
+``SparseProblem`` owns the samples and mathematical problem; PDAP and SSN
+own the optimization procedures.
 
 ``SignedModel`` satisfies this structurally, so it is a
 :class:`typing.Protocol` (no inheritance required). ``@runtime_checkable`` lets
@@ -23,11 +22,9 @@ import torch
 @runtime_checkable
 class PDAPModel(Protocol):
     # --- forward-defining scalars ---
-    # power defines the activation sigma^p; q = 2/(power+1) is the induced penalty
-    # exponent (the prox closed-forms depend on it).  The objective and SSN-solver
-    # hyperparameters are the trainer's, not the model's.
+    # power defines the activation sigma^p. SparseProblem owns the induced
+    # penalty exponent and objective; the optimizers own numerical settings.
     power: float
-    q: float
     activation: Callable[[torch.Tensor], torch.Tensor]
     input_dim: Optional[int]
 
@@ -52,6 +49,5 @@ class PDAPModel(Protocol):
     # theta (the SSN working vector) is the model's trainable parameters, read and
     # written by the trainer with torch's parameters_to_vector / vector_to_parameters
     # built-ins -- so the contract carries only what those can't express: the
-    # feature maps and the penalty/nonneg structure.
+    # feature maps.
     def jacobians(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]: ...
-    def penalty_masks(self) -> Tuple[torch.Tensor, torch.Tensor]: ...

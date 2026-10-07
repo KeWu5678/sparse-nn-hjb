@@ -44,20 +44,17 @@ class ModelConfig:
     power: float = 1.0
     # (w1, w2) = (value loss weight, gradient loss weight); l2 = (1, 0), h1 = (1, 1)
     loss_weights: Tuple[float, float] = (1.0, 1.0)
-    # Regularization.  The penalty on the atom weights is  alpha * sum_i phi(|c_i|^q),
-    # with q = 2/(power+1) (power is the activation exponent set above).  The two
-    # penalties this project uses are selected by how you set power and gamma:
-    #   * power penalty   alpha * sum |c|^q   -- set gamma = 0 (phi becomes the
-    #     identity) and power > 1 (so q < 1 is genuinely non-convex).
-    #   * log penalty     alpha * sum phi(|c|) -- set power = 1 (so q = 1) and
-    #     gamma > 0; th interpolates L1 (th=1) <-> non-convex log (th=0).
+    # Regularization uses two separate scalar penalties:
+    #   * power penalty  alpha * sum |c|^q, q = 2/(power+1): power > 1, gamma = 0.
+    #   * log penalty    alpha * sum phi(|u|): power = 1, gamma >= 0, with the
+    #     Algorithm 1 coefficient u = w_p*c and a fixed half L1 / half log mixture.
+    # With a ReLU activation, power=1 and gamma=0 give the ReLU--L1 baseline.
     alpha: float = 1e-5
     gamma: float = 0.0   # 0 => log term off (power penalty); > 0 => log penalty
-    th: float = 0.5      # L1 (th=1) <-> non-convex log (th=0); only acts when gamma > 0
     # Algorithm 1 evaluates the penalty on the normalized measure
     # mu_p = w_p*mu, with w_p(omega) = 1 + |omega|^p.  For a signed profile model
-    # with a nonhomogeneous activation this is the only supported objective; PDAP
-    # applies it automatically.  Algorithm 2 is sphere-normalized and does not use
+    # with a nonhomogeneous activation this is the only supported objective;
+    # SparseProblem applies it automatically.  Algorithm 2 is sphere-normalized and does not use
     # this parameter.
     moment_order: float = 2.0   # p in the weight w_p(omega) = 1 + |omega|^p
 

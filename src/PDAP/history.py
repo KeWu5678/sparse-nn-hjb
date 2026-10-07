@@ -2,9 +2,9 @@
 
 ``PDAP`` is a pure trainer: the per-iteration metrics and weight snapshots are
 not its state, they are returned to the caller in a :class:`History` (the Keras
-``fit``-returns-``History`` convention).  The metric *computation* is pure
-evaluation (``src.eval``) plus the regularizer; ``History.record`` orchestrates
-it once per iteration so the training loop stays free of evaluation code.
+``fit``-returns-``History`` convention). ``SparseProblem`` computes the metrics;
+``History.record`` stores them alongside parameter snapshots and selects the
+best checkpoint.
 """
 
 from __future__ import annotations
@@ -13,73 +13,9 @@ from dataclasses import dataclass, field
 from typing import Dict, List
 
 import torch
-from torch.nn.utils import parameters_to_vector
 
 from ..data import ValueSampleNormalizer
-from ..eval import data_loss_terms, relative_errors
-from .moment import (
-    amplitude_mass_radius,
-    atom_normalizer,
-    moment_weight,
-)
-from .ssn_solve import Objective, nonconvex_penalty
-
-
-def _regularizer_terms(model, objective: Objective) -> dict[str, float]:
-    """Raw functionals and weighted regularizer terms on the current support."""
-    W, b, c = model.get_atoms()
-    params = [parameter for parameter in model.parameters() if parameter.requires_grad]
-    if params:
-        theta = parameters_to_vector(params).detach()
-        penalized, nonneg = model.penalty_masks()
-        # Normalized objective: the penalty is evaluated at the normalized measure,
-        # phi(w_p(omega_n)|c_n|) = phi(|u_n|), so score it on u = w_p * c -- the same
-        # quantity ssn_solve minimizes, so the recorded objective cannot drift from it.
-        if objective.normalized:
-            scale = atom_normalizer(W, b, p=objective.moment_order)
-            if scale.numel() != theta.numel():
-                raise RuntimeError(
-                    "normalized Algorithm 1 expects one trainable coordinate per atom "
-                    f"(got {theta.numel()} for {scale.numel()} atoms)"
-                )
-            theta = theta * scale
-        phi = nonconvex_penalty(
-            theta,
-            penalized,
-            nonneg,
-            alpha=1.0,
-            th=objective.th,
-            gamma=objective.gamma,
-            q=model.q,
-        )
-    else:
-        phi = c.new_zeros(())
-    weights = moment_weight(W, b, objective.moment_order)
-    psi = torch.sum(weights.reshape(-1) * c.reshape(-1).abs())
-    total_variation = c.reshape(-1).abs().sum()
-    if c.numel():
-        radius = torch.sqrt((W * W).sum(dim=-1) + b * b)
-        radius_max = radius.max()
-    else:
-        radius_max = c.new_zeros(())
-
-    return {
-        "sparsity_functional": float(phi.detach()),
-        "psi_p": float(psi.detach()),
-        "alpha_phi": float((objective.alpha * phi).detach()),
-        "total_variation": float(total_variation.detach()),
-        "radius_r95": float(amplitude_mass_radius(W, b, c).detach()),
-        "radius_max": float(radius_max.detach()),
-    }
-
-
-def objective_value(model, objective: Objective, data) -> float:
-    """Return data fidelity plus the configured model-family penalty."""
-    X, V, dV = data
-    Vp, dVp = model.predict_tensors(X)
-    data_loss = data_loss_terms(Vp, dVp, V, dV, objective.loss_weights)[0]
-    regularizer = _regularizer_terms(model, objective)
-    return float(data_loss.detach()) + regularizer["alpha_phi"]
+from ..problems import SparseProblem
 
 
 @dataclass
@@ -130,7 +66,7 @@ class History:
     reporting_normalizer: ValueSampleNormalizer | None = None
 
     def record(
-        self, model, objective: Objective, data_train, data_valid,
+        self, model, problem: SparseProblem,
         *,
         search_radius: float | None = None,
         theorem_applied: float | None = None,
@@ -143,48 +79,13 @@ class History:
         ``radial_cap=fixed`` run: both search
         inside ``exp(5)``, and without these the records are identical.
         """
-        train_pred = model.predict_tensors(data_train[0])
-        valid_pred = model.predict_tensors(data_valid[0])
-        train_terms = data_loss_terms(
-            *train_pred, *data_train[1:], objective.loss_weights
-        )
-        valid_terms = data_loss_terms(
-            *valid_pred, *data_valid[1:], objective.loss_weights
-        )
-        regularizer = _regularizer_terms(model, objective)
-        tl = float(train_terms[0].detach()) + regularizer["alpha_phi"]
-        vl = float(valid_terms[0].detach()) + regularizer["alpha_phi"]
-        self.train_loss.append(tl)
-        self.val_loss.append(vl)
-        self.data_loss_train.append(float(train_terms[0].detach()))
-        self.data_loss_val.append(float(valid_terms[0].detach()))
-        self.value_loss_train.append(float(train_terms[1].detach()))
-        self.value_loss_val.append(float(valid_terms[1].detach()))
-        self.gradient_loss_train.append(float(train_terms[2].detach()))
-        self.gradient_loss_val.append(float(valid_terms[2].detach()))
-        self.sparsity_functional.append(regularizer["sparsity_functional"])
-        self.psi_p.append(regularizer["psi_p"])
-        self.alpha_phi.append(regularizer["alpha_phi"])
-        self.total_variation.append(regularizer["total_variation"])
-        self.radius_r95.append(regularizer["radius_r95"])
-        self.radius_max.append(regularizer["radius_max"])
+        metrics = problem.metrics(model, self.reporting_normalizer)
+        for name, value in metrics.items():
+            getattr(self, name).append(value)
         self.search_radius.append(None if search_radius is None else float(search_radius))
         self.radius_theorem_applied.append(None if theorem_applied is None else float(theorem_applied))
-        self.penalty_exponent = float(model.q)
-        self.loss_weights = tuple(float(weight) for weight in objective.loss_weights)
-        # Only reporting errors undo the data transform. Fidelity, regularizer,
-        # and best-checkpoint selection above stay in the training objective.
-        train_target, valid_target = data_train[1:], data_valid[1:]
-        normalizer = getattr(self, "reporting_normalizer", None)
-        if normalizer is not None:
-            denormalize = normalizer.denormalize_tensors
-            train_pred, train_target = denormalize(*train_pred), denormalize(*train_target)
-            valid_pred, valid_target = denormalize(*valid_pred), denormalize(*valid_target)
-        l2t, gt, h1t = relative_errors(*train_pred, *train_target)
-        l2v, gv, h1v = relative_errors(*valid_pred, *valid_target)
-        self.err_l2_train.append(l2t); self.err_l2_val.append(l2v)
-        self.err_grad_train.append(gt); self.err_grad_val.append(gv)
-        self.err_h1_train.append(h1t); self.err_h1_val.append(h1v)
+        self.penalty_exponent = problem.penalty_exponent
+        self.loss_weights = problem.loss_weights
         W, b, c = model.get_atoms()
         self.inner_weights.append({"weight": W, "bias": b})
         self.outer_weights.append(c.reshape(1, -1))
@@ -192,8 +93,8 @@ class History:
             {name: tensor.detach().clone() for name, tensor in model.state_dict().items()}
         )
         i = len(self.train_loss) - 1
-        if tl < self.best_train_loss:
-            self.best_train_loss = tl
+        if metrics["train_loss"] < self.best_train_loss:
+            self.best_train_loss = metrics["train_loss"]
             self.best_iteration = i
 
     @property

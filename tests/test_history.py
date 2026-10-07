@@ -9,7 +9,7 @@ from src.data import ValueSampleNormalizer
 from src.eval import relative_errors
 from src.models.signed import SignedModel
 from src.PDAP.history import History
-from src.PDAP.ssn_solve import Objective
+from src.problems import SparseProblem
 
 
 def test_history_summary_metrics_uses_best_iteration() -> None:
@@ -58,7 +58,7 @@ def test_restoring_a_zero_measure_snapshot_empties_an_initialized_model() -> Non
     assert dict(empty.state_dict()) == {}
     samples = (x, *empty.predict_tensors(x))
     history = History()
-    history.record(empty, Objective(), samples, samples)
+    history.record(empty, SparseProblem(samples, activation="tanh"))
 
     restored = SignedModel(activation=torch.tanh, power=1.0, verbose=False)
     restored.set_atoms(
@@ -86,16 +86,16 @@ def test_history_summary_records_normalized_objective_decomposition() -> None:
     model.set_atoms(W, b, c)
     v, dv = model.predict_tensors(x)
     samples = (x, v, dv)
-    objective = Objective(
+    problem = SparseProblem(
+        samples, activation="tanh",
         alpha=0.1,
         gamma=0.0,
         loss_weights=(1.0, 1.0),
         moment_order=2.0,
-        normalized=True,
     )
 
     history = History()
-    history.record(model, objective, samples, samples)
+    history.record(model, problem)
     metrics = history.summary_metrics()
 
     # gamma=0 gives Phi_1(mu_p) = Psi_2(mu)
@@ -128,7 +128,7 @@ def test_physical_reporting_does_not_change_objectives_snapshots_or_selection():
     v = torch.tensor([[2.0], [3.0]], dtype=torch.float64)
     dv = torch.tensor([[0.7, -0.6], [1.2, 0.5]], dtype=torch.float64)
     data = x, v, dv
-    objective = Objective(alpha=0.1, gamma=0.2, normalized=True)
+    problem = SparseProblem(data, activation="tanh", alpha=0.1, gamma=0.2)
     unchanged = History()
     # Old pickles predate the optional reporting transform.
     del unchanged.reporting_normalizer
@@ -140,8 +140,8 @@ def test_physical_reporting_does_not_change_objectives_snapshots_or_selection():
             torch.tensor([0.1], dtype=torch.float64),
             torch.tensor([coefficient], dtype=torch.float64),
         )
-        unchanged.record(model, objective, data, data)
-        physical.record(model, objective, data, data)
+        unchanged.record(model, problem)
+        physical.record(model, problem)
         expected = relative_errors(
             *normalizer.denormalize_tensors(*model.predict_tensors(x)),
             *normalizer.denormalize_tensors(v, dv),

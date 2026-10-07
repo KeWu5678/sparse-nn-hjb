@@ -46,7 +46,7 @@ def record_path(tmp_path):
         "run_id": "example", "status": "completed",
         "config": {
             "model": {"kind": "signed", "activation": "relu", "power": 1.,
-                      "normalized": True, "moment_order": 99.},
+                      "normalized": True, "moment_order": 99., "th": 0.5},
             "data": {"path": str(data_path), "normalize": True, "train_fraction": .6},
             "env": {"seed": 42},
         },
@@ -83,6 +83,8 @@ def test_saved_run_uses_recorded_scaling_not_dataset_maxima(record_path):
     assert run.iteration == 1
     # Objective/measure normalization is not another transform of V.
     assert run.record["config"]["model"]["moment_order"] == 99.
+    # Historical mixture metadata remains readable; it is not a runtime option.
+    assert run.record["config"]["model"]["th"] == 0.5
     assert run.stored_metric_coordinates == "physical"
 
 
