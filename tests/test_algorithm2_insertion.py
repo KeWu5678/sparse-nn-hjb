@@ -3,27 +3,43 @@
 from __future__ import annotations
 
 import pytest
+import torch
 
+from src.PDAP import insertion
 from src.problems import SparseProblem
 
 
-def test_q_half_insertion_minimizes_the_actual_objective_increment() -> None:
-    """For P=4.25, A=alpha=1, the exact nonzero minimizer is c=-4."""
-    result = SparseProblem(1, alpha=1.0, power=3.0).solve_insertion_weight(4.25, 1.0)
+def _insert(monkeypatch, problem, profile, curvature=1.0):
+    W = torch.zeros((1, 1), dtype=torch.float64)
+    b = torch.ones(1, dtype=torch.float64)
+    monkeypatch.setattr(insertion, "_generate_candidates", lambda *args, **kwargs: (W, b, 1, 0))
+    residual = W, W.new_tensor([[profile / curvature]]), torch.zeros_like(W)
+    return insertion.finite_step(
+        problem, residual, sample_sphere=lambda n: (W, b), N=1, verbose=False,
+    )[2]
 
-    assert result is not None
-    coefficient, increment = result
+
+def test_q_half_insertion_minimizes_the_actual_objective_increment(monkeypatch) -> None:
+    """For P=4.25, A=alpha=1, the exact nonzero minimizer is c=-4."""
+    problem = SparseProblem(1, alpha=1.0, power=3.0)
+    result = _insert(monkeypatch, problem, 4.25)
+
+    assert result.shape == (1,)
+    coefficient = result[0]
+    increment = problem.insertion_increment(coefficient, 4.25, 1.0)
     actual = 4.25 * coefficient + 0.5 * coefficient**2 + abs(coefficient) ** 0.5
     assert coefficient == pytest.approx(-4.0)
     assert increment == pytest.approx(-7.0)
     assert increment == pytest.approx(actual)
 
 
-def test_q_two_thirds_insertion_minimizes_the_actual_objective_increment() -> None:
-    result = SparseProblem(1, alpha=1.5, power=2.0).solve_insertion_weight(8.5, 1.0)
+def test_q_two_thirds_insertion_minimizes_the_actual_objective_increment(monkeypatch) -> None:
+    problem = SparseProblem(1, alpha=1.5, power=2.0)
+    result = _insert(monkeypatch, problem, 8.5)
 
-    assert result is not None
-    coefficient, increment = result
+    assert result.shape == (1,)
+    coefficient = result[0]
+    increment = problem.insertion_increment(coefficient, 8.5, 1.0)
     actual = (
         8.5 * coefficient
         + 0.5 * coefficient**2
@@ -34,11 +50,13 @@ def test_q_two_thirds_insertion_minimizes_the_actual_objective_increment() -> No
     assert increment == pytest.approx(actual)
 
 
-def test_q_one_insertion_keeps_the_soft_threshold_rule() -> None:
-    result = SparseProblem(1, alpha=1.0).solve_insertion_weight(-3.0, 2.0)
+def test_q_one_insertion_keeps_the_soft_threshold_rule(monkeypatch) -> None:
+    problem = SparseProblem(1, alpha=1.0, loss_weights=(2., 1.))
+    result = _insert(monkeypatch, problem, -3.0, curvature=2.0)
 
-    assert result is not None
-    coefficient, increment = result
+    assert result.shape == (1,)
+    coefficient = result[0]
+    increment = problem.insertion_increment(coefficient, -3.0, 2.0)
     actual = -3.0 * coefficient + coefficient**2 + abs(coefficient)
     assert coefficient == pytest.approx(1.0)
     assert increment == pytest.approx(-1.0)
@@ -50,6 +68,22 @@ def test_q_one_insertion_keeps_the_soft_threshold_rule() -> None:
     [(1.5, 1.0, 0.5), (2.0, 1.5, 2.0 / 3.0)],
 )
 def test_fractional_insertion_rejects_a_global_proximal_tie(
-    profile: float, alpha: float, q: float
+    monkeypatch, profile: float, alpha: float, q: float
 ) -> None:
-    assert SparseProblem(1, alpha=alpha, power=2.0 / q - 1.0).solve_insertion_weight(profile, 1.0) is None
+    problem = SparseProblem(1, alpha=alpha, power=2.0 / q - 1.0)
+    assert _insert(monkeypatch, problem, profile).shape == (0,)
+
+
+@pytest.mark.parametrize("alpha,power,profile,expected", [
+    (1e-41, 3., 1e-20, -9.486650001264143e-41),
+    (1e-20, 1., 2e-20, -1.9999999959435182e-40),
+])
+def test_insertion_preserves_the_power_prox_and_exact_tiny_penalty(monkeypatch, alpha, power, profile, expected):
+    problem = SparseProblem(1, alpha=alpha, power=power, loss_weights=(1e20, 1.))
+    result = _insert(monkeypatch, problem, profile, curvature=1e20)
+    assert result.shape == (1,)
+    c = result[0]
+    assert c == pytest.approx(expected, rel=1e-12, abs=0.)
+    increment = profile * c + .5 * 1e20 * c**2 + alpha * abs(c)**(2 / (power + 1))
+    assert increment < 0.
+    assert problem.insertion_increment(c, profile, 1e20) == pytest.approx(increment, rel=1e-12, abs=0.)

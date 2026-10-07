@@ -117,7 +117,7 @@ def test_accepted_trials_leave_parameters_untouched_until_commit(method):
     problem, prepared = synthetic_problem(
         data_loss, torch.eye(2, dtype=torch.float64), alpha=0.0, gamma=0.0,
     )
-    optimizer = SSN([coefficient], problem, prepared, method=method)
+    optimizer = SSN([coefficient], problem, prepared, method=method, max_iter=1)
     loss = optimizer.step()
 
     assert optimizer.last_step_success

@@ -15,15 +15,14 @@ import pickle
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import torch
 
-from .config.activations import get_activation
 from .data import DATA_DIR, TensorSamples, ValueSampleNormalizer, load_value_samples
 from .eval import relative_errors
-from .models.net import ShallowNetwork
+from .problems import SparseProblem
 
 
 def load_history(history: Any, run_index: int = 0) -> Any:
@@ -64,22 +63,16 @@ def history_atoms(
 def model_from_history(
     history: Any, activation: Any = "relu", power: float = 1.0,
     *, iteration: int | None = None, run_index: int = 0,
-) -> ShallowNetwork:
+) -> SparseProblem:
     """Compatibility reconstruction for callers holding a bare fit artifact.
 
     New reporting code should use load_run so configuration cannot be detached
-    from the fitted weights. This retains the existing ShallowNetwork forward.
+    from the fitted weights. Construction for prediction also accepts historical
+    activation powers that the current coefficient solver does not support.
     """
     w, b, c = history_atoms(history, iteration, run_index)
-    if isinstance(activation, str):
-        activation = get_activation(activation)
-    # Layer construction initializes parameters before replacing them. Reading
-    # a fit must not perturb the caller's training/random-split RNG stream.
-    with torch.random.fork_rng(devices=[]):
-        model = ShallowNetwork(
-            [w.shape[1], w.shape[0], 1], activation, p=power,
-            inner_weights=w, inner_bias=b, outer_weights=c,
-        )
+    model = SparseProblem(w.shape[1], activation=activation, power=power)
+    model.set_atoms(torch.as_tensor(w), torch.as_tensor(b), torch.as_tensor(c))
     model.eval()
     return model
 
@@ -109,7 +102,7 @@ class SavedRun:
     record_path: Path
     record: dict[str, Any]
     history: Any
-    model: ShallowNetwork
+    model: SparseProblem
     normalizer: ValueSampleNormalizer | None
     iteration: int
     normalization_recovered: bool = False
@@ -166,7 +159,7 @@ def _restore_run(
     if transform is not None:
         sx = np.asarray(transform["x_scale"], dtype=np.float64)
         sv = float(transform["v_scale"])
-        if (sx.shape != (model.hidden.weight.shape[1],) or
+        if (sx.shape != (model.input_dim,) or
                 not np.all(np.isfinite(sx) & (sx > 0)) or not np.isfinite(sv) or sv <= 0):
             raise ValueError(f"invalid recorded normalization in {path}")
         if cfg["data"].get("normalize") is False:
@@ -204,23 +197,19 @@ def load_run_for_artifact(
 
 
 def predict_model_physical(
-    model: ShallowNetwork, x: Any, normalizer: ValueSampleNormalizer | None = None,
+    model: SparseProblem, x: Any, normalizer: ValueSampleNormalizer | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Unclipped original-scale (V, dV), shapes (N,1) and (N,d).
 
     Compatibility seam for an already reconstructed model; reporting callers
     normally use predict_physical so the transform stays bound to its run.
     """
-    x = torch.as_tensor(x, dtype=torch.float64, device=model.hidden.weight.device)
-    if x.ndim != 2 or x.shape[1] != model.hidden.weight.shape[1]:
+    x = torch.as_tensor(x, dtype=torch.float64, device=model.W.device)
+    if x.ndim != 2 or x.shape[1] != model.input_dim:
         raise ValueError("physical states must have shape (N, model input dimension)")
     if normalizer is not None:
         x = x / torch.as_tensor(normalizer.x_scale, dtype=x.dtype, device=x.device)
-    x = x.detach().clone().requires_grad_(True)
-    with torch.enable_grad():
-        v = model(x)
-        dv = torch.autograd.grad(v.sum(), x)[0]
-    v, dv = v.detach(), dv.detach()
+    v, dv = model.predict_tensors(x)
     if normalizer is not None:
         v, dv = normalizer.denormalize_tensors(v, dv)
     return v, dv
@@ -256,8 +245,8 @@ def _validation_samples(record: dict[str, Any], samples=None) -> TensorSamples:
     if not 0 < split < n:
         raise ValueError("recorded train_fraction must leave nonempty train and validation sets")
     indices = np.random.RandomState(int(cfg["env"]["seed"])).permutation(n)[split:]
-    return tuple(torch.as_tensor(samples[k][indices], dtype=torch.float64)
-                 for k in ("x", "v", "dv"))
+    return cast(TensorSamples, tuple(torch.as_tensor(samples[k][indices], dtype=torch.float64)
+                                    for k in ("x", "v", "dv")))
 
 
 def _recover_legacy_normalizer(record: dict[str, Any], model) -> ValueSampleNormalizer:
@@ -286,7 +275,7 @@ def value_surface_grid(
     grid_n: int = 120,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Prepare the existing 2D mesh with unclipped original-scale predictions."""
-    if run.model.hidden.weight.shape[1] != 2:
+    if run.model.input_dim != 2:
         raise ValueError("value surfaces require a two-dimensional model")
     x0, x1 = np.meshgrid(np.linspace(*x_range, grid_n), np.linspace(*y_range, grid_n))
     value, _ = predict_physical(run, np.column_stack([x0.ravel(), x1.ravel()]))

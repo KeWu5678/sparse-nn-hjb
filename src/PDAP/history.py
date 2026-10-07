@@ -67,7 +67,7 @@ class History:
     reporting_normalizer: ValueSampleNormalizer | None = None
 
     def record(
-        self, model, problem: SparseProblem,
+        self, problem: SparseProblem,
         train_loader: DataLoader, valid_loader: DataLoader | None = None,
         *,
         search_radius: float | None = None,
@@ -82,7 +82,7 @@ class History:
         inside ``exp(5)``, and without these the records are identical.
         """
         metrics = problem.metrics(
-            model, train_loader, valid_loader, reporting_normalizer=self.reporting_normalizer,
+            train_loader, valid_loader, reporting_normalizer=self.reporting_normalizer,
         )
         for name, value in metrics.items():
             getattr(self, name).append(value)
@@ -90,12 +90,10 @@ class History:
         self.radius_theorem_applied.append(None if theorem_applied is None else float(theorem_applied))
         self.penalty_exponent = problem.penalty_exponent
         self.loss_weights = problem.loss_weights
-        W, b, c = model.get_atoms()
-        self.inner_weights.append({"weight": W, "bias": b})
-        self.outer_weights.append(c.reshape(1, -1))
-        self.model_states.append(
-            {name: tensor.detach().clone() for name, tensor in model.state_dict().items()}
-        )
+        state = {name: tensor.detach().clone() for name, tensor in problem.state_dict().items()}
+        self.model_states.append(state)
+        self.inner_weights.append({"weight": state["W"], "bias": state["b"]})
+        self.outer_weights.append(state["c"].reshape(1, -1))
         i = len(self.train_loss) - 1
         if metrics["train_loss"] < self.best_train_loss:
             self.best_train_loss = metrics["train_loss"]
@@ -121,13 +119,17 @@ class History:
         always represents the recorded iteration.
         """
         i = self.best_iteration if iteration is None else int(iteration)
-        state = self.model_states[i]
-        W = self.inner_weights[i]["weight"]
-        b = self.inner_weights[i]["bias"]
-        c = self.outer_weights[i]
-        model.set_atoms(W, b, c)
-        if state:
-            model.load_state_dict(state)
+        states = getattr(self, "model_states", [])
+        state = states[i] if states else {}
+        if "hidden.weight" in state:
+            # Pre-refactor snapshots stored two Linear layers. Translate at the
+            # artifact reader rather than retaining the removed model classes.
+            state = {"W": state["hidden.weight"], "b": state["hidden.bias"],
+                     "c": state["output.weight"].reshape(-1)}
+        if not state:
+            state = {"W": self.inner_weights[i]["weight"], "b": self.inner_weights[i]["bias"],
+                     "c": self.outer_weights[i]}
+        model.set_atoms(state["W"], state["b"], state["c"])
         return model
 
     def summary_metrics(self) -> dict[str, float | int]:

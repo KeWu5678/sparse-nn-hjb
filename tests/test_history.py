@@ -7,7 +7,6 @@ import torch
 
 from src.data import ValueSampleNormalizer, make_dataloader
 from src.eval import relative_errors
-from src.models.signed import SignedModel
 from src.PDAP.history import History
 from src.problems import SparseProblem
 
@@ -43,37 +42,86 @@ def test_history_summary_metrics_uses_best_iteration() -> None:
     }
 
 
-def test_restoring_a_zero_measure_snapshot_empties_an_initialized_model() -> None:
+@pytest.mark.parametrize("legacy", [False, True])
+def test_restoring_a_zero_measure_snapshot_empties_an_initialized_model(legacy) -> None:
     """A model that already carries atoms must not keep them across the restore.
 
     This is the terminal zero-measure run of ``PDAP.fit``: under strong
     regularization the initial insertion accepts no atom, and the recorded model
-    is the one ``build_model`` returned -- layerless, so its ``state_dict`` is
-    empty and only the emptiness of the support identifies the snapshot.
+    has empty support. Historical zero-measure snapshots had an empty state_dict;
+    current snapshots have explicitly registered empty W, b, and c tensors.
     """
     x = torch.tensor([[0.2, -0.3], [0.5, 0.7]], dtype=torch.float64)
 
-    empty = SignedModel(activation=torch.tanh, power=1.0, verbose=False)
-    empty.input_dim = 2  # what build_model does; set_atoms is never reached
-    assert dict(empty.state_dict()) == {}
+    empty = SparseProblem(2, activation="tanh")
     samples = (x, *empty.predict_tensors(x))
     history = History()
-    history.record(empty, SparseProblem(2, activation="tanh"), make_dataloader(samples))
+    history.record(empty, make_dataloader(samples))
+    if legacy:
+        history.model_states[0] = {}
 
-    restored = SignedModel(activation=torch.tanh, power=1.0, verbose=False)
+    restored = SparseProblem(2, activation="tanh")
     restored.set_atoms(
         torch.tensor([[1.0, 0.0], [0.0, 2.0]], dtype=torch.float64),
         torch.tensor([0.1, -0.2], dtype=torch.float64),
         torch.tensor([3.0, -4.0], dtype=torch.float64),
     )
-    assert restored.get_atoms()[0].shape[0] == 2
+    assert restored.n_neurons == 2
 
     history.restore_model(restored)
 
-    assert restored.get_atoms()[0].shape[0] == 0
+    assert restored.n_neurons == 0
     value, gradient = restored.predict_tensors(x)
     assert torch.allclose(value, torch.zeros_like(value))
     assert torch.allclose(gradient, torch.zeros_like(gradient))
+
+
+def test_restoring_legacy_layer_state_preserves_recorded_predictions():
+    W = torch.tensor([[1., 2.]], dtype=torch.float64)
+    b, c = torch.tensor([.5], dtype=torch.float64), torch.tensor([[3.]], dtype=torch.float64)
+    history = History(
+        inner_weights=[{"weight": W, "bias": b}], outer_weights=[c],
+        model_states=[{"hidden.weight": W, "hidden.bias": b,
+                       "output.weight": c, "output.bias": torch.zeros(1, dtype=W.dtype)}],
+    )
+
+    problem = history.restore_model(SparseProblem(2))
+    value, gradient = problem.predict_tensors(W.new_tensor([[1., 1.]]))
+
+    torch.testing.assert_close(value, W.new_tensor([[10.5]]))
+    torch.testing.assert_close(gradient, W.new_tensor([[3., 6.]]))
+    assert set(problem.state_dict()) == {"W", "b", "c"}
+
+
+def test_recorded_checkpoints_stay_independent_of_models_and_each_other():
+    atoms = {
+        "W": torch.tensor([[1., 2.]], dtype=torch.float64),
+        "b": torch.tensor([.5], dtype=torch.float64),
+        "c": torch.tensor([3.], dtype=torch.float64),
+    }
+    problem = SparseProblem(2)
+    problem.set_atoms(atoms["W"], atoms["b"], atoms["c"])
+    x = torch.tensor([[1., 1.]], dtype=torch.float64)
+    loader = make_dataloader((x, *problem.predict_tensors(x)))
+    history = History()
+    for _ in range(2):
+        history.record(problem, loader)
+        with torch.no_grad():
+            for tensor in problem.state_dict().values():
+                tensor.add_(1.)
+
+    history = pickle.loads(pickle.dumps(history))
+    for i, state in enumerate(history.model_states):
+        restored = history.restore_model(SparseProblem(2), iteration=i)
+        with torch.no_grad():
+            for name, tensor in restored.state_dict().items():
+                torch.testing.assert_close(tensor, atoms[name] + i, rtol=0, atol=0)
+                tensor.zero_()
+        for name, tensor in state.items():
+            torch.testing.assert_close(tensor, atoms[name] + i, rtol=0, atol=0)
+        torch.testing.assert_close(history.inner_weights[i]["weight"], state["W"])
+        torch.testing.assert_close(history.inner_weights[i]["bias"], state["b"])
+        torch.testing.assert_close(history.outer_weights[i], state["c"].reshape(1, -1))
 
 
 def test_history_summary_records_normalized_objective_decomposition() -> None:
@@ -82,10 +130,6 @@ def test_history_summary_records_normalized_objective_decomposition() -> None:
     c = torch.tensor([50.0, -45.0, 5.0], dtype=torch.float64)
     x = torch.tensor([[0.2, -0.3], [0.5, 0.7]], dtype=torch.float64)
 
-    model = SignedModel(activation=torch.tanh, power=1.0, verbose=False)
-    model.set_atoms(W, b, c)
-    v, dv = model.predict_tensors(x)
-    samples = (x, v, dv)
     problem = SparseProblem(
         2, activation="tanh",
         alpha=0.1,
@@ -93,9 +137,11 @@ def test_history_summary_records_normalized_objective_decomposition() -> None:
         loss_weights=(1.0, 1.0),
         moment_order=2.0,
     )
+    problem.set_atoms(W, b, c)
+    samples = (x, *problem.predict_tensors(x))
 
     history = History()
-    history.record(model, problem, make_dataloader(samples))
+    history.record(problem, make_dataloader(samples))
     metrics = history.summary_metrics()
 
     # gamma=0 gives Phi_1(mu_p) = Psi_2(mu)
@@ -123,7 +169,6 @@ def test_history_summary_records_normalized_objective_decomposition() -> None:
 
 def test_physical_reporting_does_not_change_objectives_snapshots_or_selection():
     normalizer = ValueSampleNormalizer(np.array([2.0, 8.0]), 5.0)
-    model = SignedModel(activation=torch.tanh, power=1.0, verbose=False)
     x = torch.tensor([[0.2, -0.3], [0.5, 0.7]], dtype=torch.float64)
     v = torch.tensor([[2.0], [3.0]], dtype=torch.float64)
     dv = torch.tensor([[0.7, -0.6], [1.2, 0.5]], dtype=torch.float64)
@@ -136,15 +181,15 @@ def test_physical_reporting_does_not_change_objectives_snapshots_or_selection():
     unchanged = pickle.loads(pickle.dumps(unchanged))
     physical = History(reporting_normalizer=normalizer)
     for coefficient in (1.0, 2.0):
-        model.set_atoms(
+        problem.set_atoms(
             torch.tensor([[1.0, 0.5]], dtype=torch.float64),
             torch.tensor([0.1], dtype=torch.float64),
             torch.tensor([coefficient], dtype=torch.float64),
         )
-        unchanged.record(model, problem, loader)
-        physical.record(model, problem, loader)
+        unchanged.record(problem, loader)
+        physical.record(problem, loader)
         expected = relative_errors(
-            *normalizer.denormalize_tensors(*model.predict_tensors(x)),
+            *normalizer.denormalize_tensors(*problem.predict_tensors(x)),
             *normalizer.denormalize_tensors(v, dv),
         )
         assert (physical.err_l2_val[-1], physical.err_grad_val[-1], physical.err_h1_val[-1]) == expected

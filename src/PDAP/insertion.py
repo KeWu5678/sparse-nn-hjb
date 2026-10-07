@@ -10,7 +10,7 @@ acceptance tests differ:
     points outside that radius, remove Euclidean near-duplicates, and apply the
     configured profile threshold.  There is no direction-then-radius code path.
   * ``finite_step`` — accept candidates with a profitable finite step, i.e. where
-    min_c Delta J(c; omega) < 0 (see :meth:`SparseProblem.solve_insertion_weight`); returns the
+    min_c Delta J(c; omega) < 0; returns the
     optimal outer weight c* alongside each atom.  Used for the q<1 penalty.
 
 The strategies are pure functions: the caller supplies the precomputed residual
@@ -95,9 +95,9 @@ def _generate_candidates(
             def closure():
                 opt.zero_grad()
                 w_s = w / w.norm().clamp_min(eps) if use_sphere else w
-                obj = problem.search_score(
-                    w_s[:d_dim], w_s[d_dim], normalized_residual, two_sided=two_sided,
-                )
+                profile = problem.profile(w_s[:d_dim], w_s[d_dim], normalized_residual)
+                score = profile.abs() if two_sided else profile
+                obj = score / problem.coefficient_scale(w_s[:d_dim], w_s[d_dim])
                 (-obj).backward()
                 return -obj
 
@@ -241,19 +241,22 @@ def profile_threshold(
     accepted_c: List[float] = []
     with torch.enable_grad():
         for a_i, b_i in zip(a_t, b_t):
-            result = problem.profile_insertion(
-                a_i, b_i, residual,
-                two_sided=two_sided, guaranteed=guaranteed,
+            features = problem.jacobians(residual[0], a_i.reshape(1, -1), b_i.reshape(1))
+            slope, curvature = (
+                float(value.detach()) for value in problem.directional_obj(*features, residual)
             )
-            if result is None:
+            v = abs(slope) if two_sided else slope
+            scale = float(problem.coefficient_scale(a_i, b_i))
+            threshold = problem.alpha * scale
+            # Retain the physical-profile comparison, including its rounding.
+            if v <= threshold or (guaranteed and curvature < 1e-30):
                 continue
-            score, coefficient = result
             accepted_a.append(a_i.detach())
             accepted_b.append(b_i.detach())
-            accepted_scores.append(score)
+            accepted_scores.append(v / scale - problem.alpha)
             if guaranteed:
-                assert coefficient is not None
-                accepted_c.append(coefficient)
+                magnitude = (v - threshold) / curvature
+                accepted_c.append(-magnitude if slope > 0 else magnitude)
 
     if len(accepted_scores) > max_insert:
         order = sorted(range(len(accepted_scores)), key=lambda i: accepted_scores[i], reverse=True)[:max_insert]
@@ -329,13 +332,23 @@ def finite_step(
     accepted_dJ: List[float] = []
     with torch.enable_grad():
         for a_i, b_i in zip(a_t, b_t):
-            result = problem.finite_insertion(a_i, b_i, residual)
-            if result is not None:
-                c_star, dJ = result
-                accepted_a.append(a_i.detach())
-                accepted_b.append(b_i.detach())
-                accepted_c.append(c_star)
-                accepted_dJ.append(dJ)
+            features = problem.jacobians(residual[0], a_i.reshape(1, -1), b_i.reshape(1))
+            slope, curvature = (
+                float(value.detach()) for value in problem.directional_obj(*features, residual)
+            )
+            if curvature < 1e-30 or abs(slope) < 1e-30:
+                continue
+            magnitude = problem.power_prox(abs(slope) / curvature, curvature)
+            if magnitude <= 0.0:
+                continue
+            c_star = magnitude if slope < 0 else -magnitude
+            dJ = problem.insertion_increment(c_star, slope, curvature)
+            if dJ >= 0.0:
+                continue
+            accepted_a.append(a_i.detach())
+            accepted_b.append(b_i.detach())
+            accepted_c.append(c_star)
+            accepted_dJ.append(dJ)
 
     if len(accepted_dJ) > max_insert:
         order = sorted(range(len(accepted_dJ)), key=lambda i: accepted_dJ[i])[:max_insert]

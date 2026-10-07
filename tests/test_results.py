@@ -183,7 +183,17 @@ def test_legacy_containers_and_artifact_entrypoint(record_path):
     w, b, c = history_atoms([vars(run.history)])
     assert w.shape == (1, 2) and b.shape == (1,) and c.shape == (1, 1)
     net = model_from_history([vars(run.history)], "relu", 1.)
-    torch.testing.assert_close(net.output.weight, run.model.output.weight)
+    torch.testing.assert_close(net.c, run.model.c)
+
+
+def test_historical_prediction_power_does_not_require_solver_support(record_path):
+    run = load_run(record_path)
+    net = model_from_history(run.history, torch.relu, power=4.)
+
+    value, gradient = net.predict_tensors(torch.tensor([[1., 1.]], dtype=torch.float64))
+
+    torch.testing.assert_close(value, torch.tensor([[3. * 3.5 ** 4]], dtype=torch.float64))
+    torch.testing.assert_close(gradient, torch.tensor([[12. * 3.5 ** 3, 24. * 3.5 ** 3]], dtype=torch.float64))
 
 
 def test_relocated_artifact_does_not_read_old_declared_copy(record_path):
@@ -223,8 +233,7 @@ def test_empty_support_and_empty_prediction_batch(record_path):
     assert v.shape == (0, 1) and dv.shape == (0, 2)
     run.history.inner_weights[0] = {"weight": np.empty((0, 2)), "bias": np.empty(0)}
     run.history.outer_weights[0] = np.empty((1, 0))
-    with pytest.warns(UserWarning, match="zero-element"):
-        v, dv = predict_physical(run, [[1., 2.]], iteration=0)
+    v, dv = predict_physical(run, [[1., 2.]], iteration=0)
     assert torch.count_nonzero(v) == 0 and torch.count_nonzero(dv) == 0
 
 

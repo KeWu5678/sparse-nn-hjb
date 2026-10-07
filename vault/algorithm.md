@@ -27,11 +27,44 @@ PDAP.fit() outer iteration:
   4. Prune coefficients at or below the amplitude tolerance.
 ```
 
-The single `PDAP` loop drives the signed model via its uniform interface and the
-insertion strategy from `src/PDAP/insertion.py`. The historical semiconcave
+The single `PDAP` loop drives `SparseProblem` and the insertion strategy from
+`src/PDAP/insertion.py`. The historical semiconcave
 parametrization was retired by ADR 0012; its archived design and empirical notes
 remain in `semiconcave_model.md`. The insertion-candidate merge tolerance
 (1e-2) is distinct from the prune amplitude tolerance.
+
+### Scope checked against the manuscript
+
+The authoritative source is [paper_0805.tex](../paper/paper_0805.tex),
+Algorithm 1 (`alg:log`, lines 2898–2924) and Algorithm 2 (`alg:q`, lines
+3011–3037). PDAP owns their outer procedure: search and filter candidates, test
+and rank them, choose initial coefficients and insert, request correction with
+inner weights fixed, prune, and stop when no candidate is accepted or the outer
+iteration budget is exhausted. Both algorithms require a correction that does
+not increase the post-insertion objective. SSN implements that correction
+contract; the paper does not dictate the Python class organization.
+
+Algorithm 1 uses the normalized derivative threshold and initializes each
+accepted neuron from its certificate violation and per-neuron curvature
+(lines 2838–2874). Algorithm 2 minimizes the finite one-neuron objective
+increment, accepts a negative increment, and uses that coefficient to initialize
+correction (lines 2959–2979). The coordinate-descent warm start is described for
+the separately run ReLU/l1 baseline (lines 3005–3009); it is not a universal
+extra stage required by both paper algorithms. Historical configurable paths
+must remain identified separately from these manuscript procedures.
+
+"Candidate-profile evaluation" in the refactor discussion means evaluating the
+fitting-loss derivative for a supplied candidate neuron at zero inserted
+coefficient (lines 2613–2616). It is one signed value; Algorithm 1 uses its
+normalized version (lines 2636–2645 and 2818–2822). SparseProblem supplies this
+problem-specific calculation. PDAP searches over candidates and applies the
+relevant acceptance and initialization rules. The derivative alone is neither
+the full regularized objective increment nor an insertion decision.
+
+Fixed-support preparation is only reuse within the coefficient correction:
+features and the data-fitting Hessian are calculated once while inner weights
+and samples remain fixed. Its small return record does not own candidate search,
+warm-start, acceptance or a second network; it is not a paper algorithm stage.
 
 ## MATLAB reference
 
@@ -42,7 +75,7 @@ Reference implementation: `/Users/ruizhechao/Documents/NonConvexSparseNN/`
 | `PDAPmultisemidiscrete.m` | `src/PDAP/pdap.py` | Main PDAP loop (NOT `PDAPsemidiscrete.m`) |
 | `SSN.m` | `src/SSN/optimizer.py` | Semismooth Newton optimizer (package) |
 | `SSN_TR.m` | `src/SSN/strategies.py` (`steihaug_cg`) | Trust-region globalization |
-| `setup_problem_NN_2d_from_xhat.m` | `src/models/signed.py` + `src/net.py` | Kernel, loss, find_max |
+| `setup_problem_NN_2d_from_xhat.m` | `src/problems/sparse_problem.py` + `src/PDAP/insertion.py` | Kernel/loss evaluation and candidate search, respectively |
 | `run_vdp_2d_from_mat.m` | `notebook/pdpa_vdp.ipynb` | Experiment runner |
 
 ### Known differences from MATLAB
@@ -64,7 +97,7 @@ Reference implementation: `/Users/ruizhechao/Documents/NonConvexSparseNN/`
 | Loss normalization | `M = N_points` | empirical objective in the paper |
 | Max PDAP iterations | `15` | `run_vdp_2d_from_mat.m:12` |
 | Max insert per step | `15` | `PDAPmultisemidiscrete.m:95` |
-| SSN iterations | `20` | Converges in 3-4 steps |
+| SSN iterations | `20` | Configured correction budget; not a convergence guarantee |
 
 ## Critical implementation notes
 
@@ -82,7 +115,9 @@ search's L-BFGS optimizer.
 1. **Fractional SSN requires a nonzero warm start**: Algorithm 2 first computes
    the exact one-atom coefficient. Its smallest nonzero magnitude fixes the
    proximal scale for the entire correction.
-2. **SSN gradient must be data-only**: Autograd gives the full objective gradient; SSN adds `alpha*dphi` separately. Double-counting breaks convergence. (The closure returns the full objective; SSN subtracts the penalty gradient internally.)
+2. **Use the normal-map smooth gradient**: Autograd differentiates the full
+   `loss`; `SparseProblem.jac_obj_augmented` subtracts the full penalty gradient
+   and applies the smooth nonconvex correction. SSN uses this returned gradient.
 3. **SSN line search uses full objective**: Data loss + regularization. Without regularization, sparsifying steps get rejected.
 4. **Loss normalization**: The empirical fidelity divides the value and full
    gradient sums by the sample count `M`, not by the number of scalar input
@@ -95,27 +130,34 @@ search's L-BFGS optimizer.
 
 ## Modules (`src/`)
 
-- `PDAP/` — the unified outer-loop package:
-  - `pdap.py` — `PDAP` class + `fit()` (matches `PDAPmultisemidiscrete.m`); configured
-    by `insertion=` ("profile"|"finite_step").
-    Holds the shared `sample_uniform_sphere_points` / `prune_small_weights` /
-    `check_linearity_neurons` helpers.
-  - `insertion.py` — `profile_threshold` / `finite_step` strategies, their
-    distinct nonhomogeneous/sphere candidate searches, and
-    `solve_insertion_weight` for the actual Algorithm 2 increment.
-- `models/` — the signed parametric value-function model behind the protocol in `base.py`:
-  - `signed.py` — `SignedModel` (pure network; matches `setup_problem_NN_2d_from_xhat.m`).
-- `net.py` — `ShallowNetwork`: `input -> hidden (ReLU^p) -> output`; `forward_network_matrix()` and `forward_gradient_kernel()` build the SSN data Hessian.
-- `SSN/` — the semismooth-Newton optimizer package (one configurable class):
-  - `optimizer.py` — `SSN`. Stores `q=2/(p+1)` and implements the proximal
-    normal map using the supplied fractional proximal scale.
-    Optional masks remain part of the optimizer's generic coordinate API.
-  - `strategies.py` — `levenberg_marquardt` (damped Newton) and `steihaug_cg`
-    (trust-region MPCG) globalizations, selected by `method=`.
-  - `prox.py`, `penalty.py` — proximal / penalty kernels (re-exported by `utils.py`).
-  - `mpcg.py` — projected/trust-region CG inner solve for `steihaug_cg`.
-- `utils.py` — compatibility re-exports for the `SSN` penalty/proximal kernels,
-  including `power_prox` and `power_prox_derivative`.
+The implemented ownership and its verification are recorded in
+[REFACTOR_HANDOFF.md](../REFACTOR_HANDOFF.md). PDAP owns insertion acceptance and
+warm-start selection; SparseProblem supplies their mathematical evaluations.
+
+- `problems/` — network representation and problem mathematics:
+  - `sparse_problem.py` — `SparseProblem(nn.Module)` registers `W` and `b` as
+    buffers and `c` as its parameter. It supplies predictions, input derivatives,
+    objective/proximal/normal-map calculations, supplied-candidate profile and
+    directional evaluations, and a temporary `PreparedObjective` for each
+    coefficient correction. There is no separate
+    model hierarchy or persistent feature cache.
+  - `penalty.py`, `prox.py`, `moment.py`, `radius.py` — mathematical helpers.
+- `PDAP/` — candidate search/acceptance, warm-start, support changes, and correction scheduling:
+  - `pdap.py` — `PDAP.fit(problem, train_loader, valid_loader, ...)`, configured
+    by `insertion=` ("profile" or "finite_step").
+  - `insertion.py` — profile-threshold and finite-step candidate selection.
+  - `warmstart.py` — warm-start procedure and initialization using problem calculations.
+  - `history.py` — existing metrics, one owned snapshot per checkpoint with
+    artifact views, and best-checkpoint selection. Reporting redesign is deferred.
+- `SSN/` — the semismooth Newton optimizer:
+  - `optimizer.py` — `SSN(Optimizer)`. One `step()` runs the complete configured
+    correction on supplied coefficients and owns its final acceptance/fallback.
+  - `strategies.py` — Levenberg–Marquardt and Steihaug CG globalization.
+  - `mpcg.py` — projected/trust-region CG inner solve.
+- `data.py` — reading, normalization, splitting, standard DataLoader factories,
+  and complete-sample assembly. Loaders and samples remain external to the model.
+- `eval.py` — relative errors from predictions and targets.
+- `results.py` — saved-history reconstruction and physical-coordinate prediction.
 - `metric.py` — experiment-analysis utilities (per-gamma neuron/loss tables, plots).
 - `config/` — Hydra structured configuration for PDAP training:
   - `schema.py` — typed model/training/data/env config objects.
@@ -139,7 +181,8 @@ search's L-BFGS optimizer.
 ## Data flow
 
 ```
-VDP / pendulum data generator -> dict {x, v, dv} -> PDAP(model=, insertion=).fit() -> results
+VDP / pendulum samples -> external preprocessing -> DataLoaders
+SparseProblem + DataLoaders -> PDAP.fit -> History -> saved-run evaluation
 ```
 Training data may be a legacy key-based `.npy` file or a newer `.npz` file; both must expose `x`, `v`, and `dv` arrays.
 VDP experiments: `notebook/pdpa_vdp.ipynb` (pickles in `models/experiment_N/`).

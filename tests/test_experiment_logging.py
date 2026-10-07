@@ -251,10 +251,10 @@ def test_training_record_preserves_fitted_normalization(tmp_path, monkeypatch, n
 
     # A nonzero fixed model exposes the metric's units without performing an
     # optimizer step. The zero network has relative error 1 in either convention.
-    build_model = train.build_model
+    from_config = train.SparseProblem.from_config
 
-    def initialized_model(cfg, input_dim):
-        model = build_model(cfg, input_dim)
+    def initialized_problem(model_config, input_dim):
+        model = from_config(model_config, input_dim)
         model.set_atoms(
             torch.tensor([[0.5, -0.2]], dtype=torch.float64),
             torch.tensor([1.0], dtype=torch.float64),
@@ -262,7 +262,7 @@ def test_training_record_preserves_fitted_normalization(tmp_path, monkeypatch, n
         )
         return model
 
-    monkeypatch.setattr(train, "build_model", initialized_model)
+    monkeypatch.setattr(train.SparseProblem, "from_config", initialized_problem)
     train.main.__wrapped__(cfg)
 
     record = json.loads(next(run_dir.glob("*.json")).read_text())
@@ -282,7 +282,7 @@ def test_training_record_preserves_fitted_normalization(tmp_path, monkeypatch, n
     with next(run_dir.glob("result_*.pkl")).open("rb") as file:
         history = pickle.load(file)
     assert (history.reporting_normalizer is not None) is normalize
-    model = history.restore_model(build_model(cfg, input_dim=2))
+    model = history.restore_model(from_config(cfg.model, input_dim=2))
     train.set_seed(cfg.env.seed)
     _, (x, v, dv) = split_value_samples(samples, cfg.data.train_fraction)
     if normalize:
@@ -311,7 +311,7 @@ def test_region_reporting_scores_original_value_units(tmp_path, normalize):
     cfg.eval.eval_pool = str(pool_path)
     cfg.eval.distance_cache = str(cache_path)
     cfg.eval.tube_radius = 0.2
-    model = train.build_model(cfg, input_dim=2)
+    model = train.SparseProblem.from_config(cfg.model, input_dim=2)
     model.set_atoms(
         torch.tensor([[0.5, -0.2]], dtype=torch.float64),
         torch.tensor([1.0], dtype=torch.float64),

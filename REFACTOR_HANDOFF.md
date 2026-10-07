@@ -1,86 +1,568 @@
-# Refactor discussion handoff
+# Refactor plan and handoff
 
-Updated: 2026-10-07. The repository has been recovered from Time Machine on the replacement Mac, and the design discussion has resumed.
+Updated: 2026-10-07. Branch: `work/problem-solver-refactor`.
+Implementation baseline: `edb166a666bf2dc123198c373d9abc90f52f5830`.
+Full-review baseline: `49eeb0349a0a8ee489c075400d23cb1cb31e1208`.
 
-## Start here
+## Current status and working rules
 
-**Status: DataLoader increment implemented and verified.** The user invoked implement and codebase-design and explicitly authorized implementation and delegation. Configuration and logging redesign are deferred. The remaining model/optimizer refactor decisions below are still targets, not claims about implemented code.
+**Ownership cleanup implemented and independently reviewed.** The user's latest
+instruction was "refactor (or clean up) based on the boundary and ownership we
+set up first". PDAP now owns insertion and warm-start decisions; SparseProblem
+supplies their mathematical evaluations. Final verification: 422 passed and
+one preexisting stale-artifact failure; Ruff and core Pyright pass. Both final
+reviews report no unresolved material finding within this cleanup. Mask
+retirement and reporting/configuration redesign remain explicitly deferred.
 
-The objective is to clarify ownership among **SparseProblem, SSN, and PDAP**, remove duplicated network/problem representations, and build the centralized problem directly on PyTorch.
+The reviewed scope is the diff from `49eeb03`: DataLoader integration, the
+module/SSN migration, and this ownership cleanup, including the correction test
+and independently sourced trajectory fixture. It excludes the user's
+pre-existing edits preserved in 49eeb03. The implementation baseline edb166a
+remains the reference for the migration, not the finished revision.
 
-The governing principle, explicitly stated by the user:
+The exact working source/tests before this cleanup are preserved at
+`/tmp/sparse-boundary-before-y_e9gbjp`, with a binary working-tree patch. Use this
+snapshot to distinguish current cleanup from the earlier uncommitted migration,
+compare numerical behavior, and review actual deletions. Do not regenerate
+fixtures from the modified implementation.
 
-> The refactoring doesn't need to force itself to the current pattern, best practice and principles are the guidelines.
+SparseProblem is currently the nn.Module; src/models and ssn_solve are deleted;
+SSN owns the complete coefficient correction. Configuration/logging redesign
+and separate known numerical bugs remain deferred. The earlier DataLoader-only
+restriction was the assistant's scope mistake, not a user decision.
 
-Existing classes, wrappers, inheritance, signatures, and file boundaries describe current behavior; they do not constrain the target architecture. Each retained layer must justify its responsibility. Structural redesign is not blanket authorization to change the mathematical algorithm or historical results. Numerical and artifact compatibility still need discussion.
+**The root agent plans, documents, delegates, and coordinates only.** The user
+explicitly assigned implementation and review to subagents. Root does not edit
+production code or tests. Implementation agents own separate file sets; review
+assignments are independent of the implementation under review. Keep this plan
+current as work, verification, and review finish. Do not call the overall task
+complete merely because one part or its tests pass.
 
-**Resume with the implementation scope below.** Do not re-ask accepted decisions. Configuration remains a repository-level Hydra concern; measuring, monitoring, history, and logging are separate responsibilities. The DataLoader increment is complete; use the remaining accepted decisions below for subsequent work. Investigate routine technical details without another architecture questionnaire.
+Follow `refactor.md` and the established vocabulary in `CONTEXT.md`. Do not
+rewrite either to justify a new design. Use plain text, not LaTeX, in messages.
+Do not reopen settled decisions or ask routine implementation questions.
 
-**Communication preference:** the user explicitly requested no LaTeX because it is unreadable in their interface. Use plain language, ordinary text, and small code examples or tables when useful; do not use rendered mathematical notation in replies.
+## Agreed boundaries and current implementation
 
-## Current discussion point
+User statements below are evidence for ownership. Assistant-authored plans and
+historical ADR descriptions cannot establish additional user approval.
 
-### Authorized implementation increment
+| Owner | Agreement from the discussion | Current implementation / remaining discrepancy |
+| --- | --- | --- |
+| SparseProblem | One `torch.nn.Module` represents the current network and owns problem-specific evaluations. The user reiterated "sparseproblem should use the pytorch nn.model and delete the models" and "all the problem specific evaluation is owned by sparseproblem class". | The module owns persistent neuron state, prediction, features/input derivatives, residuals, objectives, penalties, proximal/normal-map evaluations, supplied-candidate profiles, and mathematical radius. Mixed insertion/warm-start procedures and `src/models` are deleted. |
+| PDAP | Own candidate search/ranking, insertion acceptance, warm-start direction and initial-coefficient selection, support insertion/pruning, correction scheduling and outer stopping. The user said "the pdap owns the neuron insertion", described pruning and retaining proposals until accepted, and directed scope review against the paper. | These procedures live in PDAP, insertion.py and warmstart.py. They call problem evaluations for the mathematics. Historical stopping/order variants remain distinct from the paper algorithms. |
+| SSN | Retain `torch.optim.Optimizer`; optimize supplied outer coefficients with inner weights fixed, using SparseProblem's mathematics. Own correction iterations, working coefficients, and the starting-coefficient backup discussed by the user. | Complete correction, trial acceptance, final comparison/fallback and rollback are here; PDAP applies the result without a second correction acceptance loop. The legacy `ssn_solve` layer is deleted. Guard options and iteration defaults are compatibility/implementation choices, not new user requirements. |
+| Temporary preparation | The user selected "Have SparseProblem return a temporary prepared objective that SSN uses for that solve" over persistent cached attributes. | Features/targets/Hessian preparation is correction-local and reused for the solve. It is neither a second network nor a separate owner of mathematical formulas. No persistent loader or feature cache lives on SparseProblem. |
+| Data module and Dataset/DataLoader | The user reiterated "the data lives outside of the problem" and requested the DataLoader dependency. Data preparation and delivery leave PDAP/SSN. | `src/data.py` owns reading, validation, physical normalization, splitting and full-data assembly; Dataset/DataLoader retains and delivers aligned samples. Mathematical residuals/features/reductions remain evaluations, not DataLoader responsibilities. Native BatchSampler delivery now works while dropped samples remain rejected. |
+| Repository configuration | The user said configuration "is a repo level function and we are using hydra to manage it". | Hydra/runner constructs configured objects. Modules consume the settings relevant to their responsibilities; DataLoader does not own repository configuration. Redesign remains deferred. |
+| Measurement, logging, monitoring and history | The user identified these as separate concerns, then asked to "save the configuration and logging etc., part for later". | Existing metric/history and saved-run behavior is preserved. History owns one detached checkpoint; existing artifact views share it and restoration happens once. History still invokes problem metrics with supplied loaders; its final internal organization remains deferred. |
+| Work allocation | The user assigned root "only in charge of the planning and orchestrating" and asked for subagents to implement and review. | Root edits plans/docs only. The latest user instruction authorizes source cleanup through implementation agents, followed by independent review. |
 
-The latest user instruction is to formulate the plan and implement now, using the implement and codebase-design skills and subagents as useful. This supersedes the earlier request to pause implementation. The immediately preceding scope correction explicitly defers configuration and logging work.
+SparseProblem defines what a mathematical operator evaluates, including its
+parameter-dependent branches. PDAP decides which candidates/directions to use,
+when to initialize or insert, and whether to accept them. SSN makes decisions
+inside the coefficient correction. A mathematical threshold or proximal
+minimizer can be evaluated by the problem without giving it insertion control.
 
-Implement standard TensorDataset/DataLoader construction, explicit loader arguments through current training callers, centralized full-data assembly, and one temporary coefficient objective per correction. Preserve the current separate model representation, optimizer iteration/acceptance behavior, logging outputs, History format, normalization/split policy, and numerical formulas. Do not implement the broader nn.Module merge or remove ssn_solve in this increment. Those accepted later changes are independent of adopting DataLoader; the scoped increment supersedes the earlier plan's proposed simultaneous migration.
+Paper cross-check: the authoritative `paper/paper_0805.tex` specifies this outer
+procedure in Algorithm 1 (`alg:log`, lines 2898–2924) and Algorithm 2 (`alg:q`,
+lines 3011–3037). Both search/filter candidates, test and rank them, initialize
+and insert selected neurons, request a fixed-inner-weight SSN correction,
+prune, and stop on no accepted candidate or the outer iteration budget. Both
+require correction acceptance against the post-insertion objective. Assigning
+that correction check to SSN is our software organization of the paper's
+requirement; the manuscript does not prescribe Python classes. The algorithm
+map in `vault/algorithm.md` records the different insertion tests and the
+separate baseline warm-start, so they are not conflated.
 
-The implementation plan for this increment is:
+The persistent network, PDAP's proposed atoms, and SSN's working coefficients
+have different lifetimes. A proposal can be evaluated without first inserting
+it into the live network. PDAP decides when accepted support changes are
+applied; a module operation may enforce tensor/registration invariants. SSN
+retains the starting coefficients needed for its own rollback. None of this
+requires another network instance or copies of problem formulas.
 
-1. Add make_dataloader(tensor_samples, ...) and make_dataloaders(prepared_samples, train_fraction, ...) to src/data.py. Return actual PyTorch loaders, use complete sequential batches, default to a full split, and isolate each loader's Torch generator. Keep existing reading/normalization/splitting functions and NumPy split semantics.
-2. Remove sample-owning constructor arguments from SparseProblem; provide input_dim explicitly. Pass loaders to residual, model_loss, metrics, and coefficient preparation. Use data.full_batch to assemble delivered samples once per evaluation. Keep candidate inputs paired with detached residuals as one (X, residual_v, residual_dv) tuple for one insertion phase; retain the existing full-data mathematical formulas.
-3. Keep every coefficient, penalty, proximal, and normal-map formula on SparseProblem. SparseProblem.prepare_coefficients(model, train_loader) returns a small frozen PreparedObjective record containing obj, hess_obj, and coefficient_scale; the fitting closure is defined by SparseProblem. SSN receives both problem and prepared data explicitly. There is no second mathematical problem class, inheritance hierarchy, or duplicate problem settings. Synthetic objectives use the same record without a dummy network or dataset.
-4. Use PDAP.fit(model, problem, train_loader, valid_loader=None, ...) for this increment. Adapt ssn_solve to consume the returned objective while preserving its existing iteration behavior and PDAP correction guard. History.record receives explicit loaders but retains its current evaluation behavior; redesigning history/logging is deferred.
-5. Migrate the runner and existing tests. Test the agreed public seams: delivered batches and random-state isolation; prepared objective value/gradient/Hessian; full-data metrics, candidate and warm-start calculations; PDAP integration and numerical summaries. Preserve old fixtures and distinguish existing failures from regressions.
+Established mathematical names remain `obj`, `obj_augmented`, `loss`, `jac_*`,
+`hess_*`, `penalty_exponent`; `q` means the SSN proximal preimage. Physical data
+normalization and coefficient/moment normalization remain distinct.
 
-The user corrected the initial implementation: clarify ownership and remove duplication instead of adding layers, and follow refactor.md terminology. coefficient_objective.py was removed entirely; its mathematical methods remain on SparseProblem. Only a three-field PreparedObjective data record is passed separately to SSN. Established names obj, hess_obj, and coefficient_scale are retained. Repeated per-batch mathematical reductions and PDAP loader validation were also removed. DataLoader delivers samples; data.full_batch assembles the complete tensors required by this algorithm. Smaller delivery batches do not make the solver streaming or reduce its full-data memory requirement.
+The training entry point is `trainer.fit(problem, train_loader,
+valid_loader, ...)`. There is no separately constructed model passed beside
+problem. Prediction and construction require no dataset. SSN sees supplied
+coefficient vectors and problem mathematics, not loaders, layers, or insertion.
+Synthetic coefficient objectives continue to work without dummy networks/data.
 
-No Hydra schema additions, reporting callbacks, monitoring framework, artifact-schema changes, or new convergence rules belong to this increment. Loader settings are explicit Python arguments for now. The training runner uses full-split batches and zero workers by default.
+## Work assignments
 
-Fresh pre-change baseline on this Mac: **363 passed, 2 failed, 20 warnings** in 39.39 seconds. Existing failures are a stale local controller_selection.json artifact and the signed_profile PDAP golden summary. The pre-change signed_profile values were L2=0.020708285737220288, H1=0.05464074122149227, loss=0.0028238830405932294. Do not regenerate fixtures or hide these failures. The pre-existing six-file worktree patch and copies were preserved in a temporary snapshot before implementation.
+Current cleanup assignments take precedence over the earlier migration table:
 
-Final validation after removing the extra objective class: **398 passed, 2 failed, 20 warnings** in 32.35 seconds. Both failures match the pre-change baseline; signed_profile retains exactly the same three values above. Pyright reports zero errors on all changed production modules checked; Ruff and Git whitespace checks pass. Standards review (including refactor.md naming) and Spec review have no outstanding findings. A review-found issue with verbose logging on finite loaders without a sample count was fixed and tested. No fixtures were regenerated. Configuration/logging redesign and the broader model/SSN refactor remain deferred.
+| Task | Owner and files | Status / required result |
+| --- | --- | --- |
+| Problem evaluation / PDAP procedures | `ownership_cleanup`: SparseProblem, insertion.py, warmstart.py, their direct problem/model/normalization/paper/config/SSN-problem/Algorithm-2-insertion tests | Complete. Procedures moved to PDAP; feature/residual calculations shared; warm-start matrices built once; unused interfaces and four derived stored attributes removed. |
+| State ownership | `state_cleanup`: pdap.py, history.py, history/results/PDAP-equivalence/end-to-end tests; results.py only if needed | Complete. Native tensors for inspection, one owned checkpoint, one restoration, and no parameter replacement when pruning removes nothing. Reporting behavior preserved. |
+| Data/solver follow-up | `state_cleanup`: data.py, dataloader tests, SSN optimizer documentation and correction tests | Complete. Native BatchSampler works; tolerance behavior documented accurately; multi-iteration trust-region acceptance/rejection/recovery covered. No new convergence policy. |
+| Plan, integration and evidence | Root; independent `standards_audit` and `spec_audit` | Implementation and final reviews complete. Root coordinates documentation and commit; root did not edit source or tests. |
 
-The latest accepted design decision is to **adopt standard PyTorch DataLoader**, keeping repository configuration in Hydra and defining measurement/monitoring/logging separately. The earlier recommendation to retain tensor tuples as the public training input has been superseded by this explicit user choice; do not reopen DataLoader adoption.
+Tests owned by `ownership_cleanup`: test_sparse_problem, test_model_contract,
+test_paper_conformance, test_normalized_measure, test_ssn_problem,
+test_ssn_equivalence, test_algorithm2_correction, test_algorithm2_insertion,
+test_config. DataLoader tests belong to `state_cleanup`; their callers were
+migrated when get_atoms/model_loss were removed. No other agent edits shared files
+without an explicit handoff. Existing `spec_audit` and `standards_audit` remain
+independent of these implementation changes.
 
-The existing decision to **retain feature-based fitting evaluations and the cached fitting Hessian inside the temporary prepared objective** also stands. Compact quadratic storage is a separate potential performance optimization, not part of this agreed change.
+Keep the temporary prepared objective limited to fixed-support correction reuse.
+Do not resolve warm-start duplication by expanding it. Preserve the known
+historical sphere warm-start derivative convention explicitly. Mask retirement
+is deferred: existing masked goldens, finite differences and proximal tests
+exercise a real mathematical contract. Removing it needs a separate decision;
+this cleanup neither deletes that coverage nor creates a second solver/problem.
 
-Fixed-iteration SSN correction without a required convergence criterion is also accepted. Run the configured number of SSN iterations (current default 20), then perform the final objective comparison and return the accepted coefficients or the starting coefficients. Report iterations and correction acceptance; completing the budget is a normal outcome, without a convergence claim. Optional early stopping can be addressed later.
+Implemented interface (a means to the agreed ownership, not new
+user requirements): removed `search_score`, `profile_insertion`,
+`finite_insertion`, `solve_insertion_weight`, `warmstart_profiles`, and
+`warmstart_coefficients`. A signed differentiable `profile` shares the residual
+pairing used by directional slope/curvature. `jacobians` accepts supplied atoms;
+its warm-start option isolates the existing historical derivative
+convention. PDAP reads one penalty-strength value (`alpha`) and owns the tests
+and strategy choices. One coefficient-scale evaluation is reused. Proximal
+evaluations reuse existing kernels; the insertion objective increment preserves
+its exact scalar arithmetic. These mathematical operations do not reject or
+select candidates.
+There is no new class, settings bundle, prepared-object protocol, or persistent
+feature cache. Agent verification must check candidate derivatives and trajectory
+rounding against the pre-cleanup snapshot, not only algebraic equivalence.
 
-Retaining SSN's torch.optim.Optimizer inheritance and removing the legacy ssn_solve wrapper are also settled. Do not reopen these choices.
+Final validation and review:
 
-The complete-solve guarantee is also already accepted:
+- Full suite on frozen source: **422 passed, 1 preexisting failure, 18 warnings**
+  in 30.00 seconds. The sole failure is the stale ignored local controller
+  selection described below. Ruff passes all 29 changed Python files; Pyright
+  reports zero errors/warnings in src/problems, src/PDAP, src/SSN, src/data.py
+  and src/results.py. Git whitespace checks pass.
+- Both PDAP reference summaries match all eight recorded values exactly; SSN
+  references pass. All three fixture hashes match the pre-cleanup snapshot.
+  No fixture, tolerance, or numerical stopping policy was changed by this cleanup.
+- Standards and Spec reviewers independently checked the final interfaces,
+  procedure ownership, duplicate calculations/state, and numerical compatibility.
+  No unresolved material finding remains within this cleanup. Mask generality
+  remains deferred; reporting redesign and full-data memory costs are not solved
+  or benchmarked by these changes.
+- SparseProblem decreased from **53 to 46 methods**, eight to seven properties,
+  **17 to 13 stored attributes**, and 658 to 607 lines. The four core production
+  files have 48 fewer lines. These measure actual cleanup, not design acceptance
+  by method count.
+- Logs: `/tmp/sparse-boundary-final-pytest.log`,
+  `/tmp/sparse-boundary-final-ruff.log`, `/tmp/sparse-boundary-final-pyright.log`;
+  focused numerical checks: `/tmp/sparse-boundary-prox-final.log`.
 
-**SSN owns the final non-increase check for the complete coefficient correction.** If its final coefficients worsen the full objective relative to its starting coefficients, SSN returns the starting coefficients and reports that outcome. PDAP applies the returned coefficients without repeating the acceptance check. The user explicitly agreed to this, superseding the earlier placement of final acceptance in PDAP.
+Numerical compatibility decisions: the shared private residual pairing retains
+historical sum/dot operation order. Forcing one order changed a seeded support
+from 51 to 54 neurons. Scalar `power_prox` preserves finite-insertion arithmetic
+and is reused by fractional `penalty_prox`; SSN's vector proximal calculation is
+unchanged. The scalar insertion increment keeps its exact power evaluation,
+without importing the full-loss magnitude floor. Independent review caught both
+tiny-coefficient regressions, now covered through actual insertion calls. These
+are numerical contracts under refactor.md rule 9, not new procedures, classes,
+or public arithmetic-selection protocols.
 
-The temporary prepared objective returned by SparseProblem is also already agreed. Do not reopen its ownership/lifetime question.
+Earlier migration/review assignments (historical status before this cleanup):
 
-The SSN ownership, PyTorch integration, and primary stopping policy are settled. Resolve routine implementation mechanics without another architecture questionnaire. Remaining numerical safeguards/configuration compatibility and the independently discovered residual discrepancy still need deliberate handling; do not use optional convergence criteria to block discussion of the remaining design.
+| Task | Owner | Files / responsibility | Status |
+| --- | --- | --- | --- |
+| Network/problem consolidation | `objective_design` | SparseProblem; delete src/models; model-contract, sparse-problem, and DataLoader/problem tests | Implemented; ownership and duplication findings remain open |
+| Complete correction and outer loop | `training_integration` | src/SSN; src/PDAP/pdap.py; delete ssn_solve; SSN and Algorithm 2 correction tests | Implemented; stopping description and focused coverage concerns remain open |
+| Caller and artifact migration | `data_pipeline` | History, results, training runner, plotting references, remaining integration tests | Implemented; snapshot duplication remains open |
+| Plan and decision record | Root | This handoff and existing architecture documentation; coordinate interfaces and evidence | Ownership/cause record corrected; no cleanup implementation assigned |
+| Full Standards review | `standards_audit` | All changes since 49eeb03; documented rules, duplication, excessive interfaces/state | Complete: four material design findings |
+| Full specification/design review | `spec_audit` | Actual simplification, mathematical/data/optimizer ownership, compatibility and tests | Complete: broad findings plus boundary check against user statements |
+| Method/attribute usage audit | `interface_audit` | SparseProblem and callers; keep/delete/combine inventory and smaller interface | Complete: inventory, concrete reductions and current ownership reviewed |
 
-After the later model merge, the target training entry point is trainer.fit(problem, train_loader, valid_loader). This increment still passes model separately, as specified above. The runner constructs standard TensorDataset/DataLoader objects from externally prepared samples. SparseProblem obtains full samples through data.full_batch for mathematical evaluation and preparation; it neither constructs nor retains loaders. SSN receives SparseProblem and its temporary PreparedObjective data; it receives no loader or raw samples. DataLoader owns fetching, ordering, and batching; residuals, features, and objective reductions remain problem mathematics.
+Agents must report changed files, validation, remaining failures, and numerical
+or compatibility differences. Agents do not commit until root coordinates the
+completed review and checks. Root does not substitute its own implementation
+for delegated work.
 
-Every prepared correction and mathematical evaluation still covers the full required dataset. Centralized assembly preserves data/target/residual alignment, total-sample normalization, and one penalty per complete objective without repeating batch reductions throughout the mathematics. Feature matrices for the complete correction remain in memory as agreed; DataLoader does not make that cache independent of dataset size. Delivery defaults to one full-split batch; smaller batches are assembled into the same full tensors and checked for equivalence. No stochastic per-batch optimizer updates are introduced.
+After the server restart, the three prior implementation agents were no longer
+live. Their code, test logs, and reports were retained; three new independent
+read-only reviewers were assigned, rather than repeating implementation or tests.
+The pre-cleanup audit found 53 methods (eight properties), 17 stored
+attributes, test-only interfaces, and mask generality with no production caller.
+Do not delete useful mathematical operations merely because they have one
+caller, or move the same complexity into a new class. The review must identify
+real deletions/combination opportunities and their behavior consequences.
 
-The recommendation to remove Optimizer inheritance has been withdrawn after checking PyTorch's implementation. L-BFGS uses one parameter group, stores global numerical state under the first parameter, flattens parameters for its calculations, and runs multiple iterations inside step(). The SSN bookkeeping patterns previously cited as reasons to remove inheritance are therefore normal optimizer patterns, not evidence of incompatibility.
+## Original full-review findings and cleanup disposition
 
-SSN remains an Optimizer subclass and uses its parameter handling, settings, and numerical state directly. A complete correction operates on a temporary coefficient tensor registered with the optimizer. Recommend exposing the complete correction through step(), with internal iterations as in L-BFGS, rather than introducing another public solve wrapper. The exact signature and result reporting are implementation details still to specify; step() performing the complete correction has not yet been separately agreed. Do not reopen inheritance removal merely because SSN handles one temporary vector or runs a complete solve.
+The findings and line references below describe the pre-cleanup snapshot, not
+the finished source. Feature duplication, obsolete interfaces, duplicate state,
+native batching, mixed procedure ownership and missing focused coverage are
+resolved. Mask generality remains deferred for the reasons recorded above.
+The cause/prevention record remains applicable to future work.
 
-The agreed complete-solve guarantee still needs an explicit numerical tolerance, termination reporting, and compatibility treatment for the existing correction_guard setting. Current SSN strategies already check the full objective at trial points, but allow small numerical increases; those checks alone do not establish a strict non-increase contract for the complete solve.
+Scope: all 40 tracked changed paths since 49eeb03, the new correction test and
+trajectory fixture, and caller searches including ignored Python under scripts
+and experiments. The reviewers did not rerun the full suite or modify source,
+tests, or fixtures. They used small read-only probes for batching, stopping, and
+derivative behavior. Performance/copy observations were not benchmarked.
 
-### Optimizer implementation outline
+### Standards review — four material findings
 
-- Register the temporary coefficient tensor with SSN(Optimizer), use standard param_groups/state, and give SSN the prepared mathematical operations returned by SparseProblem directly. Preserve generic synthetic objectives; do not require a network or a chain of adapters.
-- Move complete iteration control, stopping, and solve diagnostics into SSN. Retain the existing Newton/trust-region calculations while changing ownership. Recommend one public step() for the complete correction.
-- Keep the starting coefficients available for the agreed final comparison and fallback. SSN's numerical working tensor is separate from the network's c. Coefficient transformations and other problem-specific calculations remain supplied by SparseProblem through its prepared objective.
-- PDAP requests preparation, invokes SSN, and applies the resulting coefficients. Remove ssn_solve and migrate its configuration definitions, callers, tests, and relevant logging to their owners.
-- Before implementation, establish the restored checkout's test baseline. Validate the prepared objective against existing evaluations, solver behavior for both strategies, the final non-increase guarantee, exceptions without network mutation, and coefficient normalization/support changes. Preserve existing golden fixtures unless an explicitly agreed numerical change explains a difference.
+1. **P2: unused mask generality** — `sparse_problem.py:65`, `:91`, `:640`.
+   Two constructor options, two attributes, three helpers, and branches through
+   penalty/proximal calculations have no production caller. Every active network
+   is signed, with all coefficients penalized and unconstrained. This is retained
+   speculative generality, judged against refactor.md rules 7 and 10–12. Fixed
+   masks also do not naturally follow changing support size. Removal must account
+   for genuine existing masked numerical tests; do not silently discard them.
+2. **P2: repeated feature calculations** — `sparse_problem.py:195`, `:598`,
+   `:616`, and `:553`/`:560`. Correction, candidate, and warm-start calculations
+   separately construct activated features and input derivatives. The two
+   warm-start methods rebuild identical matrices consecutively. Refactor.md rule
+   7 requires removing shared knowledge. Consolidation must preserve candidate
+   differentiation and explicitly handle the historical derivative discrepancy.
+3. **P2: obsolete model convenience interfaces** — `sparse_problem.py:120`,
+   `:124`, `:190`, `:411`. The activation/power getters, NumPy `predict`, and
+   `model_loss` survive only because tests call them. Delete these unnecessary
+   interfaces and test actual prediction/metrics behavior. This is a Middle Man /
+   Speculative Generality judgment under the deletion test and rule 10. In
+   contrast, `obj_augmented` has a real mathematical meaning and derivative-test
+   purpose; test-only use alone is not sufficient reason to delete it.
+4. **P2: duplicate snapshots and defensive copies** — `history.py:93`–`:98`,
+   `:134`–`:136`; `pdap.py:192`, `:211`. History separately clones atom tuples and
+   the same native state, then restores both. PDAP clones for inspection and
+   again during support replacement. Use one owned checkpoint and clone at
+   actual ownership transfers, preserving existing artifact fields. This is
+   duplicated state under refactor.md rules 7 and 12, not a request to redesign
+   history/logging.
 
-Stopping after a configured number of SSN iterations is sufficient for a budgeted correction followed by the agreed objective comparison. Reaching that budget is ordinary completion, not an error or proof of nonconvergence. Without a validated convergence check, report iterations and correction acceptance rather than asserting that the returned point converged or failed to converge. The current defaults are fit_outer_iterations = 20 and tolerance_grad = 0, which disables residual-based early exit.
+### Specification/design review — four material findings
 
-A convergence criterion is useful if early stopping or an explicit accuracy report is wanted, but need not be established merely to execute a fixed-budget correction. The existing optional check and its configuration compatibility still need deliberate treatment: inspection reproduced a false-zero residual at inactive coefficients. That mathematical issue also affects the Newton equation, so fixed-budget execution does not resolve it. Investigate it as a numerical-correctness issue separately from deciding whether early stopping is needed.
+1. **P2: standard DataLoader batching rejected** — `data.py:39` treats
+   `batch_size=None` as unbatched. A native DataLoader with an explicit sequential
+   BatchSampler also has `batch_size=None` while yielding correctly aligned
+   batches and retaining every sample. The reviewer reproduced this rejection.
+   Correct the batching validation while retaining the complete-data/no-drop
+   contract; do not introduce another loader abstraction.
+2. **P2: unsupported production generality retained** — the mask subsystem above
+   remains despite the signed-only active network. This predates the current
+   merge, but the refactor promised to remove unnecessary complexity. Masked
+   synthetic/golden cases are real mathematical coverage, so the supported
+   coefficient contract must be decided before removing the subsystem.
+3. **P2: old model interface transplanted** — the four unused convenience
+   interfaces above were carried into SparseProblem. `model_loss` is a second
+   full-evaluation path after its production guard caller moved to SSN. Remove
+   dead compatibility surface without discarding meaningful mathematical oracles.
+4. **P2: copying still follows the removed representation** — read-only inspection,
+   filtering/concatenation, support replacement, and history each copy the same
+   state. Read registered tensors for inspection; snapshot at an actual ownership
+   transfer. Preserve independence from the live network and between checkpoints.
 
-Candidate for optional convergence reporting, not accepted or required for fixed-budget execution: evaluate the scaled proximal fixed-point residual at the actual working coefficients, r(u) = (u - P_tau(u - tau * grad(f)(u))) / tau, and require it to be finite with ||r(u)||_infinity <= epsilon. Here f is obj_augmented and P_tau is the selected proximal map for the remaining penalty/constraints, with tau = 1 / inverse_step fixed for the solve. Its zeros correspond to the paper's proximal/normal-map equation with consistent coefficient and preimage values. SparseProblem supplies this mathematical evaluation through the prepared objective; SSN applies the numerical stopping rule. The norm scaling and tolerance would need explicit treatment if this feature is adopted. This tests the coefficient equation for fixed neurons and is not a claim of a global minimum.
+Additional stopping-documentation concern: `optimizer.py:118`/`:156` does not
+exit a complete correction when positive `tolerance_grad` is satisfied. It skips
+Newton work in that iteration, then repeats evaluations for the remaining budget
+and counts them. A stationary four-iteration probe performed four evaluations
+and reported four iterations. This preserves the former wrapper's behavior;
+calling it whole-correction early stopping is misleading. Correct the description
+without silently changing the accepted numerical/stopping policy. The known
+false-zero residual is a separate problem.
+
+The Spec reviewer also identified missing focused coverage for native
+BatchSampler delivery and complete multi-iteration trust-region fallback.
+Existing numerical, state-lifetime, artifact, and fixture-provenance checks remain
+useful; their passing result does not erase these design findings.
+
+### Ownership correction after the user's follow-up
+
+**Cause and accountability:** the first error was misunderstanding
+"problem-specific evaluation" as ownership of optimization procedures that
+contain mathematics. The repeated departures after the user's clarifications
+were failures to follow and verify the agreed plan. Calling the entire sequence
+a misunderstanding understates that failure. Root's account is that it did not
+deliberately choose to override the plan; the observable record establishes the
+incorrect interpretation and repeated noncompliance, not a separate approved
+design change.
+
+The concrete failure chain was:
+
+1. The assistant broadened mathematical evaluation into insertion/warm-start
+   procedure ownership and retained mixed legacy methods.
+2. It recorded its own interpretation ("insertion formulas") as accepted
+   architecture. Implementation details and user requirements were also mixed.
+3. Implementation/review did not catch departures from the original discussion,
+   including the previously omitted single-nn.Module consolidation. Passing
+   tests and later consolidation did not establish correct ownership.
+4. A subsequent cleanup proposal prioritized removing methods/repeated matrices
+   and proposed moving PDAP's largest-profile direction selection into the
+   problem, repeating the ownership error.
+
+The user did not create this ambiguity by changing the requirement. Root owns
+the planning, delegation and review failure. Independent ownership reviews
+confirmed these pre-cleanup code discrepancies, now corrected:
+
+- `profile_insertion` rejects candidates and chooses an initial coefficient;
+  `finite_insertion`/`solve_insertion_weight` include insertion optimization and
+  acceptance; `warmstart_coefficients` includes eligibility and step selection.
+  These methods mix evaluations with decisions that belong to PDAP.
+- Evaluating features, signed profiles, directional slope/curvature, objective
+  changes, and penalty/proximal operations remains problem mathematics. PDAP
+  owns how to search, rank, initialize, accept, and apply those evaluations.
+- `src/PDAP/warmstart.py` already selects the largest-profile direction. It is
+  not a pass-through. The earlier proposal to move that procedure into
+  SparseProblem and delete this module is withdrawn.
+
+The initial review itself changed no source. The latest user instruction
+authorized the completed cleanup assignments above. Review must compare ownership against the user's
+agreement, not treat assistant-authored descriptions or a lower method count as
+acceptance.
+
+**Required workflow for subsequent implementation:**
+
+1. Attach the applicable ownership row and user evidence to each agent task.
+   Label agreed requirements, implementation choices, and proposals separately.
+   A proposal or agent suggestion never becomes accepted merely by being copied
+   into this handoff or an ADR.
+2. Trace the affected caller and state lifetime. Classify each operation as
+   problem evaluation, PDAP decision/support update, SSN correction, data
+   preparation/delivery, or existing reporting. Check candidate rejection,
+   warm-start selection and correction rollback explicitly. Do not classify by
+   method name, the presence of formulas, or every conditional in isolation.
+3. Name the duplicated responsibility that disappears and the existing owner
+   that retains it. Do not justify a new class, copied formula, or responsibility
+   transfer by a shorter method count. Preserve the vocabulary in `CONTEXT.md`
+   and rules in `refactor.md`; do not rewrite them to fit the implementation.
+4. Have an independent reviewer compare the resulting code with the user
+   evidence and ownership row as well as numerical tests. Report compliance and
+   remaining discrepancies separately from passing tests. Root coordinates
+   corrections; root does not replace the implementation agent.
+
+This review reaffirmed all rows above. It also identified overclaims in the old
+"accepted architecture" table: exact tensor registration, prepared-record fields,
+full-data materialization, default iteration count and historical guard options
+are implementation/compatibility choices. Reporting placement is still deferred.
+
+### Authorized cleanup priorities and outcome
+
+Restore ownership and consolidate duplicated evaluation first (item 5), in
+parallel with independent state cleanup; then finish the data/solver follow-up
+and broader verification. The numbered findings retain their previous order
+for traceability.
+
+1. Correct the DataLoader batching check and cover the reproduced native
+   BatchSampler case. Retain ordinary/uneven batching, no-drop behavior, and RNG
+   isolation. This is a small defect fix within the accepted DataLoader contract.
+2. Delete `predict`, the `activation`/`power` getters, and `model_loss`. Migrate
+   tests to `forward`, `predict_tensors`, `metrics`, and independent objective
+   expectations instead of preserving unused methods for tests.
+3. Derive `_input_dim` from `W.shape[1]`, `_normalized` from `not use_sphere`, and
+   `_penalty_exponent` from power. Obtain growth data from the registry when
+   computing the radius. Keep the existing useful property names. This removes
+   four stored attributes (17 to 13) without adding a settings class or getters.
+4. Make History own one detached snapshot and populate its existing artifact
+   views from it. Use native tensors in PDAP for read-only inspection; keep
+   `set_atoms` as the validated support replacement. Remove `get_atoms` once its
+   copying protocol is gone. Preserve old artifact readers and checkpoint
+   isolation; avoid two consecutive state restorations.
+5. Keep the warm-start procedure in the existing `src/PDAP/warmstart.py` and
+   insertion procedures in `src/PDAP/insertion.py`. Move the acceptance and
+   initialization decisions currently hidden in SparseProblem into those
+   procedures. Keep problem-specific evaluations with SparseProblem and its
+   existing mathematical helpers. Prepare shared warm-start calculations once
+   without moving direction selection into the problem, duplicating objective
+   formulas in PDAP, or introducing another class or collection of getters.
+6. Keep necessary mathematical calculations together. `model_loss` is removed;
+   `obj_terms` remains the mathematical value/gradient fitting decomposition used
+   by metrics. Its single caller is not itself a reason to remove the operation.
+   Do not move the entire `solve_insertion_weight` procedure into `prox.py`:
+   it includes insertion decisions as well as a proximal evaluation. Existing
+   mathematical helpers supply the calculation; PDAP owns the insertion solve
+   and its acceptance.
+   Neither a single-caller method nor a long class is by itself a defect.
+7. Treat mask retirement and cross-path derivative unification as separate
+   explicit decisions. No production caller needs masks, but masked goldens,
+   normal-map finite differences, nonnegative prox tests, and fractional-scale
+   tests currently exercise them. Do not drop those assertions or add a second
+   mathematical implementation merely to make the class look smaller.
+8. Recheck caller simplicity and meaningful tests after cleanup, including the
+   complete correction with both SSN strategies. Correct stopping documentation;
+   do not silently add a new convergence policy.
+
+The first three simplifications of the class (unused interfaces, derived state,
+and snapshot ownership) remove five public operations and four stored attributes.
+This is a consequence of removing unnecessary obligations, not a method-count
+target. The SSN loss, smooth-gradient transformation, prox, preimage, normal map,
+and their Jacobians remain distinct mathematical operations. Combining them into
+a large tuple-returning method would hide the same complexity and disrupt the
+current lazy Jacobian/tolerance ordering.
+
+Numerical constraint on feature unification: for inputs `[-1, 2]`, a unit inner
+weight, zero bias, and power 1, correction versus warm-start derivatives are
+`[0.01, 1]` versus `[0, 1]` for leaky ReLU, and `[0, 4]` versus `[0, 1]` for squared
+ReLU. Ordinary ReLU agrees. Remove repeated work within a warm start first;
+blindly replacing every derivative path with autodiff changes behavior.
+
+Items 1–6 and 8 are complete, with targeted verification, full-suite comparison
+and independent boundary review recorded above. Item 7 retains masked numerical
+coverage and the explicitly tested historical derivative convention; changing
+either contract is deferred.
+
+## Implementation decisions and compatibility checks
+
+These implement the ownership requirements above; their exact fields, defaults
+and storage mechanics are not separate user-approved requirements.
+
+- Register `W` and `b` as buffers and `c` as an `nn.Parameter`, with coherent
+  empty support. Direct registration avoids randomly initialized layers that
+  would immediately be overwritten with exact atoms.
+- `prepare_coefficients(loader)` currently returns the three-field
+  `PreparedObjective` record (`obj`, `hess_obj`, `coefficient_scale`). Features
+  and targets are captured by its temporary closure; the record adds no
+  mathematical implementation or second network.
+- Full-data evaluation currently materializes a complete loader pass in the
+  data module. This is a memory tradeoff in the implementation, not a promise
+  of out-of-core training or a requirement to store data on the problem.
+- Use `SSN.step()` for one complete correction, with an internal iteration
+  budget (`max_iter`, default 20). Existing tests of one numerical iteration
+  explicitly request one iteration. No mandatory new convergence criterion.
+- Keep a starting coefficient copy inside SSN. With the guard enabled, accept
+  only a finite final full objective no greater than the initial objective;
+  otherwise restore the starting coefficients. Exceptions must not mutate the
+  network. Report iterations and correction acceptance, not convergence.
+- Preserve existing explicit `correction_guard=False` configurations as the
+  historical unguarded comparator; the guard is implemented only in SSN. Do
+  not silently change Hydra defaults while configuration redesign is deferred.
+- Preserve the existing optional `tolerance_grad` setting for compatibility;
+  do not present it as a newly validated convergence test. Its known false-zero
+  residual requires separate mathematical investigation.
+- Use the existing feature-residual loss arithmetic and cached fitting Hessian.
+  Compact quadratic storage, new penalty/activation semantics, and numerical
+  bug fixes are separate work.
+- Direct atom registration removes random draws from discarded nn.Linear
+  initialization. Check seeded PDAP trajectories explicitly. Do not add dummy
+  random draws to production, overwrite historical fixtures, loosen tolerances, or hide
+  failures to claim equivalence. Establish whether observed differences are
+  this RNG change or a mathematical regression, and record the evidence.
+- Preserve reading historical atom snapshots and physical-coordinate reporting,
+  including zero support and evaluating another checkpoint without modifying
+  the current one. Historical layer-key state dictionaries need treatment at
+  the reader, not a retained model hierarchy.
+- Saved prediction may use historical activation powers unsupported by today's
+  SSN correction. Plain construction permits positive finite powers and an
+  activation name or callable. `validate_correction()` retains the existing
+  supported-power/gamma/geometry restrictions, called by training `from_config`,
+  insertion validation, and coefficient preparation. This preserves historical
+  prediction without a second class or a prediction-only mode flag.
+- Keep state_dict limited to network state, with no samples, loader, feature
+  cache, prepared objective, or optimizer state stored on SparseProblem.
+
+## Verification and completion gate
+
+Before declaring completion, require all of the following:
+
+1. Inspect the actual diff for the accepted architecture: SparseProblem is an
+   nn.Module, obsolete model files and ssn_solve are deleted, and callers use
+   one problem. No replacement hierarchy or duplicate formula owner.
+2. Check native module behavior, prediction/input derivatives, exact coefficient
+   storage, support changes, empty support, checkpoint restoration, and no
+   incidental RNG changes from assigning exact atoms.
+3. Check prepared objective value/gradient/Hessian and lifetime; full versus
+   uneven DataLoader batches; candidate/warm-start/radius mathematics.
+4. Check complete SSN iterations, both strategies, final acceptance/fallback,
+   normalized coefficients, historical comparator behavior, and exception
+   isolation from persistent network state.
+5. Check PDAP integration, history, saved-run readers, runner, and logging
+   contracts. Preserve numerical fixtures; explain any trajectory differences.
+6. Run appropriate focused tests, type checks/lint, then the full suite once
+   after integration. Investigate new failures rather than classifying them as
+   pre-existing. Independent standards and specification reviews must both
+   resolve material findings.
+7. Update this record with evidence and outstanding limitations, then have an
+   implementation subagent commit the reviewed changes on the current branch.
+   Do not push or publish without a separate user instruction.
+
+Baseline at `edb166a`: **398 passed, 2 failed, 20 warnings**. Existing failures:
+
+- `test_pendulum_selection_prioritizes_stabilization_then_global_error`: stale
+  ignored local `controller_selection.json`; do not regenerate unrelated data.
+- `test_pdap_summary_matches_golden[signed_profile]`: prior platform/reference
+  mismatch. Pre-change L2 = 0.020708285737220288, H1 =
+  0.05464074122149227, loss = 0.0028238830405932294. The old fixture is unchanged.
+
+Earlier prerequisite work was preserved in `49eeb03`; DataLoader integration
+was committed in `edb166a`. The working tree was clean when this correction
+started. `refactor.md`, `CONTEXT.md`, and numerical fixtures were unchanged.
+
+Focused verification reported by the implementation agents:
+
+- 43 module/problem/DataLoader tests pass; src/models is deleted.
+- 45 SSN tests pass, including complete iteration budgets, worsening/nonfinite
+  final fallback, the explicit unguarded comparator, and exception rollback.
+- 10 Algorithm 2 correction tests pass after caller/validation migration.
+- 104 History/results/runner/config/normalization/radius/Algorithm 2/paper
+  conformance checks pass.
+- Both trajectory-reference tests pass with unchanged strict tolerances.
+
+These selections overlap; they are not an aggregate suite count.
+
+Integrated verification before the reopened design review, reported by `data_pipeline`:
+
+- `.venv/bin/python -m pytest -q`: **410 passed, 1 failed, 18 warnings** in
+  30.07 seconds. The sole failure is the unchanged stale ignored local
+  controller-selection artifact listed above. No new failures remain.
+- Ruff on all changed production/test files and Git whitespace checks pass.
+- Pyright has no errors in SparseProblem, SSN, PDAP, History, or results.
+  train.py/plots.py report 26 diagnostics (4/22); independent checks of their
+  `edb166a` versions produced exactly the same diagnostic identities. No new
+  typing errors were introduced.
+- Earlier standards/specification reviews reported no unresolved findings.
+  The user subsequently rejected the class/interface design; the full review
+  above supersedes those reports as evidence of design acceptance.
+- Production code changes total 307 added / 708 removed lines (401 fewer).
+  This is separate from tests and documentation. refactor.md, CONTEXT.md, and
+  both historical numerical fixtures are unchanged.
+
+Earlier migration logs: `/tmp/sparse-final-pytest.log`,
+`/tmp/sparse-final-pyright.log`. Final cleanup results and review disposition are
+at the top of this document. No push is authorized.
+
+The caller agent independently reran `edb166a` in a temporary snapshot and then
+changed only its discarded layer-initialization RNG consumption in a diagnostic
+process. Neither production code nor test fixtures were patched for this probe.
+This provides a reference for attributing the observed trajectory differences:
+
+| Reference | Final neurons | L2 | H1 | Last loss |
+| --- | ---: | ---: | ---: | ---: |
+| Original signed_profile | 54 | 0.020708285737220288 | 0.05464074122149227 | 0.0028238830405932294 |
+| Original signed_finite_step | 57 | 0.02066964472206974 | 0.05551263296586934 | 0.0029939213075414516 |
+| Old math without layer RNG, signed_profile | 57 | 0.02125353101279779 | 0.048004871851952166 | 0.0022523097271912127 |
+| Old math without layer RNG, signed_finite_step | 51 | 0.026508712474840275 | 0.05603594165442737 | 0.0028927412770338714 |
+
+The current implementation matches all eight reported values from the old-code
+diagnostic without layer RNG **exactly**, including final support widths. The
+coordinated regression treatment keeps `pdap_golden.npz` unchanged and adds
+`pdap_direct_registration_golden.npz`, populated from that independent old-code
+diagnostic, never from the new implementation's results. Existing strict
+tolerances remain unchanged. This records the accepted representation's RNG
+consequence without manufacturing random draws, skipping tests, or silently
+replacing the historical reference. Both current trajectory tests and the full
+suite's numerical checks pass against this independently sourced reference.
+
+Review follow-ups addressed before final verification: the existing fractional
+power/log-penalty rejection test now exercises `validate_correction()` (plain
+construction also serves historical prediction), and the trajectory test no
+longer silently regenerates an independent reference from current code. The
+SSN owner reports all 10 Algorithm 2 correction tests passing after the former
+migration. These change test setup, not the mathematical rejection or tolerances.
+
+Evidence lives at
+`/var/folders/11/x3msc_sj5236k25kdjys_9_r0000gn/T/sparse-pdap-baseline-zuhk5wgd`.
+
+## Historical discussion and recovery notes
+
+The following records preserve the original decisions, research, and recovery
+context. Statements about what is not yet authorized, separate models, mutable
+prepared caches, or a future model merge describe earlier stages; the current
+plan above supersedes them. The configuration/logging deferral remains current.
 
 ## Accepted decisions
 
@@ -94,13 +576,34 @@ Feature-based fitting evaluations and the cached fitting Hessian in the temporar
 
 ### Temporary prepared coefficient objective
 
-SparseProblem constructs and returns a prepared objective for the current fixed neurons and supplied training data. It does not retain the prepared feature matrices, coefficient Hessian, scaling, and masks as persistent attributes on the network object.
+The purpose is limited to reusing fixed calculations within one SSN correction.
+With inner weights, biases, samples and objective settings fixed, neuron values,
+input-derivative features, coefficient normalization and the data-fitting Hessian
+do not change when SSN changes the outer coefficients. SparseProblem calculates
+them once; SSN reuses them for iterations, trial evaluations and the final check.
+Only the data-fitting Hessian is fixed: penalty corrections and normal-map
+Jacobians can still depend on the current coefficients.
 
-PDAP keeps the returned objective available for one complete coefficient correction and supplies the same instance to SSN. Its calculations are reused across all inner SSN iterations and SSN's final acceptance check. The object can be released when that correction finishes.
+Preparation is not mathematically necessary. Recomputing these quantities on
+every evaluation is a valid alternative, at the cost of repeated neuron/input
+derivative evaluation and feature-matrix products. Keeping this reuse local to
+one solve implements the user's choice to avoid persistent prepared attributes
+on SparseProblem. It is not an additional architectural layer.
 
-This is derived calculation data and mathematical operations, not a proposed network or a backup of its weights. The working coefficient vector used by SSN is separate. All formulas remain implemented on SparseProblem; the temporary record does not reimplement them. Feature matrices used to test candidate insertions are also a separate concern; temporary values inside a SparseProblem evaluation method do not become persistent attributes merely because that method created them.
+The current method-free record contains only `obj`, `hess_obj`, and optional
+`coefficient_scale`. The fitting callable captures fixed features and target
+snapshots; the formulas are defined by SparseProblem. PDAP passes this return
+value to SSN and releases it after correction. Changing support, data or relevant
+settings requires fresh preparation. No separate setup/reset/invalidation
+protocol or persistent loader is needed.
 
-The prepared calculations remain valid while the neurons and relevant data/settings remain fixed; changing coefficients alone does not invalidate them. The user accepted retaining feature-based fitting evaluations and the already-cached fitting Hessian in this temporary objective. Do not replace them with expanded quadratic loss evaluations during the structural refactor. Closures versus a record versus a class, batching policy, and reuse across correction attempts remain implementation questions. Compact storage can be considered separately based on measured memory, speed, and numerical accuracy.
+This record is neither a proposed network nor a coefficient backup. SSN keeps
+its own starting-coefficient copy. Candidate-search and warm-start calculations
+are separate local evaluations; their duplicated work does not justify expanding
+this record into a general cache or creating more prepared-object classes.
+It must not own insertion decisions, solver state, loaders or logging. Preserve
+the current feature-residual arithmetic during structural cleanup; expanded
+quadratic storage or other numerical changes remain separate decisions.
 
 ### One network/problem representation directly on PyTorch
 
@@ -281,7 +784,11 @@ These frameworks offer different interfaces. The project-specific inference is t
 
 ## DataLoader integration plan
 
-**Historical broader plan:** the authorized increment at the top of this document supersedes this plan where it proposed simultaneous model migration, new Hydra settings, and changed history/logging ownership. Those portions are deferred. DataLoader adoption and full-data mathematical requirements remain in force.
+**Historical broader plan:** the implementation record at the top supersedes
+this proposed sequence. The single-module migration is now implemented; new
+Hydra settings and changed history/logging ownership remain deferred. DataLoader
+adoption and full-data mathematical requirements remain in force. Current
+full-data assembly is a documented memory tradeoff, not out-of-core training.
 
 ### Responsibility boundary
 
@@ -389,14 +896,15 @@ This was an earlier run, not a fresh validation at that handoff. The new Mac's p
 Start here, then inspect the actual working tree:
 
 - [Refactoring principles](refactor.md), [domain vocabulary](CONTEXT.md), [repository map](CLAUDE.md).
-- [Current ownership ADR](docs/adr/0004-model-trainer-eval-separation.md): its latest section describes the existing implementation and keeps model state outside SparseProblem. The target direction has changed in this discussion; the ADR has not yet been updated.
-- [SparseProblem](src/problems/sparse_problem.py), [model contract](src/models/base.py), [SignedModel](src/models/signed.py), [ShallowNetwork](src/models/net.py).
-- [PDAP](src/PDAP/pdap.py), [correction wrapper](src/PDAP/ssn_solve.py), [warm start](src/PDAP/warmstart.py), [SSN](src/SSN/optimizer.py).
+- [Current ownership ADR](docs/adr/0004-model-trainer-eval-separation.md): the current-decision section records the agreed single SparseProblem and complete SSN correction. Earlier sections preserve superseded designs.
+- [SparseProblem](src/problems/sparse_problem.py): replaces the former model contract and SignedModel/ShallowNetwork hierarchy, visible in Git at `edb166a`.
+- [PDAP](src/PDAP/pdap.py), [warm start](src/PDAP/warmstart.py), [SSN](src/SSN/optimizer.py): the separate correction wrapper is deleted.
 - [Configuration](src/config/schema.py), [activations](src/config/activations.py), [training runner](scripts/train.py).
 - [History](src/PDAP/history.py), [results](src/results.py), [plots](src/plots.py).
 - [Synthetic objectives](tests/ssn_test_problem.py), [SSN equivalence](tests/test_ssn_equivalence.py), [PDAP equivalence](tests/test_pdap_equivalence.py), [results tests](tests/test_results.py), [history tests](tests/test_history.py).
 
-The vault algorithm documentation also has stale references; revise it after the architecture is settled.
+The [algorithm module map](vault/algorithm.md) records the implemented ownership
+and manuscript scope; its verification link points back to this plan.
 
 The initially lost session was located:
 
@@ -406,6 +914,30 @@ The initially lost session was located:
 
 That session supplied the earlier implemented ownership split. The current discussion revises its architectural direction. The rollout and locally installed skills may not transfer; this handoff should suffice to resume.
 
-Suggested resumption message:
+Current resumption message:
 
-> Read REFACTOR_HANDOFF.md, starting with the current implementation scope and validation results, and inspect Git state. The user authorized the DataLoader increment and deferred configuration/logging redesign. Source implementation now uses external loaders, problem-owned mathematics, and a three-field PreparedObjective record; model merging and the complete SSN solve refactor remain future work. Preserve agreed architecture, use plain text rather than LaTeX, and do not reopen DataLoader adoption. Check the two documented pre-existing test failures separately from regressions. The false-zero normal-map residual still requires a separate numerical investigation. Follow the user's next instruction about the remaining refactor.
+> Ownership-first cleanup and independent Standards/Spec review are complete.
+> Read the current status and boundary table before the historical record.
+> PDAP owns search/insertion/warm-start procedures; SparseProblem owns the current
+> nn.Module and mathematical evaluations; SSN owns complete corrections and
+> fallback. Final suite: 422 passed, one existing stale local selection failure;
+> Ruff and core Pyright pass. Numerical references and tolerances are preserved.
+> Mask retirement, configuration/logging redesign and known numerical bugs remain
+> deferred. Root coordinates/docs only; subagents implement and review. The
+> pre-cleanup source/tests snapshot is /tmp/sparse-boundary-before-y_e9gbjp.
+
+Historical resumption note (review-only status superseded by the message above):
+
+> Read the current plan at the top of REFACTOR_HANDOFF.md and inspect Git state. Root only plans, documents, delegates, and coordinates; subagents implement and independently review. The requested full review of all changes since 49eeb03 is complete; its findings and proposed cleanup are recorded above. No cleanup is implemented, and the working tree remains uncommitted. The user rejected excessive methods/attributes in SparseProblem; the previous 410 passing tests and earlier narrow reviews do not establish a streamlined design. Preserve the accepted one-module/external-data/temporary-preparation/Optimizer architecture, vocabulary, historical fixtures, and configuration/logging deferral. Use the recorded usage evidence to delegate any subsequently authorized cleanup rather than moving the same complexity into more classes or dropping meaningful mathematical tests. Mask support and derivative conventions require explicit treatment.
+
+> Latest ownership correction: PDAP owns warm-start, candidate search/selection,
+> insertion acceptance, and support mutation. SparseProblem supplies the network
+> and mathematical evaluations. Withdraw the former proposal to move complete
+> warm-start selection into SparseProblem. Mixed insertion/warm-start methods
+> remain an implementation defect; the documentation correction does not fix
+> the source. Do not infer user approval from assistant-authored historical text.
+> The cause/prevention record distinguishes the initial misunderstanding from
+> repeated failures to follow the clarified plan. Before delegating cleanup,
+> attach the applicable user evidence and ownership row; independently review
+> responsibility and state lifetime as well as behavior. Exact storage/default
+> choices and deferred reporting placement are not additional user agreements.

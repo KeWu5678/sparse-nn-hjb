@@ -7,27 +7,7 @@ import torch
 __all__ = [
     "amplitude_mass_radius",
     "moment_weight",
-    "atom_normalizer",
 ]
-
-
-def atom_normalizer(W: torch.Tensor, b: torch.Tensor, *, p: float) -> torch.Tensor:
-    """Return the per-atom divisor that turns ``K`` into ``K_p``.
-
-    The revised paper objective is ``J = l^M + alpha * sum phi(w_p(omega_n)|c_n|)``.
-    Substituting the normalized coefficient ``u_n = w_p(omega_n) c_n`` turns it into
-    the *ordinary* objective ``l^M + alpha * sum phi(|u_n|)`` over the normalized
-    dictionary ``K_p = K / w_p``, because
-
-        sum_n c_n K(omega_n) = sum_n u_n K(omega_n)/w_p(omega_n) = sum_n u_n K_p(omega_n).
-
-    So every site that would need a new penalty instead divides its atom columns by
-    this vector and works in ``u``, converting back with ``c = u / w_p``.
-
-    Only Algorithm 1 calls this helper; other model families keep their native
-    dictionaries.
-    """
-    return moment_weight(W, b, p).reshape(-1)
 
 
 def moment_weight(W: torch.Tensor, b: torch.Tensor, p: float) -> torch.Tensor:

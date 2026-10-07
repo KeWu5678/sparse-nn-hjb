@@ -1,31 +1,17 @@
 """Golden characterization tests for the PDAP outer loop.
 
-Pins the current behaviour of the three explicit PDAP configurations.  PDAP has
+Pins the current behaviour of the two explicit PDAP configurations.  PDAP has
 internal randomness (sphere sampling + L-BFGS insertion), so we fix seeds and
 assert on the summary of a short run: the final neuron count (exact) and the
 error/loss scalars (tight tolerance, guarding against float reassociation while
 still catching real drift).
 
-Golden values: ``tests/fixtures/pdap_golden.npz``.  Regenerate from a known-good
-tree with ``PDAP_UPDATE_GOLDEN=1 pytest tests/test_pdap_equivalence.py``.
-
-Notes:
-- Both baselines were re-captured when all network layers began initializing in
-  float64. This removes coefficient rounding during support replacement and
-  changes the random stream consumed by layer initialization before insertion.
-- the sphere-search baselines were re-captured when Algorithm 2 stopped using
-  copies of the current support as additional L-BFGS starts.  Both variants now
-  use exactly ``N_trial`` random starts per candidate search.
-- the finite-step baseline was re-captured when PDAP pruning changed from
-  duplicate-merge pruning to amplitude-only pruning; this keeps one additional
-  atom in the short characterization run.
-- all three were re-captured when the empirical fidelity dropped the MATLAB
-  ``Nx = M*d`` divisor for the paper's ``1/(2M)``.  That is an exact
-  reparametrization of the objective (``alpha_paper = d * alpha_legacy``), so
-  the minimizer is unchanged, but it does not reproduce the old *run*: the
-  candidate L-BFGS (``insertion.py``) keeps torch's absolute
-  ``tolerance_grad=1e-7``, so scaling the profile by ``d`` shifts each refined
-  argmax by ~1e-6 and the trajectories separate.
+``pdap_direct_registration_golden.npz`` comes from the independent edb166a
+implementation with RNG consumption isolated only around SignedModel.set_atoms.
+Direct W/b/c registration intentionally removes discarded Linear initialization
+draws; the mathematical operations and these tolerances are unchanged.  The
+original ``pdap_golden.npz`` remains intact as the historical random-stream
+reference.  This test never regenerates either fixture from the code under test.
 """
 
 from __future__ import annotations
@@ -39,11 +25,10 @@ import torch
 
 from src.config.schema import EnvConfig, ExperimentConfig, ModelConfig, TrainingConfig
 from src.data import make_dataloaders
-from src.models import build_model
 from src.PDAP import PDAP
 from src.problems import SparseProblem
 
-GOLDEN_PATH = Path(__file__).parent / "fixtures" / "pdap_golden.npz"
+GOLDEN_PATH = Path(__file__).parent / "fixtures" / "pdap_direct_registration_golden.npz"
 SEED = 123
 RTOL, ATOL = 1e-5, 1e-7
 
@@ -83,10 +68,10 @@ def _run_summary(name: str) -> np.ndarray:
     np.random.seed(SEED)
     cfg = _cfg(name)
     data = _make_data()
-    model = build_model(cfg, input_dim=data["x"].shape[1])
+    model = SparseProblem.from_config(cfg.model, input_dim=data["x"].shape[1])
     train_loader, valid_loader = make_dataloaders(data, cfg.data.train_fraction)
     out = PDAP(cfg.training, insertion=cfg.model.insertion).fit(
-        model, SparseProblem.from_config(cfg.model, data["x"].shape[1]),
+        model,
         train_loader, valid_loader, num_iterations=3, num_insertion=20, verbose=False,
     )
     return np.array(
@@ -98,16 +83,6 @@ def _run_summary(name: str) -> np.ndarray:
         ],
         dtype=np.float64,
     )
-
-
-def _maybe_regenerate() -> None:
-    if GOLDEN_PATH.exists() and not os.environ.get("PDAP_UPDATE_GOLDEN"):
-        return
-    GOLDEN_PATH.parent.mkdir(parents=True, exist_ok=True)
-    np.savez(GOLDEN_PATH, **{name: _run_summary(name) for name in CONFIGS})
-
-
-_maybe_regenerate()
 
 
 @pytest.mark.skipif(

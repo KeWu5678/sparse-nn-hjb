@@ -7,11 +7,6 @@ import torch
 from ssn_test_problem import synthetic_problem
 
 from src.data import make_dataloader
-from src.models import SignedModel
-from src.PDAP.ssn_solve import (
-    SolverConfig,
-    ssn_solve,
-)
 from src.problems import SparseProblem
 from src.problems.penalty import _noncvx_penalty
 from src.SSN import SSN
@@ -37,26 +32,26 @@ def test_warmstart_prox_scale_preserves_a_smaller_existing_scale() -> None:
     assert scale == pytest.approx(1e-5)
 
 
-def test_fractional_ssn_requires_an_explicit_proximal_scale() -> None:
+def test_fractional_ssn_chooses_the_scale_from_its_starting_coefficients() -> None:
     coefficient = torch.nn.Parameter(torch.tensor([0.5], dtype=torch.float64))
     problem, prepared = synthetic_problem(
         lambda u: 0.5 * u.square().sum(), torch.eye(1, dtype=torch.float64),
         alpha=1.0, gamma=0.0, power=3.0,
     )
 
-    with pytest.raises(ValueError, match="prox_scale is required"):
-        SSN([coefficient], problem, prepared)
+    optimizer = SSN([coefficient], problem, prepared)
+    assert optimizer.param_groups[0]["inverse_step"] == pytest.approx(4 * 2 ** .5)
 
 
 @pytest.mark.parametrize("power", [2.0, 3.0])
 def test_fractional_problem_rejects_a_log_penalty(power: float) -> None:
     with pytest.raises(ValueError, match="power penalty requires gamma == 0"):
-        SparseProblem(1, alpha=1.0, gamma=1.0, power=power)
+        SparseProblem(1, alpha=1.0, gamma=1.0, power=power).validate_correction()
 
 
 def test_fractional_correction_reports_an_all_zero_warm_start() -> None:
-    model = SignedModel(activation=torch.relu, power=2.0, verbose=False)
-    model.set_atoms(
+    problem = SparseProblem(1, alpha=1.0, gamma=0.0, power=2.0)
+    problem.set_atoms(
         torch.tensor([[1.0]], dtype=torch.float64),
         torch.tensor([0.0], dtype=torch.float64),
         torch.tensor([0.0], dtype=torch.float64),
@@ -68,16 +63,12 @@ def test_fractional_correction_reports_an_all_zero_warm_start() -> None:
         torch.zeros_like(X),
     )
 
+    prepared = problem.prepare_coefficients(make_dataloader(data))
+    theta = torch.nn.Parameter(problem.c.detach().clone())
     with pytest.raises(
         ValueError, match="warm-start proximal scaling requires a nonzero coefficient"
     ):
-        ssn_solve(
-            model,
-            SparseProblem(1, alpha=1.0, gamma=0.0, power=2.0),
-            SolverConfig(),
-            make_dataloader(data),
-            iterations=1,
-        )
+        SSN([theta], problem, prepared, max_iter=1)
 
 
 def test_fractional_ssn_preserves_a_prox_consistent_warm_start() -> None:
@@ -100,7 +91,7 @@ def test_fractional_ssn_preserves_a_prox_consistent_warm_start() -> None:
         alpha=alpha, gamma=0.0, power=3.0,
     )
     prox_scale = problem.warmstart_prox_scale(coefficient.detach(), rho=0.9)
-    optimizer = SSN([coefficient], problem, prepared, prox_scale=prox_scale, tolerance_grad=0.0)
+    optimizer = SSN([coefficient], problem, prepared, prox_scale=prox_scale, tolerance_grad=0.0, max_iter=1)
 
     before = float(problem.loss(coefficient, prepared).detach())
     optimizer.step()
@@ -152,7 +143,7 @@ def test_fractional_ssn_uses_the_closed_form_prox_derivative(
         data_loss, torch.tensor([[2.0]], dtype=torch.float64),
         alpha=alpha, gamma=0.0, power=power,
     )
-    optimizer = SSN([coefficient], problem, prepared, prox_scale=prox_scale, tolerance_grad=0.0)
+    optimizer = SSN([coefficient], problem, prepared, prox_scale=prox_scale, tolerance_grad=0.0, max_iter=1)
     optimizer.step()
 
     assert optimizer.last_step_success

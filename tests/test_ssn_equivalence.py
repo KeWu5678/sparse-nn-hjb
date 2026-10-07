@@ -86,14 +86,14 @@ def _run_trajectory(config: dict) -> np.ndarray:
     kind = config["kind"]
     if kind == "ssn":
         opt = SSN(
-            [theta], problem, prepared,
+            [theta], problem, prepared, max_iter=1, correction_guard=False,
             prox_scale=config.get("prox_scale"),
         )
     elif kind == "ssn_tr":
         # folded into the base SSN: trust-region (Steihaug-CG) globalization
-        opt = SSN([theta], problem, prepared, method="steihaug_cg")
+        opt = SSN([theta], problem, prepared, method="steihaug_cg", max_iter=1, correction_guard=False)
     elif kind == "ssn_masked":
-        opt = SSN([theta], problem, prepared)
+        opt = SSN([theta], problem, prepared, max_iter=1, correction_guard=False)
     else:  # pragma: no cover
         raise ValueError(kind)
 

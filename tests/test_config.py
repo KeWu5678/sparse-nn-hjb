@@ -12,7 +12,6 @@ from hydra.errors import ConfigCompositionException
 from src.config import get_activation, get_use_sphere
 from src.config.schema import ExperimentConfig
 from src.data import DATA_DIR, load_value_samples
-from src.models import build_model
 from src.PDAP import PDAP
 from src.problems import SparseProblem
 
@@ -121,7 +120,7 @@ def test_experiments_sweep_both_datasets() -> None:
 
 
 def test_config_builds_trainer_and_model() -> None:
-    """The trainer reads its config; the model is built separately by build_model."""
+    """The trainer and sole network/problem read their respective configuration."""
     with initialize(version_base=None, config_path="../conf"):
         cfg = compose(config_name="config", overrides=["model.gamma=0.5", "env.verbose=false"])
 
@@ -130,25 +129,25 @@ def test_config_builds_trainer_and_model() -> None:
     assert problem.description()["alpha"] == cfg.model.alpha == 1e-5
     assert problem.description()["gamma"] == 0.5
     assert pdap.insertion_kind == "profile"
-    assert pdap.solver.max_ls_iter == 500
+    assert pdap.solver["max_ls_iter"] == 500
     assert pdap.fit_outer_iterations == 20
     assert pdap.ins_merge_tol == 1e-2
 
-    model = build_model(cfg, input_dim=2)
-    assert type(model).__name__ == "SignedModel"
-    assert model.power == cfg.model.power
-    assert model.activation is torch.relu
-    assert model.input_dim == 2
+    assert isinstance(problem, torch.nn.Module)
+    problem.set_atoms(torch.tensor([[1., 0.]]), torch.tensor([0.]), torch.tensor([2.]))
+    x = torch.tensor([[-1., 3.], [2., 3.]], dtype=torch.float64)
+    torch.testing.assert_close(problem(x), x.new_tensor([[0.], [4.]]))
+    assert problem.input_dim == 2
 
 
-def test_build_model_from_loaded_dataset() -> None:
+def test_construct_problem_from_loaded_dataset() -> None:
     """Loading the configured dataset and building the model gives input_dim=2."""
     with initialize(version_base=None, config_path="../conf"):
         cfg = compose(config_name="config", overrides=["env.verbose=false"])
     if not (DATA_DIR / cfg.data.path).exists():
         pytest.skip(f"dataset not present (rawdata/ is gitignored): {cfg.data.path}")
     data = load_value_samples(cfg.data.path)
-    model = build_model(cfg, input_dim=data["x"].shape[1])
+    model = SparseProblem.from_config(cfg.model, input_dim=data["x"].shape[1])
     assert model.input_dim == 2
 
 

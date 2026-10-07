@@ -608,7 +608,7 @@ def plot_model_value_surface(
 
     Reproduces the left panel of Fig. 2 in Han & Yang (arXiv:2312.17467): the value
     function as a surface, here the model's *learned* approximation (not the data
-    samples). Rebuilds a :class:`ShallowNetwork` from a fit result's best-iteration
+    samples). Rebuilds a :class:`SparseProblem` from a fit result's best-iteration
     atoms — ``history`` may be a ``History`` object, a path to its pickle, or a list
     of runs (``run_index`` selects one). ``activation`` (a name resolved via
     ``src.config.activations.get_activation``, or a callable) and ``power`` must
@@ -635,7 +635,7 @@ def plot_model_value_surface(
     """
     net = model_from_history(history, activation=activation, power=power,
                              run_index=run_index)
-    d = int(net.hidden.weight.shape[1])
+    d = net.input_dim
     if d != 2:
         raise ValueError(f"Expected 2D input, got d={d}. This function only supports 2D plots.")
 

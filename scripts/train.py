@@ -47,7 +47,6 @@ from src.data import DATA_DIR, load_value_samples, make_dataloaders, normalize_v
 from src.eval import distance_binned_error, region_split_errors
 from src.experiment_logging import ExperimentRun
 from src.logging_config import configure_logging
-from src.models import build_model
 from src.PDAP import PDAP
 from src.problems import SparseProblem
 
@@ -219,8 +218,8 @@ def main(cfg: DictConfig) -> None:
         hydra=hydra_metadata(hydra_cfg),
     )
 
-    # Data preprocessing lives in the script: load, normalize, split.  The model
-    # is built by build_model; the trainer holds only config and returns a History.
+    # Data preprocessing is external to the problem. The trainer holds only
+    # configuration and returns a History.
     with (DATA_DIR / cfg.data.path).open("rb") as source:
         data_sha256 = hashlib.file_digest(source, "sha256").hexdigest()
     evaluation_data_sha256 = {}
@@ -237,11 +236,9 @@ def main(cfg: DictConfig) -> None:
     train_loader, valid_loader = make_dataloaders(
         data, cfg.data.train_fraction, seed=cfg.env.seed,
     )
-    model = build_model(cfg, input_dim)
-
     problem = SparseProblem.from_config(cfg.model, input_dim)
     history = trainer.fit(
-        model, problem, train_loader, valid_loader,
+        problem, train_loader, valid_loader,
         num_iterations=cfg.training.num_iterations,
         num_insertion=cfg.training.num_insertion,
         max_insert=cfg.training.max_insert,
@@ -269,7 +266,7 @@ def main(cfg: DictConfig) -> None:
     # split by distance to the switching set, merged into the run record so the
     # analysis layer reads them like any other metric.
     if cfg.eval.kind == "region_split":
-        evaluation_model = build_model(cfg, input_dim)
+        evaluation_model = SparseProblem.from_config(cfg.model, input_dim)
         history.restore_model(evaluation_model)
         region = region_split_metrics(cfg, evaluation_model, data, normalizer)
         metrics.update(region)

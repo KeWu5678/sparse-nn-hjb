@@ -91,7 +91,7 @@ def test_sphere_profile_model_is_not_moment_normalized() -> None:
 
 def test_algorithm1_rejects_nonunit_activation_power() -> None:
     with pytest.raises(ValueError, match="Algorithm 1.*power == 1"):
-        SparseProblem(2, activation="softplus", power=2.0)
+        SparseProblem(2, activation="softplus", power=2.0).validate_correction()
 
 
 def test_model_schema_has_no_additive_objective_axis() -> None:

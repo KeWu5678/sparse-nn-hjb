@@ -36,7 +36,7 @@ def full_batch(loader: DataLoader) -> TensorSamples:
     This deliberately materializes the supplied samples. A single delivered
     batch is reused directly; smaller batches are concatenated in delivery order.
     """
-    if loader.batch_size is None or loader.drop_last:
+    if loader.batch_sampler is None or loader.drop_last or getattr(loader.batch_sampler, "drop_last", False):
         raise ValueError("full-data evaluation requires batching without dropping samples")
     batches = list(loader)
     if not batches:

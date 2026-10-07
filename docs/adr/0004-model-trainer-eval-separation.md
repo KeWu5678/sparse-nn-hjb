@@ -2,7 +2,60 @@
 status: accepted
 ---
 
-# Models are parametrizations; PDAP is the trainer; evaluation is pure functions
+# SparseProblem owns the network and mathematics; PDAP and SSN own optimization
+
+## Current decision: one SparseProblem built on PyTorch (2026-10-07)
+
+The agreed refactor replaces the separate model/problem representation with
+one `SparseProblem(torch.nn.Module)` that owns the current network and
+problem-specific evaluations. `SignedModel`, `ShallowNetwork`, `PDAPModel`, and
+their factory are removed, and callers use the single module. The implementation uses
+buffers for inner weights `W` and biases `b`, and an `nn.Parameter` for outer
+coefficients `c`. These registration details implement the agreement; they are
+not additional user requirements. Direct registration avoids randomly
+initialized layers that would immediately be overwritten with exact atoms.
+
+Data stays outside the module, supplied through standard Dataset/DataLoader
+delivery. Data utilities own reading, validation, physical normalization,
+splitting and assembly; the problem owns mathematical evaluations of delivered
+samples. The agreed preparation lifetime is one correction, outside persistent
+problem state. The current implementation uses a three-field `PreparedObjective`
+record (`obj`, `hess_obj`, `coefficient_scale`); these exact fields are an
+implementation choice. The record implements no separate mathematics.
+
+PDAP owns candidate search/ranking, insertion acceptance, the warm-start
+procedure and initial-coefficient selection, support insertion/pruning,
+correction scheduling and outer stopping. SparseProblem evaluates supplied candidates/directions:
+features, signed profiles, slope/curvature, objective changes, and penalty/proximal
+operations. Mathematical evaluation does not transfer search, initialization,
+or acceptance decisions to the problem. The mixed insertion/warm-start methods
+have been removed; their procedures now live in PDAP's insertion and warm-start
+modules. The assistant's former proposal to move complete warm-start selection
+into SparseProblem was withdrawn; it was not an agreed ownership change.
+
+The problem may evaluate a threshold or proximal minimizer, including branches
+defined by the mathematical operator. PDAP decides how to use those evaluations
+for search, initialization and insertion. PDAP's proposed atoms and SSN's
+temporary working coefficients do not create a second network. PDAP decides
+when accepted changes are applied to the persistent network.
+
+SSN remains a `torch.optim.Optimizer`; its `step()` owns the complete configured
+iteration budget and the final objective acceptance/fallback on temporary
+coefficients. PDAP applies the result. The old `ssn_solve` layer is removed.
+Historical explicit unguarded configurations remain comparators, with their
+setting passed to SSN. This and the exact iteration defaults are compatibility
+choices; an iteration budget does not establish convergence. Hydra stays at
+repository level. Measurement/logging/history remain separate concerns whose
+redesign the user deferred; preserving current behavior does not endorse the
+present internal placement as a permanent architecture. History now owns one
+detached checkpoint with existing artifact views and a single restoration.
+
+Implementation and verification status live in
+[REFACTOR_HANDOFF.md](../../REFACTOR_HANDOFF.md), including the user's statements,
+verification, deferred work, and the cause/prevention record. That evidence
+takes precedence over assistant-authored architectural summaries. The remainder
+of this ADR records earlier designs; its separate-model, data-owning problem,
+and cached-objective descriptions are superseded by this decision.
 
 ## Context
 
