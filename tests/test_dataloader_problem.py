@@ -142,7 +142,7 @@ def test_pdap_records_one_full_data_result_per_outer_iteration(batch_size):
     assert len(history.train_loss) == 2
     for iteration, loss in enumerate(history.train_loss):
         history.restore_model(problem, iteration)
-        value, gradient = problem.predict_tensors(x)
+        value, gradient = problem.forward_with_gradient(x)
         fitting = ((value - data[1]).square().sum() + (gradient - data[2]).square().sum()) / 10
         penalty = 1e-4 * problem.c.detach().abs().sum()
         assert loss == pytest.approx(float(fitting + penalty), rel=1e-12)

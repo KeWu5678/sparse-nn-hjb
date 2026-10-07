@@ -54,7 +54,7 @@ def test_restoring_a_zero_measure_snapshot_empties_an_initialized_model(legacy) 
     x = torch.tensor([[0.2, -0.3], [0.5, 0.7]], dtype=torch.float64)
 
     empty = SparseProblem(2, activation="tanh")
-    samples = (x, *empty.predict_tensors(x))
+    samples = (x, *empty.forward_with_gradient(x))
     history = History()
     history.record(empty, make_dataloader(samples))
     if legacy:
@@ -71,7 +71,7 @@ def test_restoring_a_zero_measure_snapshot_empties_an_initialized_model(legacy) 
     history.restore_model(restored)
 
     assert restored.n_neurons == 0
-    value, gradient = restored.predict_tensors(x)
+    value, gradient = restored.forward_with_gradient(x)
     assert torch.allclose(value, torch.zeros_like(value))
     assert torch.allclose(gradient, torch.zeros_like(gradient))
 
@@ -86,7 +86,7 @@ def test_restoring_legacy_layer_state_preserves_recorded_predictions():
     )
 
     problem = history.restore_model(SparseProblem(2))
-    value, gradient = problem.predict_tensors(W.new_tensor([[1., 1.]]))
+    value, gradient = problem.forward_with_gradient(W.new_tensor([[1., 1.]]))
 
     torch.testing.assert_close(value, W.new_tensor([[10.5]]))
     torch.testing.assert_close(gradient, W.new_tensor([[3., 6.]]))
@@ -102,7 +102,7 @@ def test_recorded_checkpoints_stay_independent_of_models_and_each_other():
     problem = SparseProblem(2)
     problem.set_atoms(atoms["W"], atoms["b"], atoms["c"])
     x = torch.tensor([[1., 1.]], dtype=torch.float64)
-    loader = make_dataloader((x, *problem.predict_tensors(x)))
+    loader = make_dataloader((x, *problem.forward_with_gradient(x)))
     history = History()
     for _ in range(2):
         history.record(problem, loader)
@@ -138,7 +138,7 @@ def test_history_summary_records_normalized_objective_decomposition() -> None:
         moment_order=2.0,
     )
     problem.set_atoms(W, b, c)
-    samples = (x, *problem.predict_tensors(x))
+    samples = (x, *problem.forward_with_gradient(x))
 
     history = History()
     history.record(problem, make_dataloader(samples))
@@ -189,7 +189,7 @@ def test_physical_reporting_does_not_change_objectives_snapshots_or_selection():
         unchanged.record(problem, loader)
         physical.record(problem, loader)
         expected = relative_errors(
-            *normalizer.denormalize_tensors(*problem.predict_tensors(x)),
+            *normalizer.denormalize_tensors(*problem.forward_with_gradient(x)),
             *normalizer.denormalize_tensors(v, dv),
         )
         assert (physical.err_l2_val[-1], physical.err_grad_val[-1], physical.err_h1_val[-1]) == expected

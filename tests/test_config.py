@@ -126,8 +126,9 @@ def test_config_builds_trainer_and_model() -> None:
 
     pdap = PDAP(cfg.training, insertion=cfg.model.insertion)
     problem = SparseProblem.from_config(cfg.model, 2)
-    assert problem.description()["alpha"] == cfg.model.alpha == 1e-5
-    assert problem.description()["gamma"] == 0.5
+    assert problem.alpha == cfg.model.alpha == 1e-5
+    # Configured alpha and gamma determine the log penalty's normal-map scaling.
+    assert problem.inverse_step(None) == pytest.approx(1.000005, rel=0, abs=1e-12)
     assert pdap.insertion_kind == "profile"
     assert pdap.solver["max_ls_iter"] == 500
     assert pdap.fit_outer_iterations == 20

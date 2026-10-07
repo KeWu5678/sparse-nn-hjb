@@ -258,8 +258,6 @@ class PDAP:
                     "  | %-16s | %-24s |", "samples",
                     f"{len(train_loader.dataset)} train, {len(valid_loader.dataset)} validation",
                 )
-            for name, value in problem.description().items():
-                logger.info("  | %-16s | %-24s |", name, value)
             logger.info("  +------------------+--------------------------+")
 
         if self.loop_order == "insertion_first":

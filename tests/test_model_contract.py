@@ -41,7 +41,7 @@ def test_problem_predicts_values_and_input_gradients():
     problem = SparseProblem(2)
     problem.set_atoms(*_atoms())
 
-    value, gradient = problem.predict_tensors(x)
+    value, gradient = problem.forward_with_gradient(x)
 
     assert value.shape == (6, 1)
     assert gradient.shape == (6, 2)
@@ -51,7 +51,7 @@ def test_empty_support_predicts_and_prepares_zero_features():
     problem = SparseProblem(2)
     x = torch.ones(3, 2, dtype=torch.float64, requires_grad=True)
 
-    value, gradient = problem.predict_tensors(x)
+    value, gradient = problem.forward_with_gradient(x)
     assert problem.n_neurons == 0
     assert problem.W.shape == (0, 2)
     assert problem.b.shape == problem.c.shape == (0,)
@@ -59,7 +59,7 @@ def test_empty_support_predicts_and_prepares_zero_features():
     assert gradient.shape == x.shape
     assert not value.any() and not gradient.any()
     torch.testing.assert_close(torch.autograd.grad(problem(x).sum(), x)[0], gradient)
-    Phi_v, Phi_g = problem.jacobians(x)
+    Phi_v, Phi_g = problem.jac_forward_with_gradient(x)
     assert Phi_v.shape == (3, 0)
     assert Phi_g.shape == (6, 0)
 
@@ -77,7 +77,7 @@ def test_module_conversion_and_forward_gradients_follow_exact_atoms():
     dc, dx = torch.autograd.grad(value.sum(), (problem.c, x))
     torch.testing.assert_close(dc, x.new_tensor([1.5]))
     torch.testing.assert_close(dx, x.new_tensor([[6., -3.], [0., 0.]]))
-    predicted_value, predicted_gradient = problem.predict_tensors(x)
+    predicted_value, predicted_gradient = problem.forward_with_gradient(x)
     torch.testing.assert_close(predicted_value, value)
     torch.testing.assert_close(predicted_gradient, dx)
 
@@ -105,7 +105,7 @@ def test_historical_prediction_power_is_rejected_before_training_reads_data():
     problem = SparseProblem(2, activation=torch.relu, power=4.)
     problem.set_atoms(torch.tensor([[1., 0.]]), torch.tensor([0.]), torch.tensor([2.]))
     x = torch.tensor([[2., 3.]], dtype=torch.float64)
-    value, gradient = problem.predict_tensors(x)
+    value, gradient = problem.forward_with_gradient(x)
     torch.testing.assert_close(value, x.new_tensor([[32.]]))
     torch.testing.assert_close(gradient, x.new_tensor([[64., 0.]]))
     before = {name: tensor.clone() for name, tensor in problem.state_dict().items()}

@@ -80,7 +80,7 @@ def test_samples_define_the_objective_and_its_derivatives(activation, power, gam
     before = {name: tensor.clone() for name, tensor in problem.state_dict().items()}
     prepared = problem.prepare_coefficients(loader)
     u = problem.coefficient_coordinates(problem.c.detach(), prepared)
-    Vp, dVp = problem.predict_tensors(data[0])
+    Vp, dVp = problem.forward_with_gradient(data[0])
     expected_obj = (0.4 * (Vp - data[1]).square().sum() + 1.3 * (dVp - data[2]).square().sum()) / (
         2 * len(data[0])
     )
@@ -182,8 +182,8 @@ def test_warmstart_preserves_the_historical_sphere_derivative_convention(activat
     problem = SparseProblem(1, activation=activation)
     X = torch.tensor([[-1.], [2.]], dtype=torch.float64)
     W, b = X.new_ones((1, 1)), X.new_zeros(1)
-    values, gradients = problem.jacobians(X, W, b)
-    legacy_values, legacy_gradients = problem.jacobians(X, W, b, warm_start=True)
+    values, gradients = problem.jac_forward_with_gradient(X, W, b)
+    legacy_values, legacy_gradients = problem.jac_forward_with_gradient(X, W, b, warm_start=True)
     torch.testing.assert_close(values, legacy_values, rtol=0, atol=0)
     torch.testing.assert_close(gradients[:, 0], X.new_tensor(actual), rtol=0, atol=0)
     torch.testing.assert_close(legacy_gradients[:, 0], X.new_tensor([0., 1.]), rtol=0, atol=0)

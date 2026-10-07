@@ -6,7 +6,34 @@ Full-review baseline: `49eeb0349a0a8ee489c075400d23cb1cb31e1208`.
 
 ## Current status and working rules
 
-**Ownership cleanup implemented and independently reviewed.** The user's latest
+**Naming follow-up implemented and reviewed, baseline `b9fba49`.** During the user's method-by-
+method review, they directed removal of `description()`, retention of `forward`,
+and the name `forward_with_gradient` for predictions plus input gradients. They
+then corrected the proposed `jac_forward` name to `jac_forward_with_gradient`.
+The latter takes inputs and current/supplied inner weights and biases; its two
+outputs are derivatives of predicted values and input gradients with respect
+to outer coefficients. Input gradients are computed internally, not supplied.
+`state_cleanup` implemented these narrow changes and all callers; root documented
+them. Independent Standards (`naming_standards`) and Spec (`spec_audit`) reviews
+found no issues within this diff. `description` and its banner loop are removed;
+there are no compatibility aliases or replacement getters.
+
+Verification: 89 focused tests passed; full suite **422 passed, 1 preexisting
+stale controller-selection artifact failure, 18 warnings** in 28.37 seconds.
+Ruff passes all 15 changed Python files; core/state/evaluation Pyright reports
+zero errors; fixture hashes and numerical behavior are preserved. Git whitespace
+checks pass. Logs: `/tmp/sparse-api-names-final-pytest.log`,
+`/tmp/sparse-api-names-focused.log`, `/tmp/sparse-api-names-ruff.log`, and
+`/tmp/sparse-api-names-pyright.log`.
+
+The review also exposed remaining duplicated feature construction in `forward`
+and the coefficient-feature calculation, and repeated quadratic fitting logic
+in prepared `obj` and `obj_terms`. This naming follow-up does not consolidate
+those calculations or change derivative conventions. The earlier review's
+completion report did not establish that all duplication or naming issues were
+resolved. Continue the user's method-by-method review without expanding scope.
+
+**Ownership cleanup at `b9fba49` implemented and independently reviewed.** The
 instruction was "refactor (or clean up) based on the boundary and ownership we
 set up first". PDAP now owns insertion and warm-start decisions; SparseProblem
 supplies their mathematical evaluations. Final verification: 422 passed and
@@ -94,7 +121,8 @@ Synthetic coefficient objectives continue to work without dummy networks/data.
 
 ## Work assignments
 
-Current cleanup assignments take precedence over the earlier migration table:
+The naming follow-up above takes precedence over these completed cleanup
+assignments and the earlier migration table:
 
 | Task | Owner and files | Status / required result |
 | --- | --- | --- |
@@ -122,8 +150,8 @@ Implemented interface (a means to the agreed ownership, not new
 user requirements): removed `search_score`, `profile_insertion`,
 `finite_insertion`, `solve_insertion_weight`, `warmstart_profiles`, and
 `warmstart_coefficients`. A signed differentiable `profile` shares the residual
-pairing used by directional slope/curvature. `jacobians` accepts supplied atoms;
-its warm-start option isolates the existing historical derivative
+pairing used by directional slope/curvature. `jac_forward_with_gradient` accepts
+supplied atoms; its warm-start option isolates the existing historical derivative
 convention. PDAP reads one penalty-strength value (`alpha`) and owns the tests
 and strategy choices. One coefficient-scale evaluation is reused. Proximal
 evaluations reuse existing kernels; the insertion objective increment preserves
@@ -133,7 +161,7 @@ There is no new class, settings bundle, prepared-object protocol, or persistent
 feature cache. Agent verification must check candidate derivatives and trajectory
 rounding against the pre-cleanup snapshot, not only algebraic equivalence.
 
-Final validation and review:
+Validation and review of ownership cleanup at `b9fba49`:
 
 - Full suite on frozen source: **422 passed, 1 preexisting failure, 18 warnings**
   in 30.00 seconds. The sole failure is the stale ignored local controller
@@ -916,7 +944,13 @@ That session supplied the earlier implemented ownership split. The current discu
 
 Current resumption message:
 
-> Ownership-first cleanup and independent Standards/Spec review are complete.
+> Continue the user's method-by-method review. The latest naming follow-up and
+> its verification status are recorded at the top; the broader ownership cleanup
+> was committed as b9fba49. Keep forward, use forward_with_gradient and
+> jac_forward_with_gradient, and remove description. The Jacobian's inputs are x
+> and current/supplied W,b; both returned matrices differentiate with respect to c.
+> Remaining duplicated feature construction and quadratic fitting logic were
+> identified after the earlier review and are not resolved by renaming.
 > Read the current status and boundary table before the historical record.
 > PDAP owns search/insertion/warm-start procedures; SparseProblem owns the current
 > nn.Module and mathematical evaluations; SSN owns complete corrections and

@@ -99,7 +99,7 @@ def test_normalized_objective_is_phi_of_the_scaled_coefficient() -> None:
     model, _, train = _fit(cfg)
 
     W, b, c = (model.W, model.b, model.c.detach())
-    value, grad = model.predict_tensors(train[0])
+    value, grad = model.forward_with_gradient(train[0])
     w1, w2 = cfg.model.loss_weights
     fidelity = float(
         (w1 * (value - train[1]).square().sum() + w2 * (grad - train[2]).square().sum())
@@ -117,7 +117,7 @@ def test_normalized_dictionary_reproduces_the_network() -> None:
     model, _, train = _fit(cfg)
     W, b, c = (model.W, model.b, model.c.detach())
     w_p = moment_weight(W, b, 2.01).reshape(-1)
-    Phi, _ = model.jacobians(train[0])
+    Phi, _ = model.jac_forward_with_gradient(train[0])
     assert torch.allclose(Phi @ c, (Phi / w_p) @ (w_p * c), atol=1e-12)
 
 
@@ -138,7 +138,7 @@ def test_guaranteed_insertion_delivers_the_promised_decrease() -> None:
     trainer = PDAP(cfg.training, insertion=cfg.model.insertion)
 
     before = model.metrics(train_loader)["train_loss"]
-    value, grad = model.predict_tensors(train[0])
+    value, grad = model.forward_with_gradient(train[0])
     res_v, res_dv = (value - train[1]).detach(), (grad - train[2]).detach()
 
     W_old, b_old, c_old = (model.W, model.b, model.c.detach())
@@ -282,7 +282,7 @@ def test_insertion_reuses_the_residual_for_the_theorem_radius() -> None:
     torch.manual_seed(0)
     np.random.seed(0)
     model = SparseProblem.from_config(cfg.model, input_dim=2)
-    original_predict = model.predict_tensors
+    original_predict = model.forward_with_gradient
     prediction_calls = 0
 
     def counted_predict(x: torch.Tensor):
@@ -290,7 +290,7 @@ def test_insertion_reuses_the_residual_for_the_theorem_radius() -> None:
         prediction_calls += 1
         return original_predict(x)
 
-    model.predict_tensors = counted_predict
+    model.forward_with_gradient = counted_predict
     PDAP(cfg.training, insertion=cfg.model.insertion).fit(
         model,
         make_dataloader(data),

@@ -155,7 +155,7 @@ def region_split_metrics(cfg, model, data, normalizer) -> dict:
     v_pred_chunks, dv_pred_chunks = [], []
     for lo in range(0, len(x_pool), 100_000):
         xb = torch.as_tensor(x_pool[lo:lo + 100_000], dtype=torch.float64)
-        vb, dvb = model.predict_tensors(xb)
+        vb, dvb = model.forward_with_gradient(xb)
         if normalizer is not None:
             vb, dvb = normalizer.denormalize_tensors(vb, dvb)
         v_pred_chunks.append(vb)
@@ -180,7 +180,7 @@ def region_split_metrics(cfg, model, data, normalizer) -> dict:
         x = torch.as_tensor(data["x"], dtype=torch.float64)
         v = torch.as_tensor(data["v"], dtype=torch.float64)
         dv = torch.as_tensor(data["dv"], dtype=torch.float64)
-        v_pred_d, dv_pred_d = model.predict_tensors(x)
+        v_pred_d, dv_pred_d = model.forward_with_gradient(x)
         if normalizer is not None:
             v_pred_d, dv_pred_d = normalizer.denormalize_tensors(v_pred_d, dv_pred_d)
             v, dv = normalizer.denormalize_tensors(v, dv)

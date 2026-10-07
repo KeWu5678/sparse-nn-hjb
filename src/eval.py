@@ -1,7 +1,7 @@
 """Performance evaluation of a model's predictions against value samples.
 
 Pure functions of (prediction, target) tensors with no model state: a model
-produces ``(V, dV)`` via ``predict_tensors`` and the trainer scores them here.
+produces ``(V, dV)`` via ``forward_with_gradient`` and the trainer scores them here.
 Objective and regularizer calculations belong to ``src.problems.SparseProblem``.
 """
 

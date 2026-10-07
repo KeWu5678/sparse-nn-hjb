@@ -137,14 +137,6 @@ class SparseProblem(nn.Module):
     def loss_weights(self) -> tuple[float, float]:
         return self._loss_weights
 
-    def description(self) -> dict[str, object]:
-        """Problem metadata for a run log, independent of solver settings."""
-        return {
-            "alpha": self._alpha,
-            "gamma": self._gamma,
-            "activation power": self._power,
-        }
-
     def set_atoms(self, W: Tensor, b: Tensor, c: Tensor) -> None:
         """Replace support with exact atoms, preserving the module's dtype/device.
 
@@ -167,7 +159,7 @@ class SparseProblem(nn.Module):
         features = self._activation(F.linear(x, self.W, self.b)) ** self._power
         return F.linear(features, self.c.unsqueeze(0))
 
-    def predict_tensors(self, x: Tensor) -> tuple[Tensor, Tensor]:
+    def forward_with_gradient(self, x: Tensor) -> tuple[Tensor, Tensor]:
         """Return detached value (N,1) and input gradient (N,d), including empty support."""
         x = x.detach().clone().requires_grad_(True)
         with torch.enable_grad():
@@ -175,11 +167,15 @@ class SparseProblem(nn.Module):
             dV = torch.autograd.grad(V.sum(), x, create_graph=False)[0]
         return V.detach(), dV.detach()
 
-    def jacobians(
+    def jac_forward_with_gradient(
         self, x: Tensor, W: Tensor | None = None, b: Tensor | None = None,
         *, warm_start: bool = False,
     ) -> tuple[Tensor, Tensor]:
-        """Coefficient features (N,n), (N*d,n), for current or supplied atoms.
+        """Jacobians of network values and input gradients with respect to c.
+
+        Given samples x and current or supplied inner weights W and biases b,
+        return the value Jacobian (N,n) and input-gradient Jacobian (N*d,n)
+        with respect to outer coefficients c. Gradient rows are sample-major.
 
         Supplied atom parameters retain their gradients for candidate search.
         warm_start preserves the historical sphere-comparator derivative:
@@ -246,7 +242,7 @@ class SparseProblem(nn.Module):
         """Return independent fixed-neuron calculations for one correction."""
         self.validate_correction()
         X, V, dV = full_batch(loader)
-        Phi_v, Phi_g = self.jacobians(X)
+        Phi_v, Phi_g = self.jac_forward_with_gradient(X)
         coefficient_scale = None
         if self.normalized:
             coefficient_scale = self.coefficient_scale(self.W, self.b)
@@ -415,7 +411,7 @@ class SparseProblem(nn.Module):
     def residual(self, loader) -> tuple[Tensor, Tensor, Tensor]:
         """Pair inputs with detached residuals for one candidate search."""
         X, V, dV = full_batch(loader)
-        Vp, dVp = self.predict_tensors(X)
+        Vp, dVp = self.forward_with_gradient(X)
         return X.detach(), (Vp - V).detach(), (dVp - dV).detach()
 
     def _regularizer_terms(self) -> dict[str, float]:
@@ -466,7 +462,7 @@ class SparseProblem(nn.Module):
             valid_loader = train_loader
         for split, loader in (("train", train_loader), ("val", valid_loader)):
             data = full_batch(loader)
-            prediction = self.predict_tensors(data[0])
+            prediction = self.forward_with_gradient(data[0])
             target = data[1:]
             obj, value_loss, gradient_loss = self.obj_terms(prediction, target)
             metrics[f"{split}_loss"] = float(obj.detach()) + regularizer["alpha_phi"]
@@ -492,7 +488,7 @@ class SparseProblem(nn.Module):
 
     def profile(self, a: Tensor, b: Tensor, residual) -> Tensor:
         """Signed fidelity derivative in a supplied candidate-neuron direction."""
-        Kv, Kg = self.jacobians(residual[0], a.reshape(1, -1), b.reshape(1))
+        Kv, Kg = self.jac_forward_with_gradient(residual[0], a.reshape(1, -1), b.reshape(1))
         res_v, res_dv = (r.detach().reshape(-1, 1) for r in residual[1:])
         return self._fidelity_pairing(Kv, Kg, res_v, res_dv, reduction="sum").squeeze(0)
 

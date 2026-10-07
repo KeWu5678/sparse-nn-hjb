@@ -209,7 +209,7 @@ def predict_model_physical(
         raise ValueError("physical states must have shape (N, model input dimension)")
     if normalizer is not None:
         x = x / torch.as_tensor(normalizer.x_scale, dtype=x.dtype, device=x.device)
-    v, dv = model.predict_tensors(x)
+    v, dv = model.forward_with_gradient(x)
     if normalizer is not None:
         v, dv = normalizer.denormalize_tensors(v, dv)
     return v, dv

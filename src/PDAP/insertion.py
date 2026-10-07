@@ -241,7 +241,7 @@ def profile_threshold(
     accepted_c: List[float] = []
     with torch.enable_grad():
         for a_i, b_i in zip(a_t, b_t):
-            features = problem.jacobians(residual[0], a_i.reshape(1, -1), b_i.reshape(1))
+            features = problem.jac_forward_with_gradient(residual[0], a_i.reshape(1, -1), b_i.reshape(1))
             slope, curvature = (
                 float(value.detach()) for value in problem.directional_obj(*features, residual)
             )
@@ -332,7 +332,7 @@ def finite_step(
     accepted_dJ: List[float] = []
     with torch.enable_grad():
         for a_i, b_i in zip(a_t, b_t):
-            features = problem.jacobians(residual[0], a_i.reshape(1, -1), b_i.reshape(1))
+            features = problem.jac_forward_with_gradient(residual[0], a_i.reshape(1, -1), b_i.reshape(1))
             slope, curvature = (
                 float(value.detach()) for value in problem.directional_obj(*features, residual)
             )
