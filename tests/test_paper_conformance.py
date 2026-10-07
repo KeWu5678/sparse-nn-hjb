@@ -346,4 +346,4 @@ def test_incoherent_configurations_are_rejected(over: dict, message: str) -> Non
         cfg = _cfg(**over)
         trainer = PDAP(cfg.training, insertion=cfg.model.insertion)
         problem = SparseProblem.from_config(cfg.model, 2)
-        problem.validate_insertion(trainer.insertion_kind)
+        problem.validate_training(insertion=trainer.insertion_kind)

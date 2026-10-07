@@ -116,7 +116,7 @@ def test_one_problem_handles_empty_and_replaced_supports():
     initial_loss = problem.metrics(loader)["train_loss"]
     a = torch.tensor([0.2, -0.3], dtype=torch.float64, requires_grad=True)
     b = a.new_tensor(0.1, requires_grad=True)
-    score = problem.profile(a, b, residual).abs() / problem.coefficient_scale(a, b)
+    score = problem.profile(a, b, residual).abs() / problem.normalization_weight(a, b)
     assert all(torch.isfinite(g).all() for g in torch.autograd.grad(score, (a, b)))
 
     preparations = []

@@ -10,4 +10,4 @@ from src.problems import PreparedObjective, SparseProblem
 
 def synthetic_problem(obj, hess_obj, **specifications):
     problem = SparseProblem(input_dim=hess_obj.shape[0], **specifications)
-    return problem, PreparedObjective(obj, hess_obj)
+    return problem, PreparedObjective(obj, hess_obj, hess_obj.new_ones(hess_obj.shape[0]))

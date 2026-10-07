@@ -176,7 +176,7 @@ class PDAP:
         """Prepare a correction, run SSN, and apply its accepted coefficients."""
         prepared = problem.prepare_coefficients(train_loader)
         theta = torch.nn.Parameter(
-            problem.coefficient_coordinates(problem.c.detach(), prepared).clone()
+            problem.coefficient_coordinates(problem.c.detach(), prepared)
         )
         optimizer = SSN(
             [theta], problem, prepared, max_iter=self.fit_outer_iterations,
@@ -242,7 +242,7 @@ class PDAP:
         """
         if valid_loader is None:
             valid_loader = train_loader
-        problem.validate_insertion(self.insertion_kind)
+        problem.validate_training(insertion=self.insertion_kind)
         # A trainer can be reused; a zero-iteration fit has no search to report.
         self._last_search_radius = None
         self._last_theorem_applied = None

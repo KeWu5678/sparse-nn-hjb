@@ -20,8 +20,12 @@ delivery. Data utilities own reading, validation, physical normalization,
 splitting and assembly; the problem owns mathematical evaluations of delivered
 samples. The agreed preparation lifetime is one correction, outside persistent
 problem state. The current implementation uses a three-field `PreparedObjective`
-record (`obj`, `hess_obj`, `coefficient_scale`); these exact fields are an
-implementation choice. The record implements no separate mathematics.
+record (`obj`, `hess_obj`, `normalization_weight`); these exact fields are an
+implementation choice. The record implements no separate mathematics and
+contains no backup of the network. Its feature matrices, targets and fitting
+Hessian are reused while SSN changes outer coefficients. The normalization
+weight is a tensor, with ones for sphere atoms. Its values depend on the
+neurons even when the configured moment order stays fixed.
 
 PDAP owns candidate search/ranking, insertion acceptance, the warm-start
 procedure and initial-coefficient selection, support insertion/pruning,
@@ -45,7 +49,13 @@ coefficients. PDAP applies the result. The old `ssn_solve` layer is removed.
 Historical explicit unguarded configurations remain comparators, with their
 setting passed to SSN. This and the exact iteration defaults are compatibility
 choices; an iteration budget does not establish convergence. Hydra stays at
-repository level. Measurement/logging/history remain separate concerns whose
+repository level. One configuration function owns training compatibility rules
+and takes explicit settings. `SparseProblem.validate_training` supplies its own
+settings to that function; construction/preparation and optimizers use this
+single entry operation. Configuration and optimizers do not inspect private
+model fields, and no second settings object or getters are needed. The ordinary
+constructor still supports historical prediction settings.
+Measurement/logging/history remain separate concerns whose
 redesign the user deferred; preserving current behavior does not endorse the
 present internal placement as a permanent architecture. History now owns one
 detached checkpoint with existing artifact views and a single restoration.

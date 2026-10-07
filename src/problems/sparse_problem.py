@@ -8,6 +8,7 @@ import torch
 from torch import Tensor, nn
 from torch.nn import functional as F
 
+from ..config import validate_training
 from ..config.activations import ACTIVATIONS, get_activation, get_growth, get_use_sphere
 from ..data import full_batch
 from ..eval import relative_errors
@@ -26,11 +27,14 @@ from .radius import certificate_radius, sample_extent
 
 @dataclass(frozen=True)
 class PreparedObjective:
-    """Fitting calculations and scaling fixed for one coefficient correction."""
+    """Fixed-feature objective, Hessian and normalization for one correction.
+
+    These are reusable calculations, not a network backup; SSN owns rollback.
+    """
 
     obj: Callable[[Tensor], Tensor]
     hess_obj: Tensor
-    coefficient_scale: Tensor | None = None
+    normalization_weight: Tensor
 
 
 class SparseProblem(nn.Module):
@@ -106,8 +110,15 @@ class SparseProblem(nn.Module):
             loss_weights=tuple(config.loss_weights),
             moment_order=config.moment_order,
         )
-        problem.validate_correction()
+        problem.validate_training()
         return problem
+
+    def validate_training(self, *, insertion: str | None = None) -> None:
+        """Check the stored specifications using the configuration layer's rules."""
+        validate_training(
+            activation_name=self._activation_name, power=self._power, gamma=self._gamma,
+            use_sphere=self.use_sphere, insertion=insertion,
+        )
 
     @property
     def input_dim(self) -> int:
@@ -207,53 +218,25 @@ class SparseProblem(nn.Module):
             Phi_g = dS_dx.permute(0, 2, 1).reshape(x.shape[0] * self.input_dim, inner_weight.shape[0])
         return (Phi_v, Phi_g) if differentiable else (Phi_v.detach(), Phi_g.detach())
 
-    def coefficient_scale(self, inner_weight: Tensor, inner_bias: Tensor) -> Tensor:
-        """Moment divisor for normalized atoms, or one on the sphere."""
+    def normalization_weight(self, inner_weight: Tensor, inner_bias: Tensor) -> Tensor:
+        """Per-neuron moment divisor for normalized atoms, or one on the sphere.
+
+        The moment order is fixed, but these weights depend on the supplied
+        neurons and remain differentiable during candidate search.
+        """
         return (
             moment_weight(inner_weight, inner_bias, self._moment_order)
             if self.normalized else torch.ones_like(inner_bias)
         )
 
-    def validate_correction(self) -> None:
-        """Validate training restrictions without excluding historical prediction."""
-        if self._activation_name is None:
-            raise ValueError("coefficient correction requires a registered activation")
-        if self._power not in (1.0, 2.0, 3.0):
-            raise ValueError(
-                "the coefficient correction supports activation powers 1, 2, 3; "
-                f"got power={self._power}"
-            )
-        if not self._use_sphere and self._power != 1.0:
-            raise ValueError(
-                "nonhomogeneous signed profile insertion is Algorithm 1 and requires power == 1"
-            )
-        if self._power != 1.0 and self._gamma != 0.0:
-            raise ValueError(
-                f"the power penalty requires gamma == 0; got power={self._power}, gamma={self._gamma}"
-            )
-
-    def validate_insertion(self, insertion: str) -> None:
-        self.validate_correction()
-        if insertion == "finite_step":
-            if not self._use_sphere:
-                raise ValueError(
-                    "finite_step insertion is Algorithm 2 and requires a sphere activation"
-                )
-            if self._gamma != 0.0:
-                raise ValueError(
-                    "finite_step insertion minimizes the power penalty and requires gamma == 0"
-                )
-
     def prepare_coefficients(self, loader) -> PreparedObjective:
         """Return independent fixed-neuron calculations for one correction."""
-        self.validate_correction()
+        self.validate_training()
         X, V, dV = full_batch(loader)
         Phi_v, Phi_g = self.jac_forward_with_gradient(X)
-        coefficient_scale = None
-        if self.normalized:
-            coefficient_scale = self.coefficient_scale(self.inner_weight, self.inner_bias)
-            Phi_v = Phi_v / coefficient_scale
-            Phi_g = Phi_g / coefficient_scale
+        normalization_weight = self.normalization_weight(self.inner_weight, self.inner_bias)
+        Phi_v = Phi_v / normalization_weight
+        Phi_g = Phi_g / normalization_weight
         V, dV = (target.detach().reshape(-1).clone() for target in (V, dV))
         n = X.shape[0]
         w1, w2 = self._loss_weights
@@ -264,19 +247,15 @@ class SparseProblem(nn.Module):
             return (w1 / (2 * n)) * (rv @ rv) + (w2 / (2 * n)) * (rg @ rg)
 
         hess_obj = (w1 / n) * (Phi_v.T @ Phi_v) + (w2 / n) * (Phi_g.T @ Phi_g)
-        return PreparedObjective(obj, hess_obj, coefficient_scale)
+        return PreparedObjective(obj, hess_obj, normalization_weight)
 
     def coefficient_coordinates(self, coefficients: Tensor, prepared: PreparedObjective) -> Tensor:
         """Physical coefficients to the coordinates used by the proximal map."""
-        return (
-            coefficients
-            if prepared.coefficient_scale is None
-            else coefficients * prepared.coefficient_scale
-        )
+        return coefficients * prepared.normalization_weight
 
     def model_coefficients(self, u: Tensor, prepared: PreparedObjective) -> Tensor:
         """Return physical model coefficients from a solved proximal iterate."""
-        return u if prepared.coefficient_scale is None else u / prepared.coefficient_scale
+        return u / prepared.normalization_weight
 
     def obj_augmented(self, u: Tensor, prepared: PreparedObjective) -> Tensor:
         """Objective plus the nonconvex correction in the proximal splitting."""
@@ -430,7 +409,7 @@ class SparseProblem(nn.Module):
             # phi(w_p(omega_n)|c_n|) = phi(|u_n|), so score it on u = w_p * c -- the same
             # quantity SSN minimizes, so the recorded objective cannot drift from it.
             if self.normalized:
-                scale = self.coefficient_scale(inner_weight, inner_bias)
+                scale = self.normalization_weight(inner_weight, inner_bias)
                 theta = theta * scale
             phi = _noncvx_penalty(
                 theta,

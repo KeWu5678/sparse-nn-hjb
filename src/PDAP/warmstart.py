@@ -25,7 +25,7 @@ def warm_start(W_new: torch.Tensor, b_new: torch.Tensor, residual,
     if n_new == 0:
         return torch.zeros(0, dtype=torch.float64)
     S_val, S_grad = problem.jac_forward_with_gradient(residual[0], W_new, b_new, warm_start=True)
-    scale = problem.coefficient_scale(W_new, b_new)
+    scale = problem.normalization_weight(W_new, b_new)
     S_val, S_grad = S_val / scale, S_grad / scale
     profiles, _ = problem.directional_obj(S_val, S_grad, residual)
     abs_profiles = profiles.abs()

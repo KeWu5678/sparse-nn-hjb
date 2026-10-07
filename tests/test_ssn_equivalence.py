@@ -82,7 +82,7 @@ def _run_trajectory(config: dict) -> np.ndarray:
         P, alpha=alpha, gamma=gamma, power=power,
         penalized_mask=pen_mask, nonneg_mask=config.get("nonneg_mask"),
     )
-    prepared = PreparedObjective(data_loss, H)
+    prepared = PreparedObjective(data_loss, H, H.new_ones(H.shape[0]))
     kind = config["kind"]
     if kind == "ssn":
         opt = SSN(

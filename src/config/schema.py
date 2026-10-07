@@ -201,6 +201,31 @@ class ExperimentConfig:
     name: str = "run"
 
 
+def validate_training(
+    *, activation_name: str | None, power: float, gamma: float, use_sphere: bool,
+    insertion: str | None = None,
+) -> None:
+    """Check training compatibility while allowing historical prediction settings."""
+    if activation_name is None:
+        raise ValueError("coefficient correction requires a registered activation")
+    if power not in (1.0, 2.0, 3.0):
+        raise ValueError(
+            "the coefficient correction supports activation powers 1, 2, 3; "
+            f"got power={power}"
+        )
+    if not use_sphere and power != 1.0:
+        raise ValueError(
+            "nonhomogeneous signed profile insertion is Algorithm 1 and requires power == 1"
+        )
+    if power != 1.0 and gamma != 0.0:
+        raise ValueError(f"the power penalty requires gamma == 0; got power={power}, gamma={gamma}")
+    if insertion == "finite_step":
+        if not use_sphere:
+            raise ValueError("finite_step insertion is Algorithm 2 and requires a sphere activation")
+        if gamma != 0.0:
+            raise ValueError("finite_step insertion minimizes the power penalty and requires gamma == 0")
+
+
 __all__ = [
     "ModelConfig",
     "TrainingConfig",
@@ -208,4 +233,5 @@ __all__ = [
     "EvalConfig",
     "EnvConfig",
     "ExperimentConfig",
+    "validate_training",
 ]

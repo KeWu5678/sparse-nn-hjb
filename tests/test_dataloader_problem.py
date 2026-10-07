@@ -104,8 +104,8 @@ def test_chunking_preserves_correction_candidate_and_warmstart_calculations(acti
     full_residual, chunked_residual = problem.residual(full), problem.residual(chunked)
     a = x.new_tensor([.2, -.3], requires_grad=True)
     bias = x.new_tensor(.1, requires_grad=True)
-    reference_score = problem.profile(a, bias, full_residual).abs() / problem.coefficient_scale(a, bias)
-    score = problem.profile(a, bias, chunked_residual).abs() / problem.coefficient_scale(a, bias)
+    reference_score = problem.profile(a, bias, full_residual).abs() / problem.normalization_weight(a, bias)
+    score = problem.profile(a, bias, chunked_residual).abs() / problem.normalization_weight(a, bias)
     torch.testing.assert_close(score, reference_score)
     for got, expected in zip(torch.autograd.grad(score, (a, bias)), torch.autograd.grad(reference_score, (a, bias))):
         torch.testing.assert_close(got, expected)
@@ -116,18 +116,21 @@ def test_chunking_preserves_correction_candidate_and_warmstart_calculations(acti
     assert problem.certificate_radius(chunked_residual) == pytest.approx(problem.certificate_radius(full_residual))
 
 
-def test_prepared_objective_survives_later_data_and_support_changes():
-    data, problem = _linear_case(alpha=.1)
+@pytest.mark.parametrize("activation", ["relu", "softplus"])
+def test_prepared_objective_survives_later_data_and_support_changes(activation):
+    data, problem = _linear_case(alpha=.1, activation=activation)
     loader = make_dataloader(data)
     prepared = problem.prepare_coefficients(loader)
-    c = problem.c.detach()
-    expected_loss, expected_hessian = problem.loss(c, prepared).clone(), prepared.hess_obj.clone()
+    u = problem.coefficient_coordinates(problem.c.detach(), prepared)
+    expected_loss, expected_hessian = problem.loss(u, prepared).clone(), prepared.hess_obj.clone()
+    expected_weight = prepared.normalization_weight.clone()
     data[1].add_(10)
-    problem.set_atoms(data[0].new_tensor([[2., -1.]]), c.new_tensor([.1]), c.new_tensor([.5]))
+    problem.set_atoms(data[0].new_tensor([[2., -1.]]), u.new_tensor([.1]), u.new_tensor([.5]))
     later = problem.prepare_coefficients(loader)
     assert later.hess_obj.shape == (1, 1)
-    torch.testing.assert_close(problem.loss(c, prepared), expected_loss, rtol=0, atol=0)
+    torch.testing.assert_close(problem.loss(u, prepared), expected_loss, rtol=0, atol=0)
     torch.testing.assert_close(prepared.hess_obj, expected_hessian, rtol=0, atol=0)
+    torch.testing.assert_close(prepared.normalization_weight, expected_weight, rtol=0, atol=0)
 
 
 @pytest.mark.parametrize("batch_size", [None, 2])

@@ -97,7 +97,7 @@ def _generate_candidates(
                 w_s = w / w.norm().clamp_min(eps) if use_sphere else w
                 profile = problem.profile(w_s[:d_dim], w_s[d_dim], normalized_residual)
                 score = profile.abs() if two_sided else profile
-                obj = score / problem.coefficient_scale(w_s[:d_dim], w_s[d_dim])
+                obj = score / problem.normalization_weight(w_s[:d_dim], w_s[d_dim])
                 (-obj).backward()
                 return -obj
 
@@ -246,7 +246,7 @@ def profile_threshold(
                 float(value.detach()) for value in problem.directional_obj(*features, residual)
             )
             v = abs(slope) if two_sided else slope
-            scale = float(problem.coefficient_scale(a_i, b_i))
+            scale = float(problem.normalization_weight(a_i, b_i))
             threshold = problem.alpha * scale
             # Retain the physical-profile comparison, including its rounding.
             if v <= threshold or (guaranteed and curvature < 1e-30):

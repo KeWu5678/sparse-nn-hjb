@@ -1,10 +1,55 @@
 # Refactor plan and handoff
 
-Updated: 2026-10-07. Branch: `work/problem-solver-refactor`.
+Updated: 2026-10-08. Branch: `work/problem-solver-refactor`.
 Implementation baseline: `edb166a666bf2dc123198c373d9abc90f52f5830`.
 Full-review baseline: `49eeb0349a0a8ee489c075400d23cb1cb31e1208`.
 
 ## Current status and working rules
+
+**Inline review implemented and independently reviewed, baseline `32b0878`.** The user's pasted cache
+recovers six comments lost during simultaneous editing. It predates the accepted
+`inner_weight` / `inner_bias` rename; apply the comments to the current file,
+not by restoring the cached source wholesale. Root plans/documents; subagents
+implement and independently review.
+
+| Review comment | Resolution / work |
+| --- | --- |
+| `coefficient_scale` is confusing; suggested `_scaling_innner_weights`. | Rename to `normalization_weight`: it evaluates a factor from the inner parameters, without scaling or mutating those parameters. PDAP also uses this mathematical evaluation, so it remains public. |
+| Move `validate_correction` to configuration. | One `src/config.validate_training` function owns the compatibility rules and takes explicit settings. One model entry operation supplies its own settings; construction/preparation and direct training retain their checks before sample access. |
+| Move `validate_insertion` to configuration. | Share the configuration rules with insertion compatibility, without duplicating model settings or adding getters. |
+| Why a prepared class / is it an inner-weight backup? | The existing three-field record stores the fitting objective, its Hessian and normalization weights for one correction. It contains no network backup or optimization procedure. Retain this plain record, not a second model or behavioral class. Its exact representation is an implementation choice, not a user requirement. |
+| Why can the factor be `None`? | Remove this identity sentinel. Every preparation carries a tensor: moment weights for normalized neurons, ones otherwise. Coordinate conversion becomes multiplication/division. |
+| Configuration is fixed; why a class or whole-network copy for conversion? | Moment order is configured once; factor values depend on the neurons and change when support changes. The prepared factors match that solve's features. Proposals remain PDAP-owned; SSN's outer-coefficient backup handles correction rollback. No new copy of inner weights is required. |
+
+`state_cleanup` implemented the changes; independent Standards and Spec reviewers
+identified private-setting reads in the first config validator as an unresolved
+encapsulation violation. Root's assumption that every model validation method
+must disappear was not a user requirement and caused that coupling. The correction
+keeps one `SparseProblem.validate_training` entry operation, replacing the two
+former methods. It supplies its own settings to the pure configuration function;
+all compatibility rules live in configuration. PDAP/SSN request this behavior
+without reading model internals. No settings copy, getter, flag, adapter class or
+new module is needed. Do not optimize method counts at the expense of ownership,
+or treat a documented tradeoff as user approval for a standards violation.
+Construction, preparation, PDAP and direct SSN retain their checks; ordinary
+prediction construction remains broader than training.
+
+Coordinate conversion now always creates independent working coefficients, so
+the immediate duplicate clone in PDAP was removed; SSN's rollback copy remains.
+Numerical formulas, solver acceptance, masks, derivative conventions and fixtures
+remain unchanged. Combined focused checks: **148 passed**; after the validation
+review fix, **76 impacted tests passed**. Ruff passes all 15 changed Python files,
+and config/core/state/evaluation Pyright reports zero errors. Fixture hashes and
+whitespace checks pass. Independent Standards (`inline_review_standards`) and
+Spec (`inline_review_spec`) reviews verified the actual correction, closed the
+encapsulation finding and found no remaining issue within this diff. The final
+full suite reports **428 passed, one preexisting stale controller-selection
+artifact failure, 18 warnings** in 28.11 seconds. The ignored artifact and its
+test were left unchanged. No new class or module was added; SparseProblem is
+21 lines shorter. Logs: `/tmp/sparse-preparation-validation-reviewed-pytest.log`
+and `/tmp/sparse-preparation-validation-{focused,ruff,pyright}.log`.
+This narrow configuration validation move is requested by the new comments;
+broader configuration and logging redesign remains deferred.
 
 **Inner-parameter rename implemented and reviewed, baseline `edc1720`.** The
 user accepted the [naming research](vault/parameter_naming.md): `W` becomes

@@ -9,6 +9,7 @@ from .schema import (
     ExperimentConfig,
     ModelConfig,
     TrainingConfig,
+    validate_training,
 )
 
 __all__ = [
@@ -20,4 +21,5 @@ __all__ = [
     "ACTIVATIONS",
     "get_activation",
     "get_use_sphere",
+    "validate_training",
 ]

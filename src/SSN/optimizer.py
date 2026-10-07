@@ -71,6 +71,7 @@ class SSN(Optimizer):
             raise ValueError(f"unknown method {method!r}; expected one of {list(methods)}")
         if not isinstance(max_iter, int) or isinstance(max_iter, bool) or max_iter < 0:
             raise ValueError("max_iter must be a nonnegative integer")
+        problem.validate_training()
         defaults = {
             "max_iter": max_iter,
             "correction_guard": correction_guard,

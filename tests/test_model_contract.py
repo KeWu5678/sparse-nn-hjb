@@ -6,7 +6,8 @@ from torch.utils.data import DataLoader, Dataset
 
 from src.config.schema import ExperimentConfig
 from src.PDAP import PDAP
-from src.problems import SparseProblem
+from src.problems import PreparedObjective, SparseProblem
+from src.SSN import SSN
 
 
 def _atoms(n=4, d=2):
@@ -94,7 +95,8 @@ def test_setting_and_pruning_atoms_preserves_float64_coefficients():
     assert all(parameter.dtype == torch.float64 for parameter in problem.parameters())
 
 
-def test_historical_prediction_power_is_rejected_before_training_reads_data():
+@pytest.mark.parametrize("entry_point", ["pdap", "preparation", "ssn"])
+def test_historical_prediction_power_is_rejected_before_training_changes_state(entry_point):
     class UnavailableSamples(Dataset):
         def __len__(self):
             return 1
@@ -111,8 +113,17 @@ def test_historical_prediction_power_is_rejected_before_training_reads_data():
     before = {name: tensor.clone() for name, tensor in problem.state_dict().items()}
     loader = DataLoader(UnavailableSamples(), generator=torch.Generator().manual_seed(0))
     with pytest.raises(ValueError, match="supports activation powers 1, 2, 3"):
-        PDAP(ExperimentConfig().training).fit(
-            problem, loader, num_iterations=1, num_insertion=2, verbose=False,
-        )
+        if entry_point == "pdap":
+            PDAP(ExperimentConfig().training).fit(
+                problem, loader, num_iterations=1, num_insertion=2, verbose=False,
+            )
+        elif entry_point == "preparation":
+            problem.prepare_coefficients(loader)
+        else:
+            prepared = PreparedObjective(
+                lambda u: .5 * u.square().sum(), torch.eye(1, dtype=problem.c.dtype),
+                torch.ones_like(problem.c),
+            )
+            SSN([problem.c], problem, prepared)
     for name, tensor in problem.state_dict().items():
         torch.testing.assert_close(tensor, before[name], rtol=0, atol=0)

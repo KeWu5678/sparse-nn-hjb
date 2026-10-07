@@ -65,6 +65,9 @@ Fixed-support preparation is only reuse within the coefficient correction:
 features and the data-fitting Hessian are calculated once while inner weights
 and samples remain fixed. Its small return record does not own candidate search,
 warm-start, acceptance or a second network; it is not a paper algorithm stage.
+It also holds the per-neuron normalization weights, using ones on the sphere.
+These convert physical outer coefficients to the coordinates used by SSN and
+back; they do not modify inner weights or provide rollback storage.
 
 ## MATLAB reference
 
@@ -160,9 +163,10 @@ warm-start selection; SparseProblem supplies their mathematical evaluations.
 - `results.py` — saved-history reconstruction and physical-coordinate prediction.
 - `metric.py` — experiment-analysis utilities (per-gamma neuron/loss tables, plots).
 - `config/` — Hydra structured configuration for PDAP training:
-  - `schema.py` — typed model/training/data/env config objects.
+  - `schema.py` — typed model/training/data/env config objects and shared training
+    compatibility validation, called before correction or insertion work.
   - `activations.py` — canonical activation registry used by configs and scripts.
-  - `store.py` — registers the Hydra `config_schema`.
+  - `scripts/train.py` registers the Hydra `config_schema` before composition.
 - Open-loop data subsystem: `src/OpenLoop/` — shared `ValueSamples`, VDP smooth
   data generation under `src/OpenLoop/vdp/`, and paper-backed infinite-horizon
   pendulum data generation under `src/OpenLoop/pendulum/`.

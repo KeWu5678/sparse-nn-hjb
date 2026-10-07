@@ -46,7 +46,7 @@ def test_fractional_ssn_chooses_the_scale_from_its_starting_coefficients() -> No
 @pytest.mark.parametrize("power", [2.0, 3.0])
 def test_fractional_problem_rejects_a_log_penalty(power: float) -> None:
     with pytest.raises(ValueError, match="power penalty requires gamma == 0"):
-        SparseProblem(1, alpha=1.0, gamma=1.0, power=power).validate_correction()
+        SparseProblem(1, alpha=1.0, gamma=1.0, power=power).validate_training()
 
 
 def test_fractional_correction_reports_an_all_zero_warm_start() -> None:
