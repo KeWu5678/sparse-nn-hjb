@@ -17,7 +17,7 @@ from .penalty import (
     jac_noncvx_penalty,
     phi_prox,
 )
-from .prox import SUPPORTED_ACTIVATION_POWERS, power_prox, power_prox_derivative
+from .prox import _power_prox, _power_prox_derivative
 from .radius import certificate_radius, sample_extent
 
 
@@ -35,6 +35,8 @@ class SparseProblem:
     For the log family loss = obj_augmented + alpha*||u||_1. For a fractional
     penalty obj_augmented = obj and the proximal map handles the full penalty.
     Optimizers own parameter mutation, differentiation of loss, and iterations.
+    Construction validates power and its compatibility with activation and gamma;
+    internal proximal helpers receive the derived exact penalty exponent.
     """
 
     def __init__(
@@ -55,7 +57,7 @@ class SparseProblem:
         self._activation = get_activation(activation)
         self._use_sphere = get_use_sphere(activation)
         self._growth = get_growth(activation)
-        if power not in SUPPORTED_ACTIVATION_POWERS:
+        if power not in (1.0, 2.0, 3.0):
             raise ValueError(
                 f"the coefficient correction supports activation powers 1, 2, 3; got power={power}"
             )
@@ -74,7 +76,7 @@ class SparseProblem:
         self._power = power
         self._penalty_exponent = 2.0 / (power + 1.0)
         self._alpha, self._gamma = alpha, gamma
-        self._loss_weights = tuple(loss_weights)
+        self._loss_weights = loss_weights
         self._moment_order = moment_order
         self._normalized = not self._use_sphere
         self._penalized_mask = penalized_mask
@@ -272,13 +274,13 @@ class SparseProblem:
 
     def prox(self, q: Tensor, inverse_step: float) -> Tensor:
         """Evaluate the selected proximal map, including nonnegative coordinates."""
-        out = power_prox(q, self._alpha_vec / inverse_step, penalty_exponent=self._penalty_exponent)
+        out = _power_prox(q, self._alpha_vec / inverse_step, penalty_exponent=self._penalty_exponent)
         kill = self._prox_nonneg & (q < 0)
         return torch.where(kill, torch.zeros_like(out), out)
 
     def jac_prox(self, q: Tensor, inverse_step: float, *, prox_result: Tensor) -> Tensor:
         """Selected proximal Jacobian at q, using its already computed image."""
-        jac = power_prox_derivative(
+        jac = _power_prox_derivative(
             q,
             self._alpha_vec / inverse_step,
             penalty_exponent=self._penalty_exponent,
@@ -480,7 +482,7 @@ class SparseProblem:
         abs_p = abs(p_omega)
         prox_input = torch.tensor([abs_p / S_sq], dtype=torch.float64)
         magnitude = float(
-            power_prox(prox_input, self._alpha / S_sq, penalty_exponent=self._penalty_exponent)[0]
+            _power_prox(prox_input, self._alpha / S_sq, penalty_exponent=self._penalty_exponent)[0]
         )
         if magnitude <= 0.0:
             return None
@@ -512,7 +514,7 @@ class SparseProblem:
                 v = torch.tensor([-slope / curvature], dtype=torch.float64)
                 tau = max(
                     float(
-                        power_prox(
+                        _power_prox(
                             v, self._alpha / curvature, penalty_exponent=self._penalty_exponent
                         )[0].item()
                     ),

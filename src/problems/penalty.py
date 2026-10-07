@@ -10,7 +10,7 @@ At gamma=0, phi(t)=t. The fractional family is t^q, with gamma=0.
 
 ``phi_prox`` takes the full nonnegative log-penalty step for PDAP's warm start.
 SSN instead splits phi(|u|) into |u| and a smooth remainder, using the signed
-``power_prox`` in ``prox.py`` and the correction terms below.
+``_power_prox`` in ``prox.py`` and the correction terms below.
 """
 
 import math
@@ -72,7 +72,7 @@ def _noncvx_correction(abs_u, sign_u, gamma, penalty_exponent=1.0):
     """Gradient of the smooth remainder in the SSN splitting.
 
     For q=1 the remainder is phi(|u|)-|u|. For q!=1 (gamma=0),
-    power_prox handles the whole penalty, so there is no remainder.
+    _power_prox handles the whole penalty, so there is no remainder.
     """
     if penalty_exponent == 1.0:
         return sign_u * (_dphi(abs_u, gamma) - 1.0)

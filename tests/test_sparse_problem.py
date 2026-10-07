@@ -30,6 +30,37 @@ def _model(activation="relu", power=1.0):
 
 
 @pytest.mark.parametrize(
+    "power",
+    [-1.0, 0.0, 1.5, 4.0, 1.0 + 5e-13, 2.0 + 5e-13, 3.0 - 5e-13,
+     float("nan"), float("inf"), -float("inf")],
+)
+def test_constructor_rejects_unsupported_powers(power):
+    with pytest.raises(ValueError, match="supports activation powers 1, 2, 3"):
+        SparseProblem(_samples(), power=power)
+
+
+@pytest.mark.parametrize(
+    "power,exponent,alpha,value,expected,derivative",
+    [
+        (1.0, 1.0, 1.0, 2.0, 1.0, 1.0),
+        (2.0, 2.0 / 3.0, 1.5, 8.5, 8.0, 48.0 / 47.0),
+        (3.0, 0.5, 1.0, 4.25, 4.0, 32.0 / 31.0),
+    ],
+)
+def test_validated_power_selects_the_proximal_map_and_derivative(
+    power, exponent, alpha, value, expected, derivative,
+):
+    problem = SparseProblem(_samples(), power=power, alpha=alpha)
+    problem.prepare_coefficients(_model(power=power))
+    assert problem.penalty_exponent == exponent
+    q = torch.tensor([-value, value], dtype=torch.float64)
+    prox = problem.prox(q, inverse_step=1.0)
+    jac = problem.jac_prox(q, inverse_step=1.0, prox_result=prox)
+    torch.testing.assert_close(prox, q.new_tensor([-expected, expected]))
+    torch.testing.assert_close(jac, derivative * torch.eye(2, dtype=q.dtype))
+
+
+@pytest.mark.parametrize(
     "activation,power,gamma",
     [
         ("relu", 1.0, 0.7),

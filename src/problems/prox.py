@@ -1,21 +1,17 @@
-"""Power-penalty proximal maps for SSN and PDAP, and their derivatives.
+"""Internal power-penalty proximal maps and their derivatives.
 
-The power proximal maps support ``q`` in ``{1, 2/3, 1/2}``.  Their fractional maps
-use closed-form stationary roots together with the global objective-switching
-threshold; at an exact tie they return zero.
+SparseProblem validates the activation power at construction and supplies the
+exact exponent ``q`` in ``{1, 2/3, 1/2}``. The fractional maps use closed-form
+stationary roots together with the global objective-switching threshold;
+at an exact tie they return zero.
 """
 
 import math
 
 import torch
 
-# Activation powers whose induced exponents q=2/(power+1) have verified global
-# scalar proximal maps below.  SparseProblem uses this tuple for configuration
-# validation so adding a closed form has one authority.
-SUPPORTED_ACTIVATION_POWERS = (1.0, 2.0, 3.0)
 
-
-def power_prox(v, lambda_, penalty_exponent=1.0):
+def _power_prox(v, lambda_, penalty_exponent=1.0):
     """Return the global proximal map of ``lambda*|.|^q``.
 
     For q=1: soft thresholding, prox(v) = sign(v) * max(|v| - lambda, 0).
@@ -24,30 +20,16 @@ def power_prox(v, lambda_, penalty_exponent=1.0):
     Args:
         v: input tensor
         lambda_: proximal scale (typically alpha / inverse_step in SSN)
-        penalty_exponent: power exponent, q = 2/(p+1) where p is the activation power;
-            1 exactly, or within 1e-12 of 1/2 or 2/3
+        penalty_exponent: exact q = 2/(power+1), derived from a power validated
+            by SparseProblem.__init__
     Returns:
         vprox: global minimizer, with zero selected at an exact tie
     """
-    penalty_exponent = _canonical_exponent(penalty_exponent)
-    if penalty_exponent == 1.0:
-        return _compute_prox_q_one(v, lambda_)
-
-    if penalty_exponent == 0.5:
-        return _compute_prox_q_half(v, lambda_)
-
-    return _compute_prox_q_twothirds(v, lambda_)
-
-
-def _canonical_exponent(penalty_exponent):
-    """Use the same supported exponent and tolerance for the map and derivative."""
-    if penalty_exponent == 1.0:
-        return 1.0
-    if abs(penalty_exponent - 0.5) < 1e-12:
-        return 0.5
-    if abs(penalty_exponent - 2.0 / 3.0) < 1e-12:
-        return 2.0 / 3.0
-    raise ValueError(f"q must be one of {{1, 2/3, 1/2}}, got {penalty_exponent}")
+    return {
+        1.0: _compute_prox_q_one,
+        0.5: _compute_prox_q_half,
+        2.0 / 3.0: _compute_prox_q_twothirds,
+    }[penalty_exponent](v, lambda_)
 
 
 def _compute_prox_q_one(v, lambda_):
@@ -132,7 +114,7 @@ def _compute_prox_q_twothirds(v, lambda_):
     return torch.where(positive_scale, torch.sign(v) * t, v)
 
 
-def power_prox_derivative(v, lambda_, penalty_exponent=1.0, prox_result=None):
+def _power_prox_derivative(v, lambda_, penalty_exponent=1.0, prox_result=None):
     """Generalized derivative of the scalar proximal map away from its switch.
 
     Ported from MATLAB computeDProx.m. With N=1 (scalar outer weights),
@@ -152,8 +134,8 @@ def power_prox_derivative(v, lambda_, penalty_exponent=1.0, prox_result=None):
     Args:
         v: proximal preimage tensor (the SSN variable q_var)
         lambda_: proximal scale (typically alpha / inverse_step)
-        penalty_exponent: supported exponent, with the same acceptance tolerance as power_prox
-        prox_result: precomputed power_prox(v, lambda_, q) — required for q != 1
+        penalty_exponent: exact q derived from a power validated by SparseProblem.__init__
+        prox_result: precomputed _power_prox(v, lambda_, q) — required for q != 1
 
     Returns:
         DP: Jacobian matrix (diagonal), shape (n, n)
@@ -163,12 +145,11 @@ def power_prox_derivative(v, lambda_, penalty_exponent=1.0, prox_result=None):
     """
     assert torch.is_floating_point(v), "Input must be real-valued"
 
-    penalty_exponent = _canonical_exponent(penalty_exponent)
     if penalty_exponent == 1.0:
         return _compute_prox_derivative_q_one(v, lambda_)
 
     if prox_result is None:
-        raise ValueError("prox_result from power_prox is required for fractional q")
+        raise ValueError("prox_result from _power_prox is required for fractional q")
     return _compute_prox_derivative_fractional(v, lambda_, penalty_exponent, prox_result)
 
 
