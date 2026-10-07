@@ -144,14 +144,16 @@ warm-start selection; SparseProblem supplies their mathematical evaluations.
     directional evaluations, and a temporary `PreparedObjective` for each
     coefficient correction. There is no separate
     model hierarchy or persistent feature cache.
-  - `penalty.py`, `prox.py`, `moment.py`, `radius.py` — mathematical helpers.
+  - `penalty.py`, `prox.py`, `moment.py` — mathematical helpers.
 - `PDAP/` — candidate search/acceptance, warm-start, support changes, and correction scheduling:
   - `pdap.py` — `PDAP.fit(problem, train_loader, valid_loader, ...)`, configured
     by `insertion=` ("profile" or "finite_step").
-  - `insertion.py` — profile-threshold and finite-step candidate selection.
+  - `insertion.py` — profile-threshold and finite-step candidate selection and
+    insertion objective change.
+  - `radius.py` — theorem certificate radius; PDAP applies its cap and fallback.
   - `warmstart.py` — warm-start procedure and initialization using problem calculations.
-  - `history.py` — existing metrics, one owned snapshot per checkpoint with
-    artifact views, and best-checkpoint selection. Reporting redesign is deferred.
+  - `history.py` — invokes evaluation, owns one snapshot per checkpoint with
+    artifact views, and selects the best checkpoint.
 - `SSN/` — the semismooth Newton optimizer:
   - `optimizer.py` — `SSN(Optimizer)`. One `step()` runs the complete configured
     correction on supplied coefficients and owns its final acceptance/fallback.
@@ -159,7 +161,8 @@ warm-start selection; SparseProblem supplies their mathematical evaluations.
   - `mpcg.py` — projected/trust-region CG inner solve.
 - `data.py` — reading, normalization, splitting, standard DataLoader factories,
   and complete-sample assembly. Loaders and samples remain external to the model.
-- `eval.py` — relative errors from predictions and targets.
+- `eval.py` — relative errors and metric/report assembly, using the problem's
+  canonical `obj` and sparsity functional for its objective mathematics.
 - `results.py` — saved-history reconstruction and physical-coordinate prediction.
 - `metric.py` — experiment-analysis utilities (per-gamma neuron/loss tables, plots).
 - `config/` — Hydra structured configuration for PDAP training:

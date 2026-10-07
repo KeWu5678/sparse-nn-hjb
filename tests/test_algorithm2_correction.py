@@ -12,22 +12,22 @@ from src.problems.penalty import _noncvx_penalty
 from src.SSN import SSN
 
 
-def test_warmstart_prox_scale_uses_all_nonzero_penalized_coefficients() -> None:
+def test_prox_scale_for_fractional_penalty_uses_all_nonzero_penalized_coefficients() -> None:
     coefficients = torch.tensor([0.0, -0.5, 2.0, 0.01], dtype=torch.float64)
     penalized = torch.tensor([True, True, True, False])
 
     problem = SparseProblem(4, alpha=1.0, power=3.0, penalized_mask=penalized)
-    scale = problem.warmstart_prox_scale(coefficients, rho=0.9)
+    scale = problem.prox_scale_for_fractional_penalty(coefficients, rho=0.9)
 
     assert scale == pytest.approx(0.3181980515339464)
 
 
-def test_warmstart_prox_scale_preserves_a_smaller_existing_scale() -> None:
+def test_prox_scale_for_fractional_penalty_preserves_a_smaller_existing_scale() -> None:
     coefficients = torch.tensor([0.5], dtype=torch.float64)
     penalized = torch.tensor([True])
 
     problem = SparseProblem(1, alpha=1e-5, power=3.0, penalized_mask=penalized)
-    scale = problem.warmstart_prox_scale(coefficients, rho=0.9)
+    scale = problem.prox_scale_for_fractional_penalty(coefficients, rho=0.9)
 
     assert scale == pytest.approx(1e-5)
 
@@ -90,7 +90,7 @@ def test_fractional_ssn_preserves_a_prox_consistent_warm_start() -> None:
         data_loss, torch.tensor([[curvature]], dtype=torch.float64),
         alpha=alpha, gamma=0.0, power=3.0,
     )
-    prox_scale = problem.warmstart_prox_scale(coefficient.detach(), rho=0.9)
+    prox_scale = problem.prox_scale_for_fractional_penalty(coefficient.detach(), rho=0.9)
     optimizer = SSN([coefficient], problem, prepared, prox_scale=prox_scale, tolerance_grad=0.0, max_iter=1)
 
     before = float(problem.loss(coefficient, prepared).detach())

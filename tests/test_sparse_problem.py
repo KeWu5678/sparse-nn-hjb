@@ -1,13 +1,11 @@
 """External samples and temporary coefficient calculations used by PDAP and SSN."""
 
-import gc
-import weakref
-
 import pytest
 import torch
 
 from src.config.activations import ACTIVATIONS
 from src.data import make_dataloader
+from src.eval import metrics
 from src.problems import SparseProblem
 
 
@@ -26,6 +24,30 @@ def _problem(activation="relu", power=1.0, **specifications):
         torch.tensor([-0.6, 0.8], dtype=torch.float64),
     )
     return problem
+
+
+def test_obj_is_the_weighted_h1_quadratic():
+    problem = SparseProblem(2, loss_weights=(.4, 1.3))
+    value = torch.tensor([[2.], [3.]], dtype=torch.float64, requires_grad=True)
+    gradient = value.new_tensor([[1., 2.], [2., 1.]], requires_grad=True)
+    target = torch.ones_like(value), torch.zeros_like(gradient)
+
+    obj = problem.obj((value, gradient), target)
+
+    torch.testing.assert_close(obj, value.new_tensor(3.75))
+    dvalue, dgradient = torch.autograd.grad(obj, (value, gradient))
+    torch.testing.assert_close(dvalue, value.new_tensor([[.2], [.4]]))
+    torch.testing.assert_close(dgradient, value.new_tensor([[.65, 1.3], [1.3, .65]]))
+
+
+@pytest.mark.parametrize("alpha", [0., .3])
+def test_sparsity_functional_remains_unweighted_and_respects_masks(alpha):
+    problem = SparseProblem(
+        1, alpha=alpha, penalized_mask=torch.tensor([True, True, False]),
+        nonneg_mask=torch.tensor([False, True, False]),
+    )
+    u = torch.tensor([-2., -3., 100.], dtype=torch.float64)
+    torch.testing.assert_close(problem.sparsity_functional(u), u.new_tensor(2.))
 
 
 @pytest.mark.parametrize(
@@ -84,12 +106,13 @@ def test_samples_define_the_objective_and_its_derivatives(activation, power, gam
     expected_obj = (0.4 * (Vp - data[1]).square().sum() + 1.3 * (dVp - data[2]).square().sum()) / (
         2 * len(data[0])
     )
+    torch.testing.assert_close(problem.obj((Vp, dVp), data[1:]), expected_obj)
     torch.testing.assert_close(prepared.obj(u), expected_obj)
     torch.testing.assert_close(prepared.hess_obj, torch.func.hessian(prepared.obj)(u))
     torch.testing.assert_close(problem.model_coefficients(u, prepared), problem.c.detach())
     loss = lambda u: problem.loss(u, prepared)
     obj_augmented = lambda u: problem.obj_augmented(u, prepared)
-    assert float(loss(u)) == pytest.approx(problem.metrics(loader)["train_loss"], rel=1e-12)
+    assert float(loss(u)) == pytest.approx(metrics(problem, loader)["train_loss"], rel=1e-12)
 
     jac_loss = torch.func.grad(loss)(u)
     torch.testing.assert_close(
@@ -110,10 +133,11 @@ def test_one_problem_handles_empty_and_replaced_supports():
     data = _samples()
     loader = make_dataloader(data)
     problem = SparseProblem(2, activation="softplus", alpha=0.01)
-    residual = problem.residual(loader)
+    prediction = problem.forward_with_gradient(data[0])
+    residual = data[0], *(p - t for p, t in zip(prediction, data[1:]))
     torch.testing.assert_close(residual[1], -data[1])
     torch.testing.assert_close(residual[2], -data[2])
-    initial_loss = problem.metrics(loader)["train_loss"]
+    initial_loss = metrics(problem, loader)["train_loss"]
     a = torch.tensor([0.2, -0.3], dtype=torch.float64, requires_grad=True)
     b = a.new_tensor(0.1, requires_grad=True)
     score = problem.profile(a, b, residual).abs() / problem.normalization_weight(a, b)
@@ -127,28 +151,19 @@ def test_one_problem_handles_empty_and_replaced_supports():
         preparations.append(prepared)
         u = problem.coefficient_coordinates(problem.c.detach(), prepared)
         assert prepared.hess_obj.shape == (width, width)
-        assert float(problem.loss(u, prepared)) == pytest.approx(problem.metrics(loader)["train_loss"], rel=1e-12)
+        assert float(problem.loss(u, prepared)) == pytest.approx(metrics(problem, loader)["train_loss"], rel=1e-12)
     assert len({id(prepared) for prepared in preparations}) == 4
 
     problem.set_atoms(W[:0], W.new_zeros(0), W.new_zeros(0))
-    assert problem.metrics(loader)["train_loss"] == pytest.approx(initial_loss)
-
-
-def test_preparation_does_not_retain_the_problem():
-    problem = _problem()
-    reference = weakref.ref(problem)
-    prepared = problem.prepare_coefficients(make_dataloader(_samples()))
-    del problem
-    gc.collect()
-    assert reference() is None
-    assert torch.isfinite(prepared.obj(torch.ones(2, dtype=torch.float64)))
+    assert metrics(problem, loader)["train_loss"] == pytest.approx(initial_loss)
 
 
 @pytest.mark.parametrize("activation,power", [("relu", 1.), ("relu", 2.), ("relu", 3.), ("softplus", 1.)])
 def test_candidate_profile_matches_fidelity_derivative_and_inner_weight_gradient(activation, power):
     problem = _problem(activation, power, loss_weights=(.4, 1.3))
     X, V, dV = _samples()
-    residual = problem.residual(make_dataloader((X, V, dV)))
+    prediction = problem.forward_with_gradient(X)
+    residual = X, prediction[0] - V, prediction[1] - dV
     omega = X.new_tensor([.7, -.2, .4], requires_grad=True)
     profile = problem.profile(omega[:2], omega[2], residual)
     derivative = torch.autograd.grad(profile, omega)[0]

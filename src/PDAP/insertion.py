@@ -342,7 +342,12 @@ def finite_step(
             if magnitude <= 0.0:
                 continue
             c_star = magnitude if slope < 0 else -magnitude
-            dJ = problem.insertion_increment(c_star, slope, curvature)
+            # The insertion increment uses the exact power, without the tiny
+            # magnitude floor needed when differentiating the full penalty.
+            dJ = (
+                slope * c_star + 0.5 * curvature * c_star**2
+                + problem.alpha * abs(c_star)**problem.penalty_exponent
+            )
             if dJ >= 0.0:
                 continue
             accepted_a.append(a_i.detach())

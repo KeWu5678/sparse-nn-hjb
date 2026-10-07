@@ -26,11 +26,9 @@ def test_q_half_insertion_minimizes_the_actual_objective_increment(monkeypatch) 
 
     assert result.shape == (1,)
     coefficient = result[0]
-    increment = problem.insertion_increment(coefficient, 4.25, 1.0)
-    actual = 4.25 * coefficient + 0.5 * coefficient**2 + abs(coefficient) ** 0.5
+    increment = 4.25 * coefficient + 0.5 * coefficient**2 + abs(coefficient) ** 0.5
     assert coefficient == pytest.approx(-4.0)
     assert increment == pytest.approx(-7.0)
-    assert increment == pytest.approx(actual)
 
 
 def test_q_two_thirds_insertion_minimizes_the_actual_objective_increment(monkeypatch) -> None:
@@ -39,15 +37,13 @@ def test_q_two_thirds_insertion_minimizes_the_actual_objective_increment(monkeyp
 
     assert result.shape == (1,)
     coefficient = result[0]
-    increment = problem.insertion_increment(coefficient, 8.5, 1.0)
-    actual = (
+    increment = (
         8.5 * coefficient
         + 0.5 * coefficient**2
         + 1.5 * abs(coefficient) ** (2.0 / 3.0)
     )
     assert coefficient == pytest.approx(-8.0)
     assert increment == pytest.approx(-30.0)
-    assert increment == pytest.approx(actual)
 
 
 def test_q_one_insertion_keeps_the_soft_threshold_rule(monkeypatch) -> None:
@@ -56,11 +52,9 @@ def test_q_one_insertion_keeps_the_soft_threshold_rule(monkeypatch) -> None:
 
     assert result.shape == (1,)
     coefficient = result[0]
-    increment = problem.insertion_increment(coefficient, -3.0, 2.0)
-    actual = -3.0 * coefficient + coefficient**2 + abs(coefficient)
+    increment = -3.0 * coefficient + coefficient**2 + abs(coefficient)
     assert coefficient == pytest.approx(1.0)
     assert increment == pytest.approx(-1.0)
-    assert increment == pytest.approx(actual)
 
 
 @pytest.mark.parametrize(
@@ -86,4 +80,3 @@ def test_insertion_preserves_the_power_prox_and_exact_tiny_penalty(monkeypatch, 
     assert c == pytest.approx(expected, rel=1e-12, abs=0.)
     increment = profile * c + .5 * 1e20 * c**2 + alpha * abs(c)**(2 / (power + 1))
     assert increment < 0.
-    assert problem.insertion_increment(c, profile, 1e20) == pytest.approx(increment, rel=1e-12, abs=0.)

@@ -1,15 +1,57 @@
-"""Performance evaluation of a model's predictions against value samples.
+"""Evaluation and reporting for a model and its external value samples.
 
-Pure functions of (prediction, target) tensors with no model state: a model
-produces ``(V, dV)`` via ``forward_with_gradient`` and the trainer scores them here.
-Objective and regularizer calculations belong to ``src.problems.SparseProblem``.
+SparseProblem supplies the fitting objective and sparsity functional; evaluation
+assembles their reported values, prediction errors and support diagnostics.
 """
 
 from __future__ import annotations
 
-from typing import Dict, Tuple
+from typing import TYPE_CHECKING, Dict, Tuple
 
 import torch
+
+from .data import full_batch
+from .problems.moment import amplitude_mass_radius, moment_weight
+
+if TYPE_CHECKING:
+    from .problems import SparseProblem
+
+
+@torch.no_grad()
+def metrics(problem: SparseProblem, train_loader, valid_loader=None, reporting_normalizer=None) -> dict[str, float]:
+    """Evaluate splits and support diagnostics using the persisted metric names."""
+    inner_weight, inner_bias, c = problem.inner_weight, problem.inner_bias, problem.c.detach()
+    u = c * problem.normalization_weight(inner_weight, inner_bias)
+    phi = problem.sparsity_functional(u) if c.numel() else c.new_zeros(())
+    weights = moment_weight(inner_weight, inner_bias, problem.moment_order)
+    psi = torch.sum(weights.reshape(-1) * c.reshape(-1).abs())
+    radius = torch.sqrt((inner_weight * inner_weight).sum(dim=-1) + inner_bias * inner_bias)
+    values = {
+        "sparsity_functional": float(phi),
+        "psi_p": float(psi),
+        "alpha_phi": float(problem.alpha * phi),
+        "total_variation": float(c.reshape(-1).abs().sum()),
+        "radius_r95": float(amplitude_mass_radius(inner_weight, inner_bias, c)),
+        "radius_max": float(radius.max()) if c.numel() else 0.0,
+    }
+    if valid_loader is None:
+        valid_loader = train_loader
+    for split, loader in (("train", train_loader), ("val", valid_loader)):
+        data = full_batch(loader)
+        prediction = problem.forward_with_gradient(data[0])
+        target = data[1:]
+        fitting = problem.obj(prediction, target)
+        n = data[0].shape[0]
+        values[f"{split}_loss"] = float(fitting) + values["alpha_phi"]
+        values[f"data_loss_{split}"] = float(fitting)
+        values[f"value_loss_{split}"] = float(torch.sum((prediction[0] - target[0]) ** 2) / (2 * n))
+        values[f"gradient_loss_{split}"] = float(torch.sum((prediction[1] - target[1]) ** 2) / (2 * n))
+        if reporting_normalizer is not None:
+            prediction = reporting_normalizer.denormalize_tensors(*prediction)
+            target = reporting_normalizer.denormalize_tensors(*target)
+        for name, error in zip(("l2", "grad", "h1"), relative_errors(*prediction, *target)):
+            values[f"err_{name}_{split}"] = error
+    return values
 
 
 @torch.no_grad()

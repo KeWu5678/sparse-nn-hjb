@@ -4,7 +4,7 @@ status: accepted
 
 # SparseProblem owns the network and mathematics; PDAP and SSN own optimization
 
-## Current decision: one SparseProblem built on PyTorch (2026-10-07)
+## Current decision: one SparseProblem built on PyTorch (updated 2026-10-08)
 
 The agreed refactor replaces the separate model/problem representation with
 one `SparseProblem(torch.nn.Module)` that owns the current network and
@@ -26,12 +26,17 @@ contains no backup of the network. Its feature matrices, targets and fitting
 Hessian are reused while SSN changes outer coefficients. The normalization
 weight is a tensor, with ones for sphere atoms. Its values depend on the
 neurons even when the configured moment order stays fixed.
+`SparseProblem.obj(prediction, target)` is the canonical scalar H1 fitting
+objective. Prepared coefficient fitting calls it using the fixed features and
+targets. This closure can reference the same problem during its correction;
+avoiding a second network does not require forbidding that reference.
 
 PDAP owns candidate search/ranking, insertion acceptance, the warm-start
 procedure and initial-coefficient selection, support insertion/pruning,
 correction scheduling and outer stopping. SparseProblem evaluates supplied candidates/directions:
-features, signed profiles, slope/curvature, objective changes, and penalty/proximal
-operations. Mathematical evaluation does not transfer search, initialization,
+features, signed profiles, slope/curvature, and penalty/proximal operations.
+PDAP owns its insertion-increment calculation and certificate radius, including
+the theorem formula and numerical cap/fallback. Mathematical evaluation does not transfer search, initialization,
 or acceptance decisions to the problem. The mixed insertion/warm-start methods
 have been removed; their procedures now live in PDAP's insertion and warm-start
 modules. The assistant's former proposal to move complete warm-start selection
@@ -55,10 +60,14 @@ settings to that function; construction/preparation and optimizers use this
 single entry operation. Configuration and optimizers do not inspect private
 model fields, and no second settings object or getters are needed. The ordinary
 constructor still supports historical prediction settings.
-Measurement/logging/history remain separate concerns whose
-redesign the user deferred; preserving current behavior does not endorse the
-present internal placement as a permanent architecture. History now owns one
-detached checkpoint with existing artifact views and a single restoration.
+The user subsequently requested separation of metrics from mathematics.
+Evaluation owns split iteration, reporting denormalization, support diagnostics
+and metric dictionaries; it calls the problem's objective and raw sparsity
+functional. History invokes evaluation and owns one detached checkpoint with
+existing artifact views and a single restoration. Broader logging/backend
+redesign remains deferred. Read-only activation identity and moment order expose
+the existing mathematical facts needed by PDAP and evaluation without copying
+configuration or inspecting private fields.
 
 Implementation and verification status live in
 [REFACTOR_HANDOFF.md](../../REFACTOR_HANDOFF.md), including the user's statements,

@@ -2,7 +2,7 @@
 
 ``PDAP`` is a pure trainer: the per-iteration metrics and weight snapshots are
 not its state, they are returned to the caller in a :class:`History` (the Keras
-``fit``-returns-``History`` convention). ``SparseProblem`` computes the metrics;
+``fit``-returns-``History`` convention). Evaluation computes the metrics;
 ``History.record`` stores them alongside parameter snapshots and selects the
 best checkpoint.
 """
@@ -16,6 +16,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from ..data import ValueSampleNormalizer
+from ..eval import metrics
 from ..problems import SparseProblem
 
 
@@ -81,10 +82,10 @@ class History:
         ``radial_cap=fixed`` run: both search
         inside ``exp(5)``, and without these the records are identical.
         """
-        metrics = problem.metrics(
-            train_loader, valid_loader, reporting_normalizer=self.reporting_normalizer,
+        values = metrics(
+            problem, train_loader, valid_loader, reporting_normalizer=self.reporting_normalizer,
         )
-        for name, value in metrics.items():
+        for name, value in values.items():
             getattr(self, name).append(value)
         self.search_radius.append(None if search_radius is None else float(search_radius))
         self.radius_theorem_applied.append(None if theorem_applied is None else float(theorem_applied))
@@ -95,8 +96,8 @@ class History:
         self.inner_weights.append({"weight": state["inner_weight"], "bias": state["inner_bias"]})
         self.outer_weights.append(state["c"].reshape(1, -1))
         i = len(self.train_loss) - 1
-        if metrics["train_loss"] < self.best_train_loss:
-            self.best_train_loss = metrics["train_loss"]
+        if values["train_loss"] < self.best_train_loss:
+            self.best_train_loss = values["train_loss"]
             self.best_iteration = i
 
     @property

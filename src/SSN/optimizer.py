@@ -90,7 +90,7 @@ class SSN(Optimizer):
         self._params = self.param_groups[0]["params"]
         group = self.param_groups[0]
         if prox_scale is None:
-            prox_scale = problem.warmstart_prox_scale(
+            prox_scale = problem.prox_scale_for_fractional_penalty(
                 parameters_to_vector(self._params).detach(), ALGORITHM2_PROX_RHO,
             )
         group["prox_scale"] = prox_scale
@@ -136,7 +136,7 @@ class SSN(Optimizer):
             vector_to_parameters(start, self._params)
             loss = initial_loss
         if self.verbose:
-            self._report(start, initial_loss, loss)
+            self._report(initial_loss, loss)
         return loss
 
     def _evaluate_current(self) -> tuple[Tensor, Tensor]:
@@ -193,22 +193,12 @@ class SSN(Optimizer):
             return loss_trial
         return loss
 
-    def _report(self, start: Tensor, initial_loss: Tensor, loss: Tensor) -> None:
+    def _report(self, initial_loss: Tensor, loss: Tensor) -> None:
         group = self.param_groups[0]
-        if self.problem.penalty_exponent < 1.0:
-            initial_active = self.problem.active_magnitudes(start)
-            final_active = self.problem.active_magnitudes(parameters_to_vector(self._params))
-            logger.info(
-                "Algorithm 2 correction  q=%.6g  rho=%.3g  min|c|=%.6e  "
-                "prox_scale=%.6e  inverse_step=%.6e  nonzero=%d->%d  "
-                "failed_steps=%d/%d  train_loss=%.6e",
-                self.problem.penalty_exponent, ALGORITHM2_PROX_RHO,
-                float(initial_active.min()) if initial_active.numel() else 0.0,
-                group["prox_scale"], group["inverse_step"], int(initial_active.numel()),
-                int(final_active.numel()), self.failed_steps, self.iterations_run, float(loss),
-            )
         logger.info(
-            "SSN correction  iterations=%d  objective=%.6e->%.6e  accepted=%s",
+            "SSN correction  iterations=%d  objective=%.6e->%.6e  accepted=%s  "
+            "failed_steps=%d  prox_scale=%s  inverse_step=%.6e",
             self.iterations_run, float(initial_loss.detach()), float(loss.detach()),
-            str(self.correction_accepted).lower(),
+            str(self.correction_accepted).lower(), self.failed_steps,
+            group["prox_scale"], group["inverse_step"],
         )

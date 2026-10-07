@@ -1,4 +1,4 @@
-"""The theorem-derived radius used by Algorithm 1's candidate search.
+"""The theorem-derived radius used by PDAP's Algorithm 1 candidate search.
 
 The quantitative insertion theorem (paper/paper_0805.tex, Section 5) states that
 under the growth bound

@@ -6,6 +6,75 @@ Full-review baseline: `49eeb0349a0a8ee489c075400d23cb1cb31e1208`.
 
 ## Current status and working rules
 
+**Method cleanup implemented and independently reviewed, baseline `de75737`.** The user's latest response
+directs the exact fractional-scale rename, removal of the active-magnitude
+method, restoration of `obj`, separation of reporting, and PDAP ownership of
+insertion change/radius. Root first reported which criticisms are valid and
+which mathematical distinctions need preserving. Earlier explanations of what
+a method computed did not answer whether its interface/ownership was justified.
+
+| User review | Verdict and implementation |
+| --- | --- |
+| Rename `warmstart_prox_scale`. | Applied exactly `prox_scale_for_fractional_penalty`, retaining its evaluator location. The user requested a rename, not acceptance of the assistant's proposed SSN relocation. SSN owns when/how its scale is selected and stored. |
+| `active_magnitudes` needs no method. | Agreed and removed. Masked filtering is inline in the scale calculation. Redundant masked minimum/count diagnostics were removed, avoiding exposed masks or silently different counts; solver outcome/scale reporting remains. |
+| `residual` replaced the agreed `obj`; `obj_terms` duplicates it. | The interface criticism is valid. A residual is an intermediate tensor, not the scalar H1 objective. Restored `obj(prediction, target)` for prepared fitting and reported totals. The two public intermediate methods are removed; PDAP computes its detached search residuals locally once. |
+| Insertion increment and certificate radius belong to PDAP. | Agreed and moved into PDAP code, including relocation of the radius module. Objective/penalty primitives remain shared. The earlier blanket justification that any mathematical formula belongs on the problem was too broad. |
+| Separate metrics from mathematics. | Split iteration, denormalization, diagnostics and report dictionaries now live in existing evaluation code; History calls it. One raw sparsity-functional calculation on the problem is reused by loss and reporting. |
+| Are `directional_obj` and `_fidelity_pairing` only profile intermediates? | Partly: the pairing is internal shared arithmetic. `directional_obj` is also directly used for first and second directional derivatives in insertion/warm-start; profile alone supplies only the first derivative. Those mathematical operations remain, sharing the H1 pairing with restored `obj`. No new derivative interface or mode flag was added. |
+| `penalty_prox`, `power_prox`: okay. | Their behavior and interface are unchanged. |
+
+The PDAP radius and existing moment diagnostics need the model's activation
+identity and moment order. Two read-only properties expose those existing facts,
+following `alpha`/`loss_weights`; no settings copy, new state, private-field read
+or adapter class is introduced. The prepared objective may hold a reference to
+the problem for its one correction so it can call canonical `obj`; this is not
+a network copy or persistent cache. The earlier weakref/GC test imposed a
+stronger assistant-invented constraint and was removed rather than forcing
+duplicated mathematics. Independence from later support/sample changes remains
+covered by the numerical tests.
+
+Read-only probes by `objective_design`: canonical `obj` reuse passes both PDAP
+references at unchanged tolerances. Replacing analytic profile/directional
+calculations with autograd, or merging their historical reduction orders,
+changes the finite-step reference from 51 to 54 neurons. Do not silently make
+that numerical change or regenerate fixtures. Retaining analytic derivatives
+does not justify retaining duplicate fitting objectives.
+
+Insertion evaluates the exact quadratic change using the shared objective's
+analytic slope/curvature plus the insertion penalty; it does not recompute two
+full model losses through `obj`. This is the retained derivative-based evaluation
+of the same objective, not an assertion that the user requested that specific
+call structure. The review report must state this distinction explicitly.
+
+`objective_design` implemented SparseProblem and test_sparse_problem;
+`state_cleanup` implemented evaluation, PDAP/SSN consumers, radius relocation and
+other affected tests. Root owns documentation and coordination. Source and tests
+were frozen for independent Standards (`inline_review_standards`) and Spec
+(`inline_review_spec`) reviews against `de75737`. Both reported no material
+findings and verified all source/test hashes against the frozen manifest.
+Standards distinguished raw reporting components from duplicate training
+objectives. Spec verified exact analytic insertion change, correction-local
+preparation, shared penalty mathematics and mask/zero-alpha behavior. It also
+required explicit disclosure that the SSN verbose report drops masked minimum/
+count fields; correction outcomes, iterations and scale information remain.
+
+Verification: **435 passed, one preexisting stale controller-selection artifact
+failure, 18 warnings** in 31.98 seconds. The failure is unchanged from the
+baseline; neither the ignored experiment artifact nor its test was modified.
+The focused integration checks passed, including PDAP/SSN trajectory references,
+tiny-coefficient insertion, and reporting with zero regularization and both
+coefficient masks. Ruff passes all 14 changed Python files; config/core/state/
+evaluation Pyright reports zero errors. Whitespace checks pass and all three
+numerical fixture hashes are unchanged. Full log:
+`/tmp/sparse-method-cleanup-final-pytest.log`.
+
+Production Python is **40 lines shorter** overall, counting radius as a move;
+SparseProblem is **89 lines shorter** (590 to 501). Its ordinary methods decrease
+from 37 to 32; read-only properties increase from 7 to 9 for the consumers above.
+Tests grow by 27 lines, mainly extending existing mathematical/reporting cases.
+No class or net module is added. These counts describe this cleanup only and do
+not establish that the entire refactor is finished.
+
 **Inline review implemented and independently reviewed, baseline `32b0878`.** The user's pasted cache
 recovers six comments lost during simultaneous editing. It predates the accepted
 `inner_weight` / `inner_bias` rename; apply the comments to the current file,
@@ -139,13 +208,13 @@ historical ADR descriptions cannot establish additional user approval.
 
 | Owner | Agreement from the discussion | Current implementation / remaining discrepancy |
 | --- | --- | --- |
-| SparseProblem | One `torch.nn.Module` represents the current network and owns problem-specific evaluations. The user reiterated "sparseproblem should use the pytorch nn.model and delete the models" and "all the problem specific evaluation is owned by sparseproblem class". | The module owns persistent neuron state, prediction, features/input derivatives, residuals, objectives, penalties, proximal/normal-map evaluations, supplied-candidate profiles, and mathematical radius. Mixed insertion/warm-start procedures and `src/models` are deleted. |
-| PDAP | Own candidate search/ranking, insertion acceptance, warm-start direction and initial-coefficient selection, support insertion/pruning, correction scheduling and outer stopping. The user said "the pdap owns the neuron insertion", described pruning and retaining proposals until accepted, and directed scope review against the paper. | These procedures live in PDAP, insertion.py and warmstart.py. They call problem evaluations for the mathematics. Historical stopping/order variants remain distinct from the paper algorithms. |
+| SparseProblem | One `torch.nn.Module` represents the current network and owns problem-specific evaluations. The user reiterated "sparseproblem should use the pytorch nn.model and delete the models" and "all the problem specific evaluation is owned by sparseproblem class". | The module owns persistent neuron state, prediction, features/input derivatives, the canonical fitting objective and its derivatives, penalties, and proximal/normal-map evaluations. The current cleanup removes reporting dictionaries and PDAP-specific operations. |
+| PDAP | Own candidate search/ranking, insertion acceptance, warm-start direction and initial-coefficient selection, support insertion/pruning, correction scheduling and outer stopping. The user said "the pdap owns the neuron insertion", described pruning and retaining proposals until accepted, and directed scope review against the paper. | These procedures live in PDAP, insertion.py and warmstart.py. The latest review also assigns insertion increment and certificate radius to PDAP. They reuse model objective/penalty evaluations and existing mathematical settings. Historical stopping/order variants remain distinct from the paper algorithms. |
 | SSN | Retain `torch.optim.Optimizer`; optimize supplied outer coefficients with inner weights fixed, using SparseProblem's mathematics. Own correction iterations, working coefficients, and the starting-coefficient backup discussed by the user. | Complete correction, trial acceptance, final comparison/fallback and rollback are here; PDAP applies the result without a second correction acceptance loop. The legacy `ssn_solve` layer is deleted. Guard options and iteration defaults are compatibility/implementation choices, not new user requirements. |
 | Temporary preparation | The user selected "Have SparseProblem return a temporary prepared objective that SSN uses for that solve" over persistent cached attributes. | Features/targets/Hessian preparation is correction-local and reused for the solve. It is neither a second network nor a separate owner of mathematical formulas. No persistent loader or feature cache lives on SparseProblem. |
 | Data module and Dataset/DataLoader | The user reiterated "the data lives outside of the problem" and requested the DataLoader dependency. Data preparation and delivery leave PDAP/SSN. | `src/data.py` owns reading, validation, physical normalization, splitting and full-data assembly; Dataset/DataLoader retains and delivers aligned samples. Mathematical residuals/features/reductions remain evaluations, not DataLoader responsibilities. Native BatchSampler delivery now works while dropped samples remain rejected. |
 | Repository configuration | The user said configuration "is a repo level function and we are using hydra to manage it". | Hydra/runner constructs configured objects. Modules consume the settings relevant to their responsibilities; DataLoader does not own repository configuration. Redesign remains deferred. |
-| Measurement, logging, monitoring and history | The user identified these as separate concerns, then asked to "save the configuration and logging etc., part for later". | Existing metric/history and saved-run behavior is preserved. History owns one detached checkpoint; existing artifact views share it and restoration happens once. History still invokes problem metrics with supplied loaders; its final internal organization remains deferred. |
+| Measurement, logging, monitoring and history | The user initially deferred these concerns, then specifically requested "separate the metrics from the mathematics" in the current method review. | Metric assembly moves into existing evaluation code, called by History. Mathematical objective/penalty evaluation stays on the problem. Persisted metric names and snapshots remain; broader logging/backend redesign stays deferred. |
 | Work allocation | The user assigned root "only in charge of the planning and orchestrating" and asked for subagents to implement and review. | Root edits plans/docs only. The latest user instruction authorizes source cleanup through implementation agents, followed by independent review. |
 
 SparseProblem defines what a mathematical operator evaluates, including its
@@ -184,7 +253,7 @@ Synthetic coefficient objectives continue to work without dummy networks/data.
 
 ## Work assignments
 
-The naming follow-up above takes precedence over these completed cleanup
+The current method cleanup above takes precedence over these completed cleanup
 assignments and the earlier migration table:
 
 | Task | Owner and files | Status / required result |

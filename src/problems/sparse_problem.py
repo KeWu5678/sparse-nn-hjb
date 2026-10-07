@@ -9,10 +9,9 @@ from torch import Tensor, nn
 from torch.nn import functional as F
 
 from ..config import validate_training
-from ..config.activations import ACTIVATIONS, get_activation, get_growth, get_use_sphere
+from ..config.activations import ACTIVATIONS, get_activation, get_use_sphere
 from ..data import full_batch
-from ..eval import relative_errors
-from .moment import amplitude_mass_radius, moment_weight
+from .moment import moment_weight
 from .penalty import (
     _noncvx_correction,
     _noncvx_correction_dd,
@@ -22,7 +21,6 @@ from .penalty import (
     phi_prox,
 )
 from .prox import _power_prox, _power_prox_derivative
-from .radius import certificate_radius, sample_extent
 
 
 @dataclass(frozen=True)
@@ -129,6 +127,14 @@ class SparseProblem(nn.Module):
         return self._alpha
 
     @property
+    def activation_name(self) -> str | None:
+        return self._activation_name
+
+    @property
+    def moment_order(self) -> float:
+        return self._moment_order
+
+    @property
     def n_neurons(self) -> int:
         return self.inner_weight.shape[0]
 
@@ -229,8 +235,21 @@ class SparseProblem(nn.Module):
             if self.normalized else torch.ones_like(inner_bias)
         )
 
+    def obj(self, prediction: tuple[Tensor, Tensor], target: tuple[Tensor, Tensor]) -> Tensor:
+        """Weighted empirical H1 quadratic, excluding the sparsity penalty.
+
+        The value channel has one entry per sample. Both channels remain
+        differentiable; the gradient channel is flattened for the H1 pairing.
+        """
+        rv, rg = ((value - reference).reshape(-1, 1) for value, reference in zip(prediction, target))
+        return 0.5 * self._fidelity_pairing(rv, rg, rv, rg).squeeze(0)
+
     def prepare_coefficients(self, loader) -> PreparedObjective:
-        """Return independent fixed-neuron calculations for one correction."""
+        """Fix features/targets for one correction, evaluated by the canonical obj.
+
+        The closure references this problem's objective; it does not copy the
+        network or retain later changes to the sampled targets or neuron support.
+        """
         self.validate_training()
         X, V, dV = full_batch(loader)
         Phi_v, Phi_g = self.jac_forward_with_gradient(X)
@@ -242,9 +261,7 @@ class SparseProblem(nn.Module):
         w1, w2 = self._loss_weights
 
         def obj(u):
-            rv = Phi_v @ u - V
-            rg = Phi_g @ u - dV
-            return (w1 / (2 * n)) * (rv @ rv) + (w2 / (2 * n)) * (rg @ rg)
+            return self.obj((Phi_v @ u, Phi_g @ u), (V, dV))
 
         hess_obj = (w1 / n) * (Phi_v.T @ Phi_v) + (w2 / n) * (Phi_g.T @ Phi_g)
         return PreparedObjective(obj, hess_obj, normalization_weight)
@@ -267,12 +284,16 @@ class SparseProblem(nn.Module):
 
     def loss(self, u: Tensor, prepared: PreparedObjective) -> Tensor:
         """Evaluate the complete objective at u, without modifying u."""
+        return prepared.obj(u) + self._alpha * self.sparsity_functional(u)
+
+    def sparsity_functional(self, u: Tensor) -> Tensor:
+        """Unweighted log/power functional on the supplied penalty coordinates."""
         penalized, nonneg = self._masks(u)
-        return prepared.obj(u) + _noncvx_penalty(
+        return _noncvx_penalty(
             u,
             penalized,
             nonneg,
-            alpha=self._alpha,
+            alpha=1.0,
             gamma=self._gamma,
             penalty_exponent=self.penalty_exponent,
         )
@@ -371,7 +392,7 @@ class SparseProblem(nn.Module):
             return self._alpha / prox_scale
         return 1.0 + self._alpha * self._gamma
 
-    def warmstart_prox_scale(self, coefficients: Tensor, rho: float) -> float | None:
+    def prox_scale_for_fractional_penalty(self, coefficients: Tensor, rho: float) -> float | None:
         """Fractional proximal scale satisfying the warm-start upper bound."""
         if self.penalty_exponent == 1.0:
             return None
@@ -379,7 +400,9 @@ class SparseProblem(nn.Module):
             raise ValueError(f"rho must satisfy 0 < rho < 1, got {rho}")
         if self._alpha <= 0.0:
             raise ValueError(f"alpha must be positive, got {self._alpha}")
-        nonzero = self.active_magnitudes(coefficients)
+        penalized, _ = self._masks(coefficients)
+        magnitudes = coefficients[penalized].abs()
+        nonzero = magnitudes[magnitudes > 0]
         if nonzero.numel() == 0:
             raise ValueError("warm-start proximal scaling requires a nonzero coefficient")
         minimum = float(nonzero.min())
@@ -387,92 +410,8 @@ class SparseProblem(nn.Module):
         bound = rho * minimum ** (2.0 - exponent) / (2.0 * (1.0 - exponent))
         return min(self._alpha / (1.0 + self._alpha * self._gamma), bound)
 
-    def active_magnitudes(self, coefficients: Tensor) -> Tensor:
-        """Nonzero penalized magnitudes, for proximal scaling and diagnostics."""
-        penalized, _ = self._masks(coefficients)
-        magnitudes = coefficients[penalized].abs()
-        return magnitudes[magnitudes > 0]
-
-    def residual(self, loader) -> tuple[Tensor, Tensor, Tensor]:
-        """Pair inputs with detached residuals for one candidate search."""
-        X, V, dV = full_batch(loader)
-        Vp, dVp = self.forward_with_gradient(X)
-        return X.detach(), (Vp - V).detach(), (dVp - dV).detach()
-
-    def _regularizer_terms(self) -> dict[str, float]:
-        """Raw functionals and weighted regularizer terms on the current support."""
-        inner_weight, inner_bias, c = self.inner_weight, self.inner_bias, self.c.detach()
-        if c.numel():
-            theta = c
-            penalized, nonneg = self._masks(theta)
-            # Normalized objective: the penalty is evaluated at the normalized measure,
-            # phi(w_p(omega_n)|c_n|) = phi(|u_n|), so score it on u = w_p * c -- the same
-            # quantity SSN minimizes, so the recorded objective cannot drift from it.
-            if self.normalized:
-                scale = self.normalization_weight(inner_weight, inner_bias)
-                theta = theta * scale
-            phi = _noncvx_penalty(
-                theta,
-                penalized,
-                nonneg,
-                alpha=1.0,
-                gamma=self._gamma,
-                penalty_exponent=self.penalty_exponent,
-            )
-        else:
-            phi = c.new_zeros(())
-        weights = moment_weight(inner_weight, inner_bias, self._moment_order)
-        psi = torch.sum(weights.reshape(-1) * c.reshape(-1).abs())
-        total_variation = c.reshape(-1).abs().sum()
-        if c.numel():
-            radius = torch.sqrt((inner_weight * inner_weight).sum(dim=-1) + inner_bias * inner_bias)
-            radius_max = radius.max()
-        else:
-            radius_max = c.new_zeros(())
-
-        return {
-            "sparsity_functional": float(phi.detach()),
-            "psi_p": float(psi.detach()),
-            "alpha_phi": float((self._alpha * phi).detach()),
-            "total_variation": float(total_variation.detach()),
-            "radius_r95": float(amplitude_mass_radius(inner_weight, inner_bias, c).detach()),
-            "radius_max": float(radius_max.detach()),
-        }
-
-    def metrics(self, train_loader, valid_loader=None, reporting_normalizer=None) -> dict[str, float]:
-        """Evaluate the objective and errors, keeping persisted metric names."""
-        regularizer = self._regularizer_terms()
-        metrics = dict(regularizer)
-        if valid_loader is None:
-            valid_loader = train_loader
-        for split, loader in (("train", train_loader), ("val", valid_loader)):
-            data = full_batch(loader)
-            prediction = self.forward_with_gradient(data[0])
-            target = data[1:]
-            obj, value_loss, gradient_loss = self.obj_terms(prediction, target)
-            metrics[f"{split}_loss"] = float(obj.detach()) + regularizer["alpha_phi"]
-            metrics[f"data_loss_{split}"] = float(obj.detach())
-            metrics[f"value_loss_{split}"] = float(value_loss.detach())
-            metrics[f"gradient_loss_{split}"] = float(gradient_loss.detach())
-            if reporting_normalizer is not None:
-                prediction = reporting_normalizer.denormalize_tensors(*prediction)
-                target = reporting_normalizer.denormalize_tensors(*target)
-            for name, error in zip(("l2", "grad", "h1"), relative_errors(*prediction, *target)):
-                metrics[f"err_{name}_{split}"] = error
-        return metrics
-
-    def obj_terms(self, prediction, target) -> tuple[Tensor, Tensor, Tensor]:
-        """Objective and its unweighted value/gradient contributions."""
-        Vp, dVp = prediction
-        V, dV = target
-        n = V.shape[0]
-        value_loss = torch.sum((Vp - V) ** 2) / (2 * n)
-        gradient_loss = torch.sum((dVp - dV) ** 2) / (2 * n)
-        w1, w2 = self._loss_weights
-        return w1 * value_loss + w2 * gradient_loss, value_loss, gradient_loss
-
     def profile(self, inner_weight: Tensor, inner_bias: Tensor, residual) -> Tensor:
-        """Signed fidelity derivative in a supplied candidate-neuron direction."""
+        """Signed first derivative of obj in a supplied candidate-neuron direction."""
         Kv, Kg = self.jac_forward_with_gradient(
             residual[0], inner_weight.reshape(1, -1), inner_bias.reshape(1),
         )
@@ -480,7 +419,7 @@ class SparseProblem(nn.Module):
         return self._fidelity_pairing(Kv, Kg, res_v, res_dv, reduction="sum").squeeze(0)
 
     def directional_obj(self, Kv: Tensor, Kg: Tensor, residual) -> tuple[Tensor, Tensor]:
-        """Fidelity slope and curvature for supplied neuron columns or a direction.
+        """First and second derivatives of obj along supplied neuron directions.
 
         A matrix has one column per neuron; a vector represents one direction.
         Residuals are fixed during insertion search. Candidate differentiation
@@ -496,11 +435,11 @@ class SparseProblem(nn.Module):
     def _fidelity_pairing(
         self, Kv: Tensor, Kg: Tensor, V: Tensor, dV: Tensor, *, reduction: str = "dot",
     ) -> Tensor:
-        """Weighted empirical pairing with the two historical reduction orders.
+        """Weighted H1 pairing shared by obj and its directional derivatives.
 
         Search used product-sum then division; insertion used dot products with
         pre-scaled weights. Reassociating either changes L-BFGS/PDAP trajectories.
-        Keep that numerical distinction here, shared by all fidelity derivatives.
+        obj uses half the dot pairing of its residual with itself.
         """
         n = Kv.shape[0]
         parts = []
@@ -540,34 +479,6 @@ class SparseProblem(nn.Module):
         return float(_power_prox(
             v, self._alpha / inverse_step, penalty_exponent=self.penalty_exponent,
         )[0])
-
-    def insertion_increment(self, coefficient: float, slope: float, curvature: float) -> float:
-        """Exact power-penalty increment for a distinct atom on the sphere.
-
-        Unlike full-loss differentiation, this scalar evaluation must not floor
-        tiny magnitudes: the floor can reverse the insertion-decrease test.
-        Algorithm 2 validates gamma == 0 before using this increment.
-        """
-        return (
-            slope * coefficient + 0.5 * curvature * coefficient**2
-            + self._alpha * abs(coefficient)**self.penalty_exponent
-        )
-
-    def certificate_radius(self, residual) -> float | None:
-        """The theorem's radius before applying PDAP's numerical search cap."""
-        X, res_v, res_dv = residual
-        w1, w2 = self._loss_weights
-        n = X.shape[0]
-        residual_norm = float(
-            torch.sqrt((w1 * res_v.pow(2).sum() + w2 * res_dv.pow(2).sum()) / max(n, 1))
-        )
-        return certificate_radius(
-            get_growth(self._activation_name) if self._activation_name is not None else None,
-            extent=sample_extent(X),
-            residual_norm=residual_norm,
-            alpha=self._alpha,
-            moment_order=self._moment_order,
-        )
 
     def _alpha_vec(self, u: Tensor) -> Tensor:
         penalized, _ = self._masks(u)

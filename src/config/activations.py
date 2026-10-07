@@ -359,7 +359,7 @@ class Growth:
 
     These are properties of the activation alone.  The data-dependent part of the
     radius constant is supplied separately from the sample extent
-    (:func:`src.problems.radius.certificate_radius`).
+    (:func:`src.PDAP.radius.certificate_radius`).
     """
 
     C_rho: float

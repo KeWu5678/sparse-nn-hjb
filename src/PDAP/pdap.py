@@ -29,11 +29,13 @@ from typing import Any, Tuple
 import torch
 from torch.utils.data import DataLoader
 
-from ..data import ValueSampleNormalizer
+from ..config.activations import get_growth
+from ..data import ValueSampleNormalizer, full_batch
 from ..problems import SparseProblem
 from ..SSN import SSN
 from .history import History
 from .insertion import FIXED_LOG_CLAMP, finite_step, profile_threshold
+from .radius import certificate_radius, sample_extent
 from .warmstart import warm_start
 
 logger = logging.getLogger(__name__)
@@ -118,13 +120,20 @@ class PDAP:
     # Per-step helpers (problem is an argument, not trainer state).
     # ------------------------------------------------------------------ #
     def _search_radius(self, problem, residual):
-        """Apply the numerical cap to the problem's mathematical radius."""
+        """Bound candidate search using the theorem, numerical cap and fallback."""
         cap = math.exp(FIXED_LOG_CLAMP)
         if self.radial_cap != "theorem" or problem.use_sphere:
             self._last_search_radius = 1.0 if problem.use_sphere else cap
             self._last_theorem_applied = -1.0
             return None
-        radius = problem.certificate_radius(residual)
+        X, res_v, res_dv = residual
+        zeros = torch.zeros_like(res_v), torch.zeros_like(res_dv)
+        residual_norm = float(torch.sqrt(2 * problem.obj((res_v, res_dv), zeros)))
+        radius = certificate_radius(
+            get_growth(problem.activation_name) if problem.activation_name is not None else None,
+            extent=sample_extent(X), residual_norm=residual_norm,
+            alpha=problem.alpha, moment_order=problem.moment_order,
+        )
         self._last_search_radius = cap if radius is None else min(float(radius), cap)
         self._last_theorem_applied = 0.0 if radius is None else 1.0
         return None if radius is None else self._last_search_radius
@@ -144,7 +153,9 @@ class PDAP:
         # batch also introduces cross terms through its shared frozen residual.
         if self.insert_mode == "sequential":
             max_insert = 1
-        residual = problem.residual(train_loader)
+        X, V, dV = full_batch(train_loader)
+        Vp, dVp = problem.forward_with_gradient(X)
+        residual = X.detach(), (Vp - V).detach(), (dVp - dV).detach()
         existing = (problem.inner_weight.detach(), problem.inner_bias.detach()) if problem.n_neurons else None
 
         d = int(problem.input_dim)

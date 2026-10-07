@@ -11,12 +11,13 @@ import torch
 from src.config.activations import ACTIVATIONS, GROWTH, get_growth
 from src.config.schema import EnvConfig, ExperimentConfig, ModelConfig, TrainingConfig
 from src.data import make_dataloader, split_value_samples
+from src.eval import metrics
 from src.PDAP import PDAP
 from src.PDAP.insertion import profile_threshold
+from src.PDAP.radius import certificate_radius, sample_extent
 from src.problems import SparseProblem
 from src.problems.moment import moment_weight
 from src.problems.penalty import _phi
-from src.problems.radius import certificate_radius, sample_extent
 
 
 def _data(n: int = 60, seed: int = 0) -> dict:
@@ -108,7 +109,7 @@ def test_normalized_objective_is_phi_of_the_scaled_coefficient() -> None:
     w_p = moment_weight(W, b, cfg.model.moment_order).reshape(-1)
     penalty = float(cfg.model.alpha * torch.sum(_phi(w_p * c.abs(), cfg.model.gamma)))
 
-    assert model.metrics(make_dataloader(train))["train_loss"] == pytest.approx(fidelity + penalty, rel=1e-12)
+    assert metrics(model, make_dataloader(train))["train_loss"] == pytest.approx(fidelity + penalty, rel=1e-12)
 
 
 def test_normalized_dictionary_reproduces_the_network() -> None:
@@ -137,7 +138,7 @@ def test_guaranteed_insertion_delivers_the_promised_decrease() -> None:
     train_loader = make_dataloader(train)
     trainer = PDAP(cfg.training, insertion=cfg.model.insertion)
 
-    before = model.metrics(train_loader)["train_loss"]
+    before = metrics(model, train_loader)["train_loss"]
     value, grad = model.forward_with_gradient(train[0])
     res_v, res_dv = (value - train[1]).detach(), (grad - train[2]).detach()
 
@@ -181,7 +182,7 @@ def test_guaranteed_insertion_delivers_the_promised_decrease() -> None:
         torch.cat([b_old, bias.reshape(1)]),
         torch.cat([c_old, torch.as_tensor(c_new[:1], dtype=torch.float64)]),
     )
-    after = model.metrics(train_loader)["train_loss"]
+    after = metrics(model, train_loader)["train_loss"]
     assert before - after >= delta ** 2 / (2 * a_p) - 1e-12
 
 

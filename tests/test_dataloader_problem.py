@@ -12,6 +12,7 @@ from torch.utils.data import (
 
 from src.config.schema import TrainingConfig
 from src.data import full_batch, make_dataloader
+from src.eval import metrics
 from src.PDAP import PDAP, insertion
 from src.PDAP.warmstart import warm_start
 from src.problems import SparseProblem
@@ -44,12 +45,12 @@ def test_prepared_objective_matches_worked_value_gradient_and_hessian(batch_size
 def test_full_data_metrics_weight_samples_and_add_penalty_once(batch_size):
     data, problem = _linear_case(alpha=.1)
     loader = make_dataloader(data, batch_size=batch_size)
-    metrics = problem.metrics(loader)
+    values = metrics(problem, loader)
     for split in ("train", "val"):
-        assert metrics[f"{split}_loss"] == pytest.approx(19 / 24 + .3)
-        assert metrics[f"err_l2_{split}"] == pytest.approx((19 / 84) ** .5)
-        assert metrics[f"err_grad_{split}"] == 0.
-        assert metrics[f"err_h1_{split}"] == pytest.approx((19 / 144) ** .5)
+        assert values[f"{split}_loss"] == pytest.approx(19 / 24 + .3)
+        assert values[f"err_l2_{split}"] == pytest.approx((19 / 84) ** .5)
+        assert values[f"err_grad_{split}"] == 0.
+        assert values[f"err_h1_{split}"] == pytest.approx((19 / 144) ** .5)
 
 
 @pytest.mark.parametrize("batch_size", [None, 1, 2])
@@ -57,7 +58,8 @@ def test_candidate_profile_combines_signed_batches_before_acceptance(monkeypatch
     x = torch.tensor([[1.], [2.], [3.]], dtype=torch.float64)
     data = x, x.new_tensor([[-1.], [3.], [-2.]]), torch.zeros_like(x)
     problem = SparseProblem(input_dim=1, alpha=.05)
-    residuals = problem.residual(make_dataloader(data, batch_size=batch_size))
+    X, V, dV = full_batch(make_dataloader(data, batch_size=batch_size))
+    residuals = X, -V, -dV  # The current network is empty.
     a, b = x.new_tensor([1.], requires_grad=True), x.new_tensor(.25, requires_grad=True)
 
     profile = problem.profile(a, b, residuals)
@@ -99,9 +101,14 @@ def test_chunking_preserves_correction_candidate_and_warmstart_calculations(acti
     torch.testing.assert_close(prepared.hess_obj, reference.hess_obj)
     torch.testing.assert_close(torch.func.grad(lambda v: problem.loss(v, prepared))(u),
         torch.func.grad(lambda v: problem.loss(v, reference))(u))
-    assert problem.metrics(chunked) == pytest.approx(problem.metrics(full))
+    assert metrics(problem, chunked) == pytest.approx(metrics(problem, full))
 
-    full_residual, chunked_residual = problem.residual(full), problem.residual(chunked)
+    residuals = []
+    for loader in (full, chunked):
+        X, V, dV = full_batch(loader)
+        Vp, dVp = problem.forward_with_gradient(X)
+        residuals.append((X.detach(), (Vp - V).detach(), (dVp - dV).detach()))
+    full_residual, chunked_residual = residuals
     a = x.new_tensor([.2, -.3], requires_grad=True)
     bias = x.new_tensor(.1, requires_grad=True)
     reference_score = problem.profile(a, bias, full_residual).abs() / problem.normalization_weight(a, bias)
@@ -113,7 +120,10 @@ def test_chunking_preserves_correction_candidate_and_warmstart_calculations(acti
         warm_start(W, b, chunked_residual, problem),
         warm_start(W, b, full_residual, problem),
     )
-    assert problem.certificate_radius(chunked_residual) == pytest.approx(problem.certificate_radius(full_residual))
+    trainer = PDAP(TrainingConfig(radial_cap="theorem"))
+    assert trainer._search_radius(problem, chunked_residual) == pytest.approx(
+        trainer._search_radius(problem, full_residual),
+    )
 
 
 @pytest.mark.parametrize("activation", ["relu", "softplus"])
@@ -184,5 +194,5 @@ def test_native_batch_sampler_keeps_full_data_evaluation_and_no_drop_contract(dr
         reference = problem.prepare_coefficients(make_dataloader(data))
         torch.testing.assert_close(prepared.obj(problem.c), reference.obj(problem.c))
         torch.testing.assert_close(prepared.hess_obj, reference.hess_obj)
-        assert problem.metrics(loader) == pytest.approx(problem.metrics(make_dataloader(data)))
+        assert metrics(problem, loader) == pytest.approx(metrics(problem, make_dataloader(data)))
     assert torch.equal(torch.get_rng_state(), rng)
