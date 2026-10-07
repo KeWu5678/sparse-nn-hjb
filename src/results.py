@@ -204,7 +204,7 @@ def predict_model_physical(
     Compatibility seam for an already reconstructed model; reporting callers
     normally use predict_physical so the transform stays bound to its run.
     """
-    x = torch.as_tensor(x, dtype=torch.float64, device=model.W.device)
+    x = torch.as_tensor(x, dtype=torch.float64, device=model.inner_weight.device)
     if x.ndim != 2 or x.shape[1] != model.input_dim:
         raise ValueError("physical states must have shape (N, model input dimension)")
     if normalizer is not None:

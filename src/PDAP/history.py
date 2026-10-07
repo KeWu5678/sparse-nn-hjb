@@ -92,7 +92,7 @@ class History:
         self.loss_weights = problem.loss_weights
         state = {name: tensor.detach().clone() for name, tensor in problem.state_dict().items()}
         self.model_states.append(state)
-        self.inner_weights.append({"weight": state["W"], "bias": state["b"]})
+        self.inner_weights.append({"weight": state["inner_weight"], "bias": state["inner_bias"]})
         self.outer_weights.append(state["c"].reshape(1, -1))
         i = len(self.train_loss) - 1
         if metrics["train_loss"] < self.best_train_loss:
@@ -124,12 +124,15 @@ class History:
         if "hidden.weight" in state:
             # Pre-refactor snapshots stored two Linear layers. Translate at the
             # artifact reader rather than retaining the removed model classes.
-            state = {"W": state["hidden.weight"], "b": state["hidden.bias"],
+            state = {"inner_weight": state["hidden.weight"], "inner_bias": state["hidden.bias"],
                      "c": state["output.weight"].reshape(-1)}
+        elif "W" in state:
+            state = {"inner_weight": state["W"], "inner_bias": state["b"], "c": state["c"]}
         if not state:
-            state = {"W": self.inner_weights[i]["weight"], "b": self.inner_weights[i]["bias"],
+            state = {"inner_weight": self.inner_weights[i]["weight"],
+                     "inner_bias": self.inner_weights[i]["bias"],
                      "c": self.outer_weights[i]}
-        model.set_atoms(state["W"], state["b"], state["c"])
+        model.set_atoms(state["inner_weight"], state["inner_bias"], state["c"])
         return model
 
     def summary_metrics(self) -> dict[str, float | int]:

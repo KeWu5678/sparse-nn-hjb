@@ -145,7 +145,7 @@ class PDAP:
         if self.insert_mode == "sequential":
             max_insert = 1
         residual = problem.residual(train_loader)
-        existing = (problem.W.detach(), problem.b.detach()) if problem.n_neurons else None
+        existing = (problem.inner_weight.detach(), problem.inner_bias.detach()) if problem.n_neurons else None
 
         d = int(problem.input_dim)
         common: dict[str, Any] = dict(
@@ -189,7 +189,7 @@ class PDAP:
     def _prune(self, problem, amp_tol: float) -> int:
         """Drop atoms with ``|c_n| <= amp_tol``; return how many were removed."""
         W, b, c, pruned = self.prune_small_weights(
-            problem.W, problem.b, problem.c, amp_tol=amp_tol,
+            problem.inner_weight, problem.inner_bias, problem.c, amp_tol=amp_tol,
         )
         if pruned:
             problem.set_atoms(W, b, c)
@@ -208,8 +208,8 @@ class PDAP:
             return 0
         c_new = torch.as_tensor(c_new, dtype=torch.float64).reshape(-1)
         if problem.n_neurons > 0:
-            W_new = torch.cat([problem.W.detach(), W_new], dim=0)
-            b_new = torch.cat([problem.b.detach(), b_new], dim=0)
+            W_new = torch.cat([problem.inner_weight.detach(), W_new], dim=0)
+            b_new = torch.cat([problem.inner_bias.detach(), b_new], dim=0)
             c_new = torch.cat([problem.c.detach(), c_new], dim=0)
         problem.set_atoms(W_new, b_new, c_new)
         return int(W_np.shape[0])

@@ -10,7 +10,7 @@ The agreed refactor replaces the separate model/problem representation with
 one `SparseProblem(torch.nn.Module)` that owns the current network and
 problem-specific evaluations. `SignedModel`, `ShallowNetwork`, `PDAPModel`, and
 their factory are removed, and callers use the single module. The implementation uses
-buffers for inner weights `W` and biases `b`, and an `nn.Parameter` for outer
+buffers named `inner_weight` and `inner_bias`, and an `nn.Parameter` for outer
 coefficients `c`. These registration details implement the agreement; they are
 not additional user requirements. Direct registration avoids randomly
 initialized layers that would immediately be overwritten with exact atoms.

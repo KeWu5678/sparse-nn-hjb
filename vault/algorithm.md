@@ -135,8 +135,8 @@ The implemented ownership and its verification are recorded in
 warm-start selection; SparseProblem supplies their mathematical evaluations.
 
 - `problems/` — network representation and problem mathematics:
-  - `sparse_problem.py` — `SparseProblem(nn.Module)` registers `W` and `b` as
-    buffers and `c` as its parameter. It supplies predictions, input derivatives,
+  - `sparse_problem.py` — `SparseProblem(nn.Module)` registers `inner_weight` and
+    `inner_bias` as buffers and `c` as its parameter. It supplies predictions, input derivatives,
     objective/proximal/normal-map calculations, supplied-candidate profile and
     directional evaluations, and a temporary `PreparedObjective` for each
     coefficient correction. There is no separate

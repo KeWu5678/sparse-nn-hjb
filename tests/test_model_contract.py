@@ -25,15 +25,15 @@ def test_exact_atom_assignment_preserves_rng_and_module_state():
 
     assert isinstance(problem, torch.nn.Module)
     assert set(dict(problem.named_parameters())) == {"c"}
-    assert set(dict(problem.named_buffers())) == {"W", "b"}
-    assert set(problem.state_dict()) == {"W", "b", "c"}
+    assert set(dict(problem.named_buffers())) == {"inner_weight", "inner_bias"}
+    assert set(problem.state_dict()) == {"inner_weight", "inner_bias", "c"}
     assert problem.n_neurons == 4
-    for actual, expected in zip((problem.W, problem.b, problem.c.detach()), atoms):
+    for actual, expected in zip((problem.inner_weight, problem.inner_bias, problem.c.detach()), atoms):
         torch.testing.assert_close(actual, expected, rtol=0, atol=0)
     problem.set_atoms(*(atom[:2] for atom in atoms))
     torch.testing.assert_close(torch.random.get_rng_state(), rng, rtol=0, atol=0)
     atoms[0].zero_()
-    assert problem.W.any()
+    assert problem.inner_weight.any()
 
 
 def test_problem_predicts_values_and_input_gradients():
@@ -53,8 +53,8 @@ def test_empty_support_predicts_and_prepares_zero_features():
 
     value, gradient = problem.forward_with_gradient(x)
     assert problem.n_neurons == 0
-    assert problem.W.shape == (0, 2)
-    assert problem.b.shape == problem.c.shape == (0,)
+    assert problem.inner_weight.shape == (0, 2)
+    assert problem.inner_bias.shape == problem.c.shape == (0,)
     assert value.shape == (3, 1)
     assert gradient.shape == x.shape
     assert not value.any() and not gradient.any()
@@ -66,10 +66,10 @@ def test_empty_support_predicts_and_prepares_zero_features():
 
 def test_module_conversion_and_forward_gradients_follow_exact_atoms():
     problem = SparseProblem(2)
-    assert problem.c.dtype == problem.W.dtype == problem.b.dtype == torch.float64
+    assert problem.c.dtype == problem.inner_weight.dtype == problem.inner_bias.dtype == torch.float64
     problem.float()
     problem.set_atoms(torch.tensor([[2., -1.]]), torch.tensor([.5]), torch.tensor([3.]))
-    assert problem.c.dtype == problem.W.dtype == problem.b.dtype == torch.float32
+    assert problem.c.dtype == problem.inner_weight.dtype == problem.inner_bias.dtype == torch.float32
     x = torch.tensor([[1., 1.], [-1., 1.]], requires_grad=True)
 
     value = problem(x)
@@ -89,7 +89,7 @@ def test_setting_and_pruning_atoms_preserves_float64_coefficients():
     problem.set_atoms(W, b, c)
     trainer = PDAP(ExperimentConfig().training)
     assert trainer._prune(problem, amp_tol=1e-8) == 0
-    for actual, expected in zip((problem.W, problem.b, problem.c.detach()), (W, b, c)):
+    for actual, expected in zip((problem.inner_weight, problem.inner_bias, problem.c.detach()), (W, b, c)):
         torch.testing.assert_close(actual, expected, rtol=0, atol=0)
     assert all(parameter.dtype == torch.float64 for parameter in problem.parameters())
 

@@ -49,8 +49,8 @@ class SparseProblem(nn.Module):
     Coefficient correction additionally requires the supported penalty/geometry.
     """
 
-    W: Tensor
-    b: Tensor
+    inner_weight: Tensor
+    inner_bias: Tensor
 
     def __init__(
         self,
@@ -86,8 +86,8 @@ class SparseProblem(nn.Module):
         self._moment_order = moment_order
         self._penalized_mask = penalized_mask
         self._nonneg_mask = nonneg_mask
-        self.register_buffer("W", torch.empty((0, input_dim), dtype=torch.float64))
-        self.register_buffer("b", torch.empty(0, dtype=torch.float64))
+        self.register_buffer("inner_weight", torch.empty((0, input_dim), dtype=torch.float64))
+        self.register_buffer("inner_bias", torch.empty(0, dtype=torch.float64))
         self.c = nn.Parameter(torch.empty(0, dtype=torch.float64))
 
     @classmethod
@@ -111,7 +111,7 @@ class SparseProblem(nn.Module):
 
     @property
     def input_dim(self) -> int:
-        return self.W.shape[1]
+        return self.inner_weight.shape[1]
 
     @property
     def alpha(self) -> float:
@@ -119,7 +119,7 @@ class SparseProblem(nn.Module):
 
     @property
     def n_neurons(self) -> int:
-        return self.W.shape[0]
+        return self.inner_weight.shape[0]
 
     @property
     def use_sphere(self) -> bool:
@@ -137,26 +137,28 @@ class SparseProblem(nn.Module):
     def loss_weights(self) -> tuple[float, float]:
         return self._loss_weights
 
-    def set_atoms(self, W: Tensor, b: Tensor, c: Tensor) -> None:
+    def set_atoms(self, inner_weight: Tensor, inner_bias: Tensor, c: Tensor) -> None:
         """Replace support with exact atoms, preserving the module's dtype/device.
 
-        W is (n, input_dim); b and c contain one entry per atom. Replacing
-        support replaces c's Parameter, so subsequent corrections use the new c.
+        inner_weight is (n, input_dim); inner_bias and c contain one entry per atom.
+        Replacing support replaces c's Parameter, so subsequent corrections use the new c.
         """
-        W, b, c = (
-            torch.as_tensor(tensor, dtype=self.W.dtype, device=self.W.device).detach().clone()
-            for tensor in (W, b, c)
+        inner_weight, inner_bias, c = (
+            torch.as_tensor(
+                tensor, dtype=self.inner_weight.dtype, device=self.inner_weight.device,
+            ).detach().clone()
+            for tensor in (inner_weight, inner_bias, c)
         )
-        b, c = b.reshape(-1), c.reshape(-1)
-        if W.ndim != 2 or W.shape[1] != self.input_dim:
-            raise ValueError("W must have shape (n, input_dim)")
-        if b.numel() != W.shape[0] or c.numel() != W.shape[0]:
-            raise ValueError("b and c must contain one entry per atom")
-        self.W, self.b, self.c = W, b, nn.Parameter(c)
+        inner_bias, c = inner_bias.reshape(-1), c.reshape(-1)
+        if inner_weight.ndim != 2 or inner_weight.shape[1] != self.input_dim:
+            raise ValueError("inner_weight must have shape (n, input_dim)")
+        if inner_bias.numel() != inner_weight.shape[0] or c.numel() != inner_weight.shape[0]:
+            raise ValueError("inner_bias and c must contain one entry per atom")
+        self.inner_weight, self.inner_bias, self.c = inner_weight, inner_bias, nn.Parameter(c)
 
     def forward(self, x: Tensor) -> Tensor:
         """Evaluate the network; ordinary autograd remains available to callers."""
-        features = self._activation(F.linear(x, self.W, self.b)) ** self._power
+        features = self._activation(F.linear(x, self.inner_weight, self.inner_bias)) ** self._power
         return F.linear(features, self.c.unsqueeze(0))
 
     def forward_with_gradient(self, x: Tensor) -> tuple[Tensor, Tensor]:
@@ -168,12 +170,13 @@ class SparseProblem(nn.Module):
         return V.detach(), dV.detach()
 
     def jac_forward_with_gradient(
-        self, x: Tensor, W: Tensor | None = None, b: Tensor | None = None,
+        self, x: Tensor,
+        inner_weight: Tensor | None = None, inner_bias: Tensor | None = None,
         *, warm_start: bool = False,
     ) -> tuple[Tensor, Tensor]:
         """Jacobians of network values and input gradients with respect to c.
 
-        Given samples x and current or supplied inner weights W and biases b,
+        Given samples x and current or supplied inner_weight and inner_bias,
         return the value Jacobian (N,n) and input-gradient Jacobian (N*d,n)
         with respect to outer coefficients c. Gradient rows are sample-major.
 
@@ -182,11 +185,11 @@ class SparseProblem(nn.Module):
         its activation derivative is the positive-preactivation indicator,
         including for leaky_relu and relu2. It does not select an initial step.
         """
-        W = self.W if W is None else W
-        b = self.b if b is None else b
-        differentiable = W.requires_grad or b.requires_grad
+        inner_weight = self.inner_weight if inner_weight is None else inner_weight
+        inner_bias = self.inner_bias if inner_bias is None else inner_bias
+        differentiable = inner_weight.requires_grad or inner_bias.requires_grad
         with torch.enable_grad():
-            z = F.linear(x.detach(), W, b).requires_grad_(True)
+            z = F.linear(x.detach(), inner_weight, inner_bias).requires_grad_(True)
             act = self._activation(z)
             Phi_v = act ** self._power
             if warm_start and self.use_sphere:
@@ -200,13 +203,16 @@ class SparseProblem(nn.Module):
                     Phi_v, z, grad_outputs=torch.ones_like(Phi_v),
                     create_graph=differentiable,
                 )[0]
-            dS_dx = dS_dz.unsqueeze(2) * W.unsqueeze(0)
-            Phi_g = dS_dx.permute(0, 2, 1).reshape(x.shape[0] * self.input_dim, W.shape[0])
+            dS_dx = dS_dz.unsqueeze(2) * inner_weight.unsqueeze(0)
+            Phi_g = dS_dx.permute(0, 2, 1).reshape(x.shape[0] * self.input_dim, inner_weight.shape[0])
         return (Phi_v, Phi_g) if differentiable else (Phi_v.detach(), Phi_g.detach())
 
-    def coefficient_scale(self, W: Tensor, b: Tensor) -> Tensor:
+    def coefficient_scale(self, inner_weight: Tensor, inner_bias: Tensor) -> Tensor:
         """Moment divisor for normalized atoms, or one on the sphere."""
-        return moment_weight(W, b, self._moment_order) if self.normalized else torch.ones_like(b)
+        return (
+            moment_weight(inner_weight, inner_bias, self._moment_order)
+            if self.normalized else torch.ones_like(inner_bias)
+        )
 
     def validate_correction(self) -> None:
         """Validate training restrictions without excluding historical prediction."""
@@ -245,7 +251,7 @@ class SparseProblem(nn.Module):
         Phi_v, Phi_g = self.jac_forward_with_gradient(X)
         coefficient_scale = None
         if self.normalized:
-            coefficient_scale = self.coefficient_scale(self.W, self.b)
+            coefficient_scale = self.coefficient_scale(self.inner_weight, self.inner_bias)
             Phi_v = Phi_v / coefficient_scale
             Phi_g = Phi_g / coefficient_scale
         V, dV = (target.detach().reshape(-1).clone() for target in (V, dV))
@@ -416,7 +422,7 @@ class SparseProblem(nn.Module):
 
     def _regularizer_terms(self) -> dict[str, float]:
         """Raw functionals and weighted regularizer terms on the current support."""
-        W, b, c = self.W, self.b, self.c.detach()
+        inner_weight, inner_bias, c = self.inner_weight, self.inner_bias, self.c.detach()
         if c.numel():
             theta = c
             penalized, nonneg = self._masks(theta)
@@ -424,7 +430,7 @@ class SparseProblem(nn.Module):
             # phi(w_p(omega_n)|c_n|) = phi(|u_n|), so score it on u = w_p * c -- the same
             # quantity SSN minimizes, so the recorded objective cannot drift from it.
             if self.normalized:
-                scale = self.coefficient_scale(W, b)
+                scale = self.coefficient_scale(inner_weight, inner_bias)
                 theta = theta * scale
             phi = _noncvx_penalty(
                 theta,
@@ -436,11 +442,11 @@ class SparseProblem(nn.Module):
             )
         else:
             phi = c.new_zeros(())
-        weights = moment_weight(W, b, self._moment_order)
+        weights = moment_weight(inner_weight, inner_bias, self._moment_order)
         psi = torch.sum(weights.reshape(-1) * c.reshape(-1).abs())
         total_variation = c.reshape(-1).abs().sum()
         if c.numel():
-            radius = torch.sqrt((W * W).sum(dim=-1) + b * b)
+            radius = torch.sqrt((inner_weight * inner_weight).sum(dim=-1) + inner_bias * inner_bias)
             radius_max = radius.max()
         else:
             radius_max = c.new_zeros(())
@@ -450,7 +456,7 @@ class SparseProblem(nn.Module):
             "psi_p": float(psi.detach()),
             "alpha_phi": float((self._alpha * phi).detach()),
             "total_variation": float(total_variation.detach()),
-            "radius_r95": float(amplitude_mass_radius(W, b, c).detach()),
+            "radius_r95": float(amplitude_mass_radius(inner_weight, inner_bias, c).detach()),
             "radius_max": float(radius_max.detach()),
         }
 
@@ -486,9 +492,11 @@ class SparseProblem(nn.Module):
         w1, w2 = self._loss_weights
         return w1 * value_loss + w2 * gradient_loss, value_loss, gradient_loss
 
-    def profile(self, a: Tensor, b: Tensor, residual) -> Tensor:
+    def profile(self, inner_weight: Tensor, inner_bias: Tensor, residual) -> Tensor:
         """Signed fidelity derivative in a supplied candidate-neuron direction."""
-        Kv, Kg = self.jac_forward_with_gradient(residual[0], a.reshape(1, -1), b.reshape(1))
+        Kv, Kg = self.jac_forward_with_gradient(
+            residual[0], inner_weight.reshape(1, -1), inner_bias.reshape(1),
+        )
         res_v, res_dv = (r.detach().reshape(-1, 1) for r in residual[1:])
         return self._fidelity_pairing(Kv, Kg, res_v, res_dv, reduction="sum").squeeze(0)
 

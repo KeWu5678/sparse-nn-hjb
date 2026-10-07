@@ -98,7 +98,7 @@ def test_normalized_objective_is_phi_of_the_scaled_coefficient() -> None:
     cfg = _cfg(moment_order=2.01)
     model, _, train = _fit(cfg)
 
-    W, b, c = (model.W, model.b, model.c.detach())
+    W, b, c = (model.inner_weight, model.inner_bias, model.c.detach())
     value, grad = model.forward_with_gradient(train[0])
     w1, w2 = cfg.model.loss_weights
     fidelity = float(
@@ -115,7 +115,7 @@ def test_normalized_dictionary_reproduces_the_network() -> None:
     """K_p @ u == K @ c, which is what makes the substitution legitimate."""
     cfg = _cfg(moment_order=2.01)
     model, _, train = _fit(cfg)
-    W, b, c = (model.W, model.b, model.c.detach())
+    W, b, c = (model.inner_weight, model.inner_bias, model.c.detach())
     w_p = moment_weight(W, b, 2.01).reshape(-1)
     Phi, _ = model.jac_forward_with_gradient(train[0])
     assert torch.allclose(Phi @ c, (Phi / w_p) @ (w_p * c), atol=1e-12)
@@ -141,7 +141,7 @@ def test_guaranteed_insertion_delivers_the_promised_decrease() -> None:
     value, grad = model.forward_with_gradient(train[0])
     res_v, res_dv = (value - train[1]).detach(), (grad - train[2]).detach()
 
-    W_old, b_old, c_old = (model.W, model.b, model.c.detach())
+    W_old, b_old, c_old = (model.inner_weight, model.inner_bias, model.c.detach())
     W_new, b_new, c_new = profile_threshold(
         model, (train[0], res_v, res_dv),
         sample_sphere=lambda n: trainer._sphere(2, n), N=20,

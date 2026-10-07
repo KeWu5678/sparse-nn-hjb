@@ -6,6 +6,24 @@ Full-review baseline: `49eeb0349a0a8ee489c075400d23cb1cb31e1208`.
 
 ## Current status and working rules
 
+**Inner-parameter rename implemented and reviewed, baseline `edc1720`.** The
+user accepted the [naming research](vault/parameter_naming.md): `W` becomes
+`inner_weight` and `b` becomes `inner_bias` on SparseProblem and its public
+arguments. Callers and checkpoint capture/restoration use the new names while
+preserving existing saved histories. The optional `c` rename was a separate
+proposal and is not part of this change. `state_cleanup` implemented and verified;
+root updated documentation. Independent Standards (`inner_names_standards`) and
+Spec (`spec_audit`) reviews found no issues in this diff.
+No additional interface, numerical, or ownership change is included.
+
+Verification: **425 passed, 1 preexisting stale controller-selection artifact
+failure, 18 warnings** in 29.29 seconds; 92 focused tests passed. The three extra
+cases exercise the existing restoration test across new names, prior `W/b/c`,
+older layer names, and legacy atom fields. Checkpoint independence remains tested.
+Ruff passes all seven changed Python files; core/state/evaluation Pyright reports
+zero errors; all three numerical fixture hashes are unchanged. Logs:
+`/tmp/sparse-inner-names-{focused,final-pytest,ruff,pyright}.log`.
+
 **Naming follow-up implemented and reviewed, baseline `b9fba49`.** During the user's method-by-
 method review, they directed removal of `description()`, retention of `forward`,
 and the name `forward_with_gradient` for predictions plus input gradients. They
@@ -439,7 +457,7 @@ either contract is deferred.
 These implement the ownership requirements above; their exact fields, defaults
 and storage mechanics are not separate user-approved requirements.
 
-- Register `W` and `b` as buffers and `c` as an `nn.Parameter`, with coherent
+- Register `inner_weight` and `inner_bias` as buffers and `c` as an `nn.Parameter`, with coherent
   empty support. Direct registration avoids randomly initialized layers that
   would immediately be overwritten with exact atoms.
 - `prepare_coefficients(loader)` currently returns the three-field
@@ -948,7 +966,7 @@ Current resumption message:
 > its verification status are recorded at the top; the broader ownership cleanup
 > was committed as b9fba49. Keep forward, use forward_with_gradient and
 > jac_forward_with_gradient, and remove description. The Jacobian's inputs are x
-> and current/supplied W,b; both returned matrices differentiate with respect to c.
+> and current/supplied inner_weight,inner_bias; both returned matrices differentiate with respect to c.
 > Remaining duplicated feature construction and quadratic fitting logic were
 > identified after the earlier review and are not resolved by renaming.
 > Read the current status and boundary table before the historical record.

@@ -49,7 +49,7 @@ def test_restoring_a_zero_measure_snapshot_empties_an_initialized_model(legacy) 
     This is the terminal zero-measure run of ``PDAP.fit``: under strong
     regularization the initial insertion accepts no atom, and the recorded model
     has empty support. Historical zero-measure snapshots had an empty state_dict;
-    current snapshots have explicitly registered empty W, b, and c tensors.
+    current snapshots explicitly register empty inner_weight, inner_bias, and c tensors.
     """
     x = torch.tensor([[0.2, -0.3], [0.5, 0.7]], dtype=torch.float64)
 
@@ -76,31 +76,41 @@ def test_restoring_a_zero_measure_snapshot_empties_an_initialized_model(legacy) 
     assert torch.allclose(gradient, torch.zeros_like(gradient))
 
 
-def test_restoring_legacy_layer_state_preserves_recorded_predictions():
-    W = torch.tensor([[1., 2.]], dtype=torch.float64)
-    b, c = torch.tensor([.5], dtype=torch.float64), torch.tensor([[3.]], dtype=torch.float64)
+@pytest.mark.parametrize("state_keys", [
+    ("inner_weight", "inner_bias", "c"),
+    ("W", "b", "c"),
+    ("hidden.weight", "hidden.bias", "output.weight"),
+    None,
+])
+def test_restoring_recorded_state_preserves_predictions(state_keys):
+    inner_weight = torch.tensor([[1., 2.]], dtype=torch.float64)
+    inner_bias = torch.tensor([.5], dtype=torch.float64)
+    c = torch.tensor([[3.]], dtype=torch.float64)
+    state = {} if state_keys is None else dict(zip(state_keys, (inner_weight, inner_bias, c.reshape(-1))))
+    if state_keys is not None and state_keys[0] == "hidden.weight":
+        state["output.weight"] = c
+        state["output.bias"] = torch.zeros(1, dtype=c.dtype)
     history = History(
-        inner_weights=[{"weight": W, "bias": b}], outer_weights=[c],
-        model_states=[{"hidden.weight": W, "hidden.bias": b,
-                       "output.weight": c, "output.bias": torch.zeros(1, dtype=W.dtype)}],
+        inner_weights=[{"weight": inner_weight, "bias": inner_bias}], outer_weights=[c],
+        model_states=[state],
     )
 
     problem = history.restore_model(SparseProblem(2))
-    value, gradient = problem.forward_with_gradient(W.new_tensor([[1., 1.]]))
+    value, gradient = problem.forward_with_gradient(inner_weight.new_tensor([[1., 1.]]))
 
-    torch.testing.assert_close(value, W.new_tensor([[10.5]]))
-    torch.testing.assert_close(gradient, W.new_tensor([[3., 6.]]))
-    assert set(problem.state_dict()) == {"W", "b", "c"}
+    torch.testing.assert_close(value, inner_weight.new_tensor([[10.5]]))
+    torch.testing.assert_close(gradient, inner_weight.new_tensor([[3., 6.]]))
+    assert set(problem.state_dict()) == {"inner_weight", "inner_bias", "c"}
 
 
 def test_recorded_checkpoints_stay_independent_of_models_and_each_other():
     atoms = {
-        "W": torch.tensor([[1., 2.]], dtype=torch.float64),
-        "b": torch.tensor([.5], dtype=torch.float64),
+        "inner_weight": torch.tensor([[1., 2.]], dtype=torch.float64),
+        "inner_bias": torch.tensor([.5], dtype=torch.float64),
         "c": torch.tensor([3.], dtype=torch.float64),
     }
     problem = SparseProblem(2)
-    problem.set_atoms(atoms["W"], atoms["b"], atoms["c"])
+    problem.set_atoms(atoms["inner_weight"], atoms["inner_bias"], atoms["c"])
     x = torch.tensor([[1., 1.]], dtype=torch.float64)
     loader = make_dataloader((x, *problem.forward_with_gradient(x)))
     history = History()
@@ -119,8 +129,8 @@ def test_recorded_checkpoints_stay_independent_of_models_and_each_other():
                 tensor.zero_()
         for name, tensor in state.items():
             torch.testing.assert_close(tensor, atoms[name] + i, rtol=0, atol=0)
-        torch.testing.assert_close(history.inner_weights[i]["weight"], state["W"])
-        torch.testing.assert_close(history.inner_weights[i]["bias"], state["b"])
+        torch.testing.assert_close(history.inner_weights[i]["weight"], state["inner_weight"])
+        torch.testing.assert_close(history.inner_weights[i]["bias"], state["inner_bias"])
         torch.testing.assert_close(history.outer_weights[i], state["c"].reshape(1, -1))
 
 
