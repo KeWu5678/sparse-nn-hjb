@@ -25,8 +25,8 @@ def test_single_atom_warm_start_has_known_minimizer(
     result = warm_start(
         W_new=torch.ones_like(X),
         b_new=torch.zeros(1, dtype=torch.float64),
-        residual=(torch.tensor([-sign * v], dtype=torch.float64), torch.zeros_like(X)),
-        problem=SparseProblem((X, torch.zeros_like(X), torch.zeros_like(X)),
+        residual=(X, torch.tensor([-sign * v], dtype=torch.float64), torch.zeros_like(X)),
+        problem=SparseProblem(1,
                               power=power, loss_weights=(1.0, 0.0), alpha=alpha, gamma=gamma),
     )
 
@@ -53,8 +53,8 @@ def test_log_warm_start_preserves_matlab_acceptance_guards(
     result = warm_start(
         W_new=torch.ones_like(X),
         b_new=torch.zeros(1, dtype=torch.float64),
-        residual=(torch.tensor([-v], dtype=torch.float64), torch.zeros_like(X)),
-        problem=SparseProblem((X, torch.zeros_like(X), torch.zeros_like(X)),
+        residual=(X, torch.tensor([-v], dtype=torch.float64), torch.zeros_like(X)),
+        problem=SparseProblem(1,
                               loss_weights=(1.0, 0.0), alpha=alpha, gamma=1.0),
     )
 

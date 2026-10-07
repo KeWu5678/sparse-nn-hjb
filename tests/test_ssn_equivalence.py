@@ -15,8 +15,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 import torch
-from ssn_test_problem import SyntheticProblem
 
+from src.problems import PreparedObjective, SparseProblem
 from src.problems.penalty import _phi
 from src.SSN import SSN
 
@@ -50,11 +50,13 @@ def _penalty(theta, mask, alpha, gamma, q):
     return alpha * torch.sum(_phi(arg, gamma))
 
 
-class _LegacyProblem(SyntheticProblem):
+class _LegacyProblem(SparseProblem):
     """Preserve the clamped loss and signed gradient subtraction of the fixtures."""
 
-    def loss(self, u):
-        return self.obj(u) + _penalty(u, self._masks(u)[0], self._alpha, self._gamma, self.penalty_exponent)
+    def loss(self, u, prepared):
+        return prepared.obj(u) + _penalty(
+            u, self._masks(u)[0], self._alpha, self._gamma, self.penalty_exponent,
+        )
 
 
 def _run_trajectory(config: dict) -> np.ndarray:
@@ -77,20 +79,21 @@ def _run_trajectory(config: dict) -> np.ndarray:
     # clamped loss, including on negative coordinates. Preserve that test problem
     # rather than silently changing its objective or regenerating its fixtures.
     problem = _LegacyProblem(
-        data_loss, H, alpha=alpha, gamma=gamma, power=power,
+        P, alpha=alpha, gamma=gamma, power=power,
         penalized_mask=pen_mask, nonneg_mask=config.get("nonneg_mask"),
     )
+    prepared = PreparedObjective(data_loss, H)
     kind = config["kind"]
     if kind == "ssn":
         opt = SSN(
-            [theta], problem,
+            [theta], problem, prepared,
             prox_scale=config.get("prox_scale"),
         )
     elif kind == "ssn_tr":
         # folded into the base SSN: trust-region (Steihaug-CG) globalization
-        opt = SSN([theta], problem, method="steihaug_cg")
+        opt = SSN([theta], problem, prepared, method="steihaug_cg")
     elif kind == "ssn_masked":
-        opt = SSN([theta], problem)
+        opt = SSN([theta], problem, prepared)
     else:  # pragma: no cover
         raise ValueError(kind)
 

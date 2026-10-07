@@ -1,4 +1,4 @@
-"""The data-owned problem contract used by both PDAP and SSN."""
+"""External samples and temporary coefficient calculations used by PDAP and SSN."""
 
 import gc
 import weakref
@@ -7,6 +7,7 @@ import pytest
 import torch
 
 from src.config.activations import get_activation
+from src.data import make_dataloader
 from src.models import SignedModel
 from src.PDAP.ssn_solve import SolverConfig, ssn_solve
 from src.problems import SparseProblem
@@ -36,7 +37,7 @@ def _model(activation="relu", power=1.0):
 )
 def test_constructor_rejects_unsupported_powers(power):
     with pytest.raises(ValueError, match="supports activation powers 1, 2, 3"):
-        SparseProblem(_samples(), power=power)
+        SparseProblem(2, power=power)
 
 
 @pytest.mark.parametrize(
@@ -50,12 +51,11 @@ def test_constructor_rejects_unsupported_powers(power):
 def test_validated_power_selects_the_proximal_map_and_derivative(
     power, exponent, alpha, value, expected, derivative,
 ):
-    problem = SparseProblem(_samples(), power=power, alpha=alpha)
-    problem.prepare_coefficients(_model(power=power))
+    problem = SparseProblem(2, power=power, alpha=alpha)
     assert problem.penalty_exponent == exponent
     q = torch.tensor([-value, value], dtype=torch.float64)
-    prox = problem.prox(q, inverse_step=1.0)
-    jac = problem.jac_prox(q, inverse_step=1.0, prox_result=prox)
+    prox = problem.prox(q, 1.0)
+    jac = problem.jac_prox(q, 1.0, prox_result=prox)
     torch.testing.assert_close(prox, q.new_tensor([-expected, expected]))
     torch.testing.assert_close(jac, derivative * torch.eye(2, dtype=q.dtype))
 
@@ -71,36 +71,36 @@ def test_validated_power_selects_the_proximal_map_and_derivative(
 )
 def test_samples_define_the_objective_and_its_derivatives(activation, power, gamma):
     data = _samples()
+    loader = make_dataloader(data)
     model = _model(activation, power)
     problem = SparseProblem(
-        data, activation=activation, power=power, alpha=0.1, gamma=gamma, loss_weights=(0.4, 1.3)
+        2, activation=activation, power=power, alpha=0.1, gamma=gamma, loss_weights=(0.4, 1.3)
     )
     before = {name: tensor.clone() for name, tensor in model.state_dict().items()}
-    with pytest.raises(RuntimeError, match="prepare_coefficients"):
-        problem.obj(model.get_atoms()[2])
-
-    problem.prepare_coefficients(model)
-    u = problem.coefficient_coordinates(model.get_atoms()[2])
+    prepared = problem.prepare_coefficients(model, loader)
+    u = problem.coefficient_coordinates(model.get_atoms()[2], prepared)
     Vp, dVp = model.predict_tensors(data[0])
     expected_obj = (0.4 * (Vp - data[1]).square().sum() + 1.3 * (dVp - data[2]).square().sum()) / (
         2 * len(data[0])
     )
-    torch.testing.assert_close(problem.obj(u), expected_obj)
-    torch.testing.assert_close(problem.hess_obj(), torch.func.hessian(problem.obj)(u))
-    torch.testing.assert_close(problem.model_coefficients(u), model.get_atoms()[2])
-    assert float(problem.loss(u)) == pytest.approx(problem.model_loss(model), rel=1e-12)
+    torch.testing.assert_close(prepared.obj(u), expected_obj)
+    torch.testing.assert_close(prepared.hess_obj, torch.func.hessian(prepared.obj)(u))
+    torch.testing.assert_close(problem.model_coefficients(u, prepared), model.get_atoms()[2])
+    loss = lambda u: problem.loss(u, prepared)
+    obj_augmented = lambda u: problem.obj_augmented(u, prepared)
+    assert float(loss(u)) == pytest.approx(problem.model_loss(model, loader), rel=1e-12)
 
-    jac_loss = torch.func.grad(problem.loss)(u)
+    jac_loss = torch.func.grad(loss)(u)
     torch.testing.assert_close(
-        problem.jac_obj_augmented(u, jac_loss), torch.func.grad(problem.obj_augmented)(u)
+        problem.jac_obj_augmented(u, jac_loss), torch.func.grad(obj_augmented)(u)
     )
     torch.testing.assert_close(
-        problem.hess_obj_augmented(u), torch.func.hessian(problem.obj_augmented)(u)
+        problem.hess_obj_augmented(u, prepared), torch.func.hessian(obj_augmented)(u)
     )
     if power == 1.0:
-        torch.testing.assert_close(problem.loss(u), problem.obj_augmented(u) + 0.1 * u.abs().sum())
+        torch.testing.assert_close(loss(u), obj_augmented(u) + 0.1 * u.abs().sum())
     else:
-        torch.testing.assert_close(problem.obj_augmented(u), problem.obj(u), rtol=0, atol=0)
+        torch.testing.assert_close(obj_augmented(u), prepared.obj(u), rtol=0, atol=0)
     for name, tensor in model.state_dict().items():
         torch.testing.assert_close(tensor, before[name], rtol=0, atol=0)
 
@@ -108,14 +108,15 @@ def test_samples_define_the_objective_and_its_derivatives(activation, power, gam
 def test_one_problem_handles_empty_models_and_replaced_supports(monkeypatch):
     # The problem exists before the model, and is reused across all corrections.
     data = _samples()
-    problem = SparseProblem(data, activation="softplus", alpha=0.01)
+    loader = make_dataloader(data)
+    problem = SparseProblem(2, activation="softplus", alpha=0.01)
     model = SignedModel(activation=get_activation("softplus"), power=1.0, verbose=False)
     model.input_dim = 2
-    residual = problem.residual(model)
-    torch.testing.assert_close(residual[0], -data[1])
-    torch.testing.assert_close(residual[1], -data[2])
-    initial_loss = problem.model_loss(model)
-    assert initial_loss == problem.metrics(model)["train_loss"]
+    residual = problem.residual(model, loader)
+    torch.testing.assert_close(residual[1], -data[1])
+    torch.testing.assert_close(residual[2], -data[2])
+    initial_loss = problem.model_loss(model, loader)
+    assert initial_loss == problem.metrics(model, loader)["train_loss"]
     a = torch.tensor([0.2, -0.3], dtype=torch.float64, requires_grad=True)
     b = a.new_tensor(0.1, requires_grad=True)
     score = problem.search_score(a, b, residual)
@@ -127,9 +128,9 @@ def test_one_problem_handles_empty_models_and_replaced_supports(monkeypatch):
     SSN = integration.SSN
     optimizers = []
 
-    def record_optimizer(params, supplied_problem, **options):
+    def record_optimizer(params, supplied_problem, prepared, **options):
         assert supplied_problem is problem
-        optimizer = SSN(params, supplied_problem, **options)
+        optimizer = SSN(params, supplied_problem, prepared, **options)
         optimizers.append(optimizer)
         return optimizer
 
@@ -137,25 +138,27 @@ def test_one_problem_handles_empty_models_and_replaced_supports(monkeypatch):
     for width in (2, 1, 3):
         W = torch.arange(1, 2 * width + 1, dtype=torch.float64).reshape(width, 2) / 5
         model.set_atoms(W, torch.zeros(width, dtype=W.dtype), torch.ones(width, dtype=W.dtype))
-        # Full-model evaluation uses the current support even before cache refresh.
-        assert problem.model_loss(model) == problem.metrics(model)["train_loss"]
-        ssn_solve(model, problem, SolverConfig(), iterations=1)
-        u = problem.coefficient_coordinates(model.get_atoms()[2])
-        assert problem.hess_obj().shape == (width, width)
-        assert float(problem.loss(u)) == pytest.approx(problem.model_loss(model), rel=1e-12)
+        # Full-model evaluation uses the current support before correction preparation.
+        assert problem.model_loss(model, loader) == problem.metrics(model, loader)["train_loss"]
+        ssn_solve(model, problem, SolverConfig(), loader, iterations=1)
+        prepared = optimizers[-1].prepared
+        u = problem.coefficient_coordinates(model.get_atoms()[2], prepared)
+        assert prepared.hess_obj.shape == (width, width)
+        assert float(problem.loss(u, prepared)) == pytest.approx(problem.model_loss(model, loader), rel=1e-12)
         assert optimizers[-1].param_groups[0]["params"][0].numel() == width
     assert len({id(optimizer) for optimizer in optimizers}) == 3
+    assert len({id(optimizer.prepared) for optimizer in optimizers}) == 3
 
     model.set_atoms(W[:0], W.new_zeros(0), W.new_zeros(0))
-    assert problem.model_loss(model) == pytest.approx(initial_loss)
+    assert problem.model_loss(model, loader) == pytest.approx(initial_loss)
 
 
 def test_preparation_does_not_retain_the_model():
-    problem = SparseProblem(_samples())
+    problem = SparseProblem(2)
     model = _model()
     reference = weakref.ref(model)
-    problem.prepare_coefficients(model)
+    prepared = problem.prepare_coefficients(model, make_dataloader(_samples()))
     del model
     gc.collect()
     assert reference() is None
-    assert torch.isfinite(problem.obj(torch.ones(2, dtype=torch.float64)))
+    assert torch.isfinite(prepared.obj(torch.ones(2, dtype=torch.float64)))

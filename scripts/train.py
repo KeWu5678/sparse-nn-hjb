@@ -43,7 +43,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from src.config.schema import ExperimentConfig
-from src.data import DATA_DIR, load_value_samples, normalize_value_samples, split_value_samples
+from src.data import DATA_DIR, load_value_samples, make_dataloaders, normalize_value_samples
 from src.eval import distance_binned_error, region_split_errors
 from src.experiment_logging import ExperimentRun
 from src.logging_config import configure_logging
@@ -234,12 +234,14 @@ def main(cfg: DictConfig) -> None:
         data, normalizer = normalize_value_samples(data)
     input_dim = data["x"].shape[1]
     logger.info("loaded %s  (d=%d)", cfg.data.path, input_dim)
-    train_data, valid_data = split_value_samples(data, cfg.data.train_fraction)
+    train_loader, valid_loader = make_dataloaders(
+        data, cfg.data.train_fraction, seed=cfg.env.seed,
+    )
     model = build_model(cfg, input_dim)
 
-    problem = SparseProblem.from_config(cfg.model, train_data, valid_data)
+    problem = SparseProblem.from_config(cfg.model, input_dim)
     history = trainer.fit(
-        model, problem,
+        model, problem, train_loader, valid_loader,
         num_iterations=cfg.training.num_iterations,
         num_insertion=cfg.training.num_insertion,
         max_insert=cfg.training.max_insert,

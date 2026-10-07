@@ -7,7 +7,7 @@ from torch import Tensor
 from torch.nn.utils import parameters_to_vector, vector_to_parameters
 from torch.optim import Optimizer
 
-from ..problems import SparseProblem
+from ..problems import PreparedObjective, SparseProblem
 from .strategies import damped_newton_step, trust_region_step
 
 __all__ = ["SSN"]
@@ -24,6 +24,7 @@ class SSN(Optimizer):
     Args:
         params: parameters to optimize (outer weights only).
         problem: sparse objective evaluated at a supplied flat vector.
+        prepared: fixed-support calculations for this coefficient correction.
         max_ls_iter: maximum damping retries after the initial trial.
         tolerance_ls: accept damped loss <= tolerance_ls * current loss.
         method: "levenberg_marquardt" (legacy damped-Newton name) or "steihaug_cg".
@@ -40,6 +41,7 @@ class SSN(Optimizer):
         self,
         params: Iterable[Tensor],
         problem: SparseProblem,
+        prepared: PreparedObjective,
         *,
         max_ls_iter: int = 500,
         tolerance_ls: float = 1.0 + 1e-8,
@@ -63,6 +65,7 @@ class SSN(Optimizer):
         if len(self.param_groups) > 1:
             raise ValueError("SSN doesn't support per-parameter options")
         self.problem = problem
+        self.prepared = prepared
         self._params = self.param_groups[0]["params"]
         self.last_step_success = True
 
@@ -70,7 +73,7 @@ class SSN(Optimizer):
     def step(self) -> Tensor:  # pyright: ignore[reportIncompatibleMethodOverride]
         """Build the normal-map system, globalize its step, and return the loss.
 
-        Unlike the base Optimizer overloads, this method owns its objective and
+        This method uses the supplied problem and prepared calculations and
         always returns a Tensor; it therefore has no closure argument.
 
         An ordinary rejected trial leaves parameters unchanged and returns the
@@ -82,7 +85,7 @@ class SSN(Optimizer):
         inverse_step = group["inverse_step"]
         with torch.enable_grad():
             u = parameters_to_vector(self._params).detach().requires_grad_(True)
-            loss = self.problem.loss(u)
+            loss = self.problem.loss(u, self.prepared)
         jac_loss, = torch.autograd.grad(loss, u, retain_graph=True)
         jac_obj_augmented = self.problem.jac_obj_augmented(u, jac_loss)
         q = self.problem.prox_preimage(u, jac_obj_augmented, inverse_step)
@@ -93,7 +96,7 @@ class SSN(Optimizer):
             return loss
 
         jac_prox = self.problem.jac_prox(q, inverse_step, prox_result=u)
-        jac_normal = self.problem.jac_normal(u, jac_prox, inverse_step)
+        jac_normal = self.problem.jac_normal(u, jac_prox, inverse_step, self.prepared)
         return self._run_strategy(q, normal_q, jac_normal, jac_prox, loss, inverse_step)
 
     def _run_strategy(
@@ -115,7 +118,7 @@ class SSN(Optimizer):
         group = self.param_groups[0]
 
         def evaluate_trial(q_trial: Tensor) -> Tensor:
-            return self.problem.loss(self.problem.prox(q_trial, inverse_step))
+            return self.problem.loss(self.problem.prox(q_trial, inverse_step), self.prepared)
 
         if group["method"] == "levenberg_marquardt":
             q_trial, loss_trial, accepted = damped_newton_step(

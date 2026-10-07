@@ -3,8 +3,8 @@
 A model is a *parametrization*, nothing more: it owns the value/gradient
 prediction, the atom support, and -- because the outer solve is linear in the
 outer parameters ``theta`` -- the feature maps (Jacobians). It owns no training algorithm or objective.
-``SparseProblem`` owns the samples and mathematical problem; PDAP and SSN
-own the optimization procedures.
+``SparseProblem`` owns the mathematical problem; external DataLoaders deliver
+samples, and PDAP and SSN own the optimization procedures.
 
 ``SignedModel`` satisfies this structurally, so it is a
 :class:`typing.Protocol` (no inheritance required). ``@runtime_checkable`` lets

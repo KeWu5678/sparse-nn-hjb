@@ -40,7 +40,8 @@ __all__ = [
 
 
 def _generate_candidates(
-    problem: SparseProblem, residual_v: torch.Tensor, residual_dv: torch.Tensor, *,
+    problem: SparseProblem,
+    residual: tuple[torch.Tensor, torch.Tensor, torch.Tensor], *,
     sample_sphere: Callable[[int], Tuple[torch.Tensor, torch.Tensor]],
     N: int,
     merge_tol: float,
@@ -63,9 +64,9 @@ def _generate_candidates(
     d_dim = problem.input_dim
 
     # Normalize residual for the L-BFGS direction search (MATLAB find_max:385).
-    res_norm = torch.sqrt(residual_v.pow(2).sum() + residual_dv.pow(2).sum()).clamp_min(1e-30)
-    res_v_n = residual_v / res_norm
-    res_dv_n = residual_dv / res_norm
+    X, res_v, res_dv = residual
+    res_norm = torch.sqrt(res_v.pow(2).sum() + res_dv.pow(2).sum()).clamp_min(1e-30)
+    normalized_residual = X, res_v / res_norm, res_dv / res_norm
 
     def maximize_batch(
         a_batch: torch.Tensor, b_batch: torch.Tensor,
@@ -95,7 +96,7 @@ def _generate_candidates(
                 opt.zero_grad()
                 w_s = w / w.norm().clamp_min(eps) if use_sphere else w
                 obj = problem.search_score(
-                    w_s[:d_dim], w_s[d_dim], (res_v_n, res_dv_n), two_sided=two_sided,
+                    w_s[:d_dim], w_s[d_dim], normalized_residual, two_sided=two_sided,
                 )
                 (-obj).backward()
                 return -obj
@@ -133,8 +134,8 @@ def _generate_candidates(
     # nonhomogeneous models give each direction a log-uniform radius (ADR 0006).
     a_t, b_t = sample_sphere(N)
     existing_unit = None
+    r_max = float(radius) if radius is not None else math.exp(FIXED_LOG_CLAMP)
     if not use_sphere:
-        r_max = float(radius) if radius is not None else math.exp(FIXED_LOG_CLAMP)
         lo, hi = math.log(math.exp(-3.0)), math.log(max(r_max, math.exp(-3.0) * 1.001))
         u = torch.rand(a_t.shape[0], dtype=torch.float64)
         r = torch.exp(lo + (hi - lo) * u)
@@ -192,7 +193,8 @@ def _generate_candidates(
 # Strategy 1: profile-threshold acceptance
 # ---------------------------------------------------------------------------- #
 def profile_threshold(
-    problem: SparseProblem, residual_v: torch.Tensor, residual_dv: torch.Tensor, *,
+    problem: SparseProblem,
+    residual: tuple[torch.Tensor, torch.Tensor, torch.Tensor], *,
     sample_sphere: Callable[[int], Tuple[torch.Tensor, torch.Tensor]],
     N: int,
     max_insert: int = 15, merge_tol: float = 1e-2,
@@ -221,7 +223,7 @@ def profile_threshold(
     d_dim = problem.input_dim
 
     a_t, b_t, n_after, discarded_outside = _generate_candidates(
-        problem, residual_v, residual_dv, sample_sphere=sample_sphere, N=N,
+        problem, residual, sample_sphere=sample_sphere, N=N,
         merge_tol=merge_tol, two_sided=two_sided,
         existing_atoms=existing_atoms, lbfgs_lr=lbfgs_lr, lbfgs_steps=lbfgs_steps,
         radius=radius,
@@ -240,7 +242,7 @@ def profile_threshold(
     with torch.enable_grad():
         for a_i, b_i in zip(a_t, b_t):
             result = problem.profile_insertion(
-                a_i, b_i, (residual_v, residual_dv),
+                a_i, b_i, residual,
                 two_sided=two_sided, guaranteed=guaranteed,
             )
             if result is None:
@@ -250,6 +252,7 @@ def profile_threshold(
             accepted_b.append(b_i.detach())
             accepted_scores.append(score)
             if guaranteed:
+                assert coefficient is not None
                 accepted_c.append(coefficient)
 
     if len(accepted_scores) > max_insert:
@@ -300,7 +303,8 @@ def profile_threshold(
 # Strategy 2: finite-step acceptance
 # ---------------------------------------------------------------------------- #
 def finite_step(
-    problem: SparseProblem, residual_v: torch.Tensor, residual_dv: torch.Tensor, *,
+    problem: SparseProblem,
+    residual: tuple[torch.Tensor, torch.Tensor, torch.Tensor], *,
     sample_sphere: Callable[[int], Tuple[torch.Tensor, torch.Tensor]],
     N: int,
     max_insert: int = 15, merge_tol: float = 1e-2,
@@ -313,7 +317,7 @@ def finite_step(
     d_dim = problem.input_dim
 
     a_t, b_t, n_after, _discarded_outside = _generate_candidates(
-        problem, residual_v, residual_dv, sample_sphere=sample_sphere, N=N,
+        problem, residual, sample_sphere=sample_sphere, N=N,
         merge_tol=merge_tol, two_sided=True,
         existing_atoms=existing_atoms, lbfgs_lr=lbfgs_lr, lbfgs_steps=lbfgs_steps,
         radius=radius,
@@ -325,7 +329,7 @@ def finite_step(
     accepted_dJ: List[float] = []
     with torch.enable_grad():
         for a_i, b_i in zip(a_t, b_t):
-            result = problem.finite_insertion(a_i, b_i, (residual_v, residual_dv))
+            result = problem.finite_insertion(a_i, b_i, residual)
             if result is not None:
                 c_star, dJ = result
                 accepted_a.append(a_i.detach())

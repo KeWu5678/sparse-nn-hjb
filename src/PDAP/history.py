@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List
 
 import torch
+from torch.utils.data import DataLoader
 
 from ..data import ValueSampleNormalizer
 from ..problems import SparseProblem
@@ -67,6 +68,7 @@ class History:
 
     def record(
         self, model, problem: SparseProblem,
+        train_loader: DataLoader, valid_loader: DataLoader | None = None,
         *,
         search_radius: float | None = None,
         theorem_applied: float | None = None,
@@ -79,7 +81,9 @@ class History:
         ``radial_cap=fixed`` run: both search
         inside ``exp(5)``, and without these the records are identical.
         """
-        metrics = problem.metrics(model, self.reporting_normalizer)
+        metrics = problem.metrics(
+            model, train_loader, valid_loader, reporting_normalizer=self.reporting_normalizer,
+        )
         for name, value in metrics.items():
             getattr(self, name).append(value)
         self.search_radius.append(None if search_radius is None else float(search_radius))

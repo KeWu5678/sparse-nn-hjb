@@ -10,7 +10,7 @@ import torch
 
 from src.config.activations import ACTIVATIONS, GROWTH, get_growth
 from src.config.schema import EnvConfig, ExperimentConfig, ModelConfig, TrainingConfig
-from src.data import split_value_samples
+from src.data import make_dataloader, split_value_samples
 from src.models import build_model
 from src.PDAP import PDAP
 from src.PDAP.insertion import profile_threshold
@@ -59,7 +59,9 @@ def _fit(cfg: ExperimentConfig, iterations: int = 4, seed: int = 0):
     model = build_model(cfg, input_dim=2)
     train, valid = split_value_samples(data, cfg.data.train_fraction)
     history = PDAP(cfg.training, insertion=cfg.model.insertion).fit(
-        model, SparseProblem.from_config(cfg.model, train, valid), num_iterations=iterations, num_insertion=20, verbose=False
+        model, SparseProblem.from_config(cfg.model, 2),
+        make_dataloader(train), make_dataloader(valid),
+        num_iterations=iterations, num_insertion=20, verbose=False,
     )
     return model, history, train
 
@@ -96,15 +98,19 @@ def test_normalized_objective_is_phi_of_the_scaled_coefficient() -> None:
     """The recorded objective equals l^M + alpha * sum phi(w_p(omega_n)|c_n|)."""
     cfg = _cfg(moment_order=2.01)
     model, _, train = _fit(cfg)
-    problem = SparseProblem.from_config(cfg.model, train)
+    problem = SparseProblem.from_config(cfg.model, 2)
 
     W, b, c = model.get_atoms()
     value, grad = model.predict_tensors(train[0])
-    fidelity = float(problem.obj_terms((value, grad), train[1:])[0])
+    w1, w2 = cfg.model.loss_weights
+    fidelity = float(
+        (w1 * (value - train[1]).square().sum() + w2 * (grad - train[2]).square().sum())
+        / (2 * train[0].shape[0])
+    )
     w_p = moment_weight(W, b, cfg.model.moment_order).reshape(-1)
     penalty = float(cfg.model.alpha * torch.sum(_phi(w_p * c.abs(), cfg.model.gamma)))
 
-    assert problem.model_loss(model) == pytest.approx(fidelity + penalty, rel=1e-12)
+    assert problem.model_loss(model, make_dataloader(train)) == pytest.approx(fidelity + penalty, rel=1e-12)
 
 
 def test_normalized_dictionary_reproduces_the_network() -> None:
@@ -130,16 +136,17 @@ def test_guaranteed_insertion_delivers_the_promised_decrease() -> None:
     cfg = _cfg(moment_order=2.01,
                insert_init="guaranteed", loop_order="insertion_first")
     model, _, train = _fit(cfg, iterations=3)
-    problem = SparseProblem.from_config(cfg.model, train)
+    problem = SparseProblem.from_config(cfg.model, 2)
+    train_loader = make_dataloader(train)
     trainer = PDAP(cfg.training, insertion=cfg.model.insertion)
 
-    before = problem.model_loss(model)
+    before = problem.model_loss(model, train_loader)
     value, grad = model.predict_tensors(train[0])
     res_v, res_dv = (value - train[1]).detach(), (grad - train[2]).detach()
 
     W_old, b_old, c_old = model.get_atoms()
     W_new, b_new, c_new = profile_threshold(
-        problem, res_v, res_dv,
+        problem, (train[0], res_v, res_dv),
         sample_sphere=lambda n: trainer._sphere(2, n), N=20,
         max_insert=1, merge_tol=1e-2, two_sided=True,
         existing_atoms=(W_old, b_old), verbose=False,
@@ -177,7 +184,7 @@ def test_guaranteed_insertion_delivers_the_promised_decrease() -> None:
         torch.cat([b_old, bias.reshape(1)]),
         torch.cat([c_old, torch.as_tensor(c_new[:1], dtype=torch.float64)]),
     )
-    after = problem.model_loss(model)
+    after = problem.model_loss(model, train_loader)
     assert before - after >= delta ** 2 / (2 * a_p) - 1e-12
 
 
@@ -222,9 +229,9 @@ def test_search_radius_never_exceeds_the_fixed_clamp() -> None:
     for p in (2.01, 2.5, 3.0, 4.0):
         cfg = _cfg(moment_order=p, radial_cap="theorem")
         data = tuple(torch.as_tensor(_data()[key]) for key in ("x", "v", "dv"))
-        problem = SparseProblem.from_config(cfg.model, data)
+        problem = SparseProblem.from_config(cfg.model, 2)
         trainer = PDAP(cfg.training)
-        radius = trainer._search_radius(problem, (-data[1], -data[2]))
+        radius = trainer._search_radius(problem, (data[0], -data[1], -data[2]))
         assert radius is not None and radius <= math.exp(5.0) + 1e-9
 
 
@@ -289,7 +296,8 @@ def test_insertion_reuses_the_residual_for_the_theorem_radius() -> None:
     model.predict_tensors = counted_predict
     PDAP(cfg.training, insertion=cfg.model.insertion).fit(
         model,
-        SparseProblem.from_config(cfg.model, data),
+        SparseProblem.from_config(cfg.model, 2),
+        make_dataloader(data),
         num_iterations=1,
         num_insertion=1,
         max_insert=1,
@@ -341,5 +349,5 @@ def test_incoherent_configurations_are_rejected(over: dict, message: str) -> Non
     with pytest.raises(ValueError, match=message):
         cfg = _cfg(**over)
         trainer = PDAP(cfg.training, insertion=cfg.model.insertion)
-        problem = SparseProblem.from_config(cfg.model, None)
+        problem = SparseProblem.from_config(cfg.model, 2)
         problem.validate_insertion(trainer.insertion_kind)

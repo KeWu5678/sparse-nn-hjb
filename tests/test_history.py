@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 import torch
 
-from src.data import ValueSampleNormalizer
+from src.data import ValueSampleNormalizer, make_dataloader
 from src.eval import relative_errors
 from src.models.signed import SignedModel
 from src.PDAP.history import History
@@ -58,7 +58,7 @@ def test_restoring_a_zero_measure_snapshot_empties_an_initialized_model() -> Non
     assert dict(empty.state_dict()) == {}
     samples = (x, *empty.predict_tensors(x))
     history = History()
-    history.record(empty, SparseProblem(samples, activation="tanh"))
+    history.record(empty, SparseProblem(2, activation="tanh"), make_dataloader(samples))
 
     restored = SignedModel(activation=torch.tanh, power=1.0, verbose=False)
     restored.set_atoms(
@@ -87,7 +87,7 @@ def test_history_summary_records_normalized_objective_decomposition() -> None:
     v, dv = model.predict_tensors(x)
     samples = (x, v, dv)
     problem = SparseProblem(
-        samples, activation="tanh",
+        2, activation="tanh",
         alpha=0.1,
         gamma=0.0,
         loss_weights=(1.0, 1.0),
@@ -95,7 +95,7 @@ def test_history_summary_records_normalized_objective_decomposition() -> None:
     )
 
     history = History()
-    history.record(model, problem)
+    history.record(model, problem, make_dataloader(samples))
     metrics = history.summary_metrics()
 
     # gamma=0 gives Phi_1(mu_p) = Psi_2(mu)
@@ -128,7 +128,8 @@ def test_physical_reporting_does_not_change_objectives_snapshots_or_selection():
     v = torch.tensor([[2.0], [3.0]], dtype=torch.float64)
     dv = torch.tensor([[0.7, -0.6], [1.2, 0.5]], dtype=torch.float64)
     data = x, v, dv
-    problem = SparseProblem(data, activation="tanh", alpha=0.1, gamma=0.2)
+    problem = SparseProblem(2, activation="tanh", alpha=0.1, gamma=0.2)
+    loader = make_dataloader(data)
     unchanged = History()
     # Old pickles predate the optional reporting transform.
     del unchanged.reporting_normalizer
@@ -140,8 +141,8 @@ def test_physical_reporting_does_not_change_objectives_snapshots_or_selection():
             torch.tensor([0.1], dtype=torch.float64),
             torch.tensor([coefficient], dtype=torch.float64),
         )
-        unchanged.record(model, problem)
-        physical.record(model, problem)
+        unchanged.record(model, problem, loader)
+        physical.record(model, problem, loader)
         expected = relative_errors(
             *normalizer.denormalize_tensors(*model.predict_tensors(x)),
             *normalizer.denormalize_tensors(v, dv),

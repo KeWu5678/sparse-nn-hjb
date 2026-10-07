@@ -29,9 +29,11 @@ from __future__ import annotations
 
 import logging
 import math
-from typing import Tuple
+from collections.abc import Sized
+from typing import Any, Tuple
 
 import torch
+from torch.utils.data import DataLoader
 
 from ..data import ValueSampleNormalizer
 from ..problems import SparseProblem
@@ -138,7 +140,9 @@ class PDAP:
     # (self.ins_merge_tol, default 1e-2) is independent of the prune amplitude
     # gate (fit's amp_tol, used only in prune_small_weights).
     # ------------------------------------------------------------------ #
-    def _insert(self, model, problem, num_insertion: int, max_insert: int, verbose: bool):
+    def _insert(
+        self, model, problem, train_loader, num_insertion: int, max_insert: int, verbose: bool
+    ):
         """Return accepted atoms and their initialized outer weights."""
         # Sequential insertion admits the highest-ranked candidate returned by the
         # multistart search, one atom per outer iteration. The theorem's rate bound
@@ -146,38 +150,38 @@ class PDAP:
         # batch also introduces cross terms through its shared frozen residual.
         if self.insert_mode == "sequential":
             max_insert = 1
-        res_v, res_dv = problem.residual(model)
+        residual = problem.residual(model, train_loader)
         existing = None
         if model.n_neurons > 0:
             Wc, bc, _ = model.get_atoms()
             existing = (Wc, bc) if Wc.shape[0] > 0 else None
 
         d = int(model.input_dim)
-        common = dict(
+        common: dict[str, Any] = dict(
             sample_sphere=lambda N: self._sphere(d, N), N=num_insertion,
             max_insert=max_insert, merge_tol=self.ins_merge_tol,
             existing_atoms=existing, verbose=verbose,
             lbfgs_lr=self.lbfgs_lr, lbfgs_steps=self.lbfgs_steps,
         )
-        radius = self._search_radius(problem, (res_v, res_dv))
+        radius = self._search_radius(problem, residual)
         if self.insertion_kind == "profile":
             W, b, c = profile_threshold(
-                problem, res_v, res_dv, two_sided=True, insert_init=self.insert_init,
+                problem, residual, two_sided=True, insert_init=self.insert_init,
                 radius=radius, **common,
             )
         else:
             W, b, c = finite_step(
-                problem, res_v, res_dv, radius=radius, **common,
+                problem, residual, radius=radius, **common,
             )
         if c is None and W.shape[0] > 0:
             c = warm_start(
                 torch.as_tensor(W, dtype=torch.float64),
                 torch.as_tensor(b, dtype=torch.float64),
-                (res_v, res_dv), problem, verbose=verbose,
+                residual, problem, verbose=verbose,
             )
         return W, b, c
 
-    def _correct(self, model, problem, verbose: bool) -> None:
+    def _correct(self, model, problem, train_loader, verbose: bool) -> None:
         """Run the SSN coefficient solve, optionally rejecting a worsening step.
 
         SSN is a local method on a nonconvex penalty and carries no descent
@@ -189,18 +193,18 @@ class PDAP:
         """
         if not self.correction_guard:
             ssn_solve(
-                model, problem, self.solver,
+                model, problem, self.solver, train_loader,
                 iterations=self.fit_outer_iterations, verbose=verbose,
             )
             return
 
-        before = problem.model_loss(model)
+        before = problem.model_loss(model, train_loader)
         snapshot = {name: t.detach().clone() for name, t in model.state_dict().items()}
         ssn_solve(
-            model, problem, self.solver,
+            model, problem, self.solver, train_loader,
             iterations=self.fit_outer_iterations, verbose=verbose,
         )
-        after = problem.model_loss(model)
+        after = problem.model_loss(model, train_loader)
         if after > before:
             model.load_state_dict(snapshot)
             if verbose:
@@ -224,10 +228,12 @@ class PDAP:
         return pruned
 
     def _insert_atoms(
-        self, model, problem, num_insertion: int, max_insert: int, verbose: bool
+        self, model, problem, train_loader, num_insertion: int, max_insert: int, verbose: bool
     ) -> int:
         """Insert accepted atoms into ``model``; return how many were added."""
-        W_np, b_np, c_new = self._insert(model, problem, num_insertion, max_insert, verbose)
+        W_np, b_np, c_new = self._insert(
+            model, problem, train_loader, num_insertion, max_insert, verbose,
+        )
         W_new = torch.as_tensor(W_np, dtype=torch.float64)
         b_new = torch.as_tensor(b_np, dtype=torch.float64)
         if W_new.shape[0] == 0:
@@ -248,6 +254,8 @@ class PDAP:
         self,
         model,
         problem: SparseProblem,
+        train_loader: DataLoader,
+        valid_loader: DataLoader | None = None,
         *,
         num_iterations: int,
         num_insertion: int,
@@ -261,7 +269,13 @@ class PDAP:
         ``reporting_normalizer`` must be the transform already applied to the
         supplied samples. It never changes the objective or checkpoint selection.
         With no transform, errors use the supplied samples' units as before.
+
+        Loaders supply the complete dataset for each mathematical evaluation;
+        batches do not introduce additional optimizer steps. Omitted validation
+        uses the training loader.
         """
+        if valid_loader is None:
+            valid_loader = train_loader
         problem.validate_model(model)
         problem.validate_insertion(self.insertion_kind)
         # A trainer can be reused; a zero-iteration fit has no search to report.
@@ -274,19 +288,26 @@ class PDAP:
             logger.info("  | %-16s | %-24s |", "model", type(model).__name__)
             logger.info("  | %-16s | %-24s |", "insertion rule", self.insertion_kind.replace("_", " "))
             logger.info("  | %-16s | %-24d |", "input dimension", int(model.input_dim))
+            if isinstance(train_loader.dataset, Sized) and isinstance(valid_loader.dataset, Sized):
+                logger.info(
+                    "  | %-16s | %-24s |", "samples",
+                    f"{len(train_loader.dataset)} train, {len(valid_loader.dataset)} validation",
+                )
             for name, value in problem.description().items():
                 logger.info("  | %-16s | %-24s |", name, value)
             logger.info("  +------------------+--------------------------+")
 
         if self.loop_order == "insertion_first":
             return self._fit_insertion_first(
-                model, problem, history,
+                model, problem, train_loader, valid_loader, history,
                 num_iterations=num_iterations, num_insertion=num_insertion,
                 max_insert=max_insert, amp_tol=amp_tol, verbose=verbose,
             )
 
         # --- initialization: insert + warm-start ---
-        W_np, b_np, c = self._insert(model, problem, num_insertion, max_insert, verbose)
+        W_np, b_np, c = self._insert(
+            model, problem, train_loader, num_insertion, max_insert, verbose,
+        )
         W = torch.as_tensor(W_np, dtype=torch.float64)
         b = torch.as_tensor(b_np, dtype=torch.float64)
         if W.shape[0] == 0:
@@ -295,7 +316,7 @@ class PDAP:
             # not a training failure; record it once and skip the SSN loop,
             # which requires a nonempty outer-parameter vector.
             history.record(
-                model, problem,
+                model, problem, train_loader, valid_loader,
                 search_radius=self._last_search_radius,
                 theorem_applied=self._last_theorem_applied,
             )
@@ -318,14 +339,14 @@ class PDAP:
             supp_before = model.n_neurons
 
             # 1. SSN on outer weights (inner weights frozen)
-            self._correct(model, problem, verbose)
+            self._correct(model, problem, train_loader, verbose)
 
             # 2. prune: defensive gate — drop negligible atoms
             pruned = self._prune(model, amp_tol)
 
             # 3. record (evaluation lives in History.record, not the loop)
             history.record(
-                model, problem,
+                model, problem, train_loader, valid_loader,
                 search_radius=self._last_search_radius,
                 theorem_applied=self._last_theorem_applied,
             )
@@ -344,7 +365,7 @@ class PDAP:
                 )
 
             # 4. insert new neurons + warm-start
-            self._insert_atoms(model, problem, num_insertion, max_insert, verbose)
+            self._insert_atoms(model, problem, train_loader, num_insertion, max_insert, verbose)
 
         history.final_neurons = int(model.n_neurons)
         if verbose:
@@ -358,7 +379,7 @@ class PDAP:
         return history
 
     def _fit_insertion_first(
-        self, model, problem, history: History, *,
+        self, model, problem, train_loader, valid_loader, history: History, *,
         num_iterations: int, num_insertion: int, max_insert: int,
         amp_tol: float, verbose: bool,
     ) -> History:
@@ -379,7 +400,9 @@ class PDAP:
 
         for i in range(num_iterations):
             # 1. insert; no accepted candidate is the algorithms' stopping rule
-            added = self._insert_atoms(model, problem, num_insertion, max_insert, verbose)
+            added = self._insert_atoms(
+                model, problem, train_loader, num_insertion, max_insert, verbose,
+            )
             if added == 0:
                 if verbose:
                     logger.info(
@@ -389,14 +412,14 @@ class PDAP:
                 break
 
             # 2. correct (rejected if it raises the objective, when guarded)
-            self._correct(model, problem, verbose)
+            self._correct(model, problem, train_loader, verbose)
 
             # 3. prune
             pruned = self._prune(model, amp_tol)
 
             # 4. record
             history.record(
-                model, problem,
+                model, problem, train_loader, valid_loader,
                 search_radius=self._last_search_radius,
                 theorem_applied=self._last_theorem_applied,
             )
@@ -411,7 +434,7 @@ class PDAP:
         if not history.train_loss:
             # Nothing was ever inserted: the zero measure is the terminal result.
             history.record(
-                model, problem,
+                model, problem, train_loader, valid_loader,
                 search_radius=self._last_search_radius,
                 theorem_applied=self._last_theorem_applied,
             )

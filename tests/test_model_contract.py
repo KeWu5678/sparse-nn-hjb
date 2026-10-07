@@ -2,6 +2,7 @@
 
 import pytest
 import torch
+from torch.utils.data import DataLoader, Dataset
 
 from src.config.schema import ExperimentConfig
 from src.models import build_model
@@ -59,6 +60,13 @@ def test_setting_and_pruning_atoms_preserves_float64_coefficients():
 
 @pytest.mark.parametrize("field,value", [("activation", "softplus"), ("power", 2.0)])
 def test_fit_rejects_model_config_mismatch_before_mutating_state(field, value):
+    class UnavailableSamples(Dataset):
+        def __len__(self):
+            return 1
+
+        def __getitem__(self, index):
+            raise AssertionError("a mismatched model must be rejected before sample access")
+
     trainer = PDAP(ExperimentConfig().training)
     model_cfg = ExperimentConfig()
     setattr(model_cfg.model, field, value)
@@ -66,7 +74,8 @@ def test_fit_rejects_model_config_mismatch_before_mutating_state(field, value):
     model.set_atoms(*_atoms())
     before = {name: tensor.clone() for name, tensor in model.state_dict().items()}
     # No data can be consumed before the mismatch is rejected.
+    loader = DataLoader(UnavailableSamples(), generator=torch.Generator().manual_seed(0))
     with pytest.raises(ValueError, match=f"model {field}.*match"):
-        trainer.fit(model, SparseProblem(None), num_iterations=1, num_insertion=2, verbose=False)
+        trainer.fit(model, SparseProblem(2), loader, num_iterations=1, num_insertion=2, verbose=False)
     for name, tensor in model.state_dict().items():
         torch.testing.assert_close(tensor, before[name], rtol=0, atol=0)

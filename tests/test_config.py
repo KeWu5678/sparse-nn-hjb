@@ -20,11 +20,6 @@ from src.problems import SparseProblem
 ConfigStore.instance().store(name="config_schema", node=ExperimentConfig)
 
 
-def _samples():
-    X = torch.zeros(1, 2, dtype=torch.float64)
-    return X, X[:, :1], X.clone()
-
-
 def test_compose_defaults() -> None:
     with initialize(version_base=None, config_path="../conf"):
         cfg = compose(config_name="config")
@@ -62,7 +57,7 @@ def test_model_groups() -> None:
     # finite_step config group = signed + finite_step
     assert fs.model.kind == "signed"
     assert fs.model.insertion == "finite_step"
-    assert SparseProblem.from_config(alg1.model, _samples()).normalized
+    assert SparseProblem.from_config(alg1.model, 2).normalized
     assert "objective" not in alg1.model
     assert "moment_beta" not in alg1.model
 
@@ -131,7 +126,7 @@ def test_config_builds_trainer_and_model() -> None:
         cfg = compose(config_name="config", overrides=["model.gamma=0.5", "env.verbose=false"])
 
     pdap = PDAP(cfg.training, insertion=cfg.model.insertion)
-    problem = SparseProblem.from_config(cfg.model, _samples())
+    problem = SparseProblem.from_config(cfg.model, 2)
     assert problem.description()["alpha"] == cfg.model.alpha == 1e-5
     assert problem.description()["gamma"] == 0.5
     assert pdap.insertion_kind == "profile"
@@ -174,5 +169,5 @@ def test_use_sphere_derives_from_activation() -> None:
         smooth = compose(config_name="config",
                          overrides=["model.activation=matern52", "env.verbose=false"])
     # default activation is relu (homogeneous -> sphere); matern52 is not
-    assert SparseProblem.from_config(default.model, _samples()).use_sphere is True
-    assert SparseProblem.from_config(smooth.model, _samples()).use_sphere is False
+    assert SparseProblem.from_config(default.model, 2).use_sphere is True
+    assert SparseProblem.from_config(smooth.model, 2).use_sphere is False

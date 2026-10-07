@@ -38,7 +38,7 @@ import pytest
 import torch
 
 from src.config.schema import EnvConfig, ExperimentConfig, ModelConfig, TrainingConfig
-from src.data import split_value_samples
+from src.data import make_dataloaders
 from src.models import build_model
 from src.PDAP import PDAP
 from src.problems import SparseProblem
@@ -84,8 +84,11 @@ def _run_summary(name: str) -> np.ndarray:
     cfg = _cfg(name)
     data = _make_data()
     model = build_model(cfg, input_dim=data["x"].shape[1])
-    train, valid = split_value_samples(data, cfg.data.train_fraction)
-    out = PDAP(cfg.training, insertion=cfg.model.insertion).fit(model, SparseProblem.from_config(cfg.model, train, valid), num_iterations=3, num_insertion=20, verbose=False)
+    train_loader, valid_loader = make_dataloaders(data, cfg.data.train_fraction)
+    out = PDAP(cfg.training, insertion=cfg.model.insertion).fit(
+        model, SparseProblem.from_config(cfg.model, data["x"].shape[1]),
+        train_loader, valid_loader, num_iterations=3, num_insertion=20, verbose=False,
+    )
     return np.array(
         [
             float(out.final_neurons),
