@@ -1,5 +1,5 @@
 """Mathematical problems shared by PDAP and SSN."""
 
-from .sparse_problem import PreparedObjective, SparseProblem
+from .sparse_problem import SparseProblem
 
-__all__ = ["PreparedObjective", "SparseProblem"]
+__all__ = ["SparseProblem"]

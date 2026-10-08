@@ -154,7 +154,8 @@ class PDAP:
         if self.insert_mode == "sequential":
             max_insert = 1
         X, V, dV = full_batch(train_loader)
-        Vp, dVp = problem.forward_with_gradient(X)
+        with torch.no_grad():
+            Vp, dVp = problem(X)
         residual = X.detach(), (Vp - V).detach(), (dVp - dV).detach()
         existing = (problem.inner_weight.detach(), problem.inner_bias.detach()) if problem.n_neurons else None
 
@@ -185,17 +186,15 @@ class PDAP:
 
     def _correct(self, problem, train_loader, verbose: bool) -> None:
         """Prepare a correction, run SSN, and apply its accepted coefficients."""
-        prepared = problem.prepare_coefficients(train_loader)
-        theta = torch.nn.Parameter(
-            problem.coefficient_coordinates(problem.c.detach(), prepared)
-        )
+        obj, hess_obj, normalization_weight = problem.prepare_coefficients(train_loader)
+        theta = torch.nn.Parameter(problem.c.detach() * normalization_weight)
         optimizer = SSN(
-            [theta], problem, prepared, max_iter=self.fit_outer_iterations,
+            [theta], problem, obj, hess_obj, max_iter=self.fit_outer_iterations,
             correction_guard=self.correction_guard, verbose=verbose, **self.solver,
         )
         optimizer.step()
         with torch.no_grad():
-            problem.c.copy_(problem.model_coefficients(theta.detach(), prepared))
+            problem.c.copy_(theta.detach() / normalization_weight)
 
     def _prune(self, problem, amp_tol: float) -> int:
         """Drop atoms with ``|c_n| <= amp_tol``; return how many were removed."""

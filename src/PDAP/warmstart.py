@@ -24,10 +24,10 @@ def warm_start(W_new: torch.Tensor, b_new: torch.Tensor, residual,
     n_new = W_new.shape[0]
     if n_new == 0:
         return torch.zeros(0, dtype=torch.float64)
-    S_val, S_grad = problem.jac_forward_with_gradient(residual[0], W_new, b_new, warm_start=True)
+    S_val, S_grad = problem.jac_forward(residual[0], W_new, b_new, warm_start=True)
     scale = problem.normalization_weight(W_new, b_new)
     S_val, S_grad = S_val / scale, S_grad / scale
-    profiles, _ = problem.directional_obj(S_val, S_grad, residual)
+    profiles = problem.jac_obj(S_val, S_grad, residual)
     abs_profiles = profiles.abs()
     best = int(abs_profiles.argmax().item())
     eps_sqrt = float(torch.finfo(torch.float64).eps) ** 0.5
@@ -35,9 +35,9 @@ def warm_start(W_new: torch.Tensor, b_new: torch.Tensor, residual,
     base = eps_sqrt * profiles / safe
     base[best] = profiles[best] / safe[best]
     direction = -base
-    slope, curvature = (
-        float(value) for value in problem.directional_obj(S_val @ direction, S_grad @ direction, residual)
-    )
+    direction_features = (S_val @ direction).reshape(-1, 1), (S_grad @ direction).reshape(-1, 1)
+    slope = float(problem.jac_obj(*direction_features, residual)[0])
+    curvature = float(problem.hess_obj(*direction_features)[0, 0])
     tau = 0.0
     if -slope >= problem.alpha and curvature > 1e-30:
         tau = problem.penalty_prox(-slope / curvature, curvature)

@@ -660,7 +660,8 @@ def plot_model_value_surface(
     # normalized grid points and rescale the prediction back to physical units.
     scale = np.ones(d) if x_scale is None else np.asarray(x_scale, dtype=np.float64).reshape(d)
     with torch.no_grad():
-        V = net(torch.tensor(grid_points / scale, dtype=torch.float64)).numpy().reshape(grid_n, grid_n)
+        value, _ = net(torch.tensor(grid_points / scale, dtype=torch.float64))
+        V = value.numpy().reshape(grid_n, grid_n)
     V = V * float(v_scale)
 
     return plot_value_surface(

@@ -15,26 +15,41 @@ coefficients `c`. These registration details implement the agreement; they are
 not additional user requirements. Direct registration avoids randomly
 initialized layers that would immediately be overwritten with exact atoms.
 
+The single `forward(x)` returns the network value and its gradient with respect
+to x; callers use `problem(x)` and unpack the pair. `jac_forward` returns the
+Jacobians of both outputs with respect to outer coefficients. Ordinary gradient
+mode preserves differentiation through both outputs; reporting requests
+`no_grad`. Loss weights belong to the objective, not the prediction outputs.
+This replaces the separate value-only and value-and-gradient prediction methods.
+
 Data stays outside the module, supplied through standard Dataset/DataLoader
 delivery. Data utilities own reading, validation, physical normalization,
 splitting and assembly; the problem owns mathematical evaluations of delivered
 samples. The agreed preparation lifetime is one correction, outside persistent
-problem state. The current implementation uses a three-field `PreparedObjective`
-record (`obj`, `hess_obj`, `normalization_weight`); these exact fields are an
-implementation choice. The record implements no separate mathematics and
-contains no backup of the network. Its feature matrices, targets and fitting
-Hessian are reused while SSN changes outer coefficients. The normalization
-weight is a tensor, with ones for sphere atoms. Its values depend on the
-neurons even when the configured moment order stays fixed.
+problem state. The user rejected the `PreparedObjective` carrier class: useful
+reuse does not require a named type. Preparation returns an objective callable,
+fitting Hessian and normalization tensor as ordinary values. PDAP keeps the
+normalization tensor local for coefficient conversion; SSN receives the callable
+and Hessian. Features, targets and fitting Hessian are reused while SSN changes
+outer coefficients. These calculations provide no network backup. The
+normalization tensor contains ones for sphere atoms; otherwise its values depend
+on the neurons even when the configured moment order stays fixed.
 `SparseProblem.obj(prediction, target)` is the canonical scalar H1 fitting
 objective. Prepared coefficient fitting calls it using the fixed features and
 targets. This closure can reference the same problem during its correction;
 avoiding a second network does not require forbidding that reference.
+`jac_obj` and `hess_obj` provide the coefficient gradient and full Hessian of
+that objective, including cross terms. PDAP uses those derivatives for individual
+neuron or combined-direction slopes and curvatures. The former `profile` and
+`directional_obj` methods and `_fidelity_pairing` helper are removed, without a
+renamed helper. The short objective, gradient and Hessian contractions represent
+distinct mathematical operations. The existing warm-start sphere derivative
+convention remains a separately documented historical numerical choice.
 
 PDAP owns candidate search/ranking, insertion acceptance, the warm-start
 procedure and initial-coefficient selection, support insertion/pruning,
 correction scheduling and outer stopping. SparseProblem evaluates supplied candidates/directions:
-features, signed profiles, slope/curvature, and penalty/proximal operations.
+features, objective derivatives, and penalty/proximal operations.
 PDAP owns its insertion-increment calculation and certificate radius, including
 the theorem formula and numerical cap/fallback. Mathematical evaluation does not transfer search, initialization,
 or acceptance decisions to the problem. The mixed insertion/warm-start methods

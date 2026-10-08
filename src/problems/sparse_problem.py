@@ -2,7 +2,6 @@
 
 import math
 from collections.abc import Callable
-from dataclasses import dataclass
 
 import torch
 from torch import Tensor, nn
@@ -21,18 +20,6 @@ from .penalty import (
     phi_prox,
 )
 from .prox import _power_prox, _power_prox_derivative
-
-
-@dataclass(frozen=True)
-class PreparedObjective:
-    """Fixed-feature objective, Hessian and normalization for one correction.
-
-    These are reusable calculations, not a network backup; SSN owns rollback.
-    """
-
-    obj: Callable[[Tensor], Tensor]
-    hess_obj: Tensor
-    normalization_weight: Tensor
 
 
 class SparseProblem(nn.Module):
@@ -173,20 +160,22 @@ class SparseProblem(nn.Module):
             raise ValueError("inner_bias and c must contain one entry per atom")
         self.inner_weight, self.inner_bias, self.c = inner_weight, inner_bias, nn.Parameter(c)
 
-    def forward(self, x: Tensor) -> Tensor:
-        """Evaluate the network; ordinary autograd remains available to callers."""
-        features = self._activation(F.linear(x, self.inner_weight, self.inner_bias)) ** self._power
-        return F.linear(features, self.c.unsqueeze(0))
+    def forward(self, x: Tensor) -> tuple[Tensor, Tensor]:
+        """Return value (N,1) and input gradient (N,d), including empty support.
 
-    def forward_with_gradient(self, x: Tensor) -> tuple[Tensor, Tensor]:
-        """Return detached value (N,1) and input gradient (N,d), including empty support."""
-        x = x.detach().clone().requires_grad_(True)
+        Both outputs retain autograd in ordinary gradient mode, including the
+        caller's input graph. Under no_grad the input derivative is still
+        evaluated, but neither output retains its graph.
+        """
+        differentiable = torch.is_grad_enabled()
+        x = x if x.requires_grad else x.detach().requires_grad_(True)
         with torch.enable_grad():
-            V = self(x)
-            dV = torch.autograd.grad(V.sum(), x, create_graph=False)[0]
-        return V.detach(), dV.detach()
+            features = self._activation(F.linear(x, self.inner_weight, self.inner_bias)) ** self._power
+            V = F.linear(features, self.c.unsqueeze(0))
+            dV = torch.autograd.grad(V.sum(), x, create_graph=differentiable)[0]
+        return (V, dV) if differentiable else (V.detach(), dV.detach())
 
-    def jac_forward_with_gradient(
+    def jac_forward(
         self, x: Tensor,
         inner_weight: Tensor | None = None, inner_bias: Tensor | None = None,
         *, warm_start: bool = False,
@@ -239,52 +228,61 @@ class SparseProblem(nn.Module):
         """Weighted empirical H1 quadratic, excluding the sparsity penalty.
 
         The value channel has one entry per sample. Both channels remain
-        differentiable; the gradient channel is flattened for the H1 pairing.
+        differentiable; the gradient channel is flattened sample-major.
         """
-        rv, rg = ((value - reference).reshape(-1, 1) for value, reference in zip(prediction, target))
-        return 0.5 * self._fidelity_pairing(rv, rg, rv, rg).squeeze(0)
+        rv, rg = ((value - reference).reshape(-1) for value, reference in zip(prediction, target))
+        n = rv.numel()
+        w1, w2 = self._loss_weights
+        return 0.5 * ((w1 / n) * rv.dot(rv) + (w2 / n) * rg.dot(rg))
 
-    def prepare_coefficients(self, loader) -> PreparedObjective:
-        """Fix features/targets for one correction, evaluated by the canonical obj.
+    def jac_obj(self, Kv: Tensor, Kg: Tensor, residual) -> Tensor:
+        """Coefficient gradient of obj from value/input-gradient Jacobians.
+
+        Kv is (N,n), Kg is (N*d,n); residual contains (X, value error,
+        input-gradient error). Residuals are fixed during candidate search;
+        supplied Jacobians retain their gradients with respect to the neurons.
+        """
+        rv, rg = (r.detach().reshape(-1, 1) for r in residual[1:])
+        n = Kv.shape[0]
+        w1, w2 = self._loss_weights
+        return w1 * ((Kv * rv).sum(0) / n) + w2 * ((Kg * rg).sum(0) / n)
+
+    def hess_obj(self, Kv: Tensor, Kg: Tensor) -> Tensor:
+        """Full coefficient Hessian of obj, including cross terms between neurons."""
+        n = Kv.shape[0]
+        w1, w2 = self._loss_weights
+        return (w1 / n) * (Kv.T @ Kv) + (w2 / n) * (Kg.T @ Kg)
+
+    def prepare_coefficients(self, loader) -> tuple[Callable[[Tensor], Tensor], Tensor, Tensor]:
+        """Return a fixed-feature objective, Hessian and normalization weights.
 
         The closure references this problem's objective; it does not copy the
         network or retain later changes to the sampled targets or neuron support.
         """
         self.validate_training()
         X, V, dV = full_batch(loader)
-        Phi_v, Phi_g = self.jac_forward_with_gradient(X)
+        Phi_v, Phi_g = self.jac_forward(X)
         normalization_weight = self.normalization_weight(self.inner_weight, self.inner_bias)
         Phi_v = Phi_v / normalization_weight
         Phi_g = Phi_g / normalization_weight
         V, dV = (target.detach().reshape(-1).clone() for target in (V, dV))
-        n = X.shape[0]
-        w1, w2 = self._loss_weights
 
         def obj(u):
             return self.obj((Phi_v @ u, Phi_g @ u), (V, dV))
 
-        hess_obj = (w1 / n) * (Phi_v.T @ Phi_v) + (w2 / n) * (Phi_g.T @ Phi_g)
-        return PreparedObjective(obj, hess_obj, normalization_weight)
+        return obj, self.hess_obj(Phi_v, Phi_g), normalization_weight
 
-    def coefficient_coordinates(self, coefficients: Tensor, prepared: PreparedObjective) -> Tensor:
-        """Physical coefficients to the coordinates used by the proximal map."""
-        return coefficients * prepared.normalization_weight
-
-    def model_coefficients(self, u: Tensor, prepared: PreparedObjective) -> Tensor:
-        """Return physical model coefficients from a solved proximal iterate."""
-        return u / prepared.normalization_weight
-
-    def obj_augmented(self, u: Tensor, prepared: PreparedObjective) -> Tensor:
+    def obj_augmented(self, u: Tensor, obj: Callable[[Tensor], Tensor]) -> Tensor:
         """Objective plus the nonconvex correction in the proximal splitting."""
         if self.penalty_exponent != 1.0:
-            return prepared.obj(u)
+            return obj(u)
         penalized, nonneg = self._masks(u)
         magnitudes = torch.where(nonneg[penalized], u[penalized].clamp_min(0), u[penalized].abs())
-        return prepared.obj(u) + self._alpha * (_phi(magnitudes, self._gamma) - magnitudes).sum()
+        return obj(u) + self._alpha * (_phi(magnitudes, self._gamma) - magnitudes).sum()
 
-    def loss(self, u: Tensor, prepared: PreparedObjective) -> Tensor:
+    def loss(self, u: Tensor, obj: Callable[[Tensor], Tensor]) -> Tensor:
         """Evaluate the complete objective at u, without modifying u."""
-        return prepared.obj(u) + self._alpha * self.sparsity_functional(u)
+        return obj(u) + self._alpha * self.sparsity_functional(u)
 
     def sparsity_functional(self, u: Tensor) -> Tensor:
         """Unweighted log/power functional on the supplied penalty coordinates."""
@@ -308,10 +306,10 @@ class SparseProblem(nn.Module):
         """Evaluate G(q), using u = P(q) and the smooth gradient at u."""
         return inverse_step * (q - u) + jac_obj_augmented
 
-    def jac_normal(self, u: Tensor, jac_prox: Tensor, inverse_step: float, prepared: PreparedObjective) -> Tensor:
+    def jac_normal(self, u: Tensor, jac_prox: Tensor, inverse_step: float, hess_obj: Tensor) -> Tensor:
         """Selected G'(q), using u = P(q) and jac_prox = P'(q)."""
         I = torch.eye(u.numel(), device=u.device, dtype=u.dtype)
-        return inverse_step * (I - jac_prox) + self.hess_obj_augmented(u, prepared) @ jac_prox
+        return inverse_step * (I - jac_prox) + self.hess_obj_augmented(u, hess_obj) @ jac_prox
 
     def jac_obj_augmented(self, u: Tensor, jac_loss: Tensor) -> Tensor:
         """Derivative of obj_augmented from the supplied derivative of loss(u).
@@ -331,12 +329,12 @@ class SparseProblem(nn.Module):
         )
         return jac_obj + alpha_vec * correction
 
-    def hess_obj_augmented(self, u: Tensor, prepared: PreparedObjective) -> Tensor:
+    def hess_obj_augmented(self, u: Tensor, hess_obj: Tensor) -> Tensor:
         """Hessian of obj plus the diagonal Hessian of the nonconvex correction."""
         correction = _noncvx_correction_dd(
             torch.abs(u), self._gamma, penalty_exponent=self.penalty_exponent
         )
-        return torch.diag(self._alpha_vec(u) * correction) + prepared.hess_obj
+        return torch.diag(self._alpha_vec(u) * correction) + hess_obj
 
     def prox(self, q: Tensor, inverse_step: float) -> Tensor:
         """Evaluate the selected proximal map, including nonnegative coordinates."""
@@ -409,54 +407,6 @@ class SparseProblem(nn.Module):
         exponent = self.penalty_exponent
         bound = rho * minimum ** (2.0 - exponent) / (2.0 * (1.0 - exponent))
         return min(self._alpha / (1.0 + self._alpha * self._gamma), bound)
-
-    def profile(self, inner_weight: Tensor, inner_bias: Tensor, residual) -> Tensor:
-        """Signed first derivative of obj in a supplied candidate-neuron direction."""
-        Kv, Kg = self.jac_forward_with_gradient(
-            residual[0], inner_weight.reshape(1, -1), inner_bias.reshape(1),
-        )
-        res_v, res_dv = (r.detach().reshape(-1, 1) for r in residual[1:])
-        return self._fidelity_pairing(Kv, Kg, res_v, res_dv, reduction="sum").squeeze(0)
-
-    def directional_obj(self, Kv: Tensor, Kg: Tensor, residual) -> tuple[Tensor, Tensor]:
-        """First and second derivatives of obj along supplied neuron directions.
-
-        A matrix has one column per neuron; a vector represents one direction.
-        Residuals are fixed during insertion search. Candidate differentiation
-        passes through the supplied features; callers choose when to detach.
-        """
-        vector = Kv.ndim == 1
-        Kv, Kg = Kv.reshape(residual[0].shape[0], -1), Kg.reshape(residual[2].numel(), -1)
-        res_v, res_dv = (r.detach().reshape(-1, 1) for r in residual[1:])
-        slope = self._fidelity_pairing(Kv, Kg, res_v, res_dv)
-        curvature = self._fidelity_pairing(Kv, Kg, Kv, Kg)
-        return (slope.squeeze(0), curvature.squeeze(0)) if vector else (slope, curvature)
-
-    def _fidelity_pairing(
-        self, Kv: Tensor, Kg: Tensor, V: Tensor, dV: Tensor, *, reduction: str = "dot",
-    ) -> Tensor:
-        """Weighted H1 pairing shared by obj and its directional derivatives.
-
-        Search used product-sum then division; insertion used dot products with
-        pre-scaled weights. Reassociating either changes L-BFGS/PDAP trajectories.
-        obj uses half the dot pairing of its residual with itself.
-        """
-        n = Kv.shape[0]
-        parts = []
-        for left, right in ((Kv, V), (Kg, dV)):
-            if reduction == "sum":
-                part = (left * right).sum(0) / n
-            elif left.shape[1] == 1:
-                part = left[:, 0].dot(right[:, 0]).reshape(1)
-            elif right.shape[1] == 1:
-                part = left.T @ right[:, 0]
-            else:
-                part = torch.stack([a.dot(b) for a, b in zip(left.T, right.T)]) if left.shape[1] else left.new_zeros(0)
-            parts.append(part)
-        w1, w2 = self._loss_weights
-        if reduction == "dot":
-            w1, w2 = w1 / n, w2 / n
-        return w1 * parts[0] + w2 * parts[1]
 
     def penalty_prox(self, value: float, inverse_step: float) -> float:
         """Selected nonnegative proximal value for the full scalar penalty.

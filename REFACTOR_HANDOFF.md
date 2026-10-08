@@ -6,7 +6,139 @@ Full-review baseline: `49eeb0349a0a8ee489c075400d23cb1cb31e1208`.
 
 ## Current status and working rules
 
-**Method cleanup implemented and independently reviewed, baseline `de75737`.** The user's latest response
+**Implementation complete and independently reviewed, baseline `69a8fa9`.**
+After the forward/autograd clarification the user said "understood, go". This
+change implements removal
+of `PreparedObjective`, one value-and-input-gradient `forward`, `jac_forward`,
+`jac_obj` and `hess_obj`, and removal of the separate pairing helper. Earlier
+passing reviews did not establish acceptance of the disputed interfaces; the
+current authorization follows the user's explicit interface discussion.
+
+The previous justification conflated useful fixed-calculation reuse with a
+need for a class. The removed `PreparedObjective` was a three-field data carrier,
+created in PDAP's correction after insertion acceptance; it neither rejected
+proposed neurons nor backed up their inner parameters. SSN alone keeps its
+starting outer coefficients for rollback. Preparation now returns ordinary
+objective/Hessian/normalization values. PDAP keeps normalization local and gives
+SSN the callable and Hessian. The coefficient multiplication/division is inline
+in PDAP; the two thin conversion methods are removed. No replacement class or
+persistent model cache is added.
+
+The user's forward interface is coherent and accepted after caller review.
+Keep one PyTorch `forward` entry point returning the unweighted network
+value and its input gradient; replace both the old value-only behavior and the
+separate `forward_with_gradient` method. Callers use `problem(x)` so module hooks
+remain active. Rename `jac_forward_with_gradient` to `jac_forward`: it returns
+the derivatives of both forward outputs with respect to the outer coefficients,
+including features for supplied candidate inner parameters. This remains a
+different operation from the scalar objective derivatives.
+
+Nearly all runtime consumers already use both outputs. The value-surface caller
+in `src/plots.py` uses only the value and can unpack the first result. Its needs
+do not justify retaining a second prediction method or adding a mode flag.
+Loss weights belong in `obj`; a zero gradient-loss weight suppresses that loss
+contribution, not the model's gradient output.
+
+| Agreed mathematical interface | Meaning |
+| --- | --- |
+| `forward(x)` | Network value and gradient with respect to x, shapes (N,1) and (N,d). |
+| `jac_forward(...)` | Jacobians of both outputs with respect to outer coefficients, with existing feature layouts. |
+| `obj(prediction, target)` | Weighted empirical H1 quadratic fitting loss; ordinary evaluation uses `obj(problem(x), target)`. |
+| `jac_obj(...)` | Gradient of that scalar loss in the supplied fixed-neuron coefficient coordinates. |
+| `hess_obj(...)` | Full Hessian in those same coordinates, reused by coefficient correction. |
+
+`jac_obj` and `hess_obj` together supply insertion/warm-start slope and curvature.
+For one neuron these are the corresponding gradient and diagonal-Hessian
+entries; for a combined direction use the gradient dot direction and the
+Hessian quadratic form, including cross terms. This replaces the separate
+`profile` / `directional_obj` interface rather than adding more wrappers.
+
+The user rejects retaining `_fidelity_pairing`; withdraw the proposed
+`_h1_inner_product` replacement. The quadratic loss, its gradient and its Hessian
+are distinct short operations, and writing their explicit contractions in
+those methods is not the same as duplicating an objective implementation.
+Do not move the helper to another file or recreate it under a different name.
+
+Implementation constraints: the former value-and-gradient helper detached its
+inputs/outputs and used `create_graph=False`. It could not merely be renamed into
+the training `forward`: ordinary gradient mode must preserve differentiation
+through both channels, including the outer coefficients and an already
+differentiable input. Reporting should use `no_grad`, while forward still
+computes the input gradient. Preserve empty support, supported callable
+activations and numerical derivative conventions. Consolidating objective
+derivatives must check existing sum/dot reduction differences; do not silently
+regenerate reference trajectories to hide changes. These requirements do not
+justify retaining the disputed class, names or helper.
+
+Retain the existing `jac_forward(..., warm_start=True)` historical sphere
+derivative convention in this change. The prohibition on mode flags concerns
+new prediction-output or profile/pairing compatibility flags; it does not
+authorize silently changing the existing warm-start mathematics.
+
+Assignments: `objective_design` owns `src/problems/sparse_problem.py`, its
+exports, and `test_sparse_problem.py` / `test_model_contract.py`.
+`state_cleanup` owns PDAP/SSN consumers, reporting/prediction/plotting callers,
+and all other affected tests. Root owns documentation and orchestration only.
+Use independent Standards and Spec reviewers after implementation. Check normal
+and no-grad prediction, gradient-only fitting backpropagation, coefficient
+Jacobians/full Hessians including cross terms, candidate-search derivatives,
+correction rollback, saved predictions and existing trajectory references.
+Do not alter reference fixtures or tolerances to conceal a numerical change.
+Run the full suite after source freeze; report the existing stale local
+controller-selection artifact failure separately. Commit reviewed changes on
+the current branch, without pushing.
+
+Verification: **437 passed, one preexisting stale controller-selection artifact
+failure, 18 warnings** in 28.98 seconds. The first full run caught a missed
+configuration test that still expected a value tensor; its existing assertion
+now unpacks the forward pair, and the corrected full run has no new failure.
+The ignored experiment artifact and its test are unchanged. Full log:
+`/tmp/sparse-explicit-interfaces-reviewed-pytest.log`. Focused core checks: 37
+passed; consumer checks: 141 passed. All six unchanged PDAP/SSN reference tests
+pass on the final source (`/tmp/sparse-explicit-interfaces-final-goldens.log`).
+
+A single matrix-product `jac_obj`
+changed the signed-profile reference error by about 7% and the finite-step
+reference from 51 to 54 neurons. A probe using the original search product-sum
+order consistently for every caller passes both unchanged PDAP references:
+signed-profile is exact and finite-step returns 51 neurons with scalar differences
+around 3e-9 or smaller. The full Gram Hessian is unchanged. This concise formula
+is applied and verified on the actual source. No fixtures/tolerances,
+shape/gradient-mode dispatch or compatibility flags were added. The lesson is
+to preserve a consistent sensitive reduction order, not preserve the old helper
+or duplicate formula families merely because an initial alternative drifted.
+
+Independent Standards review found no material source/test finding and verified
+all 24 Python files against the frozen manifest. Its documentation note about
+describing the removed interfaces in the present tense is corrected in the
+research note. Independent Spec review also found no material findings: it
+checked the plain preparation values, local normalization, differentiable
+forward outputs, full Hessian cross terms, unchanged ownership and rollback,
+and absence of replacement helpers or compatibility dispatch. Both reviews
+verified unchanged reference fixtures and numerical tolerances.
+
+Ruff passes all 24 changed Python files; core/config/state/evaluation Pyright
+reports zero errors. Expanded reporting-file Pyright still reports 26 errors;
+comparison against archived baseline `69a8fa9` confirms an exact match by file,
+severity, message, rule and multiplicity (ignoring shifted line numbers).
+Evidence: `/tmp/sparse-explicit-interfaces-reporting-pyright-comparison.log`.
+Whitespace checks pass and all three numerical fixture hashes are unchanged.
+
+Production Python is **46 lines shorter**. SparseProblem decreases from **501
+to 451 lines**, with ordinary methods reduced from **32 to 28** and its nine
+read-only properties unchanged. The prepared data carrier is deleted; no class
+is added. Tests grow by 57 lines for the interface migration and meaningful
+autograd/Hessian coverage. These counts describe this change, not completion of
+the entire refactor.
+
+Design findings and primary sources:
+[objective_derivative_interface_research.md](vault/objective_derivative_interface_research.md).
+`h1_naming_research` researched the sources; `inline_review_spec` independently
+audited call paths and the alternative representation. Root documents and
+coordinates. Do not treat later implementation choices as additional user
+approvals.
+
+**Method cleanup implemented and independently reviewed, baseline `de75737`.** The user's earlier response
 directs the exact fractional-scale rename, removal of the active-magnitude
 method, restoration of `obj`, separation of reporting, and PDAP ownership of
 insertion change/radius. Root first reported which criticisms are valid and

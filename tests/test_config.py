@@ -137,7 +137,8 @@ def test_config_builds_trainer_and_model() -> None:
     assert isinstance(problem, torch.nn.Module)
     problem.set_atoms(torch.tensor([[1., 0.]]), torch.tensor([0.]), torch.tensor([2.]))
     x = torch.tensor([[-1., 3.], [2., 3.]], dtype=torch.float64)
-    torch.testing.assert_close(problem(x), x.new_tensor([[0.], [4.]]))
+    value, _ = problem(x)
+    torch.testing.assert_close(value, x.new_tensor([[0.], [4.]]))
     assert problem.input_dim == 2
 
 

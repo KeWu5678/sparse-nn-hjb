@@ -6,7 +6,7 @@ from torch.utils.data import DataLoader, Dataset
 
 from src.config.schema import ExperimentConfig
 from src.PDAP import PDAP
-from src.problems import PreparedObjective, SparseProblem
+from src.problems import SparseProblem
 from src.SSN import SSN
 
 
@@ -42,25 +42,56 @@ def test_problem_predicts_values_and_input_gradients():
     problem = SparseProblem(2)
     problem.set_atoms(*_atoms())
 
-    value, gradient = problem.forward_with_gradient(x)
+    value, gradient = problem(x)
 
     assert value.shape == (6, 1)
     assert gradient.shape == (6, 2)
+    assert not x.requires_grad
+
+
+def test_gradient_only_loss_backpropagates_to_coefficients_and_input_graph():
+    problem = SparseProblem(2, power=2., loss_weights=(0., 1.))
+    problem.set_atoms(torch.tensor([[2., -1.]]), torch.tensor([.5]), torch.tensor([3.]))
+    base = torch.tensor([[.5, .5]], dtype=torch.float64, requires_grad=True)
+    x = 2 * base
+
+    value, gradient = problem(x)
+    loss = problem.obj((value, gradient), (torch.zeros_like(value), torch.zeros_like(gradient)))
+    dc, dx = torch.autograd.grad(loss, (problem.c, base))
+
+    torch.testing.assert_close(value, x.new_tensor([[6.75]]))
+    torch.testing.assert_close(gradient, x.new_tensor([[18., -9.]]))
+    torch.testing.assert_close(loss, x.new_tensor(202.5))
+    torch.testing.assert_close(dc, x.new_tensor([135.]))
+    torch.testing.assert_close(dx, x.new_tensor([[1080., -540.]]))
+
+    with torch.no_grad():
+        reported_value, reported_gradient = problem(x)
+    torch.testing.assert_close(reported_value, value)
+    torch.testing.assert_close(reported_gradient, gradient)
+    assert not reported_value.requires_grad and not reported_gradient.requires_grad
 
 
 def test_empty_support_predicts_and_prepares_zero_features():
     problem = SparseProblem(2)
     x = torch.ones(3, 2, dtype=torch.float64, requires_grad=True)
 
-    value, gradient = problem.forward_with_gradient(x)
+    value, gradient = problem(x)
     assert problem.n_neurons == 0
     assert problem.inner_weight.shape == (0, 2)
     assert problem.inner_bias.shape == problem.c.shape == (0,)
     assert value.shape == (3, 1)
     assert gradient.shape == x.shape
     assert not value.any() and not gradient.any()
-    torch.testing.assert_close(torch.autograd.grad(problem(x).sum(), x)[0], gradient)
-    Phi_v, Phi_g = problem.jac_forward_with_gradient(x)
+    dc, dx = torch.autograd.grad(gradient.square().sum(), (problem.c, x))
+    assert dc.shape == (0,)
+    torch.testing.assert_close(dx, gradient)
+    with torch.no_grad():
+        empty_value, empty_gradient = problem(x)
+    torch.testing.assert_close(empty_value, value)
+    torch.testing.assert_close(empty_gradient, gradient)
+    assert not empty_value.requires_grad and not empty_gradient.requires_grad
+    Phi_v, Phi_g = problem.jac_forward(x)
     assert Phi_v.shape == (3, 0)
     assert Phi_g.shape == (6, 0)
 
@@ -73,14 +104,12 @@ def test_module_conversion_and_forward_gradients_follow_exact_atoms():
     assert problem.c.dtype == problem.inner_weight.dtype == problem.inner_bias.dtype == torch.float32
     x = torch.tensor([[1., 1.], [-1., 1.]], requires_grad=True)
 
-    value = problem(x)
+    value, gradient = problem(x)
     torch.testing.assert_close(value, x.new_tensor([[4.5], [0.]]))
     dc, dx = torch.autograd.grad(value.sum(), (problem.c, x))
     torch.testing.assert_close(dc, x.new_tensor([1.5]))
     torch.testing.assert_close(dx, x.new_tensor([[6., -3.], [0., 0.]]))
-    predicted_value, predicted_gradient = problem.forward_with_gradient(x)
-    torch.testing.assert_close(predicted_value, value)
-    torch.testing.assert_close(predicted_gradient, dx)
+    torch.testing.assert_close(gradient, dx)
 
 
 def test_setting_and_pruning_atoms_preserves_float64_coefficients():
@@ -107,7 +136,7 @@ def test_historical_prediction_power_is_rejected_before_training_changes_state(e
     problem = SparseProblem(2, activation=torch.relu, power=4.)
     problem.set_atoms(torch.tensor([[1., 0.]]), torch.tensor([0.]), torch.tensor([2.]))
     x = torch.tensor([[2., 3.]], dtype=torch.float64)
-    value, gradient = problem.forward_with_gradient(x)
+    value, gradient = problem(x)
     torch.testing.assert_close(value, x.new_tensor([[32.]]))
     torch.testing.assert_close(gradient, x.new_tensor([[64., 0.]]))
     before = {name: tensor.clone() for name, tensor in problem.state_dict().items()}
@@ -120,10 +149,9 @@ def test_historical_prediction_power_is_rejected_before_training_changes_state(e
         elif entry_point == "preparation":
             problem.prepare_coefficients(loader)
         else:
-            prepared = PreparedObjective(
-                lambda u: .5 * u.square().sum(), torch.eye(1, dtype=problem.c.dtype),
-                torch.ones_like(problem.c),
+            SSN(
+                [problem.c], problem, lambda u: .5 * u.square().sum(),
+                torch.eye(1, dtype=problem.c.dtype),
             )
-            SSN([problem.c], problem, prepared)
     for name, tensor in problem.state_dict().items():
         torch.testing.assert_close(tensor, before[name], rtol=0, atol=0)

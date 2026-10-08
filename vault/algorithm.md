@@ -139,11 +139,13 @@ warm-start selection; SparseProblem supplies their mathematical evaluations.
 
 - `problems/` — network representation and problem mathematics:
   - `sparse_problem.py` — `SparseProblem(nn.Module)` registers `inner_weight` and
-    `inner_bias` as buffers and `c` as its parameter. It supplies predictions, input derivatives,
-    objective/proximal/normal-map calculations, supplied-candidate profile and
-    directional evaluations, and a temporary `PreparedObjective` for each
-    coefficient correction. There is no separate
-    model hierarchy or persistent feature cache.
+    `inner_bias` as buffers and `c` as its parameter. `forward` returns network
+    values and input gradients; `jac_forward` supplies their coefficient
+    Jacobians. `obj`, `jac_obj`, and `hess_obj` supply fitting and its coefficient
+    derivatives, alongside penalty/proximal/normal-map calculations. Preparation
+    returns an objective callable, Hessian and normalization tensor for one
+    coefficient correction. There is no separate model or objective-carrier
+    class, or persistent feature cache.
   - `penalty.py`, `prox.py`, `moment.py` — mathematical helpers.
 - `PDAP/` — candidate search/acceptance, warm-start, support changes, and correction scheduling:
   - `pdap.py` — `PDAP.fit(problem, train_loader, valid_loader, ...)`, configured

@@ -34,12 +34,12 @@ def test_prox_scale_for_fractional_penalty_preserves_a_smaller_existing_scale() 
 
 def test_fractional_ssn_chooses_the_scale_from_its_starting_coefficients() -> None:
     coefficient = torch.nn.Parameter(torch.tensor([0.5], dtype=torch.float64))
-    problem, prepared = synthetic_problem(
+    problem, obj, hess_obj = synthetic_problem(
         lambda u: 0.5 * u.square().sum(), torch.eye(1, dtype=torch.float64),
         alpha=1.0, gamma=0.0, power=3.0,
     )
 
-    optimizer = SSN([coefficient], problem, prepared)
+    optimizer = SSN([coefficient], problem, obj, hess_obj)
     assert optimizer.param_groups[0]["inverse_step"] == pytest.approx(4 * 2 ** .5)
 
 
@@ -63,12 +63,12 @@ def test_fractional_correction_reports_an_all_zero_warm_start() -> None:
         torch.zeros_like(X),
     )
 
-    prepared = problem.prepare_coefficients(make_dataloader(data))
+    obj, hess_obj, _ = problem.prepare_coefficients(make_dataloader(data))
     theta = torch.nn.Parameter(problem.c.detach().clone())
     with pytest.raises(
         ValueError, match="warm-start proximal scaling requires a nonzero coefficient"
     ):
-        SSN([theta], problem, prepared, max_iter=1)
+        SSN([theta], problem, obj, hess_obj, max_iter=1)
 
 
 def test_fractional_ssn_preserves_a_prox_consistent_warm_start() -> None:
@@ -86,16 +86,16 @@ def test_fractional_ssn_preserves_a_prox_consistent_warm_start() -> None:
             + 0.5 * curvature * value.square()
         )
 
-    problem, prepared = synthetic_problem(
+    problem, obj, hess_obj = synthetic_problem(
         data_loss, torch.tensor([[curvature]], dtype=torch.float64),
         alpha=alpha, gamma=0.0, power=3.0,
     )
     prox_scale = problem.prox_scale_for_fractional_penalty(coefficient.detach(), rho=0.9)
-    optimizer = SSN([coefficient], problem, prepared, prox_scale=prox_scale, tolerance_grad=0.0, max_iter=1)
+    optimizer = SSN([coefficient], problem, obj, hess_obj, prox_scale=prox_scale, tolerance_grad=0.0, max_iter=1)
 
-    before = float(problem.loss(coefficient, prepared).detach())
+    before = float(problem.loss(coefficient, obj).detach())
     optimizer.step()
-    after = float(problem.loss(coefficient, prepared).detach())
+    after = float(problem.loss(coefficient, obj).detach())
 
     assert optimizer.last_step_success
     assert after <= before
@@ -139,11 +139,11 @@ def test_fractional_ssn_uses_the_closed_form_prox_derivative(
         value = u[0]
         return linear * value + value.square()
 
-    problem, prepared = synthetic_problem(
+    problem, obj, hess_obj = synthetic_problem(
         data_loss, torch.tensor([[2.0]], dtype=torch.float64),
         alpha=alpha, gamma=0.0, power=power,
     )
-    optimizer = SSN([coefficient], problem, prepared, prox_scale=prox_scale, tolerance_grad=0.0, max_iter=1)
+    optimizer = SSN([coefficient], problem, obj, hess_obj, prox_scale=prox_scale, tolerance_grad=0.0, max_iter=1)
     optimizer.step()
 
     assert optimizer.last_step_success

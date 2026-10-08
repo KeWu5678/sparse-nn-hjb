@@ -38,7 +38,7 @@ def metrics(problem: SparseProblem, train_loader, valid_loader=None, reporting_n
         valid_loader = train_loader
     for split, loader in (("train", train_loader), ("val", valid_loader)):
         data = full_batch(loader)
-        prediction = problem.forward_with_gradient(data[0])
+        prediction = problem(data[0])
         target = data[1:]
         fitting = problem.obj(prediction, target)
         n = data[0].shape[0]

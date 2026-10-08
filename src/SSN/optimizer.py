@@ -1,14 +1,14 @@
 """Complete semismooth Newton coefficient correction for a sparse problem."""
 
 import logging
-from typing import Iterable
+from typing import Callable, Iterable
 
 import torch
 from torch import Tensor
 from torch.nn.utils import parameters_to_vector, vector_to_parameters
 from torch.optim import Optimizer
 
-from ..problems import PreparedObjective, SparseProblem
+from ..problems import SparseProblem
 from .strategies import damped_newton_step, trust_region_step
 
 __all__ = ["SSN"]
@@ -31,7 +31,8 @@ class SSN(Optimizer):
     Args:
         params: parameters to optimize (outer weights only).
         problem: sparse objective evaluated at a supplied flat vector.
-        prepared: fixed-support calculations for this coefficient correction.
+        obj: fitting objective for this fixed-support coefficient correction.
+        hess_obj: Hessian of that fitting objective.
         max_iter: number of Newton iterations in one complete correction.
         correction_guard: reject an increased final loss; False preserves the
             explicitly configured historical unguarded comparison.
@@ -54,7 +55,8 @@ class SSN(Optimizer):
         self,
         params: Iterable[Tensor],
         problem: SparseProblem,
-        prepared: PreparedObjective,
+        obj: Callable[[Tensor], Tensor],
+        hess_obj: Tensor,
         *,
         max_iter: int = 20,
         correction_guard: bool = True,
@@ -86,7 +88,8 @@ class SSN(Optimizer):
         if len(self.param_groups) > 1:
             raise ValueError("SSN doesn't support per-parameter options")
         self.problem = problem
-        self.prepared = prepared
+        self.obj = obj
+        self.hess_obj = hess_obj
         self._params = self.param_groups[0]["params"]
         group = self.param_groups[0]
         if prox_scale is None:
@@ -142,7 +145,7 @@ class SSN(Optimizer):
     def _evaluate_current(self) -> tuple[Tensor, Tensor]:
         with torch.enable_grad():
             u = parameters_to_vector(self._params).detach().requires_grad_(True)
-            loss = self.problem.loss(u, self.prepared)
+            loss = self.problem.loss(u, self.obj)
         return u, loss
 
     def _iteration(self, u: Tensor, loss: Tensor) -> Tensor:
@@ -160,7 +163,7 @@ class SSN(Optimizer):
             return loss
 
         jac_prox = self.problem.jac_prox(q, inverse_step, prox_result=u)
-        jac_normal = self.problem.jac_normal(u, jac_prox, inverse_step, self.prepared)
+        jac_normal = self.problem.jac_normal(u, jac_prox, inverse_step, self.hess_obj)
         return self._globalized_step(q, normal_q, jac_normal, jac_prox, loss, inverse_step)
 
     def _globalized_step(
@@ -171,7 +174,7 @@ class SSN(Optimizer):
         group = self.param_groups[0]
 
         def evaluate_trial(q_trial: Tensor) -> Tensor:
-            return self.problem.loss(self.problem.prox(q_trial, inverse_step), self.prepared)
+            return self.problem.loss(self.problem.prox(q_trial, inverse_step), self.obj)
 
         if group["method"] == "levenberg_marquardt":
             q_trial, loss_trial, accepted = damped_newton_step(

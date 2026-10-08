@@ -287,7 +287,7 @@ def test_training_record_preserves_fitted_normalization(tmp_path, monkeypatch, n
     _, (x, v, dv) = split_value_samples(samples, cfg.data.train_fraction)
     if normalize:
         x = x / torch.as_tensor(saved["x_scale"], dtype=torch.float64)
-    vp, dvp = model.forward_with_gradient(x)
+    vp, dvp = model(x)
     if normalize:
         vp, dvp = restored.denormalize_tensors(vp, dvp)
     expected = relative_errors(vp, dvp, v, dv)
@@ -322,7 +322,7 @@ def test_region_reporting_scores_original_value_units(tmp_path, normalize):
 
     got = train.region_split_metrics(cfg, model, data, normalizer)
 
-    vp, dvp = model.forward_with_gradient(torch.as_tensor(data["x"], dtype=torch.float64))
+    vp, dvp = model(torch.as_tensor(data["x"], dtype=torch.float64))
     if normalizer is not None:
         # Independent chain-rule calculation, not the reporting implementation.
         vp = vp * normalizer.v_scale

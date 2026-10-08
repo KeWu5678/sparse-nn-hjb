@@ -95,7 +95,8 @@ def _generate_candidates(
             def closure():
                 opt.zero_grad()
                 w_s = w / w.norm().clamp_min(eps) if use_sphere else w
-                profile = problem.profile(w_s[:d_dim], w_s[d_dim], normalized_residual)
+                features = problem.jac_forward(X, w_s[:d_dim].reshape(1, -1), w_s[d_dim].reshape(1))
+                profile = problem.jac_obj(*features, normalized_residual)[0]
                 score = profile.abs() if two_sided else profile
                 obj = score / problem.normalization_weight(w_s[:d_dim], w_s[d_dim])
                 (-obj).backward()
@@ -241,10 +242,9 @@ def profile_threshold(
     accepted_c: List[float] = []
     with torch.enable_grad():
         for a_i, b_i in zip(a_t, b_t):
-            features = problem.jac_forward_with_gradient(residual[0], a_i.reshape(1, -1), b_i.reshape(1))
-            slope, curvature = (
-                float(value.detach()) for value in problem.directional_obj(*features, residual)
-            )
+            features = problem.jac_forward(residual[0], a_i.reshape(1, -1), b_i.reshape(1))
+            slope = float(problem.jac_obj(*features, residual)[0].detach())
+            curvature = float(problem.hess_obj(*features)[0, 0].detach())
             v = abs(slope) if two_sided else slope
             scale = float(problem.normalization_weight(a_i, b_i))
             threshold = problem.alpha * scale
@@ -332,10 +332,9 @@ def finite_step(
     accepted_dJ: List[float] = []
     with torch.enable_grad():
         for a_i, b_i in zip(a_t, b_t):
-            features = problem.jac_forward_with_gradient(residual[0], a_i.reshape(1, -1), b_i.reshape(1))
-            slope, curvature = (
-                float(value.detach()) for value in problem.directional_obj(*features, residual)
-            )
+            features = problem.jac_forward(residual[0], a_i.reshape(1, -1), b_i.reshape(1))
+            slope = float(problem.jac_obj(*features, residual)[0].detach())
+            curvature = float(problem.hess_obj(*features)[0, 0].detach())
             if curvature < 1e-30 or abs(slope) < 1e-30:
                 continue
             magnitude = problem.power_prox(abs(slope) / curvature, curvature)

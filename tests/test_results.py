@@ -190,7 +190,7 @@ def test_historical_prediction_power_does_not_require_solver_support(record_path
     run = load_run(record_path)
     net = model_from_history(run.history, torch.relu, power=4.)
 
-    value, gradient = net.forward_with_gradient(torch.tensor([[1., 1.]], dtype=torch.float64))
+    value, gradient = net(torch.tensor([[1., 1.]], dtype=torch.float64))
 
     torch.testing.assert_close(value, torch.tensor([[3. * 3.5 ** 4]], dtype=torch.float64))
     torch.testing.assert_close(gradient, torch.tensor([[12. * 3.5 ** 3, 24. * 3.5 ** 3]], dtype=torch.float64))

@@ -196,6 +196,7 @@ def load_run_for_artifact(
                         recover_legacy_normalization=recover_legacy_normalization)
 
 
+@torch.no_grad()
 def predict_model_physical(
     model: SparseProblem, x: Any, normalizer: ValueSampleNormalizer | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -209,7 +210,7 @@ def predict_model_physical(
         raise ValueError("physical states must have shape (N, model input dimension)")
     if normalizer is not None:
         x = x / torch.as_tensor(normalizer.x_scale, dtype=x.dtype, device=x.device)
-    v, dv = model.forward_with_gradient(x)
+    v, dv = model(x)
     if normalizer is not None:
         v, dv = normalizer.denormalize_tensors(v, dv)
     return v, dv
