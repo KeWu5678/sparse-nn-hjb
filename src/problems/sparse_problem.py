@@ -7,8 +7,7 @@ import torch
 from torch import Tensor, nn
 from torch.nn import functional as F
 
-from ..config import validate_training
-from ..config.activations import ACTIVATIONS, get_activation, get_use_sphere
+from ..config import model_arguments, resolve_prediction, validate_training
 from ..data import full_batch
 from .moment import moment_weight
 from .penalty import (
@@ -41,6 +40,13 @@ class SparseProblem(nn.Module):
     inner_weight: Tensor
     inner_bias: Tensor
 
+    @classmethod
+    def from_config(cls, config, input_dim: int):
+        """Read problem specifications from the existing model configuration."""
+        problem = cls(input_dim, **model_arguments(config))
+        problem.validate_training()
+        return problem
+
     def __init__(
         self,
         input_dim: int,
@@ -55,47 +61,19 @@ class SparseProblem(nn.Module):
         nonneg_mask: Tensor | None = None,
     ) -> None:
         super().__init__()
-        self._activation_name = (
-            activation if isinstance(activation, str) else
-            next((name for name, (fn, _) in ACTIVATIONS.items() if fn is activation), None)
+        self._activation_name, self._activation, self._use_sphere, self._moment_order = (
+            resolve_prediction(
+                input_dim, activation=activation, power=power, moment_order=moment_order,
+            )
         )
-        self._activation = get_activation(activation) if isinstance(activation, str) else activation
-        self._use_sphere = (
-            get_use_sphere(self._activation_name) if self._activation_name is not None else False
-        )
-        if not math.isfinite(power) or power <= 0.0:
-            raise ValueError("power must be positive and finite")
-        if not isinstance(input_dim, int) or isinstance(input_dim, bool) or input_dim <= 0:
-            raise ValueError("input_dim must be a positive integer")
         self._power = power
         self._alpha, self._gamma = alpha, gamma
         self._loss_weights = loss_weights
-        # Old records and mixed sweeps may supply a numeric sphere placeholder.
-        self._moment_order = None if self._use_sphere else moment_order
         self._penalized_mask = penalized_mask
         self._nonneg_mask = nonneg_mask
         self.register_buffer("inner_weight", torch.empty((0, input_dim), dtype=torch.float64))
         self.register_buffer("inner_bias", torch.empty(0, dtype=torch.float64))
         self.c = nn.Parameter(torch.empty(0, dtype=torch.float64))
-
-    @classmethod
-    def from_config(cls, config, input_dim: int):
-        """Read problem specifications from the existing model configuration."""
-        if config.kind != "signed":
-            raise ValueError(
-                f"the active implementation only supports kind='signed'; got {config.kind!r}"
-            )
-        problem = cls(
-            input_dim,
-            activation=config.activation,
-            power=config.power,
-            alpha=config.alpha,
-            gamma=config.gamma,
-            loss_weights=tuple(config.loss_weights),
-            moment_order=config.moment_order,
-        )
-        problem.validate_training()
-        return problem
 
     def validate_training(self, *, insertion: str | None = None) -> None:
         """Check the stored specifications using the configuration layer's rules."""
@@ -158,6 +136,25 @@ class SparseProblem(nn.Module):
         if inner_bias.numel() != inner_weight.shape[0] or c.numel() != inner_weight.shape[0]:
             raise ValueError("inner_bias and c must contain one entry per atom")
         self.inner_weight, self.inner_bias, self.c = inner_weight, inner_bias, nn.Parameter(c)
+
+    def prepare_coefficients(self, loader) -> tuple[Callable[[Tensor], Tensor], Tensor, Tensor]:
+        """Return a fixed-feature objective, Hessian and normalization weights.
+
+        The closure references this problem's objective; it does not copy the
+        network or retain later changes to the sampled targets or neuron support.
+        """
+        self.validate_training()
+        X, V, dV = full_batch(loader)
+        Phi_v, Phi_g = self.jac_forward(X)
+        normalization_weight = self.normalization_weight(self.inner_weight, self.inner_bias)
+        Phi_v = Phi_v / normalization_weight
+        Phi_g = Phi_g / normalization_weight
+        V, dV = (target.detach().reshape(-1).clone() for target in (V, dV))
+
+        def obj(u):
+            return self.obj((Phi_v @ u, Phi_g @ u), (V, dV))
+
+        return obj, self.hess_obj(Phi_v, Phi_g), normalization_weight
 
     def forward(self, x: Tensor) -> tuple[Tensor, Tensor]:
         """Return value (N,1) and input gradient (N,d), including empty support.
@@ -223,6 +220,10 @@ class SparseProblem(nn.Module):
             if self.normalized else torch.ones_like(inner_bias)
         )
 
+    def loss(self, u: Tensor, obj: Callable[[Tensor], Tensor]) -> Tensor:
+        """Evaluate the complete objective at u, without modifying u."""
+        return obj(u) + self._alpha * self.sparsity_functional(u)
+
     def obj(self, prediction: tuple[Tensor, Tensor], target: tuple[Tensor, Tensor]) -> Tensor:
         """Weighted empirical H1 quadratic, excluding the sparsity penalty.
 
@@ -252,37 +253,6 @@ class SparseProblem(nn.Module):
         w1, w2 = self._loss_weights
         return (w1 / n) * (Kv.T @ Kv) + (w2 / n) * (Kg.T @ Kg)
 
-    def prepare_coefficients(self, loader) -> tuple[Callable[[Tensor], Tensor], Tensor, Tensor]:
-        """Return a fixed-feature objective, Hessian and normalization weights.
-
-        The closure references this problem's objective; it does not copy the
-        network or retain later changes to the sampled targets or neuron support.
-        """
-        self.validate_training()
-        X, V, dV = full_batch(loader)
-        Phi_v, Phi_g = self.jac_forward(X)
-        normalization_weight = self.normalization_weight(self.inner_weight, self.inner_bias)
-        Phi_v = Phi_v / normalization_weight
-        Phi_g = Phi_g / normalization_weight
-        V, dV = (target.detach().reshape(-1).clone() for target in (V, dV))
-
-        def obj(u):
-            return self.obj((Phi_v @ u, Phi_g @ u), (V, dV))
-
-        return obj, self.hess_obj(Phi_v, Phi_g), normalization_weight
-
-    def obj_augmented(self, u: Tensor, obj: Callable[[Tensor], Tensor]) -> Tensor:
-        """Objective plus the nonconvex correction in the proximal splitting."""
-        if self.penalty_exponent != 1.0:
-            return obj(u)
-        penalized, nonneg = self._masks(u)
-        magnitudes = torch.where(nonneg[penalized], u[penalized].clamp_min(0), u[penalized].abs())
-        return obj(u) + self._alpha * (_phi(magnitudes, self._gamma) - magnitudes).sum()
-
-    def loss(self, u: Tensor, obj: Callable[[Tensor], Tensor]) -> Tensor:
-        """Evaluate the complete objective at u, without modifying u."""
-        return obj(u) + self._alpha * self.sparsity_functional(u)
-
     def sparsity_functional(self, u: Tensor) -> Tensor:
         """Unweighted log/power functional on the supplied penalty coordinates."""
         penalized, nonneg = self._masks(u)
@@ -309,6 +279,14 @@ class SparseProblem(nn.Module):
         """Selected G'(q), using u = P(q) and jac_prox = P'(q)."""
         I = torch.eye(u.numel(), device=u.device, dtype=u.dtype)
         return inverse_step * (I - jac_prox) + self.hess_obj_augmented(u, hess_obj) @ jac_prox
+
+    def obj_augmented(self, u: Tensor, obj: Callable[[Tensor], Tensor]) -> Tensor:
+        """Objective plus the nonconvex correction in the proximal splitting."""
+        if self.penalty_exponent != 1.0:
+            return obj(u)
+        penalized, nonneg = self._masks(u)
+        magnitudes = torch.where(nonneg[penalized], u[penalized].clamp_min(0), u[penalized].abs())
+        return obj(u) + self._alpha * (_phi(magnitudes, self._gamma) - magnitudes).sum()
 
     def jac_obj_augmented(self, u: Tensor, jac_loss: Tensor) -> Tensor:
         """Derivative of obj_augmented from the supplied derivative of loss(u).

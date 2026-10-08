@@ -4,6 +4,7 @@ import pytest
 import torch
 from torch.utils.data import DataLoader, Dataset
 
+from src.config import get_activation
 from src.config.schema import ExperimentConfig
 from src.PDAP import PDAP
 from src.problems import SparseProblem
@@ -47,6 +48,22 @@ def test_problem_predicts_values_and_input_gradients():
     assert value.shape == (6, 1)
     assert gradient.shape == (6, 2)
     assert not x.requires_grad
+
+
+@pytest.mark.parametrize("activation", ["relu", "relu2", "softplus"])
+def test_registered_callable_preserves_named_prediction_and_training(activation):
+    named = SparseProblem(2, activation=activation, moment_order=2.)
+    direct = SparseProblem(2, activation=get_activation(activation), moment_order=2.)
+    atoms = _atoms()
+    x = torch.tensor([[-1., 2.], [3., -4.]], dtype=torch.float64)
+    for problem in (named, direct):
+        problem.set_atoms(*atoms)
+        problem.validate_training()
+    assert direct.activation_name == named.activation_name == activation
+    assert direct.use_sphere == named.use_sphere
+    assert direct.moment_order == named.moment_order
+    for actual, expected in zip(direct(x), named(x)):
+        torch.testing.assert_close(actual, expected, rtol=0, atol=0)
 
 
 def test_gradient_only_loss_backpropagates_to_coefficients_and_input_graph():
@@ -129,6 +146,7 @@ def test_setting_and_pruning_atoms_preserves_float64_coefficients():
     ({"activation": torch.relu, "power": 4.}, "supports activation powers 1, 2, 3"),
     ({"activation": "softplus"}, "explicit moment_order"),
     ({"activation": "softplus", "moment_order": 1.}, "moment_order must exceed"),
+    ({"activation": lambda x: x.square()}, "requires a registered activation"),
 ])
 def test_prediction_settings_are_rejected_before_training_changes_state(entry_point, specifications, message):
     class UnavailableSamples(Dataset):
@@ -145,9 +163,12 @@ def test_prediction_settings_are_rejected_before_training_changes_state(entry_po
     if specifications["activation"] == "softplus":
         torch.testing.assert_close(value, 2 * torch.nn.functional.softplus(x[:, :1]))
         torch.testing.assert_close(gradient, torch.cat((2 * torch.sigmoid(x[:, :1]), x.new_zeros((1, 1))), dim=1))
-    else:
+    elif specifications["activation"] is torch.relu:
         torch.testing.assert_close(value, x.new_tensor([[32.]]))
         torch.testing.assert_close(gradient, x.new_tensor([[64., 0.]]))
+    else:
+        torch.testing.assert_close(value, x.new_tensor([[8.]]))
+        torch.testing.assert_close(gradient, x.new_tensor([[8., 0.]]))
     before = {name: tensor.clone() for name, tensor in problem.state_dict().items()}
     loader = DataLoader(UnavailableSamples(), generator=torch.Generator().manual_seed(0))
     with pytest.raises(ValueError, match=message):

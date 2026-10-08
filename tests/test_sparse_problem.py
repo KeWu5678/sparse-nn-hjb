@@ -72,15 +72,6 @@ def test_sparsity_functional_remains_unweighted_and_respects_masks(alpha):
     torch.testing.assert_close(problem.sparsity_functional(u), u.new_tensor(2.))
 
 
-@pytest.mark.parametrize(
-    "power",
-    [-1.0, 0.0, float("nan"), float("inf"), -float("inf")],
-)
-def test_constructor_rejects_invalid_prediction_powers(power):
-    with pytest.raises(ValueError, match="power must be positive and finite"):
-        SparseProblem(2, power=power)
-
-
 @pytest.mark.parametrize("power", [1.5, 4.0, 1.0 + 5e-13, 2.0 + 5e-13, 3.0 - 5e-13])
 def test_correction_rejects_unsupported_powers(power):
     problem = SparseProblem(2, power=power)

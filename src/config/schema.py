@@ -21,10 +21,13 @@ trained, not any specific control problem. The only problem-specific input is
 from __future__ import annotations
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Optional, Tuple
 
-from .activations import get_growth
+from torch import Tensor
+
+from .activations import ACTIVATIONS, get_activation, get_growth, get_use_sphere
 
 
 @dataclass
@@ -204,6 +207,50 @@ class ExperimentConfig:
     name: str = "run"
 
 
+def model_arguments(config) -> dict:
+    """Read the supported model configuration as problem constructor arguments."""
+    if config.kind != "signed":
+        raise ValueError(
+            f"the active implementation only supports kind='signed'; got {config.kind!r}"
+        )
+    return {
+        "activation": config.activation,
+        "power": config.power,
+        "alpha": config.alpha,
+        "gamma": config.gamma,
+        "loss_weights": tuple(config.loss_weights),
+        "moment_order": config.moment_order,
+    }
+
+
+def resolve_prediction(
+    input_dim: int, *, activation: str | Callable[[Tensor], Tensor], power: float,
+    moment_order: float | None,
+) -> tuple[str | None, Callable[[Tensor], Tensor], bool, float | None]:
+    """Resolve activation identity, geometry and order under prediction contracts.
+
+    Any callable and positive finite power can predict historical models;
+    training additionally requires the compatibility rules below. Registered
+    callables retain their named activation's geometry. Sphere geometry has no
+    moment order, including when an old record supplies a numeric placeholder.
+    """
+    if isinstance(activation, str):
+        activation_name = activation
+        activation = get_activation(activation_name)
+    elif callable(activation):
+        activation_name = next(
+            (name for name, (fn, _) in ACTIVATIONS.items() if fn is activation), None,
+        )
+    else:
+        raise TypeError("activation must be a registry name or callable")
+    use_sphere = get_use_sphere(activation_name) if activation_name is not None else False
+    if not math.isfinite(power) or power <= 0.0:
+        raise ValueError("power must be positive and finite")
+    if not isinstance(input_dim, int) or isinstance(input_dim, bool) or input_dim <= 0:
+        raise ValueError("input_dim must be a positive integer")
+    return activation_name, activation, use_sphere, None if use_sphere else moment_order
+
+
 def validate_training(
     *, activation_name: str | None, power: float, gamma: float, use_sphere: bool,
     moment_order: float | None = None, insertion: str | None = None,
@@ -248,5 +295,7 @@ __all__ = [
     "EvalConfig",
     "EnvConfig",
     "ExperimentConfig",
+    "model_arguments",
+    "resolve_prediction",
     "validate_training",
 ]

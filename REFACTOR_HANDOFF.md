@@ -6,6 +6,108 @@ Full-review baseline: `49eeb0349a0a8ee489c075400d23cb1cb31e1208`.
 
 ## Current status and working rules
 
+**Method-order follow-up implemented, verified and independently reviewed,
+alongside the configuration correction above baseline `74d2f05`.** The user
+explicitly pointed to `refactor.md`, Chapter 3, item 3: arrange methods in
+descending explanatory order. The factory now introduces construction and
+validation; coefficient preparation precedes its feature/objective calculations;
+complete loss precedes its fitting and penalty components; normal-map operations
+precede augmented-objective details. Forward/Jacobian, augmented-objective
+derivatives and proximal-map/Jacobian families stay adjacent. Shared private
+helpers remain last.
+
+All **37 methods retain identical text, signatures, decorators and ASTs**;
+module/class non-method ASTs are also unchanged. No method, class or test is
+added for ordering. Before/after evidence:
+`/tmp/sparse-config-contracts-order-before.py`,
+`/tmp/sparse-config-contracts-order-ast-verification.json` and its one-off
+`sparse-config-contracts-order-verify.py` script. The final manifest and combined
+diff are `/tmp/sparse-config-contracts-order-frozen-sources.json` and
+`/tmp/sparse-config-contracts-order-frozen.diff`.
+
+Both independent reviews were refreshed on the final ordering. Standards found
+no material documented-standard or design-smell findings; Spec found no missing,
+partial, incorrect or extra requirements. Both verified the 37 unchanged method
+bodies, all 83 source/test hashes, exact combined diff and all three fixtures
+against baseline. The user's `refactor.md` edits remain unchanged and are
+excluded from the implementation commit. Root documents/coordinates only;
+`config_contracts` implemented source/tests.
+
+Final reordered-source verification: Ruff and Pyright pass. The full run in
+the existing implementation agent's environment produced **497 passed, 2 failed,
+18 warnings** in 28.16 seconds: the known stale controller-selection artifact,
+and the same denied PyTorch shared-memory worker startup. Root reran that exact
+worker test in the newly unrestricted environment: **1 passed**, 1.63 seconds.
+Thus **498 cases pass across the full run and targeted rerun**, with only the
+preexisting stale artifact failure remaining. Logs:
+`/tmp/sparse-config-contracts-order-final-pytest.log` and
+`/tmp/sparse-config-contracts-order-dataloader-root.log`.
+The two reviewed changes form one implementation commit; no push is authorized.
+
+**Configuration-contract correction implemented and independently reviewed;
+verification complete, baseline `74d2f05`.** The user
+restored a missing instruction after session recovery: "from line 58 to line
+79; the error handling and the activation function declaration (and type
+check), they should all be done in the config. These contracts should be
+specified in the config, not this class". The recovered transcript ended after
+the moment-order change; its completion did not establish completion of this
+additional requested correction.
+
+The criticism is valid: before this correction, `SparseProblem.__init__`
+interpreted activation names/callables, scanned the registry, derived geometry,
+validated power and input dimension, and canonicalized sphere moment orders.
+Configuration now owns those contracts and resolution; the problem consumes the
+resulting values and initializes its PyTorch state. The related model-kind
+validation moved from `from_config` into configuration as well. Preserve existing
+configuration keys,
+direct construction, registered and unregistered callable prediction, historical
+prediction powers, and the separate training restrictions. Do not add a new
+configuration class or change mathematical formulas or numerical references.
+Runtime support tensor shape checks remain problem-state invariants.
+
+Implementation choice: use ordinary config functions `resolve_prediction` for
+activation/geometry/order resolution and prediction validity, and
+`model_arguments` for model-kind checking and existing constructor arguments.
+The constructor delegates resolution once; `from_config` uses the argument
+mapping and existing training validation. These names and return shapes are
+implementation choices, not additional user requirements. Broader Hydra
+schema reorganization and logging remain outside this correction.
+
+`config_contracts` owns source/tests. Root plans, documents and coordinates;
+independent Standards and Spec reviewers inspect the finished changes. Verify
+configuration failures, callable/name resolution, Hydra construction, saved
+prediction, and unchanged solver references. Run the full suite after source
+freeze, report the known stale local controller-selection failure separately,
+then commit reviewed changes on this branch without pushing.
+
+Focused verification: **146 passed**. Ruff passes all six changed Python files;
+Pyright reports zero errors or warnings. The two config functions replace the
+constructor's configuration logic and `from_config`'s kind/argument handling;
+no class or numerical formula is added. Production changes add 31 net lines
+(config adds 53; SparseProblem removes 22); tests add 62 net lines. Invalid
+non-callable activations now fail immediately with a config-owned `TypeError`.
+
+Independent Standards review found no material standard or design-smell
+findings. Independent Spec review found no missing, partial, incorrect or
+additional requirements. Both verified all 83 tracked source/test hashes,
+the exact six-file frozen diff, and all three numerical fixtures against the
+manifest and baseline. Evidence:
+`/tmp/sparse-config-contracts-frozen-sources.json` and
+`/tmp/sparse-config-contracts-frozen.diff`.
+
+The first full-suite attempt produced **497 passed, 2 failed, 18 warnings**:
+the unchanged stale local selection artifact and a PyTorch shared-memory worker
+startup denied by the sandbox (`torch_shm_manager: Operation not permitted`).
+The latter was an execution-permission failure. The exact test
+`tests/test_dataloaders.py::test_full_batch_collects_aligned_samples_in_delivery_order[2-1]`
+passed outside the sandbox (**1 passed**, 1.78 seconds), with unchanged frozen
+source. Log: `/tmp/sparse-config-contracts-dataloader-unsandboxed.log`.
+Original full log: `/tmp/sparse-config-contracts-final-pytest.log`.
+The configuration correction therefore has 498 passing cases across the full
+run and targeted rerun; only the known artifact failure remains. Both independent
+reviews of the configuration correction are complete; final method-order
+verification and refreshed reviews are recorded above.
+
 **Moment-order correction implemented and independently reviewed, baseline `cf5466c`.** The user pointed
 out that the moment order depends on the activation's growth and is absent
 from the sphere/fractional formulation, then authorized the correction with
@@ -394,7 +496,7 @@ historical ADR descriptions cannot establish additional user approval.
 | SSN | Retain `torch.optim.Optimizer`; optimize supplied outer coefficients with inner weights fixed, using SparseProblem's mathematics. Own correction iterations, working coefficients, and the starting-coefficient backup discussed by the user. | Complete correction, trial acceptance, final comparison/fallback and rollback are here; PDAP applies the result without a second correction acceptance loop. The legacy `ssn_solve` layer is deleted. Guard options and iteration defaults are compatibility/implementation choices, not new user requirements. |
 | Temporary preparation | The user selected "Have SparseProblem return a temporary prepared objective that SSN uses for that solve" over persistent cached attributes. | Features/targets/Hessian preparation is correction-local and reused for the solve. It is neither a second network nor a separate owner of mathematical formulas. No persistent loader or feature cache lives on SparseProblem. |
 | Data module and Dataset/DataLoader | The user reiterated "the data lives outside of the problem" and requested the DataLoader dependency. Data preparation and delivery leave PDAP/SSN. | `src/data.py` owns reading, validation, physical normalization, splitting and full-data assembly; Dataset/DataLoader retains and delivers aligned samples. Mathematical residuals/features/reductions remain evaluations, not DataLoader responsibilities. Native BatchSampler delivery now works while dropped samples remain rejected. |
-| Repository configuration | The user said configuration "is a repo level function and we are using hydra to manage it". | Hydra/runner constructs configured objects. Modules consume the settings relevant to their responsibilities; DataLoader does not own repository configuration. Redesign remains deferred. |
+| Repository configuration | The user said configuration "is a repo level function and we are using hydra to manage it", and later explicitly assigned activation resolution/type checking and constructor configuration contracts to config. | Hydra/runner constructs configured objects. Config resolves prediction settings, validates constructor inputs and model kind, and owns training rules; SparseProblem consumes those settings. DataLoader does not own repository configuration. Broader schema redesign remains deferred. |
 | Measurement, logging, monitoring and history | The user initially deferred these concerns, then specifically requested "separate the metrics from the mathematics" in the current method review. | Metric assembly moves into existing evaluation code, called by History. Mathematical objective/penalty evaluation stays on the problem. Persisted metric names and snapshots remain; broader logging/backend redesign stays deferred. |
 | Work allocation | The user assigned root "only in charge of the planning and orchestrating" and asked for subagents to implement and review. | Root edits plans/docs only. The latest user instruction authorizes source cleanup through implementation agents, followed by independent review. |
 
@@ -1257,23 +1359,20 @@ That session supplied the earlier implemented ownership split. The current discu
 
 Current resumption message:
 
-> Continue the user's method-by-method review. The latest naming follow-up and
-> its verification status are recorded at the top; the broader ownership cleanup
-> was committed as b9fba49. Keep forward, use forward_with_gradient and
-> jac_forward_with_gradient, and remove description. The Jacobian's inputs are x
-> and current/supplied inner_weight,inner_bias; both returned matrices differentiate with respect to c.
-> Remaining duplicated feature construction and quadratic fitting logic were
-> identified after the earlier review and are not resolved by renaming.
-> Read the current status and boundary table before the historical record.
-> PDAP owns search/insertion/warm-start procedures; SparseProblem owns the current
-> nn.Module and mathematical evaluations; SSN owns complete corrections and
-> fallback. Final suite: 422 passed, one existing stale local selection failure;
-> Ruff and core Pyright pass. Numerical references and tolerances are preserved.
-> Mask retirement, configuration/logging redesign and known numerical bugs remain
-> deferred. Root coordinates/docs only; subagents implement and review. The
-> pre-cleanup source/tests snapshot is /tmp/sparse-boundary-before-y_e9gbjp.
+> The configuration-contract correction and Chapter 3.3 method-order follow-up
+> are implemented, verified and independently reviewed above baseline 74d2f05.
+> Config owns activation resolution/type checks and constructor configuration
+> contracts. SparseProblem now reads in descending explanatory order; all 37
+> method bodies are unchanged by ordering. Keep the agreed forward/jac_forward,
+> obj/jac_obj/hess_obj interfaces; the prepared class and pairing helper are gone.
+> Root coordinates/docs only; subagents implement and independently review.
+> Final checks: 497 passed in the full run, plus the sandbox-blocked worker test
+> passed in root's unrestricted rerun. Only the known stale local artifact fails.
+> Ruff/Pyright and both refreshed reviews pass; fixtures/tolerances are unchanged.
+> Preserve the user's unstaged refactor.md edits. Inspect Git to confirm the
+> combined implementation commit. No push is authorized.
 
-Historical resumption note (review-only status superseded by the message above):
+Historical resumption note (superseded by the message above):
 
 > Read the current plan at the top of REFACTOR_HANDOFF.md and inspect Git state. Root only plans, documents, delegates, and coordinates; subagents implement and independently review. The requested full review of all changes since 49eeb03 is complete; its findings and proposed cleanup are recorded above. No cleanup is implemented, and the working tree remains uncommitted. The user rejected excessive methods/attributes in SparseProblem; the previous 410 passing tests and earlier narrow reviews do not establish a streamlined design. Preserve the accepted one-module/external-data/temporary-preparation/Optimizer architecture, vocabulary, historical fixtures, and configuration/logging deferral. Use the recorded usage evidence to delegate any subsequently authorized cleanup rather than moving the same complexity into more classes or dropping meaningful mathematical tests. Mask support and derivative conventions require explicit treatment.
 

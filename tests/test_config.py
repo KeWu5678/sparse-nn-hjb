@@ -9,7 +9,7 @@ from hydra.core.config_store import ConfigStore
 from hydra.core.hydra_config import HydraConfig
 from hydra.errors import ConfigCompositionException
 
-from src.config import get_activation, get_use_sphere
+from src.config import get_activation, get_use_sphere, model_arguments, resolve_prediction
 from src.config.schema import ExperimentConfig, ModelConfig
 from src.data import DATA_DIR, load_value_samples
 from src.PDAP import PDAP
@@ -158,6 +158,56 @@ def test_construct_problem_from_loaded_dataset() -> None:
 def test_activation_resolver() -> None:
     assert get_activation("relu") is torch.relu
     assert callable(get_activation("matern52"))
+
+
+@pytest.mark.parametrize("entry_point", ["config", "problem"])
+@pytest.mark.parametrize("specifications,error,message", [
+    ({"activation": "unknown"}, ValueError, "unknown activation"),
+    ({"activation": None}, TypeError, "activation must be a registry name or callable"),
+    ({"activation": 3}, TypeError, "activation must be a registry name or callable"),
+    *[({"input_dim": dim}, ValueError, "input_dim must be a positive integer")
+      for dim in (0, -1, 2.0, True, None)],
+    *[({"power": power}, ValueError, "power must be positive and finite")
+      for power in (-1., 0., float("nan"), float("inf"), -float("inf"))],
+])
+def test_prediction_contracts_are_owned_by_config(entry_point, specifications, error, message):
+    arguments = dict(input_dim=2, activation="relu", power=1., moment_order=None)
+    arguments.update(specifications)
+    construct = resolve_prediction if entry_point == "config" else SparseProblem
+    with pytest.raises(error, match=message):
+        construct(**arguments)
+
+
+@pytest.mark.parametrize("name,use_sphere,order", [
+    ("relu", True, None), ("relu2", True, None), ("softplus", False, 2.01),
+])
+def test_prediction_resolution_preserves_registered_identity_and_geometry(name, use_sphere, order):
+    activation = get_activation(name)
+    for selection in (name, activation):
+        resolved_name, resolved_activation, sphere, moment_order = resolve_prediction(
+            2, activation=selection, power=4., moment_order=2.01,
+        )
+        assert resolved_name == name
+        assert resolved_activation is activation
+        assert sphere is use_sphere
+        assert moment_order == order
+
+
+def test_prediction_resolution_preserves_unregistered_callable():
+    activation = lambda x: x.square()
+    name, resolved, use_sphere, moment_order = resolve_prediction(
+        2, activation=activation, power=1.5, moment_order=None,
+    )
+    assert name is None and resolved is activation
+    assert use_sphere is False and moment_order is None
+
+
+def test_model_kind_contract_is_owned_by_config():
+    config = ModelConfig(kind="unsupported")
+    with pytest.raises(ValueError, match="only supports kind='signed'"):
+        model_arguments(config)
+    with pytest.raises(ValueError, match="only supports kind='signed'"):
+        SparseProblem.from_config(config, 2)
 
 
 def test_use_sphere_bundled_with_activation() -> None:

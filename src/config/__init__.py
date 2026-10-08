@@ -9,6 +9,8 @@ from .schema import (
     ExperimentConfig,
     ModelConfig,
     TrainingConfig,
+    model_arguments,
+    resolve_prediction,
     validate_training,
 )
 
@@ -21,5 +23,7 @@ __all__ = [
     "ACTIVATIONS",
     "get_activation",
     "get_use_sphere",
+    "model_arguments",
+    "resolve_prediction",
     "validate_training",
 ]
