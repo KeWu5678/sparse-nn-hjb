@@ -1,7 +1,7 @@
 """Internal power-penalty proximal maps and their derivatives.
 
-SparseProblem validates the activation power at construction and supplies the
-exact exponent ``q`` in ``{1, 2/3, 1/2}``. The fractional maps use closed-form
+Training configuration validates the activation power; SparseProblem supplies
+the exact exponent ``q`` in ``{1, 2/3, 1/2}``. The fractional maps use closed-form
 stationary roots together with the global objective-switching threshold;
 at an exact tie they return zero.
 """
@@ -21,7 +21,7 @@ def _power_prox(v, lambda_, penalty_exponent=1.0):
         v: input tensor
         lambda_: proximal scale (typically alpha / inverse_step in SSN)
         penalty_exponent: exact q = 2/(power+1), derived from a power validated
-            by SparseProblem.__init__
+            by training configuration
     Returns:
         vprox: global minimizer, with zero selected at an exact tie
     """
@@ -134,7 +134,7 @@ def _power_prox_derivative(v, lambda_, penalty_exponent=1.0, prox_result=None):
     Args:
         v: proximal preimage tensor (the SSN variable q_var)
         lambda_: proximal scale (typically alpha / inverse_step)
-        penalty_exponent: exact q derived from a power validated by SparseProblem.__init__
+        penalty_exponent: exact q derived from a power validated by training configuration
         prox_result: precomputed _power_prox(v, lambda_, q) — required for q != 1
 
     Returns:

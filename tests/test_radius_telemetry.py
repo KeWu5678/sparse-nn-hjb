@@ -6,6 +6,7 @@ import pickle
 import pytest
 import torch
 
+from src.config import resolve_model, validate_training
 from src.config.schema import ExperimentConfig, ModelConfig, TrainingConfig
 from src.data import make_dataloader
 from src.PDAP import PDAP
@@ -22,7 +23,9 @@ def test_nonzero_residual_records_computed_and_capped_theorem_radius(loop_order,
         training=TrainingConfig(radial_cap="theorem", loop_order=loop_order,
                                 lbfgs_steps=2, fit_outer_iterations=1),
     )
-    model = SparseProblem.from_config(cfg.model, input_dim=2)
+    model_config = resolve_model(cfg.model, input_dim=2)
+    validate_training(model_config)
+    model = SparseProblem(model_config)
     samples = (torch.tensor([[0., 0.], [3., 4.]], dtype=torch.float64),
                torch.ones(2, 1, dtype=torch.float64),
                torch.ones(2, 2, dtype=torch.float64))
@@ -30,7 +33,7 @@ def test_nonzero_residual_records_computed_and_capped_theorem_radius(loop_order,
     expected = min((4 * (math.sqrt(26) + 1) * math.sqrt(3) / alpha) ** (1 / 3),
                    math.exp(FIXED_LOG_CLAMP))
     assert expected > 1
-    history = PDAP(cfg.training, insertion=cfg.model.insertion).fit(
+    history = PDAP(cfg.training, insertion=model_config["insertion"]).fit(
         model, make_dataloader(samples),
         num_iterations=1, num_insertion=2, verbose=False,
     )
@@ -53,11 +56,13 @@ def test_zero_measure_fit_records_the_actual_search_radius(
                           moment_order=order),
         training=TrainingConfig(radial_cap=cap, lbfgs_steps=2),
     )
-    model = SparseProblem.from_config(cfg.model, input_dim=2)
+    model_config = resolve_model(cfg.model, input_dim=2)
+    validate_training(model_config)
+    model = SparseProblem(model_config)
     samples = (torch.zeros(3, 2, dtype=torch.float64),
                torch.zeros(3, 1, dtype=torch.float64),
                torch.zeros(3, 2, dtype=torch.float64))
-    history = PDAP(cfg.training, insertion=cfg.model.insertion).fit(
+    history = PDAP(cfg.training, insertion=model_config["insertion"]).fit(
         model, make_dataloader(samples),
         num_iterations=1, num_insertion=2, verbose=False,
     )
@@ -70,7 +75,7 @@ def test_zero_measure_fit_records_the_actual_search_radius(
 
 
 def test_old_history_summary_does_not_invent_missing_search_diagnostics():
-    model = SparseProblem(2)
+    model = SparseProblem(resolve_model({}, 2))
     samples = (torch.zeros(3, 2, dtype=torch.float64),
                torch.ones(3, 1, dtype=torch.float64),
                torch.ones(3, 2, dtype=torch.float64))
@@ -96,11 +101,13 @@ def test_zero_iteration_fit_does_not_reuse_a_previous_search(activation, power, 
         training=TrainingConfig(radial_cap="theorem", loop_order="insertion_first",
                                 lbfgs_steps=2),
     )
-    model = SparseProblem.from_config(cfg.model, input_dim=2)
+    model_config = resolve_model(cfg.model, input_dim=2)
+    validate_training(model_config)
+    model = SparseProblem(model_config)
     samples = (torch.zeros(3, 2, dtype=torch.float64),
                torch.zeros(3, 1, dtype=torch.float64),
                torch.zeros(3, 2, dtype=torch.float64))
-    trainer = PDAP(cfg.training, insertion=cfg.model.insertion)
+    trainer = PDAP(cfg.training, insertion=model_config["insertion"])
     loader = make_dataloader(samples)
     previous = trainer.fit(
         model, loader,

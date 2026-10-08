@@ -207,33 +207,21 @@ class ExperimentConfig:
     name: str = "run"
 
 
-def model_arguments(config) -> dict:
-    """Read the supported model configuration as problem constructor arguments."""
+def resolve_model(config, input_dim: int) -> dict:
+    """Prepare model configuration for construction without changing the raw input.
+
+    Hydra and ordinary mappings use the existing ModelConfig defaults. The
+    returned runtime mapping contains the activation callable and its geometry;
+    raw named configuration remains suitable for run records. Prediction accepts
+    any callable and positive finite power, including historical settings.
+    Training setup must additionally call validate_training before construction.
+    """
+    config = config if isinstance(config, ModelConfig) else ModelConfig(**config)
     if config.kind != "signed":
         raise ValueError(
             f"the active implementation only supports kind='signed'; got {config.kind!r}"
         )
-    return {
-        "activation": config.activation,
-        "power": config.power,
-        "alpha": config.alpha,
-        "gamma": config.gamma,
-        "loss_weights": tuple(config.loss_weights),
-        "moment_order": config.moment_order,
-    }
-
-
-def resolve_prediction(
-    input_dim: int, *, activation: str | Callable[[Tensor], Tensor], power: float,
-    moment_order: float | None,
-) -> tuple[str | None, Callable[[Tensor], Tensor], bool, float | None]:
-    """Resolve activation identity, geometry and order under prediction contracts.
-
-    Any callable and positive finite power can predict historical models;
-    training additionally requires the compatibility rules below. Registered
-    callables retain their named activation's geometry. Sphere geometry has no
-    moment order, including when an old record supplies a numeric placeholder.
-    """
+    activation: str | Callable[[Tensor], Tensor] = config.activation
     if isinstance(activation, str):
         activation_name = activation
         activation = get_activation(activation_name)
@@ -244,18 +232,34 @@ def resolve_prediction(
     else:
         raise TypeError("activation must be a registry name or callable")
     use_sphere = get_use_sphere(activation_name) if activation_name is not None else False
-    if not math.isfinite(power) or power <= 0.0:
+    if not math.isfinite(config.power) or config.power <= 0.0:
         raise ValueError("power must be positive and finite")
     if not isinstance(input_dim, int) or isinstance(input_dim, bool) or input_dim <= 0:
         raise ValueError("input_dim must be a positive integer")
-    return activation_name, activation, use_sphere, None if use_sphere else moment_order
+    return {
+        "input_dim": input_dim,
+        "activation": activation,
+        "activation_name": activation_name,
+        "use_sphere": use_sphere,
+        "power": config.power,
+        "alpha": config.alpha,
+        "gamma": config.gamma,
+        "loss_weights": tuple(config.loss_weights),
+        # Old records and mixed sweeps may supply a numeric sphere placeholder.
+        "moment_order": None if use_sphere else config.moment_order,
+        "insertion": config.insertion,
+    }
 
 
-def validate_training(
-    *, activation_name: str | None, power: float, gamma: float, use_sphere: bool,
-    moment_order: float | None = None, insertion: str | None = None,
-) -> None:
-    """Check training compatibility while allowing historical prediction settings."""
+def validate_training(config) -> None:
+    """Validate resolved model settings before constructing a training problem.
+
+    The insertion rule in this mapping must also be the one supplied to PDAP.
+    Prediction-only reconstruction does not call this training configuration gate.
+    """
+    activation_name, power = config["activation_name"], config["power"]
+    gamma, use_sphere = config["gamma"], config["use_sphere"]
+    moment_order, insertion = config["moment_order"], config["insertion"]
     if activation_name is None:
         raise ValueError("coefficient correction requires a registered activation")
     if power not in (1.0, 2.0, 3.0):
@@ -295,7 +299,6 @@ __all__ = [
     "EvalConfig",
     "EnvConfig",
     "ExperimentConfig",
-    "model_arguments",
-    "resolve_prediction",
+    "resolve_model",
     "validate_training",
 ]

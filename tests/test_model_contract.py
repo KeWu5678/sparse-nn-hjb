@@ -2,13 +2,11 @@
 
 import pytest
 import torch
-from torch.utils.data import DataLoader, Dataset
 
-from src.config import get_activation
+from src.config import get_activation, resolve_model, validate_training
 from src.config.schema import ExperimentConfig
 from src.PDAP import PDAP
 from src.problems import SparseProblem
-from src.SSN import SSN
 
 
 def _atoms(n=4, d=2):
@@ -22,7 +20,7 @@ def _atoms(n=4, d=2):
 def test_exact_atom_assignment_preserves_rng_and_module_state():
     atoms = _atoms()
     rng = torch.random.get_rng_state().clone()
-    problem = SparseProblem(2)
+    problem = SparseProblem(resolve_model({}, 2))
     problem.set_atoms(*atoms)
 
     assert isinstance(problem, torch.nn.Module)
@@ -40,7 +38,7 @@ def test_exact_atom_assignment_preserves_rng_and_module_state():
 
 def test_problem_predicts_values_and_input_gradients():
     x = torch.randn(6, 2, dtype=torch.float64)
-    problem = SparseProblem(2)
+    problem = SparseProblem(resolve_model({}, 2))
     problem.set_atoms(*_atoms())
 
     value, gradient = problem(x)
@@ -52,13 +50,15 @@ def test_problem_predicts_values_and_input_gradients():
 
 @pytest.mark.parametrize("activation", ["relu", "relu2", "softplus"])
 def test_registered_callable_preserves_named_prediction_and_training(activation):
-    named = SparseProblem(2, activation=activation, moment_order=2.)
-    direct = SparseProblem(2, activation=get_activation(activation), moment_order=2.)
+    named_config = resolve_model({"activation": activation, "moment_order": 2.}, 2)
+    direct_config = resolve_model({"activation": get_activation(activation), "moment_order": 2.}, 2)
+    validate_training(named_config)
+    validate_training(direct_config)
+    named, direct = SparseProblem(named_config), SparseProblem(direct_config)
     atoms = _atoms()
     x = torch.tensor([[-1., 2.], [3., -4.]], dtype=torch.float64)
     for problem in (named, direct):
         problem.set_atoms(*atoms)
-        problem.validate_training()
     assert direct.activation_name == named.activation_name == activation
     assert direct.use_sphere == named.use_sphere
     assert direct.moment_order == named.moment_order
@@ -67,7 +67,7 @@ def test_registered_callable_preserves_named_prediction_and_training(activation)
 
 
 def test_gradient_only_loss_backpropagates_to_coefficients_and_input_graph():
-    problem = SparseProblem(2, power=2., loss_weights=(0., 1.))
+    problem = SparseProblem(resolve_model({"power": 2., "loss_weights": (0., 1.)}, 2))
     problem.set_atoms(torch.tensor([[2., -1.]]), torch.tensor([.5]), torch.tensor([3.]))
     base = torch.tensor([[.5, .5]], dtype=torch.float64, requires_grad=True)
     x = 2 * base
@@ -90,7 +90,7 @@ def test_gradient_only_loss_backpropagates_to_coefficients_and_input_graph():
 
 
 def test_empty_support_predicts_and_prepares_zero_features():
-    problem = SparseProblem(2)
+    problem = SparseProblem(resolve_model({}, 2))
     x = torch.ones(3, 2, dtype=torch.float64, requires_grad=True)
 
     value, gradient = problem(x)
@@ -114,7 +114,7 @@ def test_empty_support_predicts_and_prepares_zero_features():
 
 
 def test_module_conversion_and_forward_gradients_follow_exact_atoms():
-    problem = SparseProblem(2)
+    problem = SparseProblem(resolve_model({}, 2))
     assert problem.c.dtype == problem.inner_weight.dtype == problem.inner_bias.dtype == torch.float64
     problem.float()
     problem.set_atoms(torch.tensor([[2., -1.]]), torch.tensor([.5]), torch.tensor([3.]))
@@ -130,7 +130,7 @@ def test_module_conversion_and_forward_gradients_follow_exact_atoms():
 
 
 def test_setting_and_pruning_atoms_preserves_float64_coefficients():
-    problem = SparseProblem(2)
+    problem = SparseProblem(resolve_model({}, 2))
     W, b, _ = _atoms(n=2)
     c = torch.tensor([1.123456789012345, -1.0000000001], dtype=torch.float64)
     problem.set_atoms(W, b, c)
@@ -141,22 +141,15 @@ def test_setting_and_pruning_atoms_preserves_float64_coefficients():
     assert all(parameter.dtype == torch.float64 for parameter in problem.parameters())
 
 
-@pytest.mark.parametrize("entry_point", ["pdap", "preparation", "ssn"])
 @pytest.mark.parametrize("specifications,message", [
     ({"activation": torch.relu, "power": 4.}, "supports activation powers 1, 2, 3"),
     ({"activation": "softplus"}, "explicit moment_order"),
     ({"activation": "softplus", "moment_order": 1.}, "moment_order must exceed"),
     ({"activation": lambda x: x.square()}, "requires a registered activation"),
 ])
-def test_prediction_settings_are_rejected_before_training_changes_state(entry_point, specifications, message):
-    class UnavailableSamples(Dataset):
-        def __len__(self):
-            return 1
-
-        def __getitem__(self, index):
-            raise AssertionError("unsupported correction must be rejected before sample access")
-
-    problem = SparseProblem(2, **specifications)
+def test_prediction_only_settings_remain_usable_without_training_validation(specifications, message):
+    config = resolve_model(specifications, 2)
+    problem = SparseProblem(config)
     problem.set_atoms(torch.tensor([[1., 0.]]), torch.tensor([0.]), torch.tensor([2.]))
     x = torch.tensor([[2., 3.]], dtype=torch.float64)
     value, gradient = problem(x)
@@ -170,18 +163,7 @@ def test_prediction_settings_are_rejected_before_training_changes_state(entry_po
         torch.testing.assert_close(value, x.new_tensor([[8.]]))
         torch.testing.assert_close(gradient, x.new_tensor([[8., 0.]]))
     before = {name: tensor.clone() for name, tensor in problem.state_dict().items()}
-    loader = DataLoader(UnavailableSamples(), generator=torch.Generator().manual_seed(0))
     with pytest.raises(ValueError, match=message):
-        if entry_point == "pdap":
-            PDAP(ExperimentConfig().training).fit(
-                problem, loader, num_iterations=1, num_insertion=2, verbose=False,
-            )
-        elif entry_point == "preparation":
-            problem.prepare_coefficients(loader)
-        else:
-            SSN(
-                [problem.c], problem, lambda u: .5 * u.square().sum(),
-                torch.eye(1, dtype=problem.c.dtype),
-            )
+        validate_training(config)
     for name, tensor in problem.state_dict().items():
         torch.testing.assert_close(tensor, before[name], rtol=0, atol=0)

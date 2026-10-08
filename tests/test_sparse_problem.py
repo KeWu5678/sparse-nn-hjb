@@ -3,6 +3,7 @@
 import pytest
 import torch
 
+from src.config import resolve_model, validate_training
 from src.config.activations import ACTIVATIONS
 from src.data import make_dataloader
 from src.eval import metrics
@@ -17,7 +18,11 @@ def _samples():
 
 
 def _problem(activation="relu", power=1.0, **specifications):
-    problem = SparseProblem(2, activation=activation, power=power, moment_order=2.0, **specifications)
+    config = resolve_model({
+        "activation": activation, "power": power, "moment_order": 2.0, **specifications,
+    }, 2)
+    validate_training(config)
+    problem = SparseProblem(config)
     problem.set_atoms(
         torch.tensor([[0.5, -0.3], [0.1, 0.7]], dtype=torch.float64),
         torch.tensor([0.2, 0.3], dtype=torch.float64),
@@ -27,7 +32,7 @@ def _problem(activation="relu", power=1.0, **specifications):
 
 
 def test_obj_is_the_weighted_h1_quadratic():
-    problem = SparseProblem(2, loss_weights=(.4, 1.3))
+    problem = SparseProblem(resolve_model({"loss_weights": (.4, 1.3)}, 2))
     value = torch.tensor([[2.], [3.]], dtype=torch.float64, requires_grad=True)
     gradient = value.new_tensor([[1., 2.], [2., 1.]], requires_grad=True)
     target = torch.ones_like(value), torch.zeros_like(gradient)
@@ -41,7 +46,7 @@ def test_obj_is_the_weighted_h1_quadratic():
 
 
 def test_coefficient_gradient_and_full_hessian_match_the_scalar_objective():
-    problem = SparseProblem(2, loss_weights=(.4, 1.3))
+    problem = SparseProblem(resolve_model({"loss_weights": (.4, 1.3)}, 2))
     Kv = torch.tensor([[1., 2.], [3., 4.]], dtype=torch.float64)
     Kg = Kv.new_tensor([[1., 0.], [0., 2.], [-1., 2.], [2., 3.]])
     u = Kv.new_tensor([.2, -.3])
@@ -65,7 +70,7 @@ def test_coefficient_gradient_and_full_hessian_match_the_scalar_objective():
 @pytest.mark.parametrize("alpha", [0., .3])
 def test_sparsity_functional_remains_unweighted_and_respects_masks(alpha):
     problem = SparseProblem(
-        1, alpha=alpha, penalized_mask=torch.tensor([True, True, False]),
+        resolve_model({"alpha": alpha}, 1), penalized_mask=torch.tensor([True, True, False]),
         nonneg_mask=torch.tensor([False, True, False]),
     )
     u = torch.tensor([-2., -3., 100.], dtype=torch.float64)
@@ -73,10 +78,9 @@ def test_sparsity_functional_remains_unweighted_and_respects_masks(alpha):
 
 
 @pytest.mark.parametrize("power", [1.5, 4.0, 1.0 + 5e-13, 2.0 + 5e-13, 3.0 - 5e-13])
-def test_correction_rejects_unsupported_powers(power):
-    problem = SparseProblem(2, power=power)
+def test_training_config_rejects_unsupported_powers(power):
     with pytest.raises(ValueError, match="supports activation powers 1, 2, 3"):
-        problem.prepare_coefficients(make_dataloader(_samples()))
+        validate_training(resolve_model({"power": power}, 2))
 
 
 @pytest.mark.parametrize(
@@ -90,7 +94,7 @@ def test_correction_rejects_unsupported_powers(power):
 def test_validated_power_selects_the_proximal_map_and_derivative(
     power, exponent, alpha, value, expected, derivative,
 ):
-    problem = SparseProblem(2, power=power, alpha=alpha)
+    problem = SparseProblem(resolve_model({"power": power, "alpha": alpha}, 2))
     assert problem.penalty_exponent == exponent
     q = torch.tensor([-value, value], dtype=torch.float64)
     prox = problem.prox(q, 1.0)
@@ -144,7 +148,9 @@ def test_samples_define_the_objective_and_its_derivatives(activation, power, gam
 def test_one_problem_handles_empty_and_replaced_supports():
     data = _samples()
     loader = make_dataloader(data)
-    problem = SparseProblem(2, activation="softplus", alpha=0.01, moment_order=2.0)
+    config = resolve_model({"activation": "softplus", "alpha": 0.01, "moment_order": 2.0}, 2)
+    validate_training(config)
+    problem = SparseProblem(config)
     prediction = problem(data[0])
     residual = data[0], *(p - t for p, t in zip(prediction, data[1:]))
     torch.testing.assert_close(residual[1], -data[1])
@@ -207,7 +213,7 @@ def test_candidate_objective_gradient_retains_inner_weight_derivatives(activatio
 
 @pytest.mark.parametrize("activation,actual", [("leaky_relu", [.01, 1.]), ("relu2", [0., 4.])])
 def test_warmstart_preserves_the_historical_sphere_derivative_convention(activation, actual):
-    problem = SparseProblem(1, activation=activation)
+    problem = SparseProblem(resolve_model({"activation": activation}, 1))
     X = torch.tensor([[-1.], [2.]], dtype=torch.float64)
     W, b = X.new_ones((1, 1)), X.new_zeros(1)
     values, gradients = problem.jac_forward(X, W, b)

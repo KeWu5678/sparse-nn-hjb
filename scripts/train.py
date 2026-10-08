@@ -42,6 +42,7 @@ from omegaconf import DictConfig, ListConfig, OmegaConf
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
+from src.config import resolve_model, validate_training
 from src.config.schema import ExperimentConfig
 from src.data import DATA_DIR, load_value_samples, make_dataloaders, normalize_value_samples
 from src.eval import distance_binned_error, region_split_errors
@@ -207,7 +208,6 @@ def main(cfg: DictConfig) -> None:
     log_file = cfg.env.log_file or (run_dir / "run.log")
     configure_logging(verbose=cfg.env.verbose, level=cfg.env.log_level, log_file=log_file)
     set_seed(cfg.env.seed)
-    trainer = PDAP(cfg.training, insertion=cfg.model.insertion)
 
     # Create the run record before model construction/training so elapsed_s covers
     # the actual run, not only JSON serialization.
@@ -234,10 +234,13 @@ def main(cfg: DictConfig) -> None:
         data, normalizer = normalize_value_samples(data)
     input_dim = data["x"].shape[1]
     logger.info("loaded %s  (d=%d)", cfg.data.path, input_dim)
+    model_config = resolve_model(cfg.model, input_dim)
+    validate_training(model_config)
     train_loader, valid_loader = make_dataloaders(
         data, cfg.data.train_fraction, seed=cfg.env.seed,
     )
-    problem = SparseProblem.from_config(cfg.model, input_dim)
+    trainer = PDAP(cfg.training, insertion=model_config["insertion"])
+    problem = SparseProblem(model_config)
     history = trainer.fit(
         problem, train_loader, valid_loader,
         num_iterations=cfg.training.num_iterations,
@@ -267,7 +270,7 @@ def main(cfg: DictConfig) -> None:
     # split by distance to the switching set, merged into the run record so the
     # analysis layer reads them like any other metric.
     if cfg.eval.kind == "region_split":
-        evaluation_model = SparseProblem.from_config(cfg.model, input_dim)
+        evaluation_model = SparseProblem(model_config)
         history.restore_model(evaluation_model)
         region = region_split_metrics(cfg, evaluation_model, data, normalizer)
         metrics.update(region)

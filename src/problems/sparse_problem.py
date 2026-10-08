@@ -7,7 +7,6 @@ import torch
 from torch import Tensor, nn
 from torch.nn import functional as F
 
-from ..config import model_arguments, resolve_prediction, validate_training
 from ..data import full_batch
 from .moment import moment_weight
 from .penalty import (
@@ -33,54 +32,33 @@ class SparseProblem(nn.Module):
     For the log family loss = obj_augmented + alpha*||u||_1. For a fractional
     penalty obj_augmented = obj and the proximal map handles the full penalty.
     Optimizers own parameter mutation, differentiation of loss, and iterations.
-    Prediction accepts positive finite powers and named or callable activations.
-    Coefficient correction additionally requires the supported penalty/geometry.
+    Construction consumes an already resolved configuration. Training setup must
+    validate its penalty, geometry and insertion before constructing the problem.
     """
 
     inner_weight: Tensor
     inner_bias: Tensor
 
-    @classmethod
-    def from_config(cls, config, input_dim: int):
-        """Read problem specifications from the existing model configuration."""
-        problem = cls(input_dim, **model_arguments(config))
-        problem.validate_training()
-        return problem
-
     def __init__(
         self,
-        input_dim: int,
+        config,
         *,
-        activation: str | Callable[[Tensor], Tensor] = "relu",
-        power: float = 1.0,
-        alpha: float = 1e-5,
-        gamma: float = 0.0,
-        loss_weights: tuple[float, float] = (1.0, 1.0),
-        moment_order: float | None = None,
         penalized_mask: Tensor | None = None,
         nonneg_mask: Tensor | None = None,
     ) -> None:
         super().__init__()
-        self._activation_name, self._activation, self._use_sphere, self._moment_order = (
-            resolve_prediction(
-                input_dim, activation=activation, power=power, moment_order=moment_order,
-            )
-        )
-        self._power = power
-        self._alpha, self._gamma = alpha, gamma
-        self._loss_weights = loss_weights
+        self._activation_name = config["activation_name"]
+        self._activation = config["activation"]
+        self._use_sphere = config["use_sphere"]
+        self._moment_order = config["moment_order"]
+        self._power = config["power"]
+        self._alpha, self._gamma = config["alpha"], config["gamma"]
+        self._loss_weights = config["loss_weights"]
         self._penalized_mask = penalized_mask
         self._nonneg_mask = nonneg_mask
-        self.register_buffer("inner_weight", torch.empty((0, input_dim), dtype=torch.float64))
+        self.register_buffer("inner_weight", torch.empty((0, config["input_dim"]), dtype=torch.float64))
         self.register_buffer("inner_bias", torch.empty(0, dtype=torch.float64))
         self.c = nn.Parameter(torch.empty(0, dtype=torch.float64))
-
-    def validate_training(self, *, insertion: str | None = None) -> None:
-        """Check the stored specifications using the configuration layer's rules."""
-        validate_training(
-            activation_name=self._activation_name, power=self._power, gamma=self._gamma,
-            use_sphere=self.use_sphere, moment_order=self._moment_order, insertion=insertion,
-        )
 
     @property
     def input_dim(self) -> int:
@@ -142,8 +120,8 @@ class SparseProblem(nn.Module):
 
         The closure references this problem's objective; it does not copy the
         network or retain later changes to the sampled targets or neuron support.
+        Training configuration must have been validated before construction.
         """
-        self.validate_training()
         X, V, dV = full_batch(loader)
         Phi_v, Phi_g = self.jac_forward(X)
         normalization_weight = self.normalization_weight(self.inner_weight, self.inner_bias)

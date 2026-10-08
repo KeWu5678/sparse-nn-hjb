@@ -3,6 +3,7 @@
 import pytest
 import torch
 
+from src.config import resolve_model, validate_training
 from src.PDAP.warmstart import warm_start
 from src.problems import SparseProblem
 
@@ -22,12 +23,15 @@ def test_single_atom_warm_start_has_known_minimizer(
 ) -> None:
     # A single atom with feature value 1 gives curvature 1 and proximal input |v|.
     X = torch.ones((1, 1), dtype=torch.float64)
+    config = resolve_model({
+        "power": power, "loss_weights": (1.0, 0.0), "alpha": alpha, "gamma": gamma,
+    }, 1)
+    validate_training(config)
     result = warm_start(
         W_new=torch.ones_like(X),
         b_new=torch.zeros(1, dtype=torch.float64),
         residual=(X, torch.tensor([-sign * v], dtype=torch.float64), torch.zeros_like(X)),
-        problem=SparseProblem(1,
-                              power=power, loss_weights=(1.0, 0.0), alpha=alpha, gamma=gamma),
+        problem=SparseProblem(config),
     )
 
     assert result.item() == pytest.approx(sign * expected, rel=1e-13, abs=1e-13)
@@ -49,13 +53,14 @@ def test_log_warm_start_preserves_matlab_acceptance_guards(
     feature: float, alpha: float, v: float, expected: float
 ) -> None:
     X = torch.tensor([[feature]], dtype=torch.float64)
+    config = resolve_model({"loss_weights": (1.0, 0.0), "alpha": alpha, "gamma": 1.0}, 1)
+    validate_training(config)
 
     result = warm_start(
         W_new=torch.ones_like(X),
         b_new=torch.zeros(1, dtype=torch.float64),
         residual=(X, torch.tensor([-v], dtype=torch.float64), torch.zeros_like(X)),
-        problem=SparseProblem(1,
-                              loss_weights=(1.0, 0.0), alpha=alpha, gamma=1.0),
+        problem=SparseProblem(config),
     )
 
     assert result.item() == pytest.approx(expected, rel=1e-13, abs=1e-13)

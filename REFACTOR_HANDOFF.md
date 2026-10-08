@@ -6,6 +6,87 @@ Full-review baseline: `49eeb0349a0a8ee489c075400d23cb1cb31e1208`.
 
 ## Current status and working rules
 
+**Construction-ownership correction implemented, verified and independently
+reviewed, baseline `491af6a`.** The user
+rejected the resolver call at line 64: "the config is in charge of validating,
+the problem should just read of the config file, why do you add a method?"
+Moving validation formulas into config functions while the model still starts
+resolution/validation does not satisfy this instruction. The previous Standards
+and Spec passes missed that control-flow requirement; they do not establish
+acceptance of the constructor design.
+
+Configuration/application setup resolves and validates settings **before**
+constructing `SparseProblem`. The problem only reads prepared configuration and
+initializes network state. The raw-settings constructor and the model's
+`from_config` / `validate_training` wrappers are removed. Training, saved
+prediction and tests now use this flow. Hydra file/record names, callable and
+historical prediction, configuration-owned training restrictions, solver
+mathematics, fixtures, and the agreed method order are preserved. No replacement
+config class or model validation flag is added. Runtime tensor/support
+invariants remain part of the problem. `config_contracts` implemented
+source/tests; root documents/orchestrates. Independent review must inspect
+**who invokes** configuration processing, not just where its function bodies live.
+
+Implementation flow (an implementation choice, not another user requirement):
+
+```python
+runtime = resolve_model(cfg.model, input_dim)
+validate_training(runtime)
+problem = SparseProblem(runtime)
+```
+
+One config resolver returns an ordinary runtime mapping, retaining the
+existing raw Hydra/ModelConfig data for serialization. The constructor reads
+only resolved fields; runtime coefficient masks remain explicit keyword
+arguments. Saved prediction resolves its configuration without training checks.
+Training setup validates the same insertion selection that PDAP uses. The
+superseded `model_arguments` and `resolve_prediction` helpers and all model
+validation calls from preparation, PDAP and SSN are removed.
+
+This deliberately changes the programmatic construction contract. Training,
+coefficient preparation and SSN receive a problem built after configuration
+validation; they no longer revalidate arbitrary prediction-only models. The
+previous tests of late rejection now check configuration validation. Runner
+tests verify that invalid settings fail before model, trainer or DataLoader
+construction, preserving the original Hydra configuration. The prediction/
+training distinction and activation/moment/insertion rejection cases remain.
+`config_spec` independently checked this flow before implementation.
+
+Verification on frozen source: **483 passed, one known stale local
+controller-selection artifact failure, 18 warnings**, in 28.19 seconds.
+The worker startup test passes in this full run. The stale artifact and its
+test are unchanged; no artifact regeneration is part of this correction.
+Log: `/tmp/sparse-resolved-config-final-pytest.log`. Focused checks produced
+304 passes and one test-setup migration error; after correcting that setup,
+the exact test passed. Ruff passes all 26 changed Python files; core Pyright
+reports zero errors. The 33 unchanged problem methods retain identical ASTs,
+and preparation changes only its configuration gate and documentation. Other
+solver/proximal/penalty mathematics, method ordering and all three numerical
+fixtures match `491af6a`. Production code removes 15 net lines.
+
+Evidence: `/tmp/sparse-resolved-config-frozen-sources.json` hashes all 84 tracked
+source/test/runner files; `/tmp/sparse-resolved-config-frozen.diff` records the
+26-file implementation diff; `/tmp/sparse-resolved-config-mathematical-audit.json`
+records the mathematical comparison. Root verified the exact diff, all hashes
+and the unchanged user edit to `refactor.md`. The user's edit and unrelated
+untracked `vault/data_monitoring_research.md` are excluded from the commit.
+
+Both independent reviews passed: Standards found no material violations or
+design smells; Spec found no missing, incorrect or extra requirements. Both
+verified preconstruction control flow, frozen hashes/diff, mathematical
+invariance and fixtures. Spec accounted for the 15 fewer test cases: 13
+duplicate constructor/config cases and eight repeated late-entry rejection
+cases were removed, while six runner rejection-before-construction cases were
+added. Every distinct negative scenario remains covered; numerical assertions
+and tolerances are unchanged. Commit this reviewed correction on the current
+branch without pushing.
+
+## Earlier implementation records
+
+The entries below record earlier verification and design choices. The current
+construction contract above supersedes their model-owned configuration calls,
+factories, raw-settings constructor and late-validation guarantees.
+
 **Method-order follow-up implemented, verified and independently reviewed,
 alongside the configuration correction above baseline `74d2f05`.** The user
 explicitly pointed to `refactor.md`, Chapter 3, item 3: arrange methods in
@@ -496,7 +577,7 @@ historical ADR descriptions cannot establish additional user approval.
 | SSN | Retain `torch.optim.Optimizer`; optimize supplied outer coefficients with inner weights fixed, using SparseProblem's mathematics. Own correction iterations, working coefficients, and the starting-coefficient backup discussed by the user. | Complete correction, trial acceptance, final comparison/fallback and rollback are here; PDAP applies the result without a second correction acceptance loop. The legacy `ssn_solve` layer is deleted. Guard options and iteration defaults are compatibility/implementation choices, not new user requirements. |
 | Temporary preparation | The user selected "Have SparseProblem return a temporary prepared objective that SSN uses for that solve" over persistent cached attributes. | Features/targets/Hessian preparation is correction-local and reused for the solve. It is neither a second network nor a separate owner of mathematical formulas. No persistent loader or feature cache lives on SparseProblem. |
 | Data module and Dataset/DataLoader | The user reiterated "the data lives outside of the problem" and requested the DataLoader dependency. Data preparation and delivery leave PDAP/SSN. | `src/data.py` owns reading, validation, physical normalization, splitting and full-data assembly; Dataset/DataLoader retains and delivers aligned samples. Mathematical residuals/features/reductions remain evaluations, not DataLoader responsibilities. Native BatchSampler delivery now works while dropped samples remain rejected. |
-| Repository configuration | The user said configuration "is a repo level function and we are using hydra to manage it", and later explicitly assigned activation resolution/type checking and constructor configuration contracts to config. | Hydra/runner constructs configured objects. Config resolves prediction settings, validates constructor inputs and model kind, and owns training rules; SparseProblem consumes those settings. DataLoader does not own repository configuration. Broader schema redesign remains deferred. |
+| Repository configuration | The user said configuration "is a repo level function and we are using hydra to manage it", assigned activation resolution/type checking and contracts to config, and rejected the model invoking config helpers. | Setup resolves configuration and validates training compatibility before constructing the model or optimizer. SparseProblem only reads the prepared mapping; it has no configuration factory, resolver call or validation wrapper. DataLoader does not own repository configuration. Broader schema redesign remains deferred. |
 | Measurement, logging, monitoring and history | The user initially deferred these concerns, then specifically requested "separate the metrics from the mathematics" in the current method review. | Metric assembly moves into existing evaluation code, called by History. Mathematical objective/penalty evaluation stays on the problem. Persisted metric names and snapshots remain; broader logging/backend redesign stays deferred. |
 | Work allocation | The user assigned root "only in charge of the planning and orchestrating" and asked for subagents to implement and review. | Root edits plans/docs only. The latest user instruction authorizes source cleanup through implementation agents, followed by independent review. |
 
@@ -1359,18 +1440,19 @@ That session supplied the earlier implemented ownership split. The current discu
 
 Current resumption message:
 
-> The configuration-contract correction and Chapter 3.3 method-order follow-up
-> are implemented, verified and independently reviewed above baseline 74d2f05.
-> Config owns activation resolution/type checks and constructor configuration
-> contracts. SparseProblem now reads in descending explanatory order; all 37
-> method bodies are unchanged by ordering. Keep the agreed forward/jac_forward,
-> obj/jac_obj/hess_obj interfaces; the prepared class and pairing helper are gone.
-> Root coordinates/docs only; subagents implement and independently review.
-> Final checks: 497 passed in the full run, plus the sandbox-blocked worker test
-> passed in root's unrestricted rerun. Only the known stale local artifact fails.
-> Ruff/Pyright and both refreshed reviews pass; fixtures/tolerances are unchanged.
-> Preserve the user's unstaged refactor.md edits. Inspect Git to confirm the
-> combined implementation commit. No push is authorized.
+> The construction-ownership correction above baseline 491af6a is implemented,
+> verified and independently reviewed. Inspect Git state for its commit. Config
+> setup resolves and validates before model construction; SparseProblem(runtime)
+> only reads fields and initializes tensors. Model factory/validation wrappers
+> and old constructor compatibility are removed; callers and tests are migrated.
+> Training/preparation/SSN require validation during setup, without late model
+> revalidation. Callable/historical prediction, mathematical code, numerical
+> fixtures/tolerances and Chapter 3.3 method order are preserved. Full suite:
+> 483 passed, one known stale controller-selection artifact failure. Evidence:
+> /tmp/sparse-resolved-config-*. Both independent reviews found no material
+> findings and verified the frozen implementation. Root coordinates/documents;
+> config_contracts implements. Preserve the user's unstaged refactor.md edits
+> and unrelated untracked vault/data_monitoring_research.md. No push is authorized.
 
 Historical resumption note (superseded by the message above):
 

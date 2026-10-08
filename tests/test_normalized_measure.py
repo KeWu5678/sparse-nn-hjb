@@ -7,6 +7,7 @@ import math
 import pytest
 import torch
 
+from src.config import resolve_model, validate_training
 from src.config.schema import ExperimentConfig, ModelConfig
 from src.problems import SparseProblem
 from src.problems.moment import amplitude_mass_radius, moment_weight
@@ -79,20 +80,20 @@ def test_amplitude_mass_radius_is_zero_without_amplitude_mass() -> None:
 
 
 def test_nonhomogeneous_signed_profile_is_normalized_automatically() -> None:
-    problem = SparseProblem(2, activation="softplus", power=1.0)
+    problem = SparseProblem(resolve_model({"activation": "softplus", "power": 1.0}, 2))
 
     assert problem.normalized
 
 
 def test_sphere_profile_model_is_not_moment_normalized() -> None:
-    sphere = SparseProblem(2, activation="relu", power=1.0)
+    sphere = SparseProblem(resolve_model({"activation": "relu", "power": 1.0}, 2))
 
     assert not sphere.normalized
 
 
 def test_algorithm1_rejects_nonunit_activation_power() -> None:
     with pytest.raises(ValueError, match="Algorithm 1.*power == 1"):
-        SparseProblem(2, activation="softplus", power=2.0).validate_training()
+        validate_training(resolve_model({"activation": "softplus", "power": 2.0}, 2))
 
 
 def test_model_schema_has_no_additive_objective_axis() -> None:

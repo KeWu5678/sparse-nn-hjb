@@ -20,6 +20,7 @@ from typing import Any, cast
 import numpy as np
 import torch
 
+from .config import resolve_model
 from .data import DATA_DIR, TensorSamples, ValueSampleNormalizer, load_value_samples
 from .eval import relative_errors
 from .problems import SparseProblem
@@ -71,7 +72,8 @@ def model_from_history(
     activation powers that the current coefficient solver does not support.
     """
     w, b, c = history_atoms(history, iteration, run_index)
-    model = SparseProblem(w.shape[1], activation=activation, power=power)
+    config = resolve_model({"activation": activation, "power": power}, w.shape[1])
+    model = SparseProblem(config)
     model.set_atoms(torch.as_tensor(w), torch.as_tensor(b), torch.as_tensor(c))
     model.eval()
     return model

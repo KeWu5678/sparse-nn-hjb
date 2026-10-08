@@ -10,6 +10,7 @@ from torch.utils.data import (
     TensorDataset,
 )
 
+from src.config import resolve_model, validate_training
 from src.config.schema import TrainingConfig
 from src.data import full_batch, make_dataloader
 from src.eval import metrics
@@ -21,7 +22,9 @@ from src.problems import SparseProblem
 def _linear_case(**specifications):
     x = torch.tensor([[1., 0.], [0., 1.], [1., 1.]], dtype=torch.float64)
     data = x, x.new_tensor([[1.], [2.], [4.]]), x.new_tensor([[1., 2.]]).repeat(3, 1)
-    problem = SparseProblem(2, moment_order=2.0, **specifications)
+    config = resolve_model({"moment_order": 2.0, **specifications}, 2)
+    validate_training(config)
+    problem = SparseProblem(config)
     problem.set_atoms(torch.eye(2, dtype=x.dtype), x.new_full((2,), .5), x.new_tensor([1., 2.]))
     return data, problem
 
@@ -57,7 +60,9 @@ def test_full_data_metrics_weight_samples_and_add_penalty_once(batch_size):
 def test_candidate_profile_combines_signed_batches_before_acceptance(monkeypatch, batch_size):
     x = torch.tensor([[1.], [2.], [3.]], dtype=torch.float64)
     data = x, x.new_tensor([[-1.], [3.], [-2.]]), torch.zeros_like(x)
-    problem = SparseProblem(input_dim=1, alpha=.05)
+    config = resolve_model({"alpha": .05}, 1)
+    validate_training(config)
+    problem = SparseProblem(config)
     X, V, dV = full_batch(make_dataloader(data, batch_size=batch_size))
     residuals = X, -V, -dV  # The current network is empty.
     a, b = x.new_tensor([1.], requires_grad=True), x.new_tensor(.25, requires_grad=True)
@@ -79,8 +84,10 @@ def test_candidate_profile_combines_signed_batches_before_acceptance(monkeypatch
     torch.testing.assert_close(torch.as_tensor(W[0]), a)
     assert bias[0] == .25
     assert coefficient[0] == pytest.approx(-68 / 1615)
+    config = resolve_model({"alpha": .34}, 1)
+    validate_training(config)
     W, _, _ = insertion.profile_threshold(
-        SparseProblem(1, alpha=.34), residuals, sample_sphere=lambda _: (a, b), N=1,
+        SparseProblem(config), residuals, sample_sphere=lambda _: (a, b), N=1,
         insert_init="guaranteed", verbose=False,
     )
     assert len(W) == 0
@@ -92,10 +99,12 @@ def test_chunking_preserves_correction_candidate_and_warmstart_calculations(acti
     data = x, x.square().sum(dim=1, keepdim=True), 2 * x
     W = x.new_tensor([[.5, -.3], [.1, .7]])
     b, c = x.new_tensor([.2, .3]), x.new_tensor([-.6, .8])
-    problem = SparseProblem(
-        2, activation=activation, power=power, alpha=.01,
-        loss_weights=(.4, 1.3), moment_order=2.0,
-    )
+    config = resolve_model({
+        "activation": activation, "power": power, "alpha": .01,
+        "loss_weights": (.4, 1.3), "moment_order": 2.0,
+    }, 2)
+    validate_training(config)
+    problem = SparseProblem(config)
     problem.set_atoms(W, b, c)
     full, chunked = make_dataloader(data), make_dataloader(data, batch_size=2)
     reference_obj, reference_hessian, reference_weight = problem.prepare_coefficients(full)
@@ -155,10 +164,14 @@ def test_pdap_records_one_full_data_result_per_outer_iteration(batch_size):
     torch.manual_seed(41)
     x = torch.tensor([[.2], [.4], [.7], [1.], [1.3]], dtype=torch.float64)
     data = x, x.square(), 2 * x
-    problem = SparseProblem(1, alpha=1e-4)
+    config = resolve_model({"alpha": 1e-4}, 1)
+    validate_training(config)
+    problem = SparseProblem(config)
     loader = make_dataloader(data, batch_size=batch_size)
     training = TrainingConfig(fit_outer_iterations=2, lbfgs_steps=5)
-    history = PDAP(training).fit(problem, loader, num_iterations=2, num_insertion=4, verbose=False)
+    history = PDAP(training, insertion=config["insertion"]).fit(
+        problem, loader, num_iterations=2, num_insertion=4, verbose=False,
+    )
     assert len(history.train_loss) == 2
     for iteration, loss in enumerate(history.train_loss):
         history.restore_model(problem, iteration)
@@ -176,9 +189,12 @@ def test_logging_accepts_a_finite_loader_without_a_sample_count(verbose):
             x = torch.zeros(2, 1, dtype=torch.float64)
             return iter(zip(x, x, x))
 
+    config = resolve_model({}, 1)
+    validate_training(config)
+    problem = SparseProblem(config)
     loader = DataLoader(Samples(), batch_size=2, generator=torch.Generator().manual_seed(0))
-    history = PDAP(TrainingConfig()).fit(
-        SparseProblem(1), loader, num_iterations=0, num_insertion=1, verbose=verbose,
+    history = PDAP(TrainingConfig(), insertion=config["insertion"]).fit(
+        problem, loader, num_iterations=0, num_insertion=1, verbose=verbose,
     )
     assert history.train_loss == [0.]
 

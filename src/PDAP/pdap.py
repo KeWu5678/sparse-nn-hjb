@@ -250,10 +250,11 @@ class PDAP:
         Loaders supply the complete dataset for each mathematical evaluation;
         batches do not introduce additional optimizer steps. Omitted validation
         uses the training loader.
+        Setup must validate the model configuration with this trainer's insertion
+        rule before constructing the problem.
         """
         if valid_loader is None:
             valid_loader = train_loader
-        problem.validate_training(insertion=self.insertion_kind)
         # A trainer can be reused; a zero-iteration fit has no search to report.
         self._last_search_radius = None
         self._last_theorem_applied = None

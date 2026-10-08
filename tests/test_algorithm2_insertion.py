@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 import torch
 
+from src.config import resolve_model, validate_training
 from src.PDAP import insertion
 from src.problems import SparseProblem
 
@@ -21,7 +22,9 @@ def _insert(monkeypatch, problem, profile, curvature=1.0):
 
 def test_q_half_insertion_minimizes_the_actual_objective_increment(monkeypatch) -> None:
     """For P=4.25, A=alpha=1, the exact nonzero minimizer is c=-4."""
-    problem = SparseProblem(1, alpha=1.0, power=3.0)
+    config = resolve_model({"alpha": 1.0, "power": 3.0, "insertion": "finite_step"}, 1)
+    validate_training(config)
+    problem = SparseProblem(config)
     result = _insert(monkeypatch, problem, 4.25)
 
     assert result.shape == (1,)
@@ -32,7 +35,9 @@ def test_q_half_insertion_minimizes_the_actual_objective_increment(monkeypatch) 
 
 
 def test_q_two_thirds_insertion_minimizes_the_actual_objective_increment(monkeypatch) -> None:
-    problem = SparseProblem(1, alpha=1.5, power=2.0)
+    config = resolve_model({"alpha": 1.5, "power": 2.0, "insertion": "finite_step"}, 1)
+    validate_training(config)
+    problem = SparseProblem(config)
     result = _insert(monkeypatch, problem, 8.5)
 
     assert result.shape == (1,)
@@ -47,7 +52,9 @@ def test_q_two_thirds_insertion_minimizes_the_actual_objective_increment(monkeyp
 
 
 def test_q_one_insertion_keeps_the_soft_threshold_rule(monkeypatch) -> None:
-    problem = SparseProblem(1, alpha=1.0, loss_weights=(2., 1.))
+    config = resolve_model({"alpha": 1.0, "loss_weights": (2., 1.), "insertion": "finite_step"}, 1)
+    validate_training(config)
+    problem = SparseProblem(config)
     result = _insert(monkeypatch, problem, -3.0, curvature=2.0)
 
     assert result.shape == (1,)
@@ -64,7 +71,9 @@ def test_q_one_insertion_keeps_the_soft_threshold_rule(monkeypatch) -> None:
 def test_fractional_insertion_rejects_a_global_proximal_tie(
     monkeypatch, profile: float, alpha: float, q: float
 ) -> None:
-    problem = SparseProblem(1, alpha=alpha, power=2.0 / q - 1.0)
+    config = resolve_model({"alpha": alpha, "power": 2.0 / q - 1.0, "insertion": "finite_step"}, 1)
+    validate_training(config)
+    problem = SparseProblem(config)
     assert _insert(monkeypatch, problem, profile).shape == (0,)
 
 
@@ -73,7 +82,11 @@ def test_fractional_insertion_rejects_a_global_proximal_tie(
     (1e-20, 1., 2e-20, -1.9999999959435182e-40),
 ])
 def test_insertion_preserves_the_power_prox_and_exact_tiny_penalty(monkeypatch, alpha, power, profile, expected):
-    problem = SparseProblem(1, alpha=alpha, power=power, loss_weights=(1e20, 1.))
+    config = resolve_model({
+        "alpha": alpha, "power": power, "loss_weights": (1e20, 1.), "insertion": "finite_step",
+    }, 1)
+    validate_training(config)
+    problem = SparseProblem(config)
     result = _insert(monkeypatch, problem, profile, curvature=1e20)
     assert result.shape == (1,)
     c = result[0]

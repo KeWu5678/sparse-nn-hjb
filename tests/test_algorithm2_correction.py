@@ -6,6 +6,7 @@ import pytest
 import torch
 from ssn_test_problem import synthetic_problem
 
+from src.config import resolve_model, validate_training
 from src.data import make_dataloader
 from src.problems import SparseProblem
 from src.problems.penalty import _noncvx_penalty
@@ -16,7 +17,7 @@ def test_prox_scale_for_fractional_penalty_uses_all_nonzero_penalized_coefficien
     coefficients = torch.tensor([0.0, -0.5, 2.0, 0.01], dtype=torch.float64)
     penalized = torch.tensor([True, True, True, False])
 
-    problem = SparseProblem(4, alpha=1.0, power=3.0, penalized_mask=penalized)
+    problem = SparseProblem(resolve_model({"alpha": 1.0, "power": 3.0}, 4), penalized_mask=penalized)
     scale = problem.prox_scale_for_fractional_penalty(coefficients, rho=0.9)
 
     assert scale == pytest.approx(0.3181980515339464)
@@ -26,7 +27,7 @@ def test_prox_scale_for_fractional_penalty_preserves_a_smaller_existing_scale() 
     coefficients = torch.tensor([0.5], dtype=torch.float64)
     penalized = torch.tensor([True])
 
-    problem = SparseProblem(1, alpha=1e-5, power=3.0, penalized_mask=penalized)
+    problem = SparseProblem(resolve_model({"alpha": 1e-5, "power": 3.0}, 1), penalized_mask=penalized)
     scale = problem.prox_scale_for_fractional_penalty(coefficients, rho=0.9)
 
     assert scale == pytest.approx(1e-5)
@@ -46,11 +47,13 @@ def test_fractional_ssn_chooses_the_scale_from_its_starting_coefficients() -> No
 @pytest.mark.parametrize("power", [2.0, 3.0])
 def test_fractional_problem_rejects_a_log_penalty(power: float) -> None:
     with pytest.raises(ValueError, match="power penalty requires gamma == 0"):
-        SparseProblem(1, alpha=1.0, gamma=1.0, power=power).validate_training()
+        validate_training(resolve_model({"alpha": 1.0, "gamma": 1.0, "power": power}, 1))
 
 
 def test_fractional_correction_reports_an_all_zero_warm_start() -> None:
-    problem = SparseProblem(1, alpha=1.0, gamma=0.0, power=2.0)
+    config = resolve_model({"alpha": 1.0, "gamma": 0.0, "power": 2.0}, 1)
+    validate_training(config)
+    problem = SparseProblem(config)
     problem.set_atoms(
         torch.tensor([[1.0]], dtype=torch.float64),
         torch.tensor([0.0], dtype=torch.float64),

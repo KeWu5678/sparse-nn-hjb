@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 import torch
 
+from src.config import resolve_model, validate_training
 from src.config.schema import EnvConfig, ExperimentConfig, ModelConfig, TrainingConfig
 from src.data import make_dataloaders
 from src.PDAP import PDAP
@@ -40,10 +41,12 @@ def test_algorithm2_fits_an_exact_relu_power_atom(power: float) -> None:
         ),
         env=EnvConfig(verbose=False),
     )
-    model = SparseProblem.from_config(cfg.model, input_dim=2)
+    model_config = resolve_model(cfg.model, input_dim=2)
+    validate_training(model_config)
+    model = SparseProblem(model_config)
     train_loader, valid_loader = make_dataloaders(data, cfg.data.train_fraction)
 
-    history = PDAP(cfg.training, insertion=cfg.model.insertion).fit(
+    history = PDAP(cfg.training, insertion=model_config["insertion"]).fit(
         model,
         train_loader,
         valid_loader,

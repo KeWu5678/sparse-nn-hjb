@@ -28,8 +28,8 @@ def _noncvx_penalty(
 
     For q=1, sum alpha*phi(base); for q!=1 (gamma=0), sum alpha*base^q.
     Here base is |theta| on free-sign coordinates and clamp(theta, 0) on
-    nonnegative ones. SparseProblem validates the penalty family and uses this term for
-    coefficient evaluation and full-model loss recording.
+    nonnegative ones. Training configuration validates the penalty family;
+    SparseProblem uses this term for coefficient evaluation and loss recording.
     """
     coefficients = theta[penalized]
     if coefficients.numel() == 0:
@@ -52,7 +52,7 @@ def jac_noncvx_penalty(abs_u, sign_u, alpha, gamma, penalty_exponent=1.0):
 
     For q=1: alpha * dphi(|u|) * sign(u).
     For q!=1 (gamma=0): alpha * q * |u|^{q-1} * sign(u),
-    with a singularity guard at u=0. SparseProblem validates this parameter restriction.
+    with a singularity guard at u=0. Training configuration validates this restriction.
     """
     if penalty_exponent == 1.0:
         return alpha * _dphi(abs_u, gamma) * sign_u

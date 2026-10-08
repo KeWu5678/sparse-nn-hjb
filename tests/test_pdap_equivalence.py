@@ -23,6 +23,7 @@ import numpy as np
 import pytest
 import torch
 
+from src.config import resolve_model, validate_training
 from src.config.schema import EnvConfig, ExperimentConfig, ModelConfig, TrainingConfig
 from src.data import make_dataloaders
 from src.PDAP import PDAP
@@ -68,9 +69,11 @@ def _run_summary(name: str) -> np.ndarray:
     np.random.seed(SEED)
     cfg = _cfg(name)
     data = _make_data()
-    model = SparseProblem.from_config(cfg.model, input_dim=data["x"].shape[1])
+    model_config = resolve_model(cfg.model, input_dim=data["x"].shape[1])
+    validate_training(model_config)
+    model = SparseProblem(model_config)
     train_loader, valid_loader = make_dataloaders(data, cfg.data.train_fraction)
-    out = PDAP(cfg.training, insertion=cfg.model.insertion).fit(
+    out = PDAP(cfg.training, insertion=model_config["insertion"]).fit(
         model,
         train_loader, valid_loader, num_iterations=3, num_insertion=20, verbose=False,
     )

@@ -8,8 +8,9 @@ from hydra import compose, initialize
 from hydra.core.config_store import ConfigStore
 from hydra.core.hydra_config import HydraConfig
 from hydra.errors import ConfigCompositionException
+from omegaconf import OmegaConf
 
-from src.config import get_activation, get_use_sphere, model_arguments, resolve_prediction
+from src.config import get_activation, get_use_sphere, resolve_model, validate_training
 from src.config.schema import ExperimentConfig, ModelConfig
 from src.data import DATA_DIR, load_value_samples
 from src.PDAP import PDAP
@@ -58,7 +59,9 @@ def test_model_groups() -> None:
     # finite_step config group = signed + finite_step
     assert fs.model.kind == "signed"
     assert fs.model.insertion == "finite_step"
-    assert SparseProblem.from_config(alg1.model, 2).normalized
+    model_config = resolve_model(alg1.model, 2)
+    validate_training(model_config)
+    assert SparseProblem(model_config).normalized
     assert "objective" not in alg1.model
     assert "moment_beta" not in alg1.model
 
@@ -126,8 +129,14 @@ def test_config_builds_trainer_and_model() -> None:
     with initialize(version_base=None, config_path="../conf"):
         cfg = compose(config_name="config", overrides=["model.gamma=0.5", "env.verbose=false"])
 
-    pdap = PDAP(cfg.training, insertion=cfg.model.insertion)
-    problem = SparseProblem.from_config(cfg.model, 2)
+    raw_model = OmegaConf.to_container(cfg.model, resolve=True)
+    model_config = resolve_model(cfg.model, 2)
+    validate_training(model_config)
+    pdap = PDAP(cfg.training, insertion=model_config["insertion"])
+    problem = SparseProblem(model_config)
+    assert model_config["activation"] is torch.relu
+    assert OmegaConf.to_container(cfg.model, resolve=True) == raw_model
+    assert cfg.model.activation == "relu"
     assert problem.alpha == cfg.model.alpha == 1e-5
     # Configured alpha and gamma determine the log penalty's normal-map scaling.
     assert problem.inverse_step(None) == pytest.approx(1.000005, rel=0, abs=1e-12)
@@ -151,7 +160,9 @@ def test_construct_problem_from_loaded_dataset() -> None:
     if not (DATA_DIR / cfg.data.path).exists():
         pytest.skip(f"dataset not present (rawdata/ is gitignored): {cfg.data.path}")
     data = load_value_samples(cfg.data.path)
-    model = SparseProblem.from_config(cfg.model, input_dim=data["x"].shape[1])
+    model_config = resolve_model(cfg.model, input_dim=data["x"].shape[1])
+    validate_training(model_config)
+    model = SparseProblem(model_config)
     assert model.input_dim == 2
 
 
@@ -160,7 +171,6 @@ def test_activation_resolver() -> None:
     assert callable(get_activation("matern52"))
 
 
-@pytest.mark.parametrize("entry_point", ["config", "problem"])
 @pytest.mark.parametrize("specifications,error,message", [
     ({"activation": "unknown"}, ValueError, "unknown activation"),
     ({"activation": None}, TypeError, "activation must be a registry name or callable"),
@@ -170,12 +180,11 @@ def test_activation_resolver() -> None:
     *[({"power": power}, ValueError, "power must be positive and finite")
       for power in (-1., 0., float("nan"), float("inf"), -float("inf"))],
 ])
-def test_prediction_contracts_are_owned_by_config(entry_point, specifications, error, message):
-    arguments = dict(input_dim=2, activation="relu", power=1., moment_order=None)
-    arguments.update(specifications)
-    construct = resolve_prediction if entry_point == "config" else SparseProblem
+def test_prediction_contracts_are_owned_by_config(specifications, error, message):
+    arguments = dict(specifications)
+    input_dim = arguments.pop("input_dim", 2)
     with pytest.raises(error, match=message):
-        construct(**arguments)
+        resolve_model(arguments, input_dim)
 
 
 @pytest.mark.parametrize("name,use_sphere,order", [
@@ -184,30 +193,26 @@ def test_prediction_contracts_are_owned_by_config(entry_point, specifications, e
 def test_prediction_resolution_preserves_registered_identity_and_geometry(name, use_sphere, order):
     activation = get_activation(name)
     for selection in (name, activation):
-        resolved_name, resolved_activation, sphere, moment_order = resolve_prediction(
-            2, activation=selection, power=4., moment_order=2.01,
+        resolved = resolve_model(
+            {"activation": selection, "power": 4., "moment_order": 2.01}, 2,
         )
-        assert resolved_name == name
-        assert resolved_activation is activation
-        assert sphere is use_sphere
-        assert moment_order == order
+        assert resolved["activation_name"] == name
+        assert resolved["activation"] is activation
+        assert resolved["use_sphere"] is use_sphere
+        assert resolved["moment_order"] == order
 
 
 def test_prediction_resolution_preserves_unregistered_callable():
     activation = lambda x: x.square()
-    name, resolved, use_sphere, moment_order = resolve_prediction(
-        2, activation=activation, power=1.5, moment_order=None,
-    )
-    assert name is None and resolved is activation
-    assert use_sphere is False and moment_order is None
+    resolved = resolve_model({"activation": activation, "power": 1.5}, 2)
+    assert resolved["activation_name"] is None and resolved["activation"] is activation
+    assert resolved["use_sphere"] is False and resolved["moment_order"] is None
 
 
 def test_model_kind_contract_is_owned_by_config():
     config = ModelConfig(kind="unsupported")
     with pytest.raises(ValueError, match="only supports kind='signed'"):
-        model_arguments(config)
-    with pytest.raises(ValueError, match="only supports kind='signed'"):
-        SparseProblem.from_config(config, 2)
+        resolve_model(config, 2)
 
 
 def test_use_sphere_bundled_with_activation() -> None:
@@ -222,15 +227,15 @@ def test_use_sphere_derives_from_activation() -> None:
         smooth = compose(config_name="config",
                          overrides=["model.activation=matern52", "model.moment_order=2.0", "env.verbose=false"])
     # default activation is relu (homogeneous -> sphere); matern52 is not
-    assert SparseProblem.from_config(default.model, 2).use_sphere is True
-    assert SparseProblem.from_config(smooth.model, 2).use_sphere is False
+    assert SparseProblem(resolve_model(default.model, 2)).use_sphere is True
+    assert SparseProblem(resolve_model(smooth.model, 2)).use_sphere is False
 
 
 @pytest.mark.parametrize("order", [None, 0., -1., float("nan"), float("inf"), -float("inf")])
 def test_nonhomogeneous_training_requires_an_explicit_positive_finite_order(order):
     config = ModelConfig(activation="softplus", moment_order=order)
     with pytest.raises(ValueError, match="moment_order"):
-        SparseProblem.from_config(config, 2)
+        validate_training(resolve_model(config, 2))
 
 
 @pytest.mark.parametrize("activation,bound", [
@@ -239,17 +244,21 @@ def test_nonhomogeneous_training_requires_an_explicit_positive_finite_order(orde
 ])
 def test_training_order_exceeds_the_declared_h1_growth_bound(activation, bound):
     with pytest.raises(ValueError, match="moment_order must exceed"):
-        SparseProblem.from_config(ModelConfig(activation=activation, moment_order=bound), 2)
-    problem = SparseProblem.from_config(ModelConfig(activation=activation, moment_order=bound + .01), 2)
+        validate_training(resolve_model(ModelConfig(activation=activation, moment_order=bound), 2))
+    config = resolve_model(ModelConfig(activation=activation, moment_order=bound + .01), 2)
+    validate_training(config)
+    problem = SparseProblem(config)
     assert problem.moment_order == bound + .01
 
 
 def test_activation_without_growth_metadata_keeps_explicit_numerical_training():
     config = ModelConfig(activation="snake_b0_25", moment_order=.5)
-    assert SparseProblem.from_config(config, 2).moment_order == .5
+    resolved = resolve_model(config, 2)
+    validate_training(resolved)
+    assert SparseProblem(resolved).moment_order == .5
     config.moment_order = None
     with pytest.raises(ValueError, match="explicit moment_order"):
-        SparseProblem.from_config(config, 2)
+        validate_training(resolve_model(config, 2))
 
 
 @pytest.mark.parametrize("activation,order", [("leaky_relu", None), ("gelu_squared", 2.01)])
@@ -259,4 +268,6 @@ def test_log_penalty_preset_supports_both_formulations(activation, order):
             "+experiment=log_penalty", "+model=profile", f"model.activation={activation}",
         ])
     assert cfg.model.moment_order == 2.01
-    assert SparseProblem.from_config(cfg.model, 2).moment_order == order
+    model_config = resolve_model(cfg.model, 2)
+    validate_training(model_config)
+    assert SparseProblem(model_config).moment_order == order

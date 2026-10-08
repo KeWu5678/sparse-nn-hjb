@@ -68,12 +68,12 @@ class SSN(Optimizer):
         prox_scale: float | None = None,
         verbose: bool = False,
     ) -> None:
+        """Use a problem whose configuration was validated by training setup."""
         methods = ("levenberg_marquardt", "steihaug_cg")
         if method not in methods:
             raise ValueError(f"unknown method {method!r}; expected one of {list(methods)}")
         if not isinstance(max_iter, int) or isinstance(max_iter, bool) or max_iter < 0:
             raise ValueError("max_iter must be a nonnegative integer")
-        problem.validate_training()
         defaults = {
             "max_iter": max_iter,
             "correction_guard": correction_guard,

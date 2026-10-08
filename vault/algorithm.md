@@ -138,7 +138,8 @@ The implemented ownership and its verification are recorded in
 warm-start selection; SparseProblem supplies their mathematical evaluations.
 
 - `problems/` — network representation and problem mathematics:
-  - `sparse_problem.py` — `SparseProblem(nn.Module)` registers `inner_weight` and
+  - `sparse_problem.py` — `SparseProblem(nn.Module)` reads resolved configuration
+    and registers `inner_weight` and
     `inner_bias` as buffers and `c` as its parameter. `forward` returns network
     values and input gradients; `jac_forward` supplies their coefficient
     Jacobians. `obj`, `jac_obj`, and `hess_obj` supply fitting and its coefficient
@@ -168,8 +169,11 @@ warm-start selection; SparseProblem supplies their mathematical evaluations.
 - `results.py` — saved-history reconstruction and physical-coordinate prediction.
 - `metric.py` — experiment-analysis utilities (per-gamma neuron/loss tables, plots).
 - `config/` — Hydra structured configuration for PDAP training:
-  - `schema.py` — typed model/training/data/env config objects and shared training
-    compatibility validation, called before correction or insertion work.
+  - `schema.py` — typed model/training/data/env config objects, activation and
+    geometry resolution, and training compatibility validation. Setup resolves
+    and validates configuration before constructing `SparseProblem`; the model
+    and optimizers do not initiate those configuration operations. Raw Hydra
+    settings remain unchanged for serialization.
   - `activations.py` — canonical activation registry used by configs and scripts.
   - `scripts/train.py` registers the Hydra `config_schema` before composition.
 - Open-loop data subsystem: `src/OpenLoop/` — shared `ValueSamples`, VDP smooth

@@ -16,6 +16,7 @@ import numpy as np
 import pytest
 import torch
 
+from src.config import resolve_model, validate_training
 from src.problems import SparseProblem
 from src.problems.penalty import _phi
 from src.SSN import SSN
@@ -78,8 +79,10 @@ def _run_trajectory(config: dict) -> np.ndarray:
     # The historical optimizer subtracted the signed penalty gradient from the
     # clamped loss, including on negative coordinates. Preserve that test problem
     # rather than silently changing its objective or regenerating its fixtures.
+    model_config = resolve_model({"alpha": alpha, "gamma": gamma, "power": power}, P)
+    validate_training(model_config)
     problem = _LegacyProblem(
-        P, alpha=alpha, gamma=gamma, power=power,
+        model_config,
         penalized_mask=pen_mask, nonneg_mask=config.get("nonneg_mask"),
     )
     kind = config["kind"]

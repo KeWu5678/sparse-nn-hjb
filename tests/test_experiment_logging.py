@@ -253,10 +253,10 @@ def test_training_record_preserves_fitted_normalization(tmp_path, monkeypatch, n
 
     # A nonzero fixed model exposes the metric's units without performing an
     # optimizer step. The zero network has relative error 1 in either convention.
-    from_config = train.SparseProblem.from_config
+    problem_class = train.SparseProblem
 
-    def initialized_problem(model_config, input_dim):
-        model = from_config(model_config, input_dim)
+    def initialized_problem(model_config):
+        model = problem_class(model_config)
         model.set_atoms(
             torch.tensor([[0.5, -0.2]], dtype=torch.float64),
             torch.tensor([1.0], dtype=torch.float64),
@@ -264,7 +264,7 @@ def test_training_record_preserves_fitted_normalization(tmp_path, monkeypatch, n
         )
         return model
 
-    monkeypatch.setattr(train.SparseProblem, "from_config", initialized_problem)
+    monkeypatch.setattr(train, "SparseProblem", initialized_problem)
     train.main.__wrapped__(cfg)
 
     record = json.loads(next(run_dir.glob("*.json")).read_text())
@@ -284,7 +284,7 @@ def test_training_record_preserves_fitted_normalization(tmp_path, monkeypatch, n
     with next(run_dir.glob("result_*.pkl")).open("rb") as file:
         history = pickle.load(file)
     assert (history.reporting_normalizer is not None) is normalize
-    model = history.restore_model(from_config(cfg.model, input_dim=2))
+    model = history.restore_model(problem_class(train.resolve_model(cfg.model, input_dim=2)))
     train.set_seed(cfg.env.seed)
     _, (x, v, dv) = split_value_samples(samples, cfg.data.train_fraction)
     if normalize:
@@ -313,7 +313,7 @@ def test_region_reporting_scores_original_value_units(tmp_path, normalize):
     cfg.eval.eval_pool = str(pool_path)
     cfg.eval.distance_cache = str(cache_path)
     cfg.eval.tube_radius = 0.2
-    model = train.SparseProblem.from_config(cfg.model, input_dim=2)
+    model = train.SparseProblem(train.resolve_model(cfg.model, input_dim=2))
     model.set_atoms(
         torch.tensor([[0.5, -0.2]], dtype=torch.float64),
         torch.tensor([1.0], dtype=torch.float64),
@@ -349,3 +349,38 @@ def test_failed_training_keeps_logs_without_a_run_record(tmp_path, monkeypatch):
 
     assert (tmp_path / "run.log").exists()
     assert not list(tmp_path.glob("*.json"))
+
+
+@pytest.mark.parametrize("settings,message", [
+    ({"activation": "unknown"}, "unknown activation"),
+    ({"power": 4.}, "supports activation powers 1, 2, 3"),
+    ({"activation": "softplus"}, "explicit moment_order"),
+    ({"activation": "softplus", "moment_order": 1.}, "moment_order must exceed"),
+    ({"insertion": "finite_step", "activation": "softplus", "moment_order": 2.},
+     "requires a sphere activation"),
+    ({"insertion": "finite_step", "gamma": .1}, "requires gamma == 0"),
+])
+def test_invalid_model_config_fails_before_model_solver_or_loader_setup(
+    tmp_path, monkeypatch, settings, message,
+):
+    train = load_train_module()
+    monkeypatch.delenv("MLFLOW_TRACKING_URI", raising=False)
+    hydra_cfg = OmegaConf.create({"runtime": {"output_dir": str(tmp_path)}})
+    monkeypatch.setattr(train.HydraConfig, "get", lambda: hydra_cfg)
+    dataset = tmp_path / "samples.npz"
+    np.savez(dataset, x=np.ones((2, 2)), v=np.ones((2, 1)), dv=np.ones((2, 2)))
+    cfg = OmegaConf.structured(ExperimentConfig())
+    cfg.data.path = str(dataset)
+    cfg.env.verbose = False
+    cfg.model.update(settings)
+    raw_model = OmegaConf.to_container(cfg.model, resolve=True)
+
+    def premature_setup(*args, **kwargs):
+        pytest.fail("invalid model configuration reached model, solver or sample-loader setup")
+
+    for name in ("SparseProblem", "PDAP", "make_dataloaders"):
+        monkeypatch.setattr(train, name, premature_setup)
+    with pytest.raises(ValueError, match=message):
+        train.main.__wrapped__(cfg)
+
+    assert OmegaConf.to_container(cfg.model, resolve=True) == raw_model

@@ -69,12 +69,28 @@ coefficients. PDAP applies the result. The old `ssn_solve` layer is removed.
 Historical explicit unguarded configurations remain comparators, with their
 setting passed to SSN. This and the exact iteration defaults are compatibility
 choices; an iteration budget does not establish convergence. Hydra stays at
-repository level. One configuration function owns training compatibility rules
-and takes explicit settings. `SparseProblem.validate_training` supplies its own
-settings to that function; construction/preparation and optimizers use this
-single entry operation. Configuration and optimizers do not inspect private
-model fields, and no second settings object or getters are needed. The ordinary
-constructor still supports historical prediction settings.
+repository level. Configuration setup resolves and validates settings before
+constructing `SparseProblem`; the constructor only reads those prepared values
+and initializes network state. The earlier design that made the model call a
+configuration resolver or expose `validate_training` was explicitly rejected:
+moving a function body did not transfer responsibility for configuration.
+
+The implementation uses `resolve_model(raw_config, input_dim)` to produce an
+ordinary runtime mapping, keeping the original Hydra settings unchanged for
+serialization. Training setup calls `validate_training(runtime)` with the same
+insertion selection used by PDAP, then constructs `SparseProblem(runtime)`.
+Prediction setup resolves its settings without imposing training restrictions,
+preserving callable activations and historical powers. Runtime coefficient
+masks remain constructor arguments. There is no model-owned configuration
+factory or validation wrapper, replacement configuration class, or stored
+validation flag.
+
+PDAP, SSN and coefficient preparation require configuration-validated training
+construction; they do not revalidate an arbitrary prediction-only model.
+Their configuration contracts are checked during setup, before model or solver
+construction. Runtime support/tensor invariants and mathematical safeguards
+remain with the operations that own them. Configuration and optimizers do not
+inspect private model fields.
 
 `moment_order` defaults to `None`; sphere models have no moment order. Legacy
 numeric placeholders and mixed-preset values are ignored for that geometry.

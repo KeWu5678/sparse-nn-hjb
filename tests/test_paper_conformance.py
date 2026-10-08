@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 import torch
 
+from src.config import resolve_model, validate_training
 from src.config.activations import ACTIVATIONS, GROWTH, get_growth
 from src.config.schema import EnvConfig, ExperimentConfig, ModelConfig, TrainingConfig
 from src.data import make_dataloader, split_value_samples
@@ -56,9 +57,11 @@ def _fit(cfg: ExperimentConfig, iterations: int = 4, seed: int = 0):
     torch.manual_seed(seed)
     np.random.seed(seed)
     data = _data()
-    model = SparseProblem.from_config(cfg.model, input_dim=2)
+    model_config = resolve_model(cfg.model, input_dim=2)
+    validate_training(model_config)
+    model = SparseProblem(model_config)
     train, valid = split_value_samples(data, cfg.data.train_fraction)
-    history = PDAP(cfg.training, insertion=cfg.model.insertion).fit(
+    history = PDAP(cfg.training, insertion=model_config["insertion"]).fit(
         model,
         make_dataloader(train), make_dataloader(valid),
         num_iterations=iterations, num_insertion=20, verbose=False,
@@ -229,7 +232,9 @@ def test_search_radius_never_exceeds_the_fixed_clamp() -> None:
     for p in (2.01, 2.5, 3.0, 4.0):
         cfg = _cfg(moment_order=p, radial_cap="theorem")
         data = tuple(torch.as_tensor(_data()[key]) for key in ("x", "v", "dv"))
-        problem = SparseProblem.from_config(cfg.model, 2)
+        model_config = resolve_model(cfg.model, 2)
+        validate_training(model_config)
+        problem = SparseProblem(model_config)
         trainer = PDAP(cfg.training)
         radius = trainer._search_radius(problem, (data[0], -data[1], -data[2]))
         assert radius is not None and radius <= math.exp(5.0) + 1e-9
@@ -284,7 +289,9 @@ def test_insertion_reuses_the_residual_for_the_theorem_radius() -> None:
     )
     torch.manual_seed(0)
     np.random.seed(0)
-    model = SparseProblem.from_config(cfg.model, input_dim=2)
+    model_config = resolve_model(cfg.model, input_dim=2)
+    validate_training(model_config)
+    model = SparseProblem(model_config)
     original_predict = model.forward
     prediction_calls = 0
 
@@ -294,7 +301,7 @@ def test_insertion_reuses_the_residual_for_the_theorem_radius() -> None:
         return original_predict(x)
 
     model.forward = counted_predict
-    PDAP(cfg.training, insertion=cfg.model.insertion).fit(
+    PDAP(cfg.training, insertion=model_config["insertion"]).fit(
         model,
         make_dataloader(data),
         num_iterations=1,
@@ -347,6 +354,6 @@ def test_insertion_reuses_the_residual_for_the_theorem_radius() -> None:
 def test_incoherent_configurations_are_rejected(over: dict, message: str) -> None:
     with pytest.raises(ValueError, match=message):
         cfg = _cfg(**over)
-        trainer = PDAP(cfg.training, insertion=cfg.model.insertion)
-        problem = SparseProblem.from_config(cfg.model, 2)
-        problem.validate_training(insertion=trainer.insertion_kind)
+        model_config = resolve_model(cfg.model, 2)
+        validate_training(model_config)
+        PDAP(cfg.training, insertion=model_config["insertion"])
