@@ -3,7 +3,7 @@
 
 A run = pick a registered model + a data source, override the rest::
 
-    python scripts/train.py +model=profile +data=vdp model.activation=softplus
+    python scripts/train.py +model=profile +data=vdp model.activation=softplus model.moment_order=2.01
     python scripts/train.py -m +experiment=log_penalty
 
 This entry is domain-agnostic — it loads a ``.npy``/``.npz`` with keys ``x, v, dv`` and

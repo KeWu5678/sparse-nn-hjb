@@ -125,7 +125,12 @@ def test_setting_and_pruning_atoms_preserves_float64_coefficients():
 
 
 @pytest.mark.parametrize("entry_point", ["pdap", "preparation", "ssn"])
-def test_historical_prediction_power_is_rejected_before_training_changes_state(entry_point):
+@pytest.mark.parametrize("specifications,message", [
+    ({"activation": torch.relu, "power": 4.}, "supports activation powers 1, 2, 3"),
+    ({"activation": "softplus"}, "explicit moment_order"),
+    ({"activation": "softplus", "moment_order": 1.}, "moment_order must exceed"),
+])
+def test_prediction_settings_are_rejected_before_training_changes_state(entry_point, specifications, message):
     class UnavailableSamples(Dataset):
         def __len__(self):
             return 1
@@ -133,15 +138,19 @@ def test_historical_prediction_power_is_rejected_before_training_changes_state(e
         def __getitem__(self, index):
             raise AssertionError("unsupported correction must be rejected before sample access")
 
-    problem = SparseProblem(2, activation=torch.relu, power=4.)
+    problem = SparseProblem(2, **specifications)
     problem.set_atoms(torch.tensor([[1., 0.]]), torch.tensor([0.]), torch.tensor([2.]))
     x = torch.tensor([[2., 3.]], dtype=torch.float64)
     value, gradient = problem(x)
-    torch.testing.assert_close(value, x.new_tensor([[32.]]))
-    torch.testing.assert_close(gradient, x.new_tensor([[64., 0.]]))
+    if specifications["activation"] == "softplus":
+        torch.testing.assert_close(value, 2 * torch.nn.functional.softplus(x[:, :1]))
+        torch.testing.assert_close(gradient, torch.cat((2 * torch.sigmoid(x[:, :1]), x.new_zeros((1, 1))), dim=1))
+    else:
+        torch.testing.assert_close(value, x.new_tensor([[32.]]))
+        torch.testing.assert_close(gradient, x.new_tensor([[64., 0.]]))
     before = {name: tensor.clone() for name, tensor in problem.state_dict().items()}
     loader = DataLoader(UnavailableSamples(), generator=torch.Generator().manual_seed(0))
-    with pytest.raises(ValueError, match="supports activation powers 1, 2, 3"):
+    with pytest.raises(ValueError, match=message):
         if entry_point == "pdap":
             PDAP(ExperimentConfig().training).fit(
                 problem, loader, num_iterations=1, num_insertion=2, verbose=False,

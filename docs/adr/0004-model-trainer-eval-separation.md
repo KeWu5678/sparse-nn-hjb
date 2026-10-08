@@ -75,6 +75,17 @@ settings to that function; construction/preparation and optimizers use this
 single entry operation. Configuration and optimizers do not inspect private
 model fields, and no second settings object or getters are needed. The ordinary
 constructor still supports historical prediction settings.
+
+`moment_order` defaults to `None`; sphere models have no moment order. Legacy
+numeric placeholders and mixed-preset values are ignored for that geometry.
+Nonhomogeneous training requires an explicit positive finite order, checked in
+configuration against the activation's declared H1 growth (`p > s1`). An
+activation's growth constrains the choice without uniquely determining it.
+Registered activations without growth metadata retain explicit-order numerical
+training and the existing radius fallback; no theoretical bound is invented.
+Prediction alone needs no moment order. Evaluation reports `psi_p=None` for
+sphere models while retaining their total variation.
+
 The user subsequently requested separation of metrics from mathematics.
 Evaluation owns split iteration, reporting denormalization, support diagnostics
 and metric dictionaries; it calls the problem's objective and raw sparsity

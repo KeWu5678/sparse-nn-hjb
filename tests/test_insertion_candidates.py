@@ -68,7 +68,7 @@ def _generate(
     X, residual_v, residual_dv = _inputs()
     a, b, n, discarded_outside = insertion._generate_candidates(
         SparseProblem(1,
-                      activation="relu" if use_sphere else "tanh", power=power),
+                      activation="relu" if use_sphere else "tanh", power=power, moment_order=2.0),
         (X, residual_v, residual_dv),
         sample_sphere=_starts(starts),
         N=len(starts),
@@ -113,7 +113,7 @@ def test_algorithm1_distinguishes_radius_search_failure_from_threshold_stop(
     with caplog.at_level(logging.DEBUG):
         insertion.profile_threshold(
             SparseProblem(1,
-                          activation="tanh", power=1.0, alpha=1.0),
+                          activation="tanh", power=1.0, alpha=1.0, moment_order=2.0),
             (X, residual_v, residual_dv),
             sample_sphere=_starts([[1.0, 0.0]]),
             N=1,
@@ -130,7 +130,7 @@ def test_algorithm1_distinguishes_radius_search_failure_from_threshold_stop(
     with caplog.at_level(logging.DEBUG):
         insertion.profile_threshold(
             SparseProblem(1,
-                          activation="tanh", power=1.0, alpha=1.0),
+                          activation="tanh", power=1.0, alpha=1.0, moment_order=2.0),
             (X, residual_v, residual_dv),
             sample_sphere=_starts([[1.0, 0.0]]),
             N=1,

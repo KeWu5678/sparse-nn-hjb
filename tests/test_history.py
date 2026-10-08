@@ -53,7 +53,7 @@ def test_restoring_a_zero_measure_snapshot_empties_an_initialized_model(legacy) 
     """
     x = torch.tensor([[0.2, -0.3], [0.5, 0.7]], dtype=torch.float64)
 
-    empty = SparseProblem(2, activation="tanh")
+    empty = SparseProblem(2, activation="tanh", moment_order=2.0)
     samples = (x, *empty(x))
     history = History()
     history.record(empty, make_dataloader(samples))
@@ -185,13 +185,36 @@ def test_history_summary_records_normalized_objective_decomposition(alpha, penal
     )
 
 
+@pytest.mark.parametrize("power", [1., 2., 3.])
+def test_sphere_penalty_and_reporting_do_not_depend_on_historical_moment_order(power):
+    x = torch.tensor([[.2, -.3], [.5, .7]], dtype=torch.float64)
+    inner_weight, inner_bias, c = torch.eye(2, dtype=x.dtype), x.new_zeros(2), x.new_tensor([-2., 3.])
+    expected_penalty = .1 * c.abs().pow(2 / (power + 1)).sum()
+    for order in (None, 2., 4.):
+        problem = SparseProblem(2, power=power, alpha=.1, moment_order=order)
+        problem.set_atoms(inner_weight, inner_bias, c)
+        problem.validate_training()
+        assert problem.moment_order is None
+        torch.testing.assert_close(problem.normalization_weight(inner_weight, inner_bias), torch.ones_like(c))
+        history = History()
+        history.record(problem, make_dataloader((x, *problem(x))))
+        history = pickle.loads(pickle.dumps(history))
+        summary = history.summary_metrics()
+        assert history.psi_p == [None] and summary["psi_p"] is None
+        assert summary["total_variation"] == 5.
+        assert summary["objective_train"] == pytest.approx(float(expected_penalty), rel=1e-12)
+        # Existing archives keep their recorded numeric diagnostic unchanged.
+        history.psi_p[0] = 10.
+        assert pickle.loads(pickle.dumps(history)).summary_metrics()["psi_p"] == 10.
+
+
 def test_physical_reporting_does_not_change_objectives_snapshots_or_selection():
     normalizer = ValueSampleNormalizer(np.array([2.0, 8.0]), 5.0)
     x = torch.tensor([[0.2, -0.3], [0.5, 0.7]], dtype=torch.float64)
     v = torch.tensor([[2.0], [3.0]], dtype=torch.float64)
     dv = torch.tensor([[0.7, -0.6], [1.2, 0.5]], dtype=torch.float64)
     data = x, v, dv
-    problem = SparseProblem(2, activation="tanh", alpha=0.1, gamma=0.2)
+    problem = SparseProblem(2, activation="tanh", alpha=0.1, gamma=0.2, moment_order=2.0)
     loader = make_dataloader(data)
     unchanged = History()
     # Old pickles predate the optional reporting transform.

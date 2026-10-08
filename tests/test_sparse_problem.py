@@ -17,7 +17,7 @@ def _samples():
 
 
 def _problem(activation="relu", power=1.0, **specifications):
-    problem = SparseProblem(2, activation=activation, power=power, **specifications)
+    problem = SparseProblem(2, activation=activation, power=power, moment_order=2.0, **specifications)
     problem.set_atoms(
         torch.tensor([[0.5, -0.3], [0.1, 0.7]], dtype=torch.float64),
         torch.tensor([0.2, 0.3], dtype=torch.float64),
@@ -153,7 +153,7 @@ def test_samples_define_the_objective_and_its_derivatives(activation, power, gam
 def test_one_problem_handles_empty_and_replaced_supports():
     data = _samples()
     loader = make_dataloader(data)
-    problem = SparseProblem(2, activation="softplus", alpha=0.01)
+    problem = SparseProblem(2, activation="softplus", alpha=0.01, moment_order=2.0)
     prediction = problem(data[0])
     residual = data[0], *(p - t for p, t in zip(prediction, data[1:]))
     torch.testing.assert_close(residual[1], -data[1])

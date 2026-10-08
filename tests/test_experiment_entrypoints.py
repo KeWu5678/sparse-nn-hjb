@@ -6,9 +6,12 @@ import os
 import runpy
 import subprocess
 import sys
+from dataclasses import asdict
 from pathlib import Path
 
 import pytest
+
+from src.config.schema import ModelConfig
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -102,3 +105,17 @@ def test_p_study_requires_a_complete_unique_grid(tmp_path, monkeypatch):
     (tmp_path / "duplicate.json").write_text(json.dumps(record))
     with pytest.raises(ValueError, match="duplicate"):
         namespace["load"](tmp_path)
+
+
+@pytest.mark.parametrize("activation", ["relu", "leaky_relu"])
+def test_preflight_matches_historical_sphere_orders_to_current_cells(activation):
+    if not (ROOT / "scripts/paper/preflight.py").exists():
+        pytest.skip("paper-workspace entry points are local/ignored under ADR 0011")
+    preflight = importlib.import_module("scripts.paper.preflight")
+    current = asdict(ModelConfig(activation=activation))
+    historical = current | {"moment_order": 2.01}
+    assert preflight.cell(current) == preflight.cell(historical)
+    assert current["moment_order"] is None and historical["moment_order"] == 2.01
+    first = current | {"activation": "softplus", "moment_order": 2.01}
+    second = first | {"moment_order": 3.}
+    assert preflight.cell(first) != preflight.cell(second)

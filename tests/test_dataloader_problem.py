@@ -21,7 +21,7 @@ from src.problems import SparseProblem
 def _linear_case(**specifications):
     x = torch.tensor([[1., 0.], [0., 1.], [1., 1.]], dtype=torch.float64)
     data = x, x.new_tensor([[1.], [2.], [4.]]), x.new_tensor([[1., 2.]]).repeat(3, 1)
-    problem = SparseProblem(2, **specifications)
+    problem = SparseProblem(2, moment_order=2.0, **specifications)
     problem.set_atoms(torch.eye(2, dtype=x.dtype), x.new_full((2,), .5), x.new_tensor([1., 2.]))
     return data, problem
 
@@ -92,7 +92,10 @@ def test_chunking_preserves_correction_candidate_and_warmstart_calculations(acti
     data = x, x.square().sum(dim=1, keepdim=True), 2 * x
     W = x.new_tensor([[.5, -.3], [.1, .7]])
     b, c = x.new_tensor([.2, .3]), x.new_tensor([-.6, .8])
-    problem = SparseProblem(2, activation=activation, power=power, alpha=.01, loss_weights=(.4, 1.3))
+    problem = SparseProblem(
+        2, activation=activation, power=power, alpha=.01,
+        loss_weights=(.4, 1.3), moment_order=2.0,
+    )
     problem.set_atoms(W, b, c)
     full, chunked = make_dataloader(data), make_dataloader(data, batch_size=2)
     reference_obj, reference_hessian, reference_weight = problem.prepare_coefficients(full)

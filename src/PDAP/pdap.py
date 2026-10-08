@@ -127,6 +127,7 @@ class PDAP:
             self._last_theorem_applied = -1.0
             return None
         X, res_v, res_dv = residual
+        assert problem.moment_order is not None  # Nonhomogeneous training was validated before search.
         zeros = torch.zeros_like(res_v), torch.zeros_like(res_dv)
         residual_norm = float(torch.sqrt(2 * problem.obj((res_v, res_dv), zeros)))
         radius = certificate_radius(

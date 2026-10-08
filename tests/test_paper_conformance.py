@@ -37,7 +37,7 @@ def _cfg(**over) -> ExperimentConfig:
         "insert_init", "insert_mode", "correction_guard", "loop_order", "radial_cap",
     }
     model = dict(kind="signed", insertion="profile", activation="softplus", power=1.0,
-                 alpha=1e-4, gamma=1.0)
+                 alpha=1e-4, gamma=1.0, moment_order=2.0)
     train: dict = {}
     for key, value in over.items():
         if key in model_keys:

@@ -41,7 +41,7 @@ def test_nonzero_residual_records_computed_and_capped_theorem_radius(loop_order,
 
 @pytest.mark.parametrize("activation,power,insertion,cap,order,expected_radius,applied", [
     ("softplus", 1.0, "profile", "theorem", 4.0, 1.0, 1.0),
-    ("gelu_squared", 1.0, "profile", "theorem", 2.0, math.exp(FIXED_LOG_CLAMP), 0.0),
+    ("snake_b0_25", 1.0, "profile", "theorem", 2.0, math.exp(FIXED_LOG_CLAMP), 0.0),
     ("softplus", 1.0, "profile", "fixed", 4.0, math.exp(FIXED_LOG_CLAMP), -1.0),
     ("relu", 2.0, "finite_step", "theorem", 4.0, 1.0, -1.0),
 ])
@@ -92,7 +92,7 @@ def test_old_history_summary_does_not_invent_missing_search_diagnostics():
 ])
 def test_zero_iteration_fit_does_not_reuse_a_previous_search(activation, power, insertion):
     cfg = ExperimentConfig(
-        model=ModelConfig(activation=activation, power=power, insertion=insertion),
+        model=ModelConfig(activation=activation, power=power, insertion=insertion, moment_order=2.0),
         training=TrainingConfig(radial_cap="theorem", loop_order="insertion_first",
                                 lbfgs_steps=2),
     )

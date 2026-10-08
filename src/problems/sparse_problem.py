@@ -50,7 +50,7 @@ class SparseProblem(nn.Module):
         alpha: float = 1e-5,
         gamma: float = 0.0,
         loss_weights: tuple[float, float] = (1.0, 1.0),
-        moment_order: float = 2.0,
+        moment_order: float | None = None,
         penalized_mask: Tensor | None = None,
         nonneg_mask: Tensor | None = None,
     ) -> None:
@@ -65,14 +65,13 @@ class SparseProblem(nn.Module):
         )
         if not math.isfinite(power) or power <= 0.0:
             raise ValueError("power must be positive and finite")
-        if not moment_order > 0.0:
-            raise ValueError("moment_order must be positive")
         if not isinstance(input_dim, int) or isinstance(input_dim, bool) or input_dim <= 0:
             raise ValueError("input_dim must be a positive integer")
         self._power = power
         self._alpha, self._gamma = alpha, gamma
         self._loss_weights = loss_weights
-        self._moment_order = moment_order
+        # Old records and mixed sweeps may supply a numeric sphere placeholder.
+        self._moment_order = None if self._use_sphere else moment_order
         self._penalized_mask = penalized_mask
         self._nonneg_mask = nonneg_mask
         self.register_buffer("inner_weight", torch.empty((0, input_dim), dtype=torch.float64))
@@ -102,7 +101,7 @@ class SparseProblem(nn.Module):
         """Check the stored specifications using the configuration layer's rules."""
         validate_training(
             activation_name=self._activation_name, power=self._power, gamma=self._gamma,
-            use_sphere=self.use_sphere, insertion=insertion,
+            use_sphere=self.use_sphere, moment_order=self._moment_order, insertion=insertion,
         )
 
     @property
@@ -118,7 +117,7 @@ class SparseProblem(nn.Module):
         return self._activation_name
 
     @property
-    def moment_order(self) -> float:
+    def moment_order(self) -> float | None:
         return self._moment_order
 
     @property

@@ -43,7 +43,7 @@ class History:
     gradient_loss_train: List[float] = field(default_factory=list)
     gradient_loss_val: List[float] = field(default_factory=list)
     sparsity_functional: List[float] = field(default_factory=list)
-    psi_p: List[float] = field(default_factory=list)
+    psi_p: List[float | None] = field(default_factory=list)
     alpha_phi: List[float] = field(default_factory=list)
     total_variation: List[float] = field(default_factory=list)
     radius_r95: List[float] = field(default_factory=list)
@@ -96,8 +96,8 @@ class History:
         self.inner_weights.append({"weight": state["inner_weight"], "bias": state["inner_bias"]})
         self.outer_weights.append(state["c"].reshape(1, -1))
         i = len(self.train_loss) - 1
-        if values["train_loss"] < self.best_train_loss:
-            self.best_train_loss = values["train_loss"]
+        if self.train_loss[i] < self.best_train_loss:
+            self.best_train_loss = self.train_loss[i]
             self.best_iteration = i
 
     @property
@@ -136,10 +136,10 @@ class History:
         model.set_atoms(state["inner_weight"], state["inner_bias"], state["c"])
         return model
 
-    def summary_metrics(self) -> dict[str, float | int]:
+    def summary_metrics(self) -> dict[str, float | int | None]:
         """Scalar comparison metrics at the selected best iteration."""
         i = int(self.best_iteration)
-        metrics: dict[str, float | int] = {
+        metrics: dict[str, float | int | None] = {
             "rel_l2_train": float(self.err_l2_train[i]),
             "rel_l2_val": float(self.err_l2_val[i]),
             "rel_grad_train": float(self.err_grad_train[i]),
@@ -158,6 +158,7 @@ class History:
         }
         if getattr(self, "data_loss_train", []):
             w1, w2 = getattr(self, "loss_weights", (1.0, 1.0))
+            psi_p = self.psi_p[i]
             metrics.update(
                 {
                     "objective_train": float(self.train_loss[i]),
@@ -173,7 +174,7 @@ class History:
                     "data_gradient_term_train": float(w2 * self.gradient_loss_train[i]),
                     "data_gradient_term_val": float(w2 * self.gradient_loss_val[i]),
                     "sparsity_functional": float(self.sparsity_functional[i]),
-                    "psi_p": float(self.psi_p[i]),
+                    "psi_p": None if psi_p is None else float(psi_p),
                     "alpha_phi": float(self.alpha_phi[i]),
                     "total_variation": float(self.total_variation[i]),
                     "radius_r95": float(self.radius_r95[i]),

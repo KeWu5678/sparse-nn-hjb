@@ -170,7 +170,7 @@ def test_experiment_run_projects_completed_record_to_mlflow(tmp_path, monkeypatc
     )
 
     run.add_artifact("fit_history", artifact)
-    run.log_metrics({"rel_h1_val": 0.12, "best_neurons": 78, "label": "skip"}, step=3)
+    run.log_metrics({"rel_h1_val": 0.12, "best_neurons": 78, "psi_p": None, "label": "skip"}, step=3)
     path = run.finish(summary={"best_score": 18.3, "normalization": normalization})
 
     assert path.exists()
@@ -183,6 +183,8 @@ def test_experiment_run_projects_completed_record_to_mlflow(tmp_path, monkeypatc
     assert ("rel_h1_val", 0.12, 3) in calls["metrics"]
     assert ("best_neurons", 78.0, 3) in calls["metrics"]
     assert ("best_score", 18.3, None) in calls["metrics"]
+    assert all(key != "psi_p" for key, _, _ in calls["metrics"])
+    assert json.loads(path.read_text())["metrics"][0]["values"]["psi_p"] is None
     assert all(key != "normalization" for key, _, _ in calls["metrics"])
     assert json.loads(path.read_text())["normalization"] == normalization
     assert calls["tags"]["run_id"] == "activationsearch_pendulum_20260611_a3f9"

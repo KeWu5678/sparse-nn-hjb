@@ -18,18 +18,21 @@ if TYPE_CHECKING:
 
 
 @torch.no_grad()
-def metrics(problem: SparseProblem, train_loader, valid_loader=None, reporting_normalizer=None) -> dict[str, float]:
+def metrics(problem: SparseProblem, train_loader, valid_loader=None, reporting_normalizer=None) -> dict[str, float | None]:
     """Evaluate splits and support diagnostics using the persisted metric names."""
     inner_weight, inner_bias, c = problem.inner_weight, problem.inner_bias, problem.c.detach()
     u = c * problem.normalization_weight(inner_weight, inner_bias)
     phi = problem.sparsity_functional(u) if c.numel() else c.new_zeros(())
-    weights = moment_weight(inner_weight, inner_bias, problem.moment_order)
-    psi = torch.sum(weights.reshape(-1) * c.reshape(-1).abs())
+    psi = None  # The sphere formulation has no moment order or moment diagnostic.
+    if problem.moment_order is not None:
+        weights = moment_weight(inner_weight, inner_bias, problem.moment_order)
+        psi = float(torch.sum(weights.reshape(-1) * c.reshape(-1).abs()))
+    alpha_phi = float(problem.alpha * phi)
     radius = torch.sqrt((inner_weight * inner_weight).sum(dim=-1) + inner_bias * inner_bias)
     values = {
         "sparsity_functional": float(phi),
-        "psi_p": float(psi),
-        "alpha_phi": float(problem.alpha * phi),
+        "psi_p": psi,
+        "alpha_phi": alpha_phi,
         "total_variation": float(c.reshape(-1).abs().sum()),
         "radius_r95": float(amplitude_mass_radius(inner_weight, inner_bias, c)),
         "radius_max": float(radius.max()) if c.numel() else 0.0,
@@ -42,7 +45,7 @@ def metrics(problem: SparseProblem, train_loader, valid_loader=None, reporting_n
         target = data[1:]
         fitting = problem.obj(prediction, target)
         n = data[0].shape[0]
-        values[f"{split}_loss"] = float(fitting) + values["alpha_phi"]
+        values[f"{split}_loss"] = float(fitting) + alpha_phi
         values[f"data_loss_{split}"] = float(fitting)
         values[f"value_loss_{split}"] = float(torch.sum((prediction[0] - target[0]) ** 2) / (2 * n))
         values[f"gradient_loss_{split}"] = float(torch.sum((prediction[1] - target[1]) ** 2) / (2 * n))

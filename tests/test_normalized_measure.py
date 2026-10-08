@@ -53,9 +53,10 @@ def test_moment_weight_is_differentiable_in_scale() -> None:
     assert math.isclose(float(scale.grad), 1.0, rel_tol=1e-9)
 
 
-def test_moment_weight_rejects_nonpositive_order() -> None:
+@pytest.mark.parametrize("order", [None, 0.0, -1.0])
+def test_moment_weight_requires_a_positive_order(order) -> None:
     with pytest.raises(ValueError, match="moment order"):
-        moment_weight(torch.zeros(1, 1), torch.zeros(1), p=0.0)
+        moment_weight(torch.zeros(1, 1), torch.zeros(1), p=order)
 
 
 def test_amplitude_mass_radius_is_weighted_parameter_quantile() -> None:
@@ -99,4 +100,4 @@ def test_model_schema_has_no_additive_objective_axis() -> None:
 
     assert "objective" not in fields
     assert "moment_beta" not in fields
-    assert ModelConfig().moment_order == 2.0
+    assert ModelConfig().moment_order is None

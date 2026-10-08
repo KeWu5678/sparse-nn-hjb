@@ -6,6 +6,55 @@ Full-review baseline: `49eeb0349a0a8ee489c075400d23cb1cb31e1208`.
 
 ## Current status and working rules
 
+**Moment-order correction implemented and independently reviewed, baseline `cf5466c`.** The user pointed
+out that the moment order depends on the activation's growth and is absent
+from the sphere/fractional formulation, then authorized the correction with
+"change it". The universal `2.0` default was inherited from configuration and
+retained during refactoring without checking its applicability. Preserving an
+old default did not justify representing an inapplicable mathematical setting.
+
+Both configuration and `SparseProblem` now default to `None`. Sphere models
+store `None`, including when a mixed experiment or historical input supplies a
+numeric placeholder. Nonhomogeneous training requires an explicit positive
+finite order; configuration checks it against the activation's declared H1
+growth exponent (`p > s1`). The activation constrains admissible orders, not a
+unique automatically selected value. Existing registered activations without
+growth metadata retain their explicit-order numerical path and radius fallback;
+no growth constants or default exponents are invented. Prediction alone still
+requires no regularization setting.
+
+Sphere reporting records `psi_p=None` while retaining total variation.
+Historical numeric metrics remain readable; old/new sphere comparison keys
+are normalized consistently without rewriting saved artifacts. Nonhomogeneous
+presets already specify their orders; tests that previously relied on `2.0` now
+supply their intended order explicitly. The pure radius calculation still handles
+inapplicable theorem hypotheses; training validates declared growth first.
+The existing local `scripts/paper/preflight.py` is ignored by `.gitignore`; its
+comparison-key fix is retained locally and included in review. The diff is
+`/tmp/sparse-moment-order-preflight.diff`; the script's tracking policy is unchanged.
+
+`state_cleanup` implemented source/config/tests; root documents and orchestrates.
+Focused checks: **226 passed**, including configuration and direct-training
+rejection, sphere defaults/reporting, mixed presets, saved prediction and
+historical comparison keys. All six PDAP/SSN reference checks pass unchanged.
+The full suite ran once on frozen source: **466 passed, one preexisting stale
+controller-selection artifact failure, 18 warnings**, in 28.93 seconds. Log:
+`/tmp/sparse-moment-order-final-pytest.log`. The artifact and its test are unchanged.
+Ruff passes all 20 changed Python paths, including the local ignored helper;
+core/config/PDAP/SSN/data/results/evaluation Pyright reports zero errors.
+Whitespace checks pass; all three numerical fixture hashes and their tolerances
+are unchanged. The frozen manifest is `/tmp/sparse-moment-order-frozen-sources.json`.
+
+The tracked implementation adds 19 net lines across seven production Python
+files, with no new functions/classes or numerical formula changes. Twelve test
+files add 111 net lines, extending existing checks and migrating implicit test
+settings. Independent Standards review found no material standards or design
+smell findings. Independent Spec review found no missing, incorrect or additional
+requirements. Both verified all 19 tracked Python files, the ignored helper and
+three fixtures against the frozen manifest; fixture bytes also match the baseline.
+The local helper was reviewed against its recorded before/after diff because its
+history is outside Git. Broader configuration/logging redesign remains deferred.
+
 **Implementation complete and independently reviewed, baseline `69a8fa9`.**
 After the forward/autograd clarification the user said "understood, go". This
 change implements removal

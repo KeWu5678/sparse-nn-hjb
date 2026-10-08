@@ -20,8 +20,11 @@ trained, not any specific control problem. The only problem-specific input is
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from typing import Optional, Tuple
+
+from .activations import get_growth
 
 
 @dataclass
@@ -56,7 +59,7 @@ class ModelConfig:
     # with a nonhomogeneous activation this is the only supported objective;
     # SparseProblem applies it automatically.  Algorithm 2 is sphere-normalized and does not use
     # this parameter.
-    moment_order: float = 2.0   # p in the weight w_p(omega) = 1 + |omega|^p
+    moment_order: Optional[float] = None  # Explicit for nonhomogeneous models; unused on the sphere.
 
 
 @dataclass
@@ -203,7 +206,7 @@ class ExperimentConfig:
 
 def validate_training(
     *, activation_name: str | None, power: float, gamma: float, use_sphere: bool,
-    insertion: str | None = None,
+    moment_order: float | None = None, insertion: str | None = None,
 ) -> None:
     """Check training compatibility while allowing historical prediction settings."""
     if activation_name is None:
@@ -219,6 +222,18 @@ def validate_training(
         )
     if power != 1.0 and gamma != 0.0:
         raise ValueError(f"the power penalty requires gamma == 0; got power={power}, gamma={gamma}")
+    if not use_sphere:
+        if moment_order is None:
+            raise ValueError("nonhomogeneous training requires an explicit moment_order")
+        if not math.isfinite(moment_order) or moment_order <= 0.0:
+            raise ValueError("moment_order must be positive and finite")
+        growth = get_growth(activation_name)
+        if growth is not None and moment_order <= growth.s1:
+            raise ValueError(
+                f"moment_order must exceed {growth.s1:g} for activation {activation_name!r}"
+            )
+        # An undeclared growth bound permits numerical training, but cannot
+        # certify H1 admissibility or supply a theorem search radius.
     if insertion == "finite_step":
         if not use_sphere:
             raise ValueError("finite_step insertion is Algorithm 2 and requires a sphere activation")

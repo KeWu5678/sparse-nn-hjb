@@ -83,6 +83,7 @@ def test_saved_run_uses_recorded_scaling_not_dataset_maxima(record_path):
     assert run.iteration == 1
     # Objective/measure normalization is not another transform of V.
     assert run.record["config"]["model"]["moment_order"] == 99.
+    assert run.model.moment_order is None
     # Historical mixture metadata remains readable; it is not a runtime option.
     assert run.record["config"]["model"]["th"] == 0.5
     assert run.stored_metric_coordinates == "physical"
@@ -194,6 +195,23 @@ def test_historical_prediction_power_does_not_require_solver_support(record_path
 
     torch.testing.assert_close(value, torch.tensor([[3. * 3.5 ** 4]], dtype=torch.float64))
     torch.testing.assert_close(gradient, torch.tensor([[12. * 3.5 ** 3, 24. * 3.5 ** 3]], dtype=torch.float64))
+
+
+def test_saved_nonhomogeneous_predictions_do_not_require_a_training_order(record_path):
+    record = json.loads(record_path.read_text())
+    record["config"]["model"]["activation"] = "tanh"
+    record["config"]["model"].pop("moment_order")
+    record_path.write_text(json.dumps(record))
+    before = record_path.read_bytes()
+    run = load_run(record_path)
+
+    value, gradient = predict_physical(run, [[2., 4.]])
+
+    activation = torch.tanh(torch.tensor(3.5, dtype=torch.float64))
+    torch.testing.assert_close(value, (24 * activation).reshape(1, 1))
+    torch.testing.assert_close(gradient, (12 * (1 - activation.square())).repeat(1, 2))
+    assert run.model.moment_order is None
+    assert record_path.read_bytes() == before
 
 
 def test_relocated_artifact_does_not_read_old_declared_copy(record_path):

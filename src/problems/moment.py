@@ -10,7 +10,7 @@ __all__ = [
 ]
 
 
-def moment_weight(W: torch.Tensor, b: torch.Tensor, p: float) -> torch.Tensor:
+def moment_weight(W: torch.Tensor, b: torch.Tensor, p: float | None) -> torch.Tensor:
     """Per-atom moment weight ``w_p(omega) = 1 + |omega|^p`` with ``omega=(a,b)``.
 
     ``|omega|`` is the Euclidean norm of the *concatenated* inner weight and bias
@@ -26,8 +26,8 @@ def moment_weight(W: torch.Tensor, b: torch.Tensor, p: float) -> torch.Tensor:
     Returns:
         ``w_p``, shape ``(n,)`` (or scalar for a single atom), matching ``b``.
     """
-    if not p > 0.0:
-        raise ValueError("moment order p must be positive")
+    if p is None or not p > 0.0:
+        raise ValueError("moment order p must be supplied and positive")
     W = torch.as_tensor(W, dtype=torch.float64)
     b = torch.as_tensor(b, dtype=torch.float64)
     sq = (W * W).sum(dim=-1) + b * b

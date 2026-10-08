@@ -10,7 +10,7 @@ from hydra.core.hydra_config import HydraConfig
 from hydra.errors import ConfigCompositionException
 
 from src.config import get_activation, get_use_sphere
-from src.config.schema import ExperimentConfig
+from src.config.schema import ExperimentConfig, ModelConfig
 from src.data import DATA_DIR, load_value_samples
 from src.PDAP import PDAP
 from src.problems import SparseProblem
@@ -27,6 +27,7 @@ def test_compose_defaults() -> None:
     assert cfg.model.activation == "relu"
     assert cfg.model.power == 1.0
     assert cfg.model.alpha == 1e-5
+    assert cfg.model.moment_order is None
     assert "c_init" not in cfg.model
     assert "th" not in cfg.model
     assert cfg.training.num_iterations == 10
@@ -52,6 +53,7 @@ def test_model_groups() -> None:
         alg1 = compose(config_name="config", overrides=[
             "+model=profile",
             "model.activation=softplus",
+            "model.moment_order=2.0",
         ])
     # finite_step config group = signed + finite_step
     assert fs.model.kind == "signed"
@@ -168,7 +170,43 @@ def test_use_sphere_derives_from_activation() -> None:
     with initialize(version_base=None, config_path="../conf"):
         default = compose(config_name="config", overrides=["env.verbose=false"])
         smooth = compose(config_name="config",
-                         overrides=["model.activation=matern52", "env.verbose=false"])
+                         overrides=["model.activation=matern52", "model.moment_order=2.0", "env.verbose=false"])
     # default activation is relu (homogeneous -> sphere); matern52 is not
     assert SparseProblem.from_config(default.model, 2).use_sphere is True
     assert SparseProblem.from_config(smooth.model, 2).use_sphere is False
+
+
+@pytest.mark.parametrize("order", [None, 0., -1., float("nan"), float("inf"), -float("inf")])
+def test_nonhomogeneous_training_requires_an_explicit_positive_finite_order(order):
+    config = ModelConfig(activation="softplus", moment_order=order)
+    with pytest.raises(ValueError, match="moment_order"):
+        SparseProblem.from_config(config, 2)
+
+
+@pytest.mark.parametrize("activation,bound", [
+    ("softplus", 1.), ("tanh", 1.), ("gaussian", 1.),
+    ("gausscent_1", 1.), ("matern52", 1.), ("gelu_squared", 2.),
+])
+def test_training_order_exceeds_the_declared_h1_growth_bound(activation, bound):
+    with pytest.raises(ValueError, match="moment_order must exceed"):
+        SparseProblem.from_config(ModelConfig(activation=activation, moment_order=bound), 2)
+    problem = SparseProblem.from_config(ModelConfig(activation=activation, moment_order=bound + .01), 2)
+    assert problem.moment_order == bound + .01
+
+
+def test_activation_without_growth_metadata_keeps_explicit_numerical_training():
+    config = ModelConfig(activation="snake_b0_25", moment_order=.5)
+    assert SparseProblem.from_config(config, 2).moment_order == .5
+    config.moment_order = None
+    with pytest.raises(ValueError, match="explicit moment_order"):
+        SparseProblem.from_config(config, 2)
+
+
+@pytest.mark.parametrize("activation,order", [("leaky_relu", None), ("gelu_squared", 2.01)])
+def test_log_penalty_preset_supports_both_formulations(activation, order):
+    with initialize(version_base=None, config_path="../conf"):
+        cfg = compose(config_name="config", overrides=[
+            "+experiment=log_penalty", "+model=profile", f"model.activation={activation}",
+        ])
+    assert cfg.model.moment_order == 2.01
+    assert SparseProblem.from_config(cfg.model, 2).moment_order == order
