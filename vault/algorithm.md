@@ -123,7 +123,7 @@ search's L-BFGS optimizer.
    the exact one-atom coefficient. Its smallest nonzero magnitude fixes the
    proximal scale for the entire correction.
 2. **Use the normal-map smooth gradient**: Autograd differentiates the full
-   objective `obj + alpha*sparsity_functional` built by PDAP; `SparseProblem.jac_obj_augmented` subtracts the full penalty gradient
+   objective `obj + Proximal.penalty` built by PDAP; `SSN.jac_obj_augmented` subtracts the full penalty gradient
    and applies the smooth nonconvex correction. SSN uses this returned gradient.
 3. **SSN line search uses full objective**: Data loss + regularization. Without regularization, sparsifying steps get rejected.
 4. **Loss normalization**: The empirical fidelity divides the value and full
@@ -139,7 +139,7 @@ search's L-BFGS optimizer.
 
 The implemented ownership and its verification are recorded in
 [REFACTOR_HANDOFF.md](../REFACTOR_HANDOFF.md). PDAP owns insertion acceptance and
-warm-start selection; SparseProblem supplies their mathematical evaluations.
+warm-start selection; SparseProblem and Proximal supply their mathematical evaluations.
 
 - `problems/` — network representation and problem mathematics:
   - `sparse_problem.py` — `SparseProblem(nn.Module)` reads resolved configuration
@@ -147,11 +147,14 @@ warm-start selection; SparseProblem supplies their mathematical evaluations.
     `inner_bias` as buffers and `c` as its parameter. `forward` returns network
     values and input gradients; `kernel` supplies the kernel matrices of the
     current or supplied atoms, i.e. their coefficient Jacobians. `obj`, `jac_obj`,
-    and `hess_obj` supply fitting and its coefficient derivatives, alongside
-    penalty/proximal/normal-map calculations. `PDAP.train_ssn_outerweights`
+    and `hess_obj` supply fitting and its coefficient derivatives; the problem
+    also supplies the penalty exponent q = 2/(power+1). `PDAP.train_ssn_outerweights`
     prepares the coefficient loss, Hessian and normalization for one correction.
-    There is no separate model or objective-carrier class, or persistent
-    feature cache.
+    There is no objective-carrier class or persistent feature cache.
+  - `proximal.py` — `Proximal(alpha, gamma, penalty_exponent)`: the penalty αΦ,
+    its split into the fractional penalty α·Σ|u|^q and a smooth correction, the
+    vector and scalar proximal maps (taking the proximal constant λ), and the
+    optional coordinate masks. Shared by PDAP, SSN and evaluation.
   - `penalty.py`, `prox.py`, `moment.py` — mathematical helpers.
 - `PDAP/` — candidate search/acceptance, warm-start, support changes, and correction scheduling:
   - `pdap.py` — plain `PDAP` with `step(problem, train_loader)` for one complete
@@ -167,14 +170,16 @@ warm-start selection; SparseProblem supplies their mathematical evaluations.
     checkpoint with artifact views; selects the earliest minimum training
     objective. Execution totals also include work without a new checkpoint.
 - `SSN/` — the semismooth Newton optimizer:
-  - `optimizer.py` — `SSN(Optimizer)`. One `step()` runs the complete configured
-    correction on supplied coefficients and owns its final acceptance/fallback.
+  - `optimizer.py` — `SSN(Optimizer)` on a `Proximal`. One `step()` runs the
+    complete configured correction on supplied coefficients and owns its final
+    acceptance/fallback; SSN owns the normal map, its Jacobian, the prox
+    preimage and the prox-scale selection `fractional_prox_scale`.
   - `strategies.py` — Levenberg–Marquardt and Steihaug CG globalization.
   - `mpcg.py` — projected/trust-region CG inner solve.
 - `data.py` — reading, normalization, splitting, standard DataLoader factories,
   and complete-sample assembly. Loaders and samples remain external to the model.
 - `eval.py` — relative errors and metric/report assembly, using the problem's
-  canonical `obj` and sparsity functional for its objective mathematics.
+  canonical `obj` and Proximal's sparsity functional for its objective mathematics.
 - `training.py` — external `run_training` loop, timing, evaluation, recording
   and progress output. The budget belongs here; PDAP decides whether candidate
   search provides another admissible update. Native PyTorch evaluates each full
@@ -208,7 +213,7 @@ warm-start selection; SparseProblem supplies their mathematical evaluations.
 
 ```
 VDP / pendulum samples -> external preprocessing -> DataLoaders
-SparseProblem + PDAP + DataLoaders -> run_training -> History -> saved-run evaluation
+SparseProblem + Proximal + PDAP + DataLoaders -> run_training -> History -> saved-run evaluation
 ```
 
 ```python

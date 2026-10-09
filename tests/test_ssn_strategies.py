@@ -2,19 +2,19 @@
 
 import pytest
 import torch
-from ssn_test_problem import synthetic_problem
+from ssn_test_problem import synthetic_correction
 
 from src.SSN import SSN
 
 
 def _make_optimizer(method="levenberg_marquardt", *, curvature=1.0, **options):
     coefficient = torch.nn.Parameter(torch.tensor([1.0], dtype=torch.float64))
-    problem, coefficient_loss, hess_obj = synthetic_problem(
+    proximal, coefficient_loss, hess_obj = synthetic_correction(
         lambda u: 0.5 * curvature * u.square().sum(),
         torch.tensor([[curvature]], dtype=torch.float64),
         alpha=0.0, gamma=0.0,
     )
-    optimizer = SSN([coefficient], problem, coefficient_loss, hess_obj, method=method, max_iter=1, **options)
+    optimizer = SSN([coefficient], proximal, coefficient_loss, hess_obj, method=method, max_iter=1, **options)
     return optimizer, coefficient
 
 

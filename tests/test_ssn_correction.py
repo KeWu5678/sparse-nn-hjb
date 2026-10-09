@@ -2,7 +2,7 @@
 
 import pytest
 import torch
-from ssn_test_problem import synthetic_problem
+from ssn_test_problem import synthetic_correction
 
 from src.SSN import SSN
 
@@ -10,10 +10,10 @@ from src.SSN import SSN
 @pytest.mark.parametrize("iterations", [0, 1, 4])
 def test_one_step_runs_the_configured_complete_correction(iterations):
     coefficient = torch.nn.Parameter(torch.tensor([1.], dtype=torch.float64))
-    problem, coefficient_loss, hess_obj = synthetic_problem(
+    proximal, coefficient_loss, hess_obj = synthetic_correction(
         lambda u: .5 * u.square().sum(), torch.eye(1, dtype=torch.float64), alpha=0.,
     )
-    optimizer = SSN([coefficient], problem, coefficient_loss, hess_obj, max_iter=iterations)
+    optimizer = SSN([coefficient], proximal, coefficient_loss, hess_obj, max_iter=iterations)
     loss = optimizer.step()
 
     assert optimizer.iterations_run == iterations
@@ -29,11 +29,11 @@ def test_final_guard_rejects_a_worsening_trial_allowed_by_local_tolerance(guard)
     coefficient = torch.nn.Parameter(torch.tensor([1.], dtype=torch.float64))
     # Newton moves toward this concave objective's maximum. A permissive local
     # tolerance allows that trial; the complete correction must decide separately.
-    problem, coefficient_loss, hess_obj = synthetic_problem(
+    proximal, coefficient_loss, hess_obj = synthetic_correction(
         lambda u: 2 - .5 * u.square().sum(), -torch.eye(1, dtype=torch.float64), alpha=0.,
     )
     optimizer = SSN(
-        [coefficient], problem, coefficient_loss, hess_obj, max_iter=1,
+        [coefficient], proximal, coefficient_loss, hess_obj, max_iter=1,
         tolerance_ls=2., correction_guard=guard,
     )
     loss = optimizer.step()
@@ -52,8 +52,8 @@ def test_nonfinite_final_loss_restores_starting_coefficients(guard):
     def fitting(u):
         return torch.where(u.abs() < .1, u.new_tensor(-torch.inf), .5 * u.square()).sum()
 
-    problem, coefficient_loss, hess_obj = synthetic_problem(fitting, torch.eye(1, dtype=torch.float64), alpha=0.)
-    optimizer = SSN([coefficient], problem, coefficient_loss, hess_obj, max_iter=1, correction_guard=guard)
+    proximal, coefficient_loss, hess_obj = synthetic_correction(fitting, torch.eye(1, dtype=torch.float64), alpha=0.)
+    optimizer = SSN([coefficient], proximal, coefficient_loss, hess_obj, max_iter=1, correction_guard=guard)
     loss = optimizer.step()
 
     assert not optimizer.correction_accepted
@@ -70,8 +70,8 @@ def test_exception_after_an_accepted_iteration_restores_the_whole_correction():
             raise error
         return .5 * u.square().sum()
 
-    problem, coefficient_loss, hess_obj = synthetic_problem(fitting, torch.eye(1, dtype=torch.float64), alpha=0.)
-    optimizer = SSN([coefficient], problem, coefficient_loss, hess_obj, max_iter=2)
+    proximal, coefficient_loss, hess_obj = synthetic_correction(fitting, torch.eye(1, dtype=torch.float64), alpha=0.)
+    optimizer = SSN([coefficient], proximal, coefficient_loss, hess_obj, max_iter=2)
     with pytest.raises(RuntimeError, match="second iteration failed") as caught:
         optimizer.step()
 
@@ -96,8 +96,8 @@ def test_complete_trust_region_correction_continues_after_a_rejected_trial():
                 return value + 1.
         return value
 
-    problem, coefficient_loss, hess_obj = synthetic_problem(fitting, torch.eye(1, dtype=torch.float64), alpha=0.)
-    optimizer = SSN([coefficient], problem, coefficient_loss, hess_obj, method="steihaug_cg", max_iter=4)
+    proximal, coefficient_loss, hess_obj = synthetic_correction(fitting, torch.eye(1, dtype=torch.float64), alpha=0.)
+    optimizer = SSN([coefficient], proximal, coefficient_loss, hess_obj, method="steihaug_cg", max_iter=4)
     loss = optimizer.step()
 
     assert optimizer.iterations_run == trials == 4

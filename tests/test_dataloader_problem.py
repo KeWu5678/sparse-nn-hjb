@@ -2,7 +2,7 @@
 
 import pytest
 import torch
-from ssn_test_problem import capture_coefficient_solve
+from ssn_test_problem import capture_coefficient_solve, proximal_for
 from torch.utils.data import (
     BatchSampler,
     DataLoader,
@@ -28,14 +28,14 @@ def _linear_case(**specifications):
     validate_training(config)
     problem = SparseProblem(config)
     problem.set_atoms(torch.eye(2, dtype=x.dtype), x.new_full((2,), .5), x.new_tensor([1., 2.]))
-    return data, problem
+    return data, problem, proximal_for(config, problem)
 
 
 @pytest.mark.parametrize("batch_size", [None, 1, 2])
 def test_prepared_objective_matches_worked_value_gradient_and_hessian(monkeypatch, batch_size):
-    data, problem = _linear_case(alpha=.1)
+    data, problem, proximal = _linear_case(alpha=.1)
     loss, hess_obj, u = capture_coefficient_solve(
-        monkeypatch, problem, make_dataloader(data, batch_size=batch_size),
+        monkeypatch, problem, proximal, make_dataloader(data, batch_size=batch_size),
     )
     c = problem.c.detach()
 
@@ -51,9 +51,9 @@ def test_prepared_objective_matches_worked_value_gradient_and_hessian(monkeypatc
 
 @pytest.mark.parametrize("batch_size", [None, 1, 2])
 def test_full_data_metrics_weight_samples_and_add_penalty_once(batch_size):
-    data, problem = _linear_case(alpha=.1)
+    data, problem, proximal = _linear_case(alpha=.1)
     loader = make_dataloader(data, batch_size=batch_size)
-    values = metrics(problem, loader)
+    values = metrics(problem, proximal, loader)
     for split in ("train", "val"):
         assert values[f"{split}_loss"] == pytest.approx(19 / 24 + .3)
         assert values[f"err_l2_{split}"] == pytest.approx((19 / 84) ** .5)
@@ -68,6 +68,7 @@ def test_candidate_profile_combines_signed_batches_before_acceptance(monkeypatch
     config = resolve_model({"alpha": .05}, 1)
     validate_training(config)
     problem = SparseProblem(config)
+    proximal = proximal_for(config, problem)
     X, V, dV = full_batch(make_dataloader(data, batch_size=batch_size))
     residuals = X, -V, -dV  # The current network is empty.
     a, b = x.new_tensor([1.], requires_grad=True), x.new_tensor(.25, requires_grad=True)
@@ -83,7 +84,7 @@ def test_candidate_profile_combines_signed_batches_before_acceptance(monkeypatch
         a.detach().reshape(1, 1), b.detach().reshape(1), 1, 0,
     ))
     W, bias, coefficient = insertion.profile_threshold(
-        problem, residuals, sample_sphere=lambda _: (a, b), N=1,
+        problem, proximal, residuals, sample_sphere=lambda _: (a, b), N=1,
         insert_init="guaranteed", verbose=False,
     )
     torch.testing.assert_close(torch.as_tensor(W[0]), a)
@@ -91,8 +92,9 @@ def test_candidate_profile_combines_signed_batches_before_acceptance(monkeypatch
     assert coefficient[0] == pytest.approx(-68 / 1615)
     config = resolve_model({"alpha": .34}, 1)
     validate_training(config)
+    problem = SparseProblem(config)
     W, _, _ = insertion.profile_threshold(
-        SparseProblem(config), residuals, sample_sphere=lambda _: (a, b), N=1,
+        problem, proximal_for(config, problem), residuals, sample_sphere=lambda _: (a, b), N=1,
         insert_init="guaranteed", verbose=False,
     )
     assert len(W) == 0
@@ -110,16 +112,17 @@ def test_chunking_preserves_correction_candidate_and_warmstart_calculations(monk
     }, 2)
     validate_training(config)
     problem = SparseProblem(config)
+    proximal = proximal_for(config, problem)
     problem.set_atoms(W, b, c)
     full, chunked = make_dataloader(data), make_dataloader(data, batch_size=2)
-    reference_loss, reference_hessian, reference_u = capture_coefficient_solve(monkeypatch, problem, full)
-    loss, hess_obj, u = capture_coefficient_solve(monkeypatch, problem, chunked)
+    reference_loss, reference_hessian, reference_u = capture_coefficient_solve(monkeypatch, problem, proximal, full)
+    loss, hess_obj, u = capture_coefficient_solve(monkeypatch, problem, proximal, chunked)
     torch.testing.assert_close(u, c * problem.moment_weight_of_atoms(W, b))
     torch.testing.assert_close(loss(u), reference_loss(u))
     torch.testing.assert_close(hess_obj, reference_hessian)
     torch.testing.assert_close(u, reference_u)
     torch.testing.assert_close(torch.func.grad(loss)(u), torch.func.grad(reference_loss)(u))
-    assert metrics(problem, chunked) == pytest.approx(metrics(problem, full))
+    assert metrics(problem, proximal, chunked) == pytest.approx(metrics(problem, proximal, full))
 
     residuals = []
     for loader in (full, chunked):
@@ -137,10 +140,10 @@ def test_chunking_preserves_correction_candidate_and_warmstart_calculations(monk
     for got, expected in zip(torch.autograd.grad(score, (a, bias)), torch.autograd.grad(reference_score, (a, bias))):
         torch.testing.assert_close(got, expected)
     torch.testing.assert_close(
-        warm_start(W, b, chunked_residual, problem),
-        warm_start(W, b, full_residual, problem),
+        warm_start(W, b, chunked_residual, problem, proximal),
+        warm_start(W, b, full_residual, problem, proximal),
     )
-    trainer = PDAP(TrainingConfig(radial_cap="theorem"))
+    trainer = PDAP(TrainingConfig(radial_cap="theorem"), proximal)
     assert trainer._search_radius(problem, chunked_residual) == pytest.approx(
         trainer._search_radius(problem, full_residual),
     )
@@ -148,14 +151,14 @@ def test_chunking_preserves_correction_candidate_and_warmstart_calculations(monk
 
 @pytest.mark.parametrize("activation", ["relu", "softplus"])
 def test_prepared_objective_survives_later_data_and_support_changes(monkeypatch, activation):
-    data, problem = _linear_case(alpha=.1, activation=activation)
+    data, problem, proximal = _linear_case(alpha=.1, activation=activation)
     loader = make_dataloader(data)
-    loss, hess_obj, u = capture_coefficient_solve(monkeypatch, problem, loader)
+    loss, hess_obj, u = capture_coefficient_solve(monkeypatch, problem, proximal, loader)
     expected_loss, expected_hessian = loss(u).clone(), hess_obj.clone()
     expected_coefficients = u.clone()
     data[1].add_(10)
     problem.set_atoms(data[0].new_tensor([[2., -1.]]), u.new_tensor([.1]), u.new_tensor([.5]))
-    _, later_hessian, _ = capture_coefficient_solve(monkeypatch, problem, loader)
+    _, later_hessian, _ = capture_coefficient_solve(monkeypatch, problem, proximal, loader)
     assert later_hessian.shape == (1, 1)
     torch.testing.assert_close(loss(u), expected_loss, rtol=0, atol=0)
     torch.testing.assert_close(hess_obj, expected_hessian, rtol=0, atol=0)
@@ -173,7 +176,7 @@ def test_pdap_records_one_full_data_result_per_outer_iteration(batch_size):
     loader = make_dataloader(data, batch_size=batch_size)
     training = TrainingConfig(fit_outer_iterations=2, lbfgs_steps=5, num_insertion=4)
     history = run_training(
-        PDAP(training, insertion=config["insertion"]),
+        PDAP(training, proximal_for(config, problem), insertion=config["insertion"]),
         problem, loader, num_iterations=2, verbose=False,
     )
     assert len(history.train_loss) == 2
@@ -198,7 +201,7 @@ def test_logging_accepts_a_finite_loader_without_a_sample_count(verbose):
     problem = SparseProblem(config)
     loader = DataLoader(Samples(), batch_size=2, generator=torch.Generator().manual_seed(0))
     history = run_training(
-        PDAP(TrainingConfig(num_insertion=1), insertion=config["insertion"]),
+        PDAP(TrainingConfig(num_insertion=1), proximal_for(config, problem), insertion=config["insertion"]),
         problem, loader, num_iterations=0, verbose=verbose,
     )
     assert history.train_loss == [0.]
@@ -206,7 +209,7 @@ def test_logging_accepts_a_finite_loader_without_a_sample_count(verbose):
 
 @pytest.mark.parametrize("drop_last", [False, True])
 def test_native_batch_sampler_keeps_full_data_evaluation_and_no_drop_contract(monkeypatch, drop_last):
-    data, problem = _linear_case(alpha=.1)
+    data, problem, proximal = _linear_case(alpha=.1)
     dataset = TensorDataset(*data)
     loader = DataLoader(
         dataset, batch_sampler=BatchSampler(SequentialSampler(dataset), 2, drop_last),
@@ -215,15 +218,15 @@ def test_native_batch_sampler_keeps_full_data_evaluation_and_no_drop_contract(mo
     rng = torch.get_rng_state().clone()
     if drop_last:
         with pytest.raises(ValueError, match="without dropping samples"):
-            PDAP(TrainingConfig()).train_ssn_outerweights(problem, loader)
+            PDAP(TrainingConfig(), proximal).train_ssn_outerweights(problem, loader)
     else:
         for actual, expected in zip(full_batch(loader), data):
             torch.testing.assert_close(actual, expected, rtol=0, atol=0)
-        loss, hess_obj, _ = capture_coefficient_solve(monkeypatch, problem, loader)
+        loss, hess_obj, _ = capture_coefficient_solve(monkeypatch, problem, proximal, loader)
         reference_loss, reference_hessian, _ = capture_coefficient_solve(
-            monkeypatch, problem, make_dataloader(data),
+            monkeypatch, problem, proximal, make_dataloader(data),
         )
         torch.testing.assert_close(loss(problem.c), reference_loss(problem.c))
         torch.testing.assert_close(hess_obj, reference_hessian)
-        assert metrics(problem, loader) == pytest.approx(metrics(problem, make_dataloader(data)))
+        assert metrics(problem, proximal, loader) == pytest.approx(metrics(problem, proximal, make_dataloader(data)))
     assert torch.equal(torch.get_rng_state(), rng)

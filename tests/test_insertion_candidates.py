@@ -7,6 +7,7 @@ import math
 
 import pytest
 import torch
+from ssn_test_problem import proximal_for
 
 import src.PDAP.insertion as insertion
 from src.config import resolve_model, validate_training
@@ -116,12 +117,13 @@ def test_algorithm1_distinguishes_radius_search_failure_from_threshold_stop(
         "activation": "tanh", "power": 1.0, "alpha": 1.0, "moment_order": 2.0,
     }, 1)
     validate_training(config)
+    problem = SparseProblem(config)
+    proximal = proximal_for(config, problem)
 
     _fake_lbfgs(monkeypatch, [[2.0, 0.0]])
     with caplog.at_level(logging.DEBUG):
         insertion.profile_threshold(
-            SparseProblem(config),
-            (X, residual_v, residual_dv),
+            problem, proximal, (X, residual_v, residual_dv),
             sample_sphere=_starts([[1.0, 0.0]]),
             N=1,
             max_insert=1,
@@ -136,8 +138,7 @@ def test_algorithm1_distinguishes_radius_search_failure_from_threshold_stop(
     _fake_lbfgs(monkeypatch, [[0.0, 0.0]])
     with caplog.at_level(logging.DEBUG):
         insertion.profile_threshold(
-            SparseProblem(config),
-            (X, residual_v, residual_dv),
+            problem, proximal, (X, residual_v, residual_dv),
             sample_sphere=_starts([[1.0, 0.0]]),
             N=1,
             max_insert=1,
@@ -159,11 +160,12 @@ def test_sphere_search_reports_when_only_existing_support_is_returned(
     )
     config = resolve_model({"activation": "relu", "power": 2.0, "alpha": 1.0}, 1)
     validate_training(config)
+    problem = SparseProblem(config)
+    proximal = proximal_for(config, problem)
 
     with caplog.at_level(logging.DEBUG):
         insertion.profile_threshold(
-            SparseProblem(config),
-            (X, residual_v, residual_dv),
+            problem, proximal, (X, residual_v, residual_dv),
             sample_sphere=_starts([[1.0, 0.0]]),
             N=1,
             max_insert=1,

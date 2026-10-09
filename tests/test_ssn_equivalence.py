@@ -17,7 +17,7 @@ import pytest
 import torch
 
 from src.config import resolve_model, validate_training
-from src.problems import SparseProblem
+from src.problems import Proximal, SparseProblem
 from src.problems.penalty import _phi
 from src.SSN import SSN
 
@@ -72,27 +72,27 @@ def _run_trajectory(config: dict) -> np.ndarray:
     # rather than silently changing its objective or regenerating its fixtures.
     model_config = resolve_model({"alpha": alpha, "gamma": gamma, "power": power}, P)
     validate_training(model_config)
-    problem = SparseProblem(
-        model_config,
+    proximal = Proximal(
+        alpha, gamma, SparseProblem(model_config).penalty_exponent,
         penalized_mask=pen_mask, nonneg_mask=config.get("nonneg_mask"),
     )
 
     def coefficient_loss(u):
         return data_loss(u) + _penalty(
-            u, problem._masks(u)[0], problem.alpha, problem._gamma, problem.penalty_exponent,
+            u, proximal.masks(u)[0], proximal.alpha, proximal.gamma, proximal.penalty_exponent,
         )
 
     kind = config["kind"]
     if kind == "ssn":
         opt = SSN(
-            [theta], problem, coefficient_loss, H, max_iter=1, correction_guard=False,
+            [theta], proximal, coefficient_loss, H, max_iter=1, correction_guard=False,
             prox_scale=config.get("prox_scale"),
         )
     elif kind == "ssn_tr":
         # folded into the base SSN: trust-region (Steihaug-CG) globalization
-        opt = SSN([theta], problem, coefficient_loss, H, method="steihaug_cg", max_iter=1, correction_guard=False)
+        opt = SSN([theta], proximal, coefficient_loss, H, method="steihaug_cg", max_iter=1, correction_guard=False)
     elif kind == "ssn_masked":
-        opt = SSN([theta], problem, coefficient_loss, H, max_iter=1, correction_guard=False)
+        opt = SSN([theta], proximal, coefficient_loss, H, max_iter=1, correction_guard=False)
     else:  # pragma: no cover
         raise ValueError(kind)
 

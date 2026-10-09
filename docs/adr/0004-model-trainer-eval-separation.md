@@ -45,10 +45,9 @@ normalization tensor contains ones for sphere atoms; otherwise its values depend
 on the neurons even when the configured moment order stays fixed.
 `SparseProblem.obj(prediction, target)` is the canonical scalar H1 fitting
 objective. The local coefficient-loss callable evaluates it from the fixed
-features and targets, then adds `alpha * sparsity_functional(u)` itself; there
-is no `SparseProblem.loss` method. `obj_augmented(u, fitting)` receives the
-evaluated scalar and adds the nonconvex correction; it receives no callable. The closure references the same problem during its correction;
-there is no second network or persistent sample cache.
+features and targets, then adds `Proximal.penalty(u)` itself; there is no
+`SparseProblem.loss` method. The closure references the same problem during its
+correction; there is no second network or persistent sample cache.
 `jac_obj` and `hess_obj` provide the coefficient gradient and full Hessian of
 that objective, including cross terms. PDAP uses those derivatives for individual
 neuron or combined-direction slopes and curvatures. The former `profile` and
@@ -59,8 +58,9 @@ convention remains a separately documented historical numerical choice.
 
 PDAP owns candidate search/ranking, insertion acceptance, the warm-start
 procedure and initial-coefficient selection, support insertion/pruning,
-correction scheduling and outer stopping. SparseProblem evaluates supplied candidates/directions:
-features, objective derivatives, and penalty/proximal operations.
+correction scheduling and outer stopping. SparseProblem evaluates supplied
+candidates/directions: features and objective derivatives. Proximal evaluates
+penalty and proximal operations.
 PDAP owns its insertion-increment calculation and certificate radius, including
 the theorem formula and numerical cap/fallback. Mathematical evaluation does not transfer search, initialization,
 or acceptance decisions to the problem. The mixed insertion/warm-start methods
@@ -68,11 +68,27 @@ have been removed; their procedures now live in PDAP's insertion and warm-start
 modules. The assistant's former proposal to move complete warm-start selection
 into SparseProblem was withdrawn; it was not an agreed ownership change.
 
-The problem may evaluate a threshold or proximal minimizer, including branches
+Proximal may evaluate a threshold or proximal minimizer, including branches
 defined by the mathematical operator. PDAP decides how to use those evaluations
 for search, initialization and insertion. PDAP's proposed atoms and SSN's
 temporary working coefficients do not create a second network. PDAP decides
 when accepted changes are applied to the persistent network.
+
+Update 2026-10-09: `Proximal` (`src/problems/proximal.py`) owns the penalty
+term αΦ of the objective and its proximal maps: Φ, the penalty and its
+derivative, the split into the fractional penalty α·Σ|u|^q that the prox
+handles and a smooth correction, the vector and scalar proximal maps, and the
+optional coordinate masks. Its maps take the proximal constant λ. It is built
+from the configured α and γ and the problem's penalty exponent q = 2/(k+1),
+the only penalty value `SparseProblem` supplies. `SparseProblem` keeps the
+network, kernel, moment weights and fitting objective. Training setup builds one
+instance; PDAP stores it, uses it for the coefficient-loss closure, the radius
+bound, insertion and the warm start, and passes it to each SSN. Evaluation
+receives it from `run_training`. SSN takes the `Proximal` in place of the
+problem and owns the normal map, its Jacobian, the prox preimage, the augmented
+gradient and Hessian, and the prox-scale selection (`fractional_prox_scale`).
+SSN had read only α, γ, q and the masks from the problem, so this reverses the
+"one shared problem for PDAP and SSN" follow-up below for the penalty.
 
 SSN remains a `torch.optim.Optimizer`; its `step()` owns the complete configured
 iteration budget and the final objective acceptance/fallback on temporary
@@ -92,7 +108,7 @@ serialization. Training setup calls `validate_training(runtime)` with the same
 insertion selection used by PDAP, then constructs `SparseProblem(runtime)`.
 Prediction setup resolves its settings without imposing training restrictions,
 preserving callable activations and historical powers. Runtime coefficient
-masks remain constructor arguments. There is no model-owned configuration
+masks are `Proximal` constructor arguments. There is no model-owned configuration
 factory or validation wrapper, replacement configuration class, or stored
 validation flag.
 
@@ -115,8 +131,8 @@ sphere models while retaining their total variation.
 
 The user subsequently requested separation of metrics from mathematics.
 Evaluation owns split iteration, reporting denormalization, support diagnostics
-and metric dictionaries; it calls the problem's objective and raw sparsity
-functional. The accepted metrics/measuring refactor introduces one complete
+and metric dictionaries; it calls the problem's objective and Proximal's raw
+sparsity functional. The accepted metrics/measuring refactor introduces one complete
 `PDAP.step` and an external `run_training` function that owns the outer budget,
 timing, evaluation and recording. PDAP remains a plain class: its support
 insertion/pruning needs structural operations, while a second optimizer parameter

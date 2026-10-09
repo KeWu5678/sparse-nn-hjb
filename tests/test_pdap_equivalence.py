@@ -22,6 +22,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 import torch
+from ssn_test_problem import proximal_for
 
 from src.config import resolve_model, validate_training
 from src.config.schema import EnvConfig, ExperimentConfig, ModelConfig, TrainingConfig
@@ -75,7 +76,7 @@ def _run_summary(name: str) -> np.ndarray:
     model = SparseProblem(model_config)
     train_loader, valid_loader = make_dataloaders(data, cfg.data.train_fraction)
     out = run_training(
-        PDAP(cfg.training, insertion=model_config["insertion"]),
+        PDAP(cfg.training, proximal_for(model_config, model), insertion=model_config["insertion"]),
         model,
         train_loader, valid_loader, num_iterations=3, verbose=False,
     )

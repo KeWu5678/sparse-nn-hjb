@@ -19,7 +19,7 @@ from torch.utils.data import DataLoader
 from .data import ValueSampleNormalizer
 from .eval import metrics
 from .PDAP import PDAP, History
-from .problems import SparseProblem
+from .problems import Proximal, SparseProblem
 
 logger = structlog.get_logger(__name__)
 
@@ -75,7 +75,10 @@ def run_training(
                 )
                 diagnostics = {**search, **correction}
                 diagnostics["solver_seconds"] = search["solver_seconds"] + correction["solver_seconds"]
-                _record(problem, train_loader, valid_loader, history, diagnostics, verbose, display_every)
+                _record(
+                    problem, pdap.proximal, train_loader, valid_loader, history, diagnostics,
+                    verbose, display_every,
+                )
                 search = _measure(pdap.insert, problem, train_loader, history, verbose)
     else:
         for _ in range(num_iterations):
@@ -83,10 +86,16 @@ def run_training(
             if diagnostics["stop_reason"] is not None:
                 history.run_metrics["stop_reason"] = diagnostics["stop_reason"]
                 break
-            _record(problem, train_loader, valid_loader, history, diagnostics, verbose, display_every)
+            _record(
+                problem, pdap.proximal, train_loader, valid_loader, history, diagnostics,
+                verbose, display_every,
+            )
 
     if not history.train_loss:
-        _record(problem, train_loader, valid_loader, history, diagnostics, verbose, display_every)
+        _record(
+            problem, pdap.proximal, train_loader, valid_loader, history, diagnostics,
+            verbose, display_every,
+        )
     history.final_neurons = problem.n_neurons
     history.run_metrics["process_peak_rss_bytes"] = _process_peak_rss_bytes()
     if verbose:
@@ -115,13 +124,15 @@ def _measure(
 
 
 def _record(
-    problem: SparseProblem, train_loader: DataLoader, valid_loader: DataLoader | None,
-    history: History, diagnostics: dict, verbose: bool, display_every: int,
+    problem: SparseProblem, proximal: Proximal, train_loader: DataLoader,
+    valid_loader: DataLoader | None, history: History, diagnostics: dict,
+    verbose: bool, display_every: int,
 ) -> None:
     """Evaluate the current state before capturing its checkpoint."""
     started = perf_counter()
     values = metrics(
-        problem, train_loader, valid_loader, reporting_normalizer=history.reporting_normalizer,
+        problem, proximal, train_loader, valid_loader,
+        reporting_normalizer=history.reporting_normalizer,
     )
     elapsed = perf_counter() - started
     history.run_metrics["evaluation_seconds"] += elapsed

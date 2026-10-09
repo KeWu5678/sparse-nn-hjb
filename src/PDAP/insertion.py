@@ -14,7 +14,8 @@ acceptance tests differ:
     optimal outer weight c* alongside each atom.  Used for the q<1 penalty.
 
 The strategies are pure functions: the caller supplies the precomputed residual
-(so the "zero network" first iteration is just residual = -target) and the shared problem.
+(so the "zero network" first iteration is just residual = -target), the shared
+problem and its penalty.
 """
 
 from __future__ import annotations
@@ -26,7 +27,7 @@ from typing import Callable, List, Optional, Tuple
 import numpy as np
 import torch
 
-from ..problems import SparseProblem
+from ..problems import Proximal, SparseProblem
 
 # Numerical bound for random starts and final candidate filtering.
 FIXED_LOG_CLAMP = 5.0
@@ -195,6 +196,7 @@ def _generate_candidates(
 # ---------------------------------------------------------------------------- #
 def profile_threshold(
     problem: SparseProblem,
+    proximal: Proximal,
     residual: tuple[torch.Tensor, torch.Tensor, torch.Tensor], *,
     sample_sphere: Callable[[int], Tuple[torch.Tensor, torch.Tensor]],
     N: int,
@@ -246,13 +248,13 @@ def profile_threshold(
         curvature = float(problem.hess_obj(*features)[0, 0])
         v = abs(slope) if two_sided else slope
         scale = float(problem.moment_weight_of_atoms(a_i, b_i))
-        threshold = problem.alpha * scale
+        threshold = proximal.alpha * scale
         # Retain the physical-profile comparison, including its rounding.
         if v <= threshold or (guaranteed and curvature < 1e-30):
             continue
         accepted_a.append(a_i.detach())
         accepted_b.append(b_i.detach())
-        accepted_scores.append(v / scale - problem.alpha)
+        accepted_scores.append(v / scale - proximal.alpha)
         if guaranteed:
             magnitude = (v - threshold) / curvature
             accepted_c.append(-magnitude if slope > 0 else magnitude)
@@ -306,6 +308,7 @@ def profile_threshold(
 # ---------------------------------------------------------------------------- #
 def finite_step(
     problem: SparseProblem,
+    proximal: Proximal,
     residual: tuple[torch.Tensor, torch.Tensor, torch.Tensor], *,
     sample_sphere: Callable[[int], Tuple[torch.Tensor, torch.Tensor]],
     N: int,
@@ -335,7 +338,7 @@ def finite_step(
         curvature = float(problem.hess_obj(*features)[0, 0])
         if curvature < 1e-30 or abs(slope) < 1e-30:
             continue
-        magnitude = problem.power_prox(abs(slope) / curvature, curvature)
+        magnitude = proximal.fractional_prox(abs(slope) / curvature, proximal.alpha / curvature)
         if magnitude <= 0.0:
             continue
         c_star = magnitude if slope < 0 else -magnitude
@@ -343,7 +346,7 @@ def finite_step(
         # magnitude floor needed when differentiating the full penalty.
         dJ = (
             slope * c_star + 0.5 * curvature * c_star**2
-            + problem.alpha * abs(c_star)**problem.penalty_exponent
+            + proximal.alpha * abs(c_star)**proximal.penalty_exponent
         )
         if dJ >= 0.0:
             continue
@@ -362,7 +365,7 @@ def finite_step(
         logger.debug(
             "Candidate search  sampled=%d  unique=%d  accepted=%d/%d  "
             "rule=adding atom reduces objective (q=%.3f)",
-            N, n_after, len(accepted_a), max_insert, problem.penalty_exponent,
+            N, n_after, len(accepted_a), max_insert, proximal.penalty_exponent,
         )
 
     if len(accepted_a) == 0:

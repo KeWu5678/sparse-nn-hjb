@@ -1,30 +1,18 @@
-"""Neuron and objective mathematics evaluated on externally supplied data."""
-
-import math
+"""Neuron and fitting mathematics evaluated on externally supplied data."""
 
 import torch
 from torch import Tensor, nn
 from torch.nn import functional as F
 
 from .moment import moment_weight
-from .penalty import (
-    _noncvx_correction,
-    _noncvx_correction_dd,
-    _noncvx_penalty,
-    _phi,
-    jac_noncvx_penalty,
-    phi_prox,
-)
-from .prox import _power_prox, _power_prox_derivative
 
 
 class SparseProblem(nn.Module):
-    """Own the sparse network and regularized objective without owning samples.
+    """Own the sparse network and its data fitting without owning samples.
 
-    obj evaluates data fitting from predictions and targets. obj_augmented adds the nonconvex
-    normal-map correction; callers form the objective obj + alpha*sparsity_functional.
-    For the log family that objective is obj_augmented + alpha*||u||_1. For a fractional
-    penalty obj_augmented = obj and the proximal map handles the full penalty.
+    obj evaluates data fitting from predictions and targets; Proximal owns the
+    penalty term, and callers form the objective obj + Proximal.penalty. The
+    problem supplies the penalty exponent q = 2/(power+1) its activation implies.
     Optimizers own parameter mutation, differentiation of the objective, and iterations.
     Construction consumes an already resolved configuration. Training setup must
     validate its penalty, geometry and insertion before constructing the problem.
@@ -33,23 +21,14 @@ class SparseProblem(nn.Module):
     inner_weight: Tensor
     inner_bias: Tensor
 
-    def __init__(
-        self,
-        config,
-        *,
-        penalized_mask: Tensor | None = None,
-        nonneg_mask: Tensor | None = None,
-    ) -> None:
+    def __init__(self, config) -> None:
         super().__init__()
         self._activation_name = config["activation_name"]
         self._activation = config["activation"]
         self._use_sphere = config["use_sphere"]
         self._moment_order = config["moment_order"]
         self._power = config["power"]
-        self._alpha, self._gamma = config["alpha"], config["gamma"]
         self._loss_weights = config["loss_weights"]
-        self._penalized_mask = penalized_mask
-        self._nonneg_mask = nonneg_mask
         self.register_buffer("inner_weight", torch.empty((0, config["input_dim"]), dtype=torch.float64))
         self.register_buffer("inner_bias", torch.empty(0, dtype=torch.float64))
         self.c = nn.Parameter(torch.empty(0, dtype=torch.float64))
@@ -57,10 +36,6 @@ class SparseProblem(nn.Module):
     @property
     def input_dim(self) -> int:
         return self.inner_weight.shape[1]
-
-    @property
-    def alpha(self) -> float:
-        return self._alpha
 
     @property
     def activation(self):
@@ -194,181 +169,3 @@ class SparseProblem(nn.Module):
         n = Kv.shape[0]
         w1, w2 = self._loss_weights
         return (w1 / n) * (Kv.T @ Kv) + (w2 / n) * (Kg.T @ Kg)
-
-    def sparsity_functional(self, u: Tensor) -> Tensor:
-        """Unweighted log/power functional on the supplied penalty coordinates."""
-        penalized, nonneg = self._masks(u)
-        return _noncvx_penalty(
-            u,
-            penalized,
-            nonneg,
-            alpha=1.0,
-            gamma=self._gamma,
-            penalty_exponent=self.penalty_exponent,
-        )
-
-    def normal_map(
-        self,
-        q: Tensor,
-        u: Tensor,
-        jac_obj_augmented: Tensor,
-        inverse_step: float,
-    ) -> Tensor:
-        """Evaluate G(q), using u = P(q) and the smooth gradient at u."""
-        return inverse_step * (q - u) + jac_obj_augmented
-
-    def jac_normal(self, u: Tensor, jac_prox: Tensor, inverse_step: float, hess_obj: Tensor) -> Tensor:
-        """Selected G'(q), using u = P(q) and jac_prox = P'(q)."""
-        I = torch.eye(u.numel(), device=u.device, dtype=u.dtype)
-        return inverse_step * (I - jac_prox) + self.hess_obj_augmented(u, hess_obj) @ jac_prox
-
-    def obj_augmented(self, u: Tensor, fitting: Tensor) -> Tensor:
-        """Add the nonconvex splitting correction to the scalar fitting value.
-
-        fitting is obj evaluated at the same u; the caller preserves its
-        autograd graph when derivatives of the augmented objective are needed.
-        """
-        if self.penalty_exponent != 1.0:
-            return fitting
-        penalized, nonneg = self._masks(u)
-        magnitudes = torch.where(nonneg[penalized], u[penalized].clamp_min(0), u[penalized].abs())
-        return fitting + self._alpha * (_phi(magnitudes, self._gamma) - magnitudes).sum()
-
-    def jac_obj_augmented(self, u: Tensor, jac_loss: Tensor) -> Tensor:
-        """Derivative of obj_augmented from the supplied derivative of the objective at u.
-
-        Retain the original full-gradient subtraction and correction arithmetic,
-        including its derivative selection at masked nonsmooth coordinates.
-        The caller computes jac_loss and controls gradient tracking.
-        """
-        alpha_vec = self._alpha_vec(u)
-        abs_u, sign_u = torch.abs(u), torch.sign(u)
-        reg_grad = jac_noncvx_penalty(
-            abs_u, sign_u, alpha_vec, self._gamma, penalty_exponent=self.penalty_exponent
-        )
-        jac_obj = jac_loss - reg_grad
-        correction = _noncvx_correction(
-            abs_u, sign_u, self._gamma, penalty_exponent=self.penalty_exponent
-        )
-        return jac_obj + alpha_vec * correction
-
-    def hess_obj_augmented(self, u: Tensor, hess_obj: Tensor) -> Tensor:
-        """Hessian of obj plus the diagonal Hessian of the nonconvex correction."""
-        correction = _noncvx_correction_dd(
-            torch.abs(u), self._gamma, penalty_exponent=self.penalty_exponent
-        )
-        return torch.diag(self._alpha_vec(u) * correction) + hess_obj
-
-    def prox(self, q: Tensor, inverse_step: float) -> Tensor:
-        """Evaluate the selected proximal map, including nonnegative coordinates."""
-        out = _power_prox(q, self._alpha_vec(q) / inverse_step, penalty_exponent=self.penalty_exponent)
-        kill = self._masks(q)[1] & (q < 0)
-        return torch.where(kill, torch.zeros_like(out), out)
-
-    def jac_prox(self, q: Tensor, inverse_step: float, *, prox_result: Tensor) -> Tensor:
-        """Selected proximal Jacobian at q, using its already computed image."""
-        jac = _power_prox_derivative(
-            q,
-            self._alpha_vec(q) / inverse_step,
-            penalty_exponent=self.penalty_exponent,
-            prox_result=prox_result,
-        )
-        kill = self._masks(q)[1] & (q < 0)
-        diagonal = torch.where(kill, torch.zeros_like(prox_result), torch.diagonal(jac))
-        return torch.diag(diagonal)
-
-    def prox_preimage(self, u: Tensor, jac_obj_augmented: Tensor, inverse_step: float) -> Tensor:
-        """Reconstruct q from a prox-consistent iterate, following MATLAB SSN.m.
-
-        Nonzero penalized entries use the penalty's stationarity equation;
-        zero entries use the smooth gradient. The proximal map is the identity
-        on unpenalized coordinates, whose preimage remains u.
-        """
-        penalized, _ = self._masks(u)
-        alpha_vec = self._alpha_vec(u)
-        abs_u, sign_u = torch.abs(u), torch.sign(u)
-        active = (abs_u > 0) & penalized
-        if self.penalty_exponent == 1.0:
-            grad = torch.where(active, -alpha_vec * sign_u, jac_obj_augmented)
-        else:
-            s = abs_u.clamp(min=1e-30)
-            base = alpha_vec * self.penalty_exponent * s ** (self.penalty_exponent - 1)
-            grad = torch.where(active, -base * sign_u, jac_obj_augmented)
-        q = u - (1.0 / inverse_step) * grad
-        return torch.where(penalized, q, u)
-
-    def inverse_step(self, prox_scale: float | None) -> float:
-        """Translate the solver's proximal scale to the normal-map inverse step.
-
-        The log family retains the reference scaling 1 + alpha*gamma. The
-        fractional family requires the scale chosen from its warm start.
-        This calculation stores no numerical setting on the problem.
-        """
-        if self.penalty_exponent < 1.0 and prox_scale is None:
-            raise ValueError("prox_scale is required when penalty_exponent < 1")
-        if prox_scale is not None and (not math.isfinite(prox_scale) or prox_scale <= 0.0):
-            raise ValueError(f"prox_scale must be positive and finite, got {prox_scale}")
-        if self.penalty_exponent < 1.0:
-            assert prox_scale is not None
-            return self._alpha / prox_scale
-        return 1.0 + self._alpha * self._gamma
-
-    def prox_scale_for_fractional_penalty(self, coefficients: Tensor, rho: float) -> float | None:
-        """Fractional proximal scale satisfying the warm-start upper bound."""
-        if self.penalty_exponent == 1.0:
-            return None
-        if not 0.0 < rho < 1.0:
-            raise ValueError(f"rho must satisfy 0 < rho < 1, got {rho}")
-        if self._alpha <= 0.0:
-            raise ValueError(f"alpha must be positive, got {self._alpha}")
-        penalized, _ = self._masks(coefficients)
-        magnitudes = coefficients[penalized].abs()
-        nonzero = magnitudes[magnitudes > 0]
-        if nonzero.numel() == 0:
-            raise ValueError("warm-start proximal scaling requires a nonzero coefficient")
-        minimum = float(nonzero.min())
-        exponent = self.penalty_exponent
-        bound = rho * minimum ** (2.0 - exponent) / (2.0 * (1.0 - exponent))
-        return min(self._alpha / (1.0 + self._alpha * self._gamma), bound)
-
-    def penalty_prox(self, value: float, inverse_step: float) -> float:
-        """Selected nonnegative proximal value for the full scalar penalty.
-
-        The log family's closed-form root requires value >= alpha/inverse_step
-        to guarantee a minimizer; PDAP owns that eligibility check. SSN's prox
-        instead uses the split penalty required by its normal map.
-        """
-        if self.penalty_exponent == 1.0:
-            return phi_prox(value, self._alpha / inverse_step, gamma=self._gamma)
-        return max(self.power_prox(value, inverse_step), 0.0)
-
-    def power_prox(self, value: float, inverse_step: float) -> float:
-        """Scalar power-penalty proximal value, including its q=1 safeguard.
-
-        Retain scalar scale arithmetic; SSN's masked vector prox has a different
-        floating-point evaluation order and must keep its own numerical contract.
-        """
-        v = torch.tensor([value], dtype=torch.float64)
-        return float(_power_prox(
-            v, self._alpha / inverse_step, penalty_exponent=self.penalty_exponent,
-        )[0])
-
-    def _alpha_vec(self, u: Tensor) -> Tensor:
-        penalized, _ = self._masks(u)
-        return torch.where(
-            penalized, torch.full_like(u, float(self._alpha)), torch.zeros_like(u),
-        )
-
-    def _masks(self, u: Tensor) -> tuple[Tensor, Tensor]:
-        return (
-            self._mask(self._penalized_mask, u, True, "penalized_mask"),
-            self._mask(self._nonneg_mask, u, False, "nonneg_mask"),
-        )
-
-    @staticmethod
-    def _mask(mask: Tensor | None, coordinates: Tensor, default: bool, name: str) -> Tensor:
-        if mask is None:
-            return torch.full_like(coordinates, default, dtype=torch.bool)
-        if mask.shape != coordinates.shape:
-            raise ValueError(f"{name} length must match the problem dimension")
-        return mask.to(dtype=torch.bool, device=coordinates.device)

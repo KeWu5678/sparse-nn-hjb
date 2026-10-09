@@ -1,7 +1,7 @@
 """Evaluation and reporting for a model and its external value samples.
 
-SparseProblem supplies the fitting objective and sparsity functional; evaluation
-assembles their reported values, prediction errors and support diagnostics.
+SparseProblem supplies the fitting objective and Proximal the sparsity functional;
+evaluation assembles their reported values, prediction errors and support diagnostics.
 """
 
 from __future__ import annotations
@@ -14,18 +14,21 @@ from .data import full_batch
 from .problems.moment import amplitude_mass_radius
 
 if TYPE_CHECKING:
-    from .problems import SparseProblem
+    from .problems import Proximal, SparseProblem
 
 
 @torch.no_grad()
-def metrics(problem: SparseProblem, train_loader, valid_loader=None, reporting_normalizer=None) -> dict[str, float | None]:
+def metrics(
+    problem: SparseProblem, proximal: Proximal, train_loader, valid_loader=None,
+    reporting_normalizer=None,
+) -> dict[str, float | None]:
     """Evaluate splits and support diagnostics using the persisted metric names."""
     inner_weight, inner_bias, c = problem.inner_weight, problem.inner_bias, problem.c.detach()
     u = c * problem.moment_weight_of_atoms()
-    phi = problem.sparsity_functional(u) if c.numel() else c.new_zeros(())
+    phi = proximal.sparsity_functional(u) if c.numel() else c.new_zeros(())
     # psi_p = sum w_p|c| = ||u||_1. The sphere formulation has no moment diagnostic.
     psi = float(u.abs().sum()) if problem.moment_order is not None else None
-    alpha_phi = float(problem.alpha * phi)
+    alpha_phi = float(proximal.alpha * phi)
     radius = torch.sqrt((inner_weight * inner_weight).sum(dim=-1) + inner_bias * inner_bias)
     values = {
         "sparsity_functional": float(phi),

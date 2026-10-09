@@ -2,6 +2,7 @@
 
 import pytest
 import torch
+from ssn_test_problem import proximal_for
 
 from src.config import resolve_model, validate_training
 from src.PDAP.warmstart import warm_start
@@ -27,11 +28,13 @@ def test_single_atom_warm_start_has_known_minimizer(
         "power": power, "loss_weights": (1.0, 0.0), "alpha": alpha, "gamma": gamma,
     }, 1)
     validate_training(config)
+    problem = SparseProblem(config)
     result = warm_start(
         W_new=torch.ones_like(X),
         b_new=torch.zeros(1, dtype=torch.float64),
         residual=(X, torch.tensor([-sign * v], dtype=torch.float64), torch.zeros_like(X)),
-        problem=SparseProblem(config),
+        problem=problem,
+        proximal=proximal_for(config, problem),
     )
 
     assert result.item() == pytest.approx(sign * expected, rel=1e-13, abs=1e-13)
@@ -56,11 +59,13 @@ def test_log_warm_start_preserves_matlab_acceptance_guards(
     config = resolve_model({"loss_weights": (1.0, 0.0), "alpha": alpha, "gamma": 1.0}, 1)
     validate_training(config)
 
+    problem = SparseProblem(config)
     result = warm_start(
         W_new=torch.ones_like(X),
         b_new=torch.zeros(1, dtype=torch.float64),
         residual=(X, torch.tensor([-v], dtype=torch.float64), torch.zeros_like(X)),
-        problem=SparseProblem(config),
+        problem=problem,
+        proximal=proximal_for(config, problem),
     )
 
     assert result.item() == pytest.approx(expected, rel=1e-13, abs=1e-13)

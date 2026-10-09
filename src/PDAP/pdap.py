@@ -1,7 +1,8 @@
 """PDAP support updates and complete outer steps.
 
-SparseProblem owns the network and mathematics. PDAP owns candidate search,
-insertion, coefficient correction, pruning and the no-candidate stopping rule.
+SparseProblem owns the network and its fitting; Proximal owns the penalty and
+its proximal maps. PDAP owns candidate search, insertion, coefficient
+correction, pruning and the no-candidate stopping rule.
 The external training loop owns repetition, measurement and history.
 """
 
@@ -15,7 +16,7 @@ from torch.utils.data import DataLoader
 
 from ..config.activations import get_growth
 from ..data import full_batch
-from ..problems import SparseProblem
+from ..problems import Proximal, SparseProblem
 from ..SSN import SSN
 from .insertion import FIXED_LOG_CLAMP, finite_step, profile_threshold
 from .radius import certificate_radius, sample_extent
@@ -23,9 +24,13 @@ from .warmstart import warm_start
 
 
 class PDAP:
-    def __init__(self, training, *, insertion: str = "profile") -> None:
-        """Read the settings for one outer step; run_training owns its repetition."""
+    def __init__(self, training, proximal: Proximal, *, insertion: str = "profile") -> None:
+        """Read the settings for one outer step; run_training owns its repetition.
+
+        proximal is the penalty shared by insertion, correction and evaluation.
+        """
         t = training
+        self.proximal = proximal
         if insertion not in ("profile", "finite_step"):
             raise ValueError(f"insertion must be 'profile' or 'finite_step', got {insertion!r}")
         self.insertion_kind = insertion
@@ -142,13 +147,13 @@ class PDAP:
         def coefficient_loss(u: torch.Tensor) -> torch.Tensor:
             return (
                 problem.obj((value_jacobian @ u, gradient_jacobian @ u), (V, dV))
-                + problem.alpha * problem.sparsity_functional(u)
+                + self.proximal.penalty(u)
             )
 
         hess_obj = problem.hess_obj(value_jacobian, gradient_jacobian)
         theta = torch.nn.Parameter(problem.c.detach() * moment_weight)
         optimizer = SSN(
-            [theta], problem, coefficient_loss, hess_obj, max_iter=self.fit_outer_iterations,
+            [theta], self.proximal, coefficient_loss, hess_obj, max_iter=self.fit_outer_iterations,
             correction_guard=self.correction_guard, verbose=verbose, **self.solver,
         )
         optimizer.step()
@@ -187,18 +192,18 @@ class PDAP:
         radius = self._search_radius(problem, residual)
         if self.insertion_kind == "profile":
             W, b, c = profile_threshold(
-                problem, residual, two_sided=True, insert_init=self.insert_init,
+                problem, self.proximal, residual, two_sided=True, insert_init=self.insert_init,
                 radius=radius, **common,
             )
         else:
             W, b, c = finite_step(
-                problem, residual, radius=radius, **common,
+                problem, self.proximal, residual, radius=radius, **common,
             )
         if c is None and W.shape[0] > 0:
             c = warm_start(
                 torch.as_tensor(W, dtype=torch.float64),
                 torch.as_tensor(b, dtype=torch.float64),
-                residual, problem, verbose=verbose,
+                residual, problem, self.proximal, verbose=verbose,
             )
         return W, b, c
 
@@ -256,7 +261,7 @@ class PDAP:
         radius = certificate_radius(
             get_growth(problem.activation_name) if problem.activation_name is not None else None,
             extent=sample_extent(X), residual_norm=residual_norm,
-            alpha=problem.alpha, moment_order=problem.moment_order,
+            alpha=self.proximal.alpha, moment_order=problem.moment_order,
         )
         self._last_search_radius = cap if radius is None else min(float(radius), cap)
         self._last_theorem_applied = 0.0 if radius is None else 1.0

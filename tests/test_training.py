@@ -16,14 +16,15 @@ from src.SSN import SSN
 
 
 def _case(monkeypatch, *, order="insertion_first", accepted=(True,)):
-    from src.problems import SparseProblem
+    from src.problems import Proximal, SparseProblem
 
     config = resolve_model({"alpha": 0.0}, 1)
     validate_training(config)
     problem = SparseProblem(config)
     x = torch.tensor([[0.25], [0.75]], dtype=torch.float64)
     loader = make_dataloader((x, x.clone(), torch.ones_like(x)))
-    pdap = PDAP(TrainingConfig(loop_order=order, fit_outer_iterations=0))
+    proximal = Proximal(config["alpha"], config["gamma"], problem.penalty_exponent)
+    pdap = PDAP(TrainingConfig(loop_order=order, fit_outer_iterations=0), proximal)
     searches = iter(accepted)
     search_number = count(1)
 
@@ -54,7 +55,7 @@ def test_step_completes_optimization_without_quality_evaluation(monkeypatch):
     # A zero-budget SSN correction accepts its initial coefficients; this differs
     # from a search that never invokes correction at all.
     assert diagnostics["correction_accepted"] is True
-    assert metrics(problem, loader)["train_loss"] == 0.0
+    assert metrics(problem, pdap.proximal, loader)["train_loss"] == 0.0
 
 
 def test_ssn_trial_failure_and_final_acceptance_reach_history_and_run_totals(monkeypatch):
@@ -109,7 +110,7 @@ def test_each_record_scores_its_checkpoint_and_totals_include_trailing_work(
     assert history.summary_metrics()["iterations"] == 2
     for i in range(2):
         history.restore_model(problem, i)
-        assert history.train_loss[i] == pytest.approx(metrics(problem, loader)["train_loss"])
+        assert history.train_loss[i] == pytest.approx(metrics(problem, pdap.proximal, loader)["train_loss"])
 
 
 def test_terminal_search_is_counted_without_a_duplicate_checkpoint(monkeypatch):
@@ -157,7 +158,7 @@ def test_failed_legacy_initialization_keeps_existing_model_and_reports_its_size(
 
     assert history.final_neurons == history.best_neurons == problem.n_neurons == 1
     assert history.model_states[0]["inner_weight"].item() == 2.0
-    assert history.train_loss[0] == metrics(problem, loader)["train_loss"]
+    assert history.train_loss[0] == metrics(problem, pdap.proximal, loader)["train_loss"]
     assert history.run_metrics["total_insertion_searches"] == 1
     assert history.run_metrics["total_coefficient_corrections"] == 0
     assert history.summary_metrics()["stop_reason"] == "no_candidate"
@@ -174,7 +175,7 @@ def test_zero_budget_records_existing_or_legacy_initialized_state(monkeypatch, o
     history = training.run_training(pdap, problem, loader, num_iterations=0, verbose=False)
 
     assert len(history.train_loss) == 1
-    assert history.train_loss[0] == metrics(problem, loader)["train_loss"]
+    assert history.train_loss[0] == metrics(problem, pdap.proximal, loader)["train_loss"]
     assert history.run_metrics["total_insertion_searches"] == searches
     assert history.run_metrics["total_coefficient_corrections"] == 0
     assert history.run_metrics["stop_reason"] == "iteration_budget"
@@ -183,8 +184,8 @@ def test_zero_budget_records_existing_or_legacy_initialized_state(monkeypatch, o
 
 
 def test_history_stores_supplied_values_without_prediction_and_copies_diagnostics(monkeypatch):
-    problem, loader, _ = _case(monkeypatch)
-    values = metrics(problem, loader)
+    problem, loader, pdap = _case(monkeypatch)
+    values = metrics(problem, pdap.proximal, loader)
     diagnostics = {"search_radius": 2.0, "correction_accepted": False}
 
     def unexpected_prediction(*args, **kwargs):

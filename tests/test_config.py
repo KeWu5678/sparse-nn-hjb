@@ -14,7 +14,8 @@ from src.config import get_activation, get_use_sphere, resolve_model, validate_t
 from src.config.schema import ExperimentConfig, ModelConfig
 from src.data import DATA_DIR, load_value_samples
 from src.PDAP import PDAP
-from src.problems import SparseProblem
+from src.problems import Proximal, SparseProblem
+from src.SSN import SSN
 
 # Must be registered before any compose() call below.
 ConfigStore.instance().store(name="config_schema", node=ExperimentConfig)
@@ -132,14 +133,19 @@ def test_config_builds_trainer_and_model() -> None:
     raw_model = OmegaConf.to_container(cfg.model, resolve=True)
     model_config = resolve_model(cfg.model, 2)
     validate_training(model_config)
-    pdap = PDAP(cfg.training, insertion=model_config["insertion"])
     problem = SparseProblem(model_config)
+    proximal = Proximal(model_config["alpha"], model_config["gamma"], problem.penalty_exponent)
+    pdap = PDAP(cfg.training, proximal, insertion=model_config["insertion"])
     assert model_config["activation"] is torch.relu
     assert OmegaConf.to_container(cfg.model, resolve=True) == raw_model
     assert cfg.model.activation == "relu"
-    assert problem.alpha == cfg.model.alpha == 1e-5
+    assert pdap.proximal.alpha == cfg.model.alpha == 1e-5
     # Configured alpha and gamma determine the log penalty's normal-map scaling.
-    assert problem.inverse_step(None) == pytest.approx(1.000005, rel=0, abs=1e-12)
+    optimizer = SSN(
+        [torch.nn.Parameter(torch.zeros(1, dtype=torch.float64))], proximal,
+        lambda u: u.sum(), torch.eye(1, dtype=torch.float64),
+    )
+    assert optimizer.param_groups[0]["inverse_step"] == pytest.approx(1.000005, rel=0, abs=1e-12)
     assert pdap.insertion_kind == "profile"
     assert pdap.solver["max_ls_iter"] == 500
     assert pdap.fit_outer_iterations == 20

@@ -4,6 +4,7 @@ import pickle
 import numpy as np
 import pytest
 import torch
+from ssn_test_problem import proximal_for
 
 from src.config import resolve_model, validate_training
 from src.data import ValueSampleNormalizer, make_dataloader
@@ -55,10 +56,11 @@ def test_restoring_a_zero_measure_snapshot_empties_an_initialized_model(legacy) 
     """
     x = torch.tensor([[0.2, -0.3], [0.5, 0.7]], dtype=torch.float64)
 
-    empty = SparseProblem(resolve_model({"activation": "tanh", "moment_order": 2.0}, 2))
+    config = resolve_model({"activation": "tanh", "moment_order": 2.0}, 2)
+    empty = SparseProblem(config)
     samples = (x, *empty(x))
     history = History()
-    history.record(empty, evaluate(empty, make_dataloader(samples)))
+    history.record(empty, evaluate(empty, proximal_for(config, empty), make_dataloader(samples)))
     if legacy:
         history.model_states[0] = {}
 
@@ -111,13 +113,14 @@ def test_recorded_checkpoints_stay_independent_of_models_and_each_other():
         "inner_bias": torch.tensor([.5], dtype=torch.float64),
         "c": torch.tensor([3.], dtype=torch.float64),
     }
-    problem = SparseProblem(resolve_model({}, 2))
+    config = resolve_model({}, 2)
+    problem = SparseProblem(config)
     problem.set_atoms(atoms["inner_weight"], atoms["inner_bias"], atoms["c"])
     x = torch.tensor([[1., 1.]], dtype=torch.float64)
     loader = make_dataloader((x, *problem(x)))
     history = History()
     for _ in range(2):
-        history.record(problem, evaluate(problem, loader))
+        history.record(problem, evaluate(problem, proximal_for(config, problem), loader))
         with torch.no_grad():
             for tensor in problem.state_dict().values():
                 tensor.add_(1.)
@@ -148,9 +151,11 @@ def test_history_summary_records_normalized_objective_decomposition(alpha, penal
     c = torch.tensor([50.0, -45.0, 5.0], dtype=torch.float64)
     x = torch.tensor([[0.2, -0.3], [0.5, 0.7]], dtype=torch.float64)
 
-    problem = SparseProblem(
-        resolve_model({"activation": "tanh", "alpha": alpha, "gamma": 0.0,
-                       "loss_weights": (1.0, 1.0), "moment_order": 2.0}, 2),
+    config = resolve_model({"activation": "tanh", "alpha": alpha, "gamma": 0.0,
+                            "loss_weights": (1.0, 1.0), "moment_order": 2.0}, 2)
+    problem = SparseProblem(config)
+    proximal = proximal_for(
+        config, problem,
         penalized_mask=None if penalized is None else torch.tensor(penalized),
         nonneg_mask=None if nonnegative is None else torch.tensor(nonnegative),
     )
@@ -158,7 +163,7 @@ def test_history_summary_records_normalized_objective_decomposition(alpha, penal
     samples = (x, *problem(x))
 
     history = History()
-    history.record(problem, evaluate(problem, make_dataloader(samples)))
+    history.record(problem, evaluate(problem, proximal, make_dataloader(samples)))
     metrics = history.summary_metrics()
 
     # The full moment is 50*(1+1) + 45*(1+4) + 5*(1+25) = 455.
@@ -197,7 +202,7 @@ def test_sphere_penalty_and_reporting_do_not_depend_on_historical_moment_order(p
         assert problem.moment_order is None
         torch.testing.assert_close(problem.moment_weight_of_atoms(), torch.ones_like(c))
         history = History()
-        history.record(problem, evaluate(problem, make_dataloader((x, *problem(x)))))
+        history.record(problem, evaluate(problem, proximal_for(config, problem), make_dataloader((x, *problem(x)))))
         history = pickle.loads(pickle.dumps(history))
         summary = history.summary_metrics()
         assert history.psi_p == [None] and summary["psi_p"] is None
@@ -214,9 +219,11 @@ def test_physical_reporting_does_not_change_objectives_snapshots_or_selection():
     v = torch.tensor([[2.0], [3.0]], dtype=torch.float64)
     dv = torch.tensor([[0.7, -0.6], [1.2, 0.5]], dtype=torch.float64)
     data = x, v, dv
-    problem = SparseProblem(resolve_model({
+    config = resolve_model({
         "activation": "tanh", "alpha": 0.1, "gamma": 0.2, "moment_order": 2.0,
-    }, 2))
+    }, 2)
+    problem = SparseProblem(config)
+    proximal = proximal_for(config, problem)
     loader = make_dataloader(data)
     unchanged = History()
     # Old pickles predate the optional reporting transform.
@@ -229,8 +236,8 @@ def test_physical_reporting_does_not_change_objectives_snapshots_or_selection():
             torch.tensor([0.1], dtype=torch.float64),
             torch.tensor([coefficient], dtype=torch.float64),
         )
-        unchanged.record(problem, evaluate(problem, loader))
-        physical.record(problem, evaluate(problem, loader, reporting_normalizer=normalizer))
+        unchanged.record(problem, evaluate(problem, proximal, loader))
+        physical.record(problem, evaluate(problem, proximal, loader, reporting_normalizer=normalizer))
         expected = relative_errors(
             *normalizer.denormalize_tensors(*problem(x)),
             *normalizer.denormalize_tensors(v, dv),
