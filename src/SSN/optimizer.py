@@ -48,8 +48,9 @@ class SSN(Optimizer):
         verbose: report correction iterations, acceptance, and diagnostics.
 
     q is the proximal preimage, normal_q = G(q), and jac_normal is its selected
-    Jacobian. The Newton equation is jac_normal @ dq = -normal_q. inverse_step
-    scales the normal map; sigma is the persistent trust-region radius.
+    Jacobian. The Newton equation is jac_normal @ dq = -normal_q. tau is the
+    proximal step: G(q) = (q - u)/tau + smooth gradient, with u = prox(q) for the
+    proximal constant alpha*tau. sigma is the persistent trust-region radius.
     """
 
     def __init__(
@@ -98,7 +99,7 @@ class SSN(Optimizer):
                 proximal, parameters_to_vector(self._params).detach(), ALGORITHM2_PROX_RHO,
             )
         group["prox_scale"] = prox_scale
-        group["inverse_step"] = self._inverse_step(prox_scale)
+        group["tau"] = self._tau(prox_scale)
         self.verbose = verbose
         self.last_step_success = True
         self.iterations_run = 0
@@ -188,29 +189,30 @@ class SSN(Optimizer):
         penalized, _ = self.proximal.masks(u)
         active = (torch.abs(u) > 0) & penalized
         grad = torch.where(active, -self.proximal.jac_fractional_penalty(u), jac_obj_augmented)
-        q = u - (1.0 / self.param_groups[0]["inverse_step"]) * grad
+        q = u - self.param_groups[0]["tau"] * grad
         return torch.where(penalized, q, u)
 
     def normal_map(self, q: Tensor, u: Tensor, jac_obj_augmented: Tensor) -> Tensor:
         """Evaluate G(q), using u = P(q) and the smooth gradient at u."""
-        return self.param_groups[0]["inverse_step"] * (q - u) + jac_obj_augmented
+        return (q - u) / self.param_groups[0]["tau"] + jac_obj_augmented
 
     def jac_normal(self, u: Tensor, jac_prox: Tensor) -> Tensor:
         """Selected G'(q), using u = P(q) and jac_prox = P'(q)."""
         I = torch.eye(u.numel(), device=u.device, dtype=u.dtype)
         return (
-            self.param_groups[0]["inverse_step"] * (I - jac_prox)
+            (I - jac_prox) / self.param_groups[0]["tau"]
             + self.hess_obj_augmented(u) @ jac_prox
         )
 
     def _prox_constant(self) -> float:
-        return self.proximal.alpha / self.param_groups[0]["inverse_step"]
+        return self.proximal.alpha * self.param_groups[0]["tau"]
 
-    def _inverse_step(self, prox_scale: float | None) -> float:
-        """Translate the proximal scale to the normal-map inverse step.
+    def _tau(self, prox_scale: float | None) -> float:
+        """The proximal step tau, so that the proximal constant is alpha*tau.
 
-        The log family retains the reference scaling 1 + alpha*gamma. The
-        fractional family requires the scale chosen from its warm start.
+        The log family uses tau = 1/(1 + alpha*gamma), eq. proximal-residual.
+        The fractional family requires the scale lambda_t chosen from its warm
+        start and uses tau = lambda_t/alpha, eq. algorithm2-normal-map.
         """
         proximal = self.proximal
         if proximal.penalty_exponent < 1.0 and prox_scale is None:
@@ -219,8 +221,8 @@ class SSN(Optimizer):
             raise ValueError(f"prox_scale must be positive and finite, got {prox_scale}")
         if proximal.penalty_exponent < 1.0:
             assert prox_scale is not None
-            return proximal.alpha / prox_scale
-        return 1.0 + proximal.alpha * proximal.gamma
+            return prox_scale / proximal.alpha
+        return 1.0 / (1.0 + proximal.alpha * proximal.gamma)
 
     def _globalized_step(
         self, q: Tensor, normal_q: Tensor, jac_normal: Tensor, jac_prox: Tensor,
@@ -256,10 +258,10 @@ class SSN(Optimizer):
         group = self.param_groups[0]
         logger.debug(
             "SSN correction  iterations=%d  objective=%.6e->%.6e  accepted=%s  "
-            "failed_steps=%d  prox_scale=%s  inverse_step=%.6e",
+            "failed_steps=%d  prox_scale=%s  tau=%.6e",
             self.iterations_run, float(initial_loss.detach()), float(loss.detach()),
             str(self.correction_accepted).lower(), self.failed_steps,
-            group["prox_scale"], group["inverse_step"],
+            group["prox_scale"], group["tau"],
         )
 
 

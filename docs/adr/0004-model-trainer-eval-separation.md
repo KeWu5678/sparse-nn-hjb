@@ -87,6 +87,9 @@ bound, insertion and the warm start, and passes it to each SSN. Evaluation
 receives it from `run_training`. SSN takes the `Proximal` in place of the
 problem and owns the normal map, its Jacobian, the prox preimage, the augmented
 gradient and Hessian, and the prox-scale selection (`fractional_prox_scale`).
+SSN parameterizes its normal map by the proximal step τ of eq.
+`proximal-residual`: τ = 1/(1+αγ) for the log family and λ_t/α for the
+fractional family, with proximal constant ατ; this remains defined at α = 0.
 SSN had read only α, γ, q and the masks from the problem, so this reverses the
 "one shared problem for PDAP and SSN" follow-up below for the penalty.
 

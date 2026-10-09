@@ -43,7 +43,7 @@ def test_fractional_ssn_chooses_the_scale_from_its_starting_coefficients() -> No
     )
 
     optimizer = SSN([coefficient], proximal, coefficient_loss, hess_obj)
-    assert optimizer.param_groups[0]["inverse_step"] == pytest.approx(4 * 2 ** .5)
+    assert optimizer.param_groups[0]["tau"] == pytest.approx(1 / (4 * 2 ** .5))
 
 
 @pytest.mark.parametrize("power", [2.0, 3.0])

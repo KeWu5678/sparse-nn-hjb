@@ -19,7 +19,7 @@ def _power_prox(v, lambda_, penalty_exponent=1.0):
     For q=2/3: closed-form via depressed quartic (Ferrari's method).
     Args:
         v: input tensor
-        lambda_: proximal scale (typically alpha / inverse_step in SSN)
+        lambda_: proximal constant (alpha * tau in SSN)
         penalty_exponent: exact q = 2/(power+1), derived from a power validated
             by training configuration
     Returns:
@@ -129,11 +129,11 @@ def _power_prox_derivative(v, lambda_, penalty_exponent=1.0, prox_result=None):
         Requires the precomputed prox_result to identify the selected branch.
 
     Used in SSN's _DG to form the generalized Jacobian:
-        DG = inverse_step*(I - DPc) + alpha*diag(correction_dd)*DPc + H_data*DPc
+        DG = (I - DPc)/tau + alpha*diag(correction_dd)*DPc + H_data*DPc
 
     Args:
         v: proximal preimage tensor (the SSN variable q_var)
-        lambda_: proximal scale (typically alpha / inverse_step)
+        lambda_: proximal constant (alpha * tau in SSN)
         penalty_exponent: exact q derived from a power validated by training configuration
         prox_result: precomputed _power_prox(v, lambda_, q) — required for q != 1
 

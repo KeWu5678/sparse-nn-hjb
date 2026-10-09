@@ -85,7 +85,7 @@ def test_problem_normal_jacobian_matches_finite_differences(power, gamma):
     # Active, inactive, and unpenalized coordinates, away from switching points.
     q = torch.tensor([-1.2, 0.01, 0.8], dtype=torch.float64)
     optimizer = correction_optimizer(proximal, coefficient_loss, hess_obj, q, prox_scale=0.1 / 1.3)
-    lambda_ = proximal.alpha / optimizer.param_groups[0]["inverse_step"]
+    lambda_ = proximal.alpha * optimizer.param_groups[0]["tau"]
 
     def normal(q):
         u = proximal.prox(q, lambda_)
