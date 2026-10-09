@@ -2,12 +2,16 @@
 status: accepted
 ---
 
-# SparseProblem owns the network and mathematics; PDAP and SSN own optimization
+# SparseModel owns the network and mathematics; PDAP and SSN own optimization
 
-## Current decision: one SparseProblem built on PyTorch (updated 2026-10-08)
+## Current decision: one SparseModel built on PyTorch (updated 2026-10-09)
+
+Update 2026-10-09: `SparseProblem` is renamed `SparseModel`, and the `src/problems/`
+package is renamed `src/models/`. Sections below the current decision keep the
+names in use when they were written.
 
 The agreed refactor replaces the separate model/problem representation with
-one `SparseProblem(torch.nn.Module)` that owns the current network and
+one `SparseModel(torch.nn.Module)` that owns the current network and
 problem-specific evaluations. `SignedModel`, `ShallowNetwork`, `PDAPModel`, and
 their factory are removed, and callers use the single module. The implementation uses
 buffers named `inner_weight` and `inner_bias`, and an `nn.Parameter` for outer
@@ -36,17 +40,17 @@ subsequently requested that preparation occur directly inside
 `correct_outer_weights`. That method assembles
 the samples, computes fixed features, normalization and the fitting Hessian,
 and defines the complete coefficient-loss callable locally. There is no
-`SparseProblem.prepare_coefficients` method or preparation-return tuple.
+`SparseModel.prepare_coefficients` method or preparation-return tuple.
 SSN receives the loss callable and fitting Hessian, evaluating the callable
 directly at current and trial coefficients. Features, targets and fitting
 Hessian are reused while SSN changes outer coefficients. These calculations
 provide no network backup. The
 normalization tensor contains ones for sphere atoms; otherwise its values depend
 on the neurons even when the configured moment order stays fixed.
-`SparseProblem.obj(prediction, target)` is the canonical scalar H1 fitting
+`SparseModel.obj(prediction, target)` is the canonical scalar H1 fitting
 objective. The local coefficient-loss callable evaluates it from the fixed
 features and targets, then adds `Proximal.penalty(u)` itself; there is no
-`SparseProblem.loss` method. The closure references the same problem during its
+`SparseModel.loss` method. The closure references the same problem during its
 correction; there is no second network or persistent sample cache.
 `jac_obj` and `hess_obj` provide the coefficient gradient and full Hessian of
 that objective, including cross terms. PDAP uses those derivatives for individual
@@ -58,7 +62,7 @@ convention remains a separately documented historical numerical choice.
 
 PDAP owns candidate search/ranking, insertion acceptance, the warm-start
 procedure and initial-coefficient selection, support insertion/pruning,
-correction scheduling and outer stopping. SparseProblem evaluates supplied
+correction scheduling and outer stopping. SparseModel evaluates supplied
 candidates/directions: features and objective derivatives. Proximal evaluates
 penalty and proximal operations.
 PDAP owns its insertion-increment calculation and certificate radius, including
@@ -66,7 +70,7 @@ the theorem formula and numerical cap/fallback. Mathematical evaluation does not
 or acceptance decisions to the problem. The mixed insertion/warm-start methods
 have been removed; their procedures now live in PDAP's insertion and warm-start
 modules. The assistant's former proposal to move complete warm-start selection
-into SparseProblem was withdrawn; it was not an agreed ownership change.
+into SparseModel was withdrawn; it was not an agreed ownership change.
 
 Proximal may evaluate a threshold or proximal minimizer, including branches
 defined by the mathematical operator. PDAP decides how to use those evaluations
@@ -74,13 +78,13 @@ for search, initialization and insertion. PDAP's proposed atoms and SSN's
 temporary working coefficients do not create a second network. PDAP decides
 when accepted changes are applied to the persistent network.
 
-Update 2026-10-09: `Proximal` (`src/problems/proximal.py`) owns the penalty
+Update 2026-10-09: `Proximal` (`src/models/proximal.py`) owns the penalty
 term αΦ of the objective and its proximal maps: Φ, the penalty and its
 derivative, the split into the fractional penalty α·Σ|u|^q that the prox
 handles and a smooth correction, the vector and scalar proximal maps, and the
 optional coordinate masks. Its maps take the proximal constant λ. It is built
 from the configured α and γ and the problem's penalty exponent q = 2/(k+1),
-the only penalty value `SparseProblem` supplies. `SparseProblem` keeps the
+the only penalty value `SparseModel` supplies. `SparseModel` keeps the
 network, kernel, moment weights and fitting objective. Training setup builds one
 instance; PDAP stores it, uses it for the coefficient-loss closure, the radius
 bound, insertion and the warm start, and passes it to each SSN. Evaluation
@@ -100,7 +104,7 @@ Historical explicit unguarded configurations remain comparators, with their
 setting passed to SSN. This and the exact iteration defaults are compatibility
 choices; an iteration budget does not establish convergence. Hydra stays at
 repository level. Configuration setup resolves and validates settings before
-constructing `SparseProblem`; the constructor only reads those prepared values
+constructing `SparseModel`; the constructor only reads those prepared values
 and initializes network state. The earlier design that made the model call a
 configuration resolver or expose `validate_training` was explicitly rejected:
 moving a function body did not transfer responsibility for configuration.
@@ -108,7 +112,7 @@ moving a function body did not transfer responsibility for configuration.
 The implementation uses `resolve_model(raw_config, input_dim)` to produce an
 ordinary runtime mapping, keeping the original Hydra settings unchanged for
 serialization. Training setup calls `validate_training(runtime)` with the same
-insertion selection used by PDAP, then constructs `SparseProblem(runtime)`.
+insertion selection used by PDAP, then constructs `SparseModel(runtime)`.
 Prediction setup resolves its settings without imposing training restrictions,
 preserving callable activations and historical powers. Runtime coefficient
 masks are `Proximal` constructor arguments. There is no model-owned configuration

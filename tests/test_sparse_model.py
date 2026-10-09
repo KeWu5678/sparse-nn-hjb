@@ -8,8 +8,8 @@ from src.config import resolve_model, validate_training
 from src.config.activations import ACTIVATIONS
 from src.data import make_dataloader
 from src.eval import metrics
+from src.models import Proximal, SparseModel
 from src.PDAP.warmstart import _warm_start_kernel
-from src.problems import Proximal, SparseProblem
 
 
 def _samples():
@@ -24,7 +24,7 @@ def _problem(activation="relu", power=1.0, **specifications):
         "activation": activation, "power": power, "moment_order": 2.0, **specifications,
     }, 2)
     validate_training(config)
-    problem = SparseProblem(config)
+    problem = SparseModel(config)
     problem.set_atoms(
         torch.tensor([[0.5, -0.3], [0.1, 0.7]], dtype=torch.float64),
         torch.tensor([0.2, 0.3], dtype=torch.float64),
@@ -34,7 +34,7 @@ def _problem(activation="relu", power=1.0, **specifications):
 
 
 def test_obj_is_the_weighted_h1_quadratic():
-    problem = SparseProblem(resolve_model({"loss_weights": (.4, 1.3)}, 2))
+    problem = SparseModel(resolve_model({"loss_weights": (.4, 1.3)}, 2))
     value = torch.tensor([[2.], [3.]], dtype=torch.float64, requires_grad=True)
     gradient = value.new_tensor([[1., 2.], [2., 1.]], requires_grad=True)
     target = torch.ones_like(value), torch.zeros_like(gradient)
@@ -48,7 +48,7 @@ def test_obj_is_the_weighted_h1_quadratic():
 
 
 def test_coefficient_gradient_and_full_hessian_match_the_scalar_objective():
-    problem = SparseProblem(resolve_model({"loss_weights": (.4, 1.3)}, 2))
+    problem = SparseModel(resolve_model({"loss_weights": (.4, 1.3)}, 2))
     Kv = torch.tensor([[1., 2.], [3., 4.]], dtype=torch.float64)
     Kg = Kv.new_tensor([[1., 0.], [0., 2.], [-1., 2.], [2., 3.]])
     u = Kv.new_tensor([.2, -.3])
@@ -97,7 +97,7 @@ def test_validated_power_selects_the_proximal_map_and_derivative(
     power, exponent, alpha, value, expected, derivative,
 ):
     config = resolve_model({"power": power, "alpha": alpha}, 2)
-    problem = SparseProblem(config)
+    problem = SparseModel(config)
     assert problem.penalty_exponent == exponent
     proximal = proximal_for(config, problem)
     q = torch.tensor([-value, value], dtype=torch.float64)
@@ -161,7 +161,7 @@ def test_one_problem_handles_empty_and_replaced_supports(monkeypatch):
     loader = make_dataloader(data)
     config = resolve_model({"activation": "softplus", "alpha": 0.01, "moment_order": 2.0}, 2)
     validate_training(config)
-    problem = SparseProblem(config)
+    problem = SparseModel(config)
     proximal = proximal_for(config, problem)
     prediction = problem(data[0])
     residual = data[0], *(p - t for p, t in zip(prediction, data[1:]))
@@ -224,7 +224,7 @@ def test_candidate_objective_gradient_retains_inner_weight_derivatives(activatio
 
 @pytest.mark.parametrize("activation,actual", [("leaky_relu", [.01, 1.]), ("relu2", [0., 4.])])
 def test_warmstart_preserves_the_historical_sphere_derivative_convention(activation, actual):
-    problem = SparseProblem(resolve_model({"activation": activation}, 1))
+    problem = SparseModel(resolve_model({"activation": activation}, 1))
     X = torch.tensor([[-1.], [2.]], dtype=torch.float64)
     W, b = X.new_ones((1, 1)), X.new_zeros(1)
     values, gradients = problem.kernel(X, W, b)

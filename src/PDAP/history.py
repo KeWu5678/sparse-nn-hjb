@@ -12,7 +12,7 @@ from typing import Any, Dict, List
 import torch
 
 from ..data import ValueSampleNormalizer
-from ..problems import SparseProblem
+from ..models import SparseModel
 
 
 @dataclass
@@ -67,7 +67,7 @@ class History:
     run_metrics: dict[str, Any] = field(default_factory=dict)
 
     def record(
-        self, problem: SparseProblem, values: dict[str, float | None],
+        self, problem: SparseModel, values: dict[str, float | None],
         diagnostics: dict[str, Any] | None = None,
     ) -> None:
         """Store supplied measurements and an independent checkpoint.

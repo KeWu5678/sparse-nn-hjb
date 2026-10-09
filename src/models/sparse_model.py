@@ -7,7 +7,7 @@ from torch.nn import functional as F
 from .moment import moment_weight
 
 
-class SparseProblem(nn.Module):
+class SparseModel(nn.Module):
     """Own the sparse network and its data fitting without owning samples.
 
     obj evaluates data fitting from predictions and targets; Proximal owns the

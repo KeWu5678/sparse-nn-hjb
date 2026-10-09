@@ -29,7 +29,7 @@ def _noncvx_penalty(
     For q=1, sum alpha*phi(base); for q!=1 (gamma=0), sum alpha*base^q.
     Here base is |theta| on free-sign coordinates and clamp(theta, 0) on
     nonnegative ones. Training configuration validates the penalty family;
-    SparseProblem uses this term for coefficient evaluation and loss recording.
+    SparseModel uses this term for coefficient evaluation and loss recording.
     """
     coefficients = theta[penalized]
     if coefficients.numel() == 0:

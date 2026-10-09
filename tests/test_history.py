@@ -10,8 +10,8 @@ from src.config import resolve_model, validate_training
 from src.data import ValueSampleNormalizer, make_dataloader
 from src.eval import metrics as evaluate
 from src.eval import relative_errors
+from src.models import SparseModel
 from src.PDAP.history import History
-from src.problems import SparseProblem
 
 
 def test_history_summary_metrics_uses_best_iteration() -> None:
@@ -57,14 +57,14 @@ def test_restoring_a_zero_measure_snapshot_empties_an_initialized_model(legacy) 
     x = torch.tensor([[0.2, -0.3], [0.5, 0.7]], dtype=torch.float64)
 
     config = resolve_model({"activation": "tanh", "moment_order": 2.0}, 2)
-    empty = SparseProblem(config)
+    empty = SparseModel(config)
     samples = (x, *empty(x))
     history = History()
     history.record(empty, evaluate(empty, proximal_for(config, empty), make_dataloader(samples)))
     if legacy:
         history.model_states[0] = {}
 
-    restored = SparseProblem(resolve_model({"activation": "tanh"}, 2))
+    restored = SparseModel(resolve_model({"activation": "tanh"}, 2))
     restored.set_atoms(
         torch.tensor([[1.0, 0.0], [0.0, 2.0]], dtype=torch.float64),
         torch.tensor([0.1, -0.2], dtype=torch.float64),
@@ -99,7 +99,7 @@ def test_restoring_recorded_state_preserves_predictions(state_keys):
         model_states=[state],
     )
 
-    problem = history.restore_model(SparseProblem(resolve_model({}, 2)))
+    problem = history.restore_model(SparseModel(resolve_model({}, 2)))
     value, gradient = problem(inner_weight.new_tensor([[1., 1.]]))
 
     torch.testing.assert_close(value, inner_weight.new_tensor([[10.5]]))
@@ -114,7 +114,7 @@ def test_recorded_checkpoints_stay_independent_of_models_and_each_other():
         "c": torch.tensor([3.], dtype=torch.float64),
     }
     config = resolve_model({}, 2)
-    problem = SparseProblem(config)
+    problem = SparseModel(config)
     problem.set_atoms(atoms["inner_weight"], atoms["inner_bias"], atoms["c"])
     x = torch.tensor([[1., 1.]], dtype=torch.float64)
     loader = make_dataloader((x, *problem(x)))
@@ -127,7 +127,7 @@ def test_recorded_checkpoints_stay_independent_of_models_and_each_other():
 
     history = pickle.loads(pickle.dumps(history))
     for i, state in enumerate(history.model_states):
-        restored = history.restore_model(SparseProblem(resolve_model({}, 2)), iteration=i)
+        restored = history.restore_model(SparseModel(resolve_model({}, 2)), iteration=i)
         with torch.no_grad():
             for name, tensor in restored.state_dict().items():
                 torch.testing.assert_close(tensor, atoms[name] + i, rtol=0, atol=0)
@@ -153,7 +153,7 @@ def test_history_summary_records_normalized_objective_decomposition(alpha, penal
 
     config = resolve_model({"activation": "tanh", "alpha": alpha, "gamma": 0.0,
                             "loss_weights": (1.0, 1.0), "moment_order": 2.0}, 2)
-    problem = SparseProblem(config)
+    problem = SparseModel(config)
     proximal = proximal_for(
         config, problem,
         penalized_mask=None if penalized is None else torch.tensor(penalized),
@@ -197,7 +197,7 @@ def test_sphere_penalty_and_reporting_do_not_depend_on_historical_moment_order(p
     for order in (None, 2., 4.):
         config = resolve_model({"power": power, "alpha": .1, "moment_order": order}, 2)
         validate_training(config)
-        problem = SparseProblem(config)
+        problem = SparseModel(config)
         problem.set_atoms(inner_weight, inner_bias, c)
         assert problem.moment_order is None
         torch.testing.assert_close(problem.moment_weight_of_atoms(), torch.ones_like(c))
@@ -222,7 +222,7 @@ def test_physical_reporting_does_not_change_objectives_snapshots_or_selection():
     config = resolve_model({
         "activation": "tanh", "alpha": 0.1, "gamma": 0.2, "moment_order": 2.0,
     }, 2)
-    problem = SparseProblem(config)
+    problem = SparseModel(config)
     proximal = proximal_for(config, problem)
     loader = make_dataloader(data)
     unchanged = History()

@@ -13,8 +13,8 @@ from omegaconf import OmegaConf
 from src.config import get_activation, get_use_sphere, resolve_model, validate_training
 from src.config.schema import ExperimentConfig, ModelConfig
 from src.data import DATA_DIR, load_value_samples
+from src.models import Proximal, SparseModel
 from src.PDAP import PDAP
-from src.problems import Proximal, SparseProblem
 from src.SSN import SSN
 
 # Must be registered before any compose() call below.
@@ -62,7 +62,7 @@ def test_model_groups() -> None:
     assert fs.model.insertion == "finite_step"
     model_config = resolve_model(alg1.model, 2)
     validate_training(model_config)
-    assert SparseProblem(model_config).normalized
+    assert SparseModel(model_config).normalized
     assert "objective" not in alg1.model
     assert "moment_beta" not in alg1.model
 
@@ -133,7 +133,7 @@ def test_config_builds_trainer_and_model() -> None:
     raw_model = OmegaConf.to_container(cfg.model, resolve=True)
     model_config = resolve_model(cfg.model, 2)
     validate_training(model_config)
-    problem = SparseProblem(model_config)
+    problem = SparseModel(model_config)
     proximal = Proximal(model_config["alpha"], model_config["gamma"], problem.penalty_exponent)
     pdap = PDAP(cfg.training, proximal, insertion=model_config["insertion"])
     assert model_config["activation"] is torch.relu
@@ -172,7 +172,7 @@ def test_construct_problem_from_loaded_dataset() -> None:
     data = load_value_samples(cfg.data.path)
     model_config = resolve_model(cfg.model, input_dim=data["x"].shape[1])
     validate_training(model_config)
-    model = SparseProblem(model_config)
+    model = SparseModel(model_config)
     assert model.input_dim == 2
 
 
@@ -237,8 +237,8 @@ def test_use_sphere_derives_from_activation() -> None:
         smooth = compose(config_name="config",
                          overrides=["model.activation=matern52", "model.moment_order=2.0", "env.verbose=false"])
     # default activation is relu (homogeneous -> sphere); matern52 is not
-    assert SparseProblem(resolve_model(default.model, 2)).use_sphere is True
-    assert SparseProblem(resolve_model(smooth.model, 2)).use_sphere is False
+    assert SparseModel(resolve_model(default.model, 2)).use_sphere is True
+    assert SparseModel(resolve_model(smooth.model, 2)).use_sphere is False
 
 
 @pytest.mark.parametrize("order", [None, 0., -1., float("nan"), float("inf"), -float("inf")])
@@ -257,7 +257,7 @@ def test_training_order_exceeds_the_declared_h1_growth_bound(activation, bound):
         validate_training(resolve_model(ModelConfig(activation=activation, moment_order=bound), 2))
     config = resolve_model(ModelConfig(activation=activation, moment_order=bound + .01), 2)
     validate_training(config)
-    problem = SparseProblem(config)
+    problem = SparseModel(config)
     assert problem.moment_order == bound + .01
 
 
@@ -265,7 +265,7 @@ def test_activation_without_growth_metadata_keeps_explicit_numerical_training():
     config = ModelConfig(activation="snake_b0_25", moment_order=.5)
     resolved = resolve_model(config, 2)
     validate_training(resolved)
-    assert SparseProblem(resolved).moment_order == .5
+    assert SparseModel(resolved).moment_order == .5
     config.moment_order = None
     with pytest.raises(ValueError, match="explicit moment_order"):
         validate_training(resolve_model(config, 2))
@@ -280,4 +280,4 @@ def test_log_penalty_preset_supports_both_formulations(activation, order):
     assert cfg.model.moment_order == 2.01
     model_config = resolve_model(cfg.model, 2)
     validate_training(model_config)
-    assert SparseProblem(model_config).moment_order == order
+    assert SparseModel(model_config).moment_order == order

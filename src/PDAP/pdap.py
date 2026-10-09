@@ -1,6 +1,6 @@
 """PDAP support updates and complete outer steps.
 
-SparseProblem owns the network and its fitting; Proximal owns the penalty and
+SparseModel owns the network and its fitting; Proximal owns the penalty and
 its proximal maps. PDAP owns candidate search, insertion, coefficient
 correction, pruning and the no-candidate stopping rule.
 The external training loop owns repetition, measurement and history.
@@ -16,7 +16,7 @@ from torch.utils.data import DataLoader
 
 from ..config.activations import get_growth
 from ..data import full_batch
-from ..problems import Proximal, SparseProblem
+from ..models import Proximal, SparseModel
 from ..SSN import SSN
 from .insertion import FIXED_LOG_CLAMP, finite_step, profile_threshold
 from .radius import certificate_radius, sample_extent
@@ -72,7 +72,7 @@ class PDAP:
         self.prune_amp_tol = t.prune_amp_tol
 
     def step(
-        self, problem: SparseProblem, train_loader: DataLoader, *, verbose: bool = False,
+        self, problem: SparseModel, train_loader: DataLoader, *, verbose: bool = False,
     ) -> dict:
         """Insert, correct and prune one complete step of the paper algorithms.
 
@@ -89,7 +89,7 @@ class PDAP:
         return diagnostics
 
     def initialize(
-        self, problem: SparseProblem, train_loader: DataLoader, *, verbose: bool = False,
+        self, problem: SparseModel, train_loader: DataLoader, *, verbose: bool = False,
     ) -> dict:
         """Perform the historical correction-first initial support replacement."""
         W, b, c = self._insert(
@@ -107,7 +107,7 @@ class PDAP:
         return diagnostics
 
     def insert(
-        self, problem: SparseProblem, train_loader: DataLoader, *, verbose: bool = False,
+        self, problem: SparseModel, train_loader: DataLoader, *, verbose: bool = False,
     ) -> dict:
         """Extend the current support with accepted, initialized candidates."""
         W_np, b_np, c_new = self._insert(
@@ -125,7 +125,7 @@ class PDAP:
         return self._search_diagnostics(int(W_np.shape[0]))
 
     def train_ssn_outerweights_and_prune(
-        self, problem: SparseProblem, train_loader: DataLoader, *, verbose: bool = False,
+        self, problem: SparseModel, train_loader: DataLoader, *, verbose: bool = False,
     ) -> dict:
         """Apply the accepted SSN correction, then remove negligible atoms."""
         diagnostics = self.train_ssn_outerweights(problem, train_loader, verbose=verbose)
@@ -134,7 +134,7 @@ class PDAP:
         return diagnostics
 
     def train_ssn_outerweights(
-        self, problem: SparseProblem, train_loader: DataLoader, *, verbose: bool = False,
+        self, problem: SparseModel, train_loader: DataLoader, *, verbose: bool = False,
     ) -> dict:
         """Prepare a correction, run SSN, and apply its accepted coefficients."""
         X, V, dV = full_batch(train_loader)

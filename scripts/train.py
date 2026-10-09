@@ -48,8 +48,8 @@ from src.data import DATA_DIR, load_value_samples, make_dataloaders, normalize_v
 from src.eval import distance_binned_error, region_split_errors
 from src.experiment_logging import ExperimentRun
 from src.logging import configure_logging
+from src.models import Proximal, SparseModel
 from src.PDAP import PDAP
-from src.problems import Proximal, SparseProblem
 from src.training import run_training
 
 logger = structlog.get_logger(__name__)
@@ -253,7 +253,7 @@ def _run_experiment(cfg: DictConfig, hydra_cfg, run_dir: Path, run_id: str) -> P
     train_loader, valid_loader = make_dataloaders(
         data, cfg.data.train_fraction, seed=cfg.env.seed,
     )
-    problem = SparseProblem(model_config)
+    problem = SparseModel(model_config)
     proximal = Proximal(model_config["alpha"], model_config["gamma"], problem.penalty_exponent)
     trainer = PDAP(cfg.training, proximal, insertion=model_config["insertion"])
     history = run_training(
@@ -280,7 +280,7 @@ def _run_experiment(cfg: DictConfig, hydra_cfg, run_dir: Path, run_id: str) -> P
     # split by distance to the switching set, merged into the run record so the
     # analysis layer reads them like any other metric.
     if cfg.eval.kind == "region_split":
-        evaluation_model = SparseProblem(model_config)
+        evaluation_model = SparseModel(model_config)
         history.restore_model(evaluation_model)
         region = region_split_metrics(cfg, evaluation_model, data, normalizer)
         metrics.update(region)

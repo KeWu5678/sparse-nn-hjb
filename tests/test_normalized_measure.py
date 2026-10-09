@@ -9,8 +9,8 @@ import torch
 
 from src.config import resolve_model, validate_training
 from src.config.schema import ExperimentConfig, ModelConfig
-from src.problems import SparseProblem
-from src.problems.moment import amplitude_mass_radius, moment_weight
+from src.models import SparseModel
+from src.models.moment import amplitude_mass_radius, moment_weight
 
 
 def _cfg(**model_kwargs) -> ExperimentConfig:
@@ -80,13 +80,13 @@ def test_amplitude_mass_radius_is_zero_without_amplitude_mass() -> None:
 
 
 def test_nonhomogeneous_signed_profile_is_normalized_automatically() -> None:
-    problem = SparseProblem(resolve_model({"activation": "softplus", "power": 1.0}, 2))
+    problem = SparseModel(resolve_model({"activation": "softplus", "power": 1.0}, 2))
 
     assert problem.normalized
 
 
 def test_sphere_profile_model_is_not_moment_normalized() -> None:
-    sphere = SparseProblem(resolve_model({"activation": "relu", "power": 1.0}, 2))
+    sphere = SparseModel(resolve_model({"activation": "relu", "power": 1.0}, 2))
 
     assert not sphere.normalized
 

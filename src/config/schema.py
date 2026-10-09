@@ -60,7 +60,7 @@ class ModelConfig:
     # Algorithm 1 evaluates the penalty on the normalized measure
     # mu_p = w_p*mu, with w_p(omega) = 1 + |omega|^p.  For a signed profile model
     # with a nonhomogeneous activation this is the only supported objective;
-    # SparseProblem applies it automatically.  Algorithm 2 is sphere-normalized and does not use
+    # SparseModel applies it automatically.  Algorithm 2 is sphere-normalized and does not use
     # this parameter.
     moment_order: Optional[float] = None  # Explicit for nonhomogeneous models; unused on the sphere.
 

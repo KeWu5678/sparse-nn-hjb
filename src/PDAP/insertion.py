@@ -27,7 +27,7 @@ from typing import Callable, List, Optional, Tuple
 import numpy as np
 import torch
 
-from ..problems import Proximal, SparseProblem
+from ..models import Proximal, SparseModel
 
 # Numerical bound for random starts and final candidate filtering.
 FIXED_LOG_CLAMP = 5.0
@@ -41,7 +41,7 @@ __all__ = [
 
 
 def _generate_candidates(
-    problem: SparseProblem,
+    problem: SparseModel,
     residual: tuple[torch.Tensor, torch.Tensor, torch.Tensor], *,
     sample_sphere: Callable[[int], Tuple[torch.Tensor, torch.Tensor]],
     N: int,
@@ -195,7 +195,7 @@ def _generate_candidates(
 # Strategy 1: profile-threshold acceptance
 # ---------------------------------------------------------------------------- #
 def profile_threshold(
-    problem: SparseProblem,
+    problem: SparseModel,
     proximal: Proximal,
     residual: tuple[torch.Tensor, torch.Tensor, torch.Tensor], *,
     sample_sphere: Callable[[int], Tuple[torch.Tensor, torch.Tensor]],
@@ -307,7 +307,7 @@ def profile_threshold(
 # Strategy 2: finite-step acceptance
 # ---------------------------------------------------------------------------- #
 def finite_step(
-    problem: SparseProblem,
+    problem: SparseModel,
     proximal: Proximal,
     residual: tuple[torch.Tensor, torch.Tensor, torch.Tensor], *,
     sample_sphere: Callable[[int], Tuple[torch.Tensor, torch.Tensor]],

@@ -6,7 +6,7 @@ import math
 
 import pytest
 
-from src.problems.penalty import phi_prox
+from src.models.penalty import phi_prox
 
 
 @pytest.mark.parametrize(("v", "expected"), [(-1.0, 0.0), (0.5, 0.0), (3.0, 2.5)])

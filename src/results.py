@@ -23,7 +23,7 @@ import torch
 from .config import resolve_model
 from .data import DATA_DIR, TensorSamples, ValueSampleNormalizer, load_value_samples
 from .eval import relative_errors
-from .problems import SparseProblem
+from .models import SparseModel
 
 
 def load_history(history: Any, run_index: int = 0) -> Any:
@@ -64,7 +64,7 @@ def history_atoms(
 def model_from_history(
     history: Any, activation: Any = "relu", power: float = 1.0,
     *, iteration: int | None = None, run_index: int = 0,
-) -> SparseProblem:
+) -> SparseModel:
     """Compatibility reconstruction for callers holding a bare fit artifact.
 
     New reporting code should use load_run so configuration cannot be detached
@@ -73,7 +73,7 @@ def model_from_history(
     """
     w, b, c = history_atoms(history, iteration, run_index)
     config = resolve_model({"activation": activation, "power": power}, w.shape[1])
-    model = SparseProblem(config)
+    model = SparseModel(config)
     model.set_atoms(torch.as_tensor(w), torch.as_tensor(b), torch.as_tensor(c).reshape(-1))
     model.eval()
     return model
@@ -104,7 +104,7 @@ class SavedRun:
     record_path: Path
     record: dict[str, Any]
     history: Any
-    model: SparseProblem
+    model: SparseModel
     normalizer: ValueSampleNormalizer | None
     iteration: int
     normalization_recovered: bool = False
@@ -200,7 +200,7 @@ def load_run_for_artifact(
 
 @torch.no_grad()
 def predict_model_physical(
-    model: SparseProblem, x: Any, normalizer: ValueSampleNormalizer | None = None,
+    model: SparseModel, x: Any, normalizer: ValueSampleNormalizer | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Unclipped original-scale (V, dV), shapes (N,1) and (N,d).
 

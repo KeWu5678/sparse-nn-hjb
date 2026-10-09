@@ -5,8 +5,8 @@ import torch
 from ssn_test_problem import proximal_for
 
 from src.config import resolve_model, validate_training
+from src.models import SparseModel
 from src.PDAP.warmstart import warm_start
-from src.problems import SparseProblem
 
 
 @pytest.mark.parametrize("sign", [-1.0, 1.0])
@@ -28,7 +28,7 @@ def test_single_atom_warm_start_has_known_minimizer(
         "power": power, "loss_weights": (1.0, 0.0), "alpha": alpha, "gamma": gamma,
     }, 1)
     validate_training(config)
-    problem = SparseProblem(config)
+    problem = SparseModel(config)
     result = warm_start(
         W_new=torch.ones_like(X),
         b_new=torch.zeros(1, dtype=torch.float64),
@@ -59,7 +59,7 @@ def test_log_warm_start_preserves_matlab_acceptance_guards(
     config = resolve_model({"loss_weights": (1.0, 0.0), "alpha": alpha, "gamma": 1.0}, 1)
     validate_training(config)
 
-    problem = SparseProblem(config)
+    problem = SparseModel(config)
     result = warm_start(
         W_new=torch.ones_like(X),
         b_new=torch.zeros(1, dtype=torch.float64),

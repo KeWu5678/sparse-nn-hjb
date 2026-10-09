@@ -17,8 +17,8 @@ import pytest
 import torch
 
 from src.config import resolve_model, validate_training
-from src.problems import Proximal, SparseProblem
-from src.problems.penalty import _phi
+from src.models import Proximal, SparseModel
+from src.models.penalty import _phi
 from src.SSN import SSN
 
 GOLDEN_PATH = Path(__file__).parent / "fixtures" / "ssn_golden.npz"
@@ -73,7 +73,7 @@ def _run_trajectory(config: dict) -> np.ndarray:
     model_config = resolve_model({"alpha": alpha, "gamma": gamma, "power": power}, P)
     validate_training(model_config)
     proximal = Proximal(
-        alpha, gamma, SparseProblem(model_config).penalty_exponent,
+        alpha, gamma, SparseModel(model_config).penalty_exponent,
         penalized_mask=pen_mask, nonneg_mask=config.get("nonneg_mask"),
     )
 

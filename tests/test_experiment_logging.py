@@ -245,7 +245,7 @@ def test_training_record_preserves_fitted_normalization(
 
     # A nonzero fixed model exposes the metric's units without performing an
     # optimizer step. The zero network has relative error 1 in either convention.
-    problem_class = train.SparseProblem
+    problem_class = train.SparseModel
 
     def initialized_problem(model_config):
         model = problem_class(model_config)
@@ -256,7 +256,7 @@ def test_training_record_preserves_fitted_normalization(
         )
         return model
 
-    monkeypatch.setattr(train, "SparseProblem", initialized_problem)
+    monkeypatch.setattr(train, "SparseModel", initialized_problem)
     with _isolated_logging(), structlog.contextvars.bound_contextvars(
         run_id="caller", experiment="outer", seed=-1,
     ):
@@ -313,7 +313,7 @@ def test_region_reporting_scores_original_value_units(tmp_path, normalize):
     cfg.eval.eval_pool = str(pool_path)
     cfg.eval.distance_cache = str(cache_path)
     cfg.eval.tube_radius = 0.2
-    model = train.SparseProblem(train.resolve_model(cfg.model, input_dim=2))
+    model = train.SparseModel(train.resolve_model(cfg.model, input_dim=2))
     model.set_atoms(
         torch.tensor([[0.5, -0.2]], dtype=torch.float64),
         torch.tensor([1.0], dtype=torch.float64),
@@ -414,7 +414,7 @@ def test_invalid_model_config_fails_before_model_solver_or_loader_setup(
     def premature_setup(*args, **kwargs):
         pytest.fail("invalid model configuration reached model, solver or sample-loader setup")
 
-    for name in ("SparseProblem", "PDAP", "make_dataloaders"):
+    for name in ("SparseModel", "PDAP", "make_dataloaders"):
         monkeypatch.setattr(train, name, premature_setup)
     with _isolated_logging(), pytest.raises(ValueError, match=message):
         train.main.__wrapped__(cfg)

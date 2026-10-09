@@ -9,7 +9,7 @@ from torch import Tensor
 from torch.nn.utils import parameters_to_vector, vector_to_parameters
 from torch.optim import Optimizer
 
-from ..problems import Proximal
+from ..models import Proximal
 from .strategies import damped_newton_step, trust_region_step
 
 __all__ = ["SSN", "fractional_prox_scale"]

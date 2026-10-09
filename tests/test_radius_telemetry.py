@@ -11,10 +11,10 @@ from src.config import resolve_model, validate_training
 from src.config.schema import ExperimentConfig, ModelConfig, TrainingConfig
 from src.data import make_dataloader
 from src.eval import metrics
+from src.models import SparseModel
 from src.PDAP import PDAP
 from src.PDAP.history import History
 from src.PDAP.insertion import FIXED_LOG_CLAMP
-from src.problems import SparseProblem
 from src.training import run_training
 
 
@@ -28,7 +28,7 @@ def test_nonzero_residual_records_computed_and_capped_theorem_radius(loop_order,
     )
     model_config = resolve_model(cfg.model, input_dim=2)
     validate_training(model_config)
-    model = SparseProblem(model_config)
+    model = SparseModel(model_config)
     samples = (torch.tensor([[0., 0.], [3., 4.]], dtype=torch.float64),
                torch.ones(2, 1, dtype=torch.float64),
                torch.ones(2, 2, dtype=torch.float64))
@@ -62,7 +62,7 @@ def test_zero_measure_fit_records_the_actual_search_radius(
     )
     model_config = resolve_model(cfg.model, input_dim=2)
     validate_training(model_config)
-    model = SparseProblem(model_config)
+    model = SparseModel(model_config)
     samples = (torch.zeros(3, 2, dtype=torch.float64),
                torch.zeros(3, 1, dtype=torch.float64),
                torch.zeros(3, 2, dtype=torch.float64))
@@ -81,7 +81,7 @@ def test_zero_measure_fit_records_the_actual_search_radius(
 
 def test_old_history_summary_does_not_invent_missing_search_diagnostics():
     config = resolve_model({}, 2)
-    model = SparseProblem(config)
+    model = SparseModel(config)
     samples = (torch.zeros(3, 2, dtype=torch.float64),
                torch.ones(3, 1, dtype=torch.float64),
                torch.ones(3, 2, dtype=torch.float64))
@@ -109,7 +109,7 @@ def test_zero_iteration_fit_does_not_reuse_a_previous_search(activation, power, 
     )
     model_config = resolve_model(cfg.model, input_dim=2)
     validate_training(model_config)
-    model = SparseProblem(model_config)
+    model = SparseModel(model_config)
     samples = (torch.zeros(3, 2, dtype=torch.float64),
                torch.zeros(3, 1, dtype=torch.float64),
                torch.zeros(3, 2, dtype=torch.float64))

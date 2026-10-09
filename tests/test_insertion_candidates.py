@@ -11,7 +11,7 @@ from ssn_test_problem import proximal_for
 
 import src.PDAP.insertion as insertion
 from src.config import resolve_model, validate_training
-from src.problems import SparseProblem
+from src.models import SparseModel
 
 
 def _inputs():
@@ -73,7 +73,7 @@ def _generate(
     }, 1)
     validate_training(config)
     a, b, n, discarded_outside = insertion._generate_candidates(
-        SparseProblem(config),
+        SparseModel(config),
         (X, residual_v, residual_dv),
         sample_sphere=_starts(starts),
         N=len(starts),
@@ -117,7 +117,7 @@ def test_algorithm1_distinguishes_radius_search_failure_from_threshold_stop(
         "activation": "tanh", "power": 1.0, "alpha": 1.0, "moment_order": 2.0,
     }, 1)
     validate_training(config)
-    problem = SparseProblem(config)
+    problem = SparseModel(config)
     proximal = proximal_for(config, problem)
 
     _fake_lbfgs(monkeypatch, [[2.0, 0.0]])
@@ -160,7 +160,7 @@ def test_sphere_search_reports_when_only_existing_support_is_returned(
     )
     config = resolve_model({"activation": "relu", "power": 2.0, "alpha": 1.0}, 1)
     validate_training(config)
-    problem = SparseProblem(config)
+    problem = SparseModel(config)
     proximal = proximal_for(config, problem)
 
     with caplog.at_level(logging.DEBUG):
@@ -226,7 +226,7 @@ def test_algorithm1_optimizes_each_random_start_once(monkeypatch):
 
 
 def test_nonhomogeneous_search_gets_normalization_from_the_problem():
-    problem = SparseProblem(resolve_model({"activation": "tanh"}, 1))
+    problem = SparseModel(resolve_model({"activation": "tanh"}, 1))
     assert problem.normalized
     with pytest.raises(TypeError, match="normalized"):
         resolve_model({"activation": "tanh", "normalized": False}, 1)

@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 import torch
 
-from src.problems.prox import _power_prox, _power_prox_derivative
+from src.models.prox import _power_prox, _power_prox_derivative
 
 
 @pytest.mark.parametrize("tensor_scale", [False, True])

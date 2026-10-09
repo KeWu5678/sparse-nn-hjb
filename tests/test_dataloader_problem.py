@@ -15,9 +15,9 @@ from src.config import resolve_model, validate_training
 from src.config.schema import TrainingConfig
 from src.data import full_batch, make_dataloader
 from src.eval import metrics
+from src.models import SparseModel
 from src.PDAP import PDAP, insertion
 from src.PDAP.warmstart import warm_start
-from src.problems import SparseProblem
 from src.training import run_training
 
 
@@ -26,7 +26,7 @@ def _linear_case(**specifications):
     data = x, x.new_tensor([[1.], [2.], [4.]]), x.new_tensor([[1., 2.]]).repeat(3, 1)
     config = resolve_model({"moment_order": 2.0, **specifications}, 2)
     validate_training(config)
-    problem = SparseProblem(config)
+    problem = SparseModel(config)
     problem.set_atoms(torch.eye(2, dtype=x.dtype), x.new_full((2,), .5), x.new_tensor([1., 2.]))
     return data, problem, proximal_for(config, problem)
 
@@ -67,7 +67,7 @@ def test_candidate_profile_combines_signed_batches_before_acceptance(monkeypatch
     data = x, x.new_tensor([[-1.], [3.], [-2.]]), torch.zeros_like(x)
     config = resolve_model({"alpha": .05}, 1)
     validate_training(config)
-    problem = SparseProblem(config)
+    problem = SparseModel(config)
     proximal = proximal_for(config, problem)
     X, V, dV = full_batch(make_dataloader(data, batch_size=batch_size))
     residuals = X, -V, -dV  # The current network is empty.
@@ -92,7 +92,7 @@ def test_candidate_profile_combines_signed_batches_before_acceptance(monkeypatch
     assert coefficient[0] == pytest.approx(-68 / 1615)
     config = resolve_model({"alpha": .34}, 1)
     validate_training(config)
-    problem = SparseProblem(config)
+    problem = SparseModel(config)
     W, _, _ = insertion.profile_threshold(
         problem, proximal_for(config, problem), residuals, sample_sphere=lambda _: (a, b), N=1,
         insert_init="guaranteed", verbose=False,
@@ -111,7 +111,7 @@ def test_chunking_preserves_correction_candidate_and_warmstart_calculations(monk
         "loss_weights": (.4, 1.3), "moment_order": 2.0,
     }, 2)
     validate_training(config)
-    problem = SparseProblem(config)
+    problem = SparseModel(config)
     proximal = proximal_for(config, problem)
     problem.set_atoms(W, b, c)
     full, chunked = make_dataloader(data), make_dataloader(data, batch_size=2)
@@ -172,7 +172,7 @@ def test_pdap_records_one_full_data_result_per_outer_iteration(batch_size):
     data = x, x.square(), 2 * x
     config = resolve_model({"alpha": 1e-4}, 1)
     validate_training(config)
-    problem = SparseProblem(config)
+    problem = SparseModel(config)
     loader = make_dataloader(data, batch_size=batch_size)
     training = TrainingConfig(fit_outer_iterations=2, lbfgs_steps=5, num_insertion=4)
     history = run_training(
@@ -198,7 +198,7 @@ def test_logging_accepts_a_finite_loader_without_a_sample_count(verbose):
 
     config = resolve_model({}, 1)
     validate_training(config)
-    problem = SparseProblem(config)
+    problem = SparseModel(config)
     loader = DataLoader(Samples(), batch_size=2, generator=torch.Generator().manual_seed(0))
     history = run_training(
         PDAP(TrainingConfig(num_insertion=1), proximal_for(config, problem), insertion=config["insertion"]),

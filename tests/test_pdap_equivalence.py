@@ -27,8 +27,8 @@ from ssn_test_problem import proximal_for
 from src.config import resolve_model, validate_training
 from src.config.schema import EnvConfig, ExperimentConfig, ModelConfig, TrainingConfig
 from src.data import make_dataloaders
+from src.models import SparseModel
 from src.PDAP import PDAP
-from src.problems import SparseProblem
 from src.training import run_training
 
 GOLDEN_PATH = Path(__file__).parent / "fixtures" / "pdap_direct_registration_golden.npz"
@@ -73,7 +73,7 @@ def _run_summary(name: str) -> np.ndarray:
     data = _make_data()
     model_config = resolve_model(cfg.model, input_dim=data["x"].shape[1])
     validate_training(model_config)
-    model = SparseProblem(model_config)
+    model = SparseModel(model_config)
     train_loader, valid_loader = make_dataloaders(data, cfg.data.train_fraction)
     out = run_training(
         PDAP(cfg.training, proximal_for(model_config, model), insertion=model_config["insertion"]),

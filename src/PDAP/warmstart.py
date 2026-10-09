@@ -13,14 +13,14 @@ import logging
 import torch
 from torch.nn import functional as F
 
-from ..problems import Proximal, SparseProblem
+from ..models import Proximal, SparseModel
 
 logger = logging.getLogger(__name__)
 
 
 @torch.no_grad()
 def warm_start(W_new: torch.Tensor, b_new: torch.Tensor, residual,
-               problem: SparseProblem, proximal: Proximal, *, verbose: bool = False) -> torch.Tensor:
+               problem: SparseModel, proximal: Proximal, *, verbose: bool = False) -> torch.Tensor:
     """Select the largest-profile direction and evaluate its proximal step."""
     n_new = W_new.shape[0]
     if n_new == 0:
@@ -51,7 +51,7 @@ def warm_start(W_new: torch.Tensor, b_new: torch.Tensor, residual,
     return out.reshape(-1)
 
 
-def _warm_start_kernel(problem: SparseProblem, X: torch.Tensor, W: torch.Tensor, b: torch.Tensor):
+def _warm_start_kernel(problem: SparseModel, X: torch.Tensor, W: torch.Tensor, b: torch.Tensor):
     """Kernel of the new atoms with the historical sphere-comparator derivative.
 
     On the sphere, the activation derivative in the input-gradient kernel is the

@@ -1,6 +1,6 @@
 """Internal power-penalty proximal maps and their derivatives.
 
-Training configuration validates the activation power; SparseProblem supplies
+Training configuration validates the activation power; SparseModel supplies
 the exact exponent ``q`` in ``{1, 2/3, 1/2}``. The fractional maps use closed-form
 stationary roots together with the global objective-switching threshold;
 at an exact tie they return zero.

@@ -14,12 +14,12 @@ from src.config.activations import ACTIVATIONS, GROWTH, get_growth
 from src.config.schema import EnvConfig, ExperimentConfig, ModelConfig, TrainingConfig
 from src.data import make_dataloader, split_value_samples
 from src.eval import metrics
+from src.models import SparseModel
+from src.models.moment import moment_weight
+from src.models.penalty import _phi
 from src.PDAP import PDAP
 from src.PDAP.insertion import profile_threshold
 from src.PDAP.radius import certificate_radius, sample_extent
-from src.problems import SparseProblem
-from src.problems.moment import moment_weight
-from src.problems.penalty import _phi
 from src.training import run_training
 
 
@@ -61,7 +61,7 @@ def _fit(cfg: ExperimentConfig, iterations: int = 4, seed: int = 0):
     data = _data()
     model_config = resolve_model(cfg.model, input_dim=2)
     validate_training(model_config)
-    model = SparseProblem(model_config)
+    model = SparseModel(model_config)
     train, valid = split_value_samples(data, cfg.data.train_fraction)
     cfg.training.num_insertion = 20
     history = run_training(
@@ -239,7 +239,7 @@ def test_search_radius_never_exceeds_the_fixed_clamp() -> None:
         data = tuple(torch.as_tensor(_data()[key]) for key in ("x", "v", "dv"))
         model_config = resolve_model(cfg.model, 2)
         validate_training(model_config)
-        problem = SparseProblem(model_config)
+        problem = SparseModel(model_config)
         trainer = PDAP(cfg.training, proximal_for(model_config, problem))
         radius = trainer._search_radius(problem, (data[0], -data[1], -data[2]))
         assert radius is not None and radius <= math.exp(5.0) + 1e-9
@@ -296,7 +296,7 @@ def test_insertion_reuses_the_residual_for_the_theorem_radius() -> None:
     np.random.seed(0)
     model_config = resolve_model(cfg.model, input_dim=2)
     validate_training(model_config)
-    model = SparseProblem(model_config)
+    model = SparseModel(model_config)
     original_predict = model.forward
     prediction_calls = 0
 
@@ -361,5 +361,5 @@ def test_incoherent_configurations_are_rejected(over: dict, message: str) -> Non
         cfg = _cfg(**over)
         model_config = resolve_model(cfg.model, 2)
         validate_training(model_config)
-        PDAP(cfg.training, proximal_for(model_config, SparseProblem(model_config)),
+        PDAP(cfg.training, proximal_for(model_config, SparseModel(model_config)),
              insertion=model_config["insertion"])

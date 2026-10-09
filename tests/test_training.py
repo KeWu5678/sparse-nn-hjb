@@ -16,11 +16,11 @@ from src.SSN import SSN
 
 
 def _case(monkeypatch, *, order="insertion_first", accepted=(True,)):
-    from src.problems import Proximal, SparseProblem
+    from src.models import Proximal, SparseModel
 
     config = resolve_model({"alpha": 0.0}, 1)
     validate_training(config)
-    problem = SparseProblem(config)
+    problem = SparseModel(config)
     x = torch.tensor([[0.25], [0.75]], dtype=torch.float64)
     loader = make_dataloader((x, x.clone(), torch.ones_like(x)))
     proximal = Proximal(config["alpha"], config["gamma"], problem.penalty_exponent)

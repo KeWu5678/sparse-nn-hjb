@@ -1,6 +1,6 @@
 """Semismooth Newton iterations and globalization.
 
-Problem mathematics live in ``src.problems``; MPCG and strategies consume
+Problem mathematics live in ``src.models``; MPCG and strategies consume
 already evaluated normal-map quantities.
 """
 

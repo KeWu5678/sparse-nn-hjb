@@ -27,7 +27,7 @@ PDAP.step() — one complete paper iteration:
   4. Prune coefficients at or below the amplitude tolerance.
 ```
 
-The plain `PDAP` class updates `SparseProblem` using the insertion strategy from
+The plain `PDAP` class updates `SparseModel` using the insertion strategy from
 `src/PDAP/insertion.py`. `run_training` in `src/training.py` repeats the steps,
 evaluates their results, and records History. Its explicit historical
 `correction_first` branch preserves initialization, correction/pruning,
@@ -60,7 +60,7 @@ must remain identified separately from these manuscript procedures.
 "Candidate-profile evaluation" in the refactor discussion means evaluating the
 fitting-loss derivative for a supplied candidate neuron at zero inserted
 coefficient (lines 2613–2616). It is one signed value; Algorithm 1 uses its
-normalized version (lines 2636–2645 and 2818–2822). SparseProblem supplies this
+normalized version (lines 2636–2645 and 2818–2822). SparseModel supplies this
 problem-specific calculation. PDAP searches over candidates and applies the
 relevant acceptance and initialization rules. The derivative alone is neither
 the full regularized objective increment nor an insertion decision.
@@ -82,7 +82,7 @@ Reference implementation: `/Users/ruizhechao/Documents/NonConvexSparseNN/`
 | `PDAPmultisemidiscrete.m` | `src/PDAP/pdap.py` | Main PDAP loop (NOT `PDAPsemidiscrete.m`) |
 | `SSN.m` | `src/SSN/optimizer.py` | Semismooth Newton optimizer (package) |
 | `SSN_TR.m` | `src/SSN/strategies.py` (`steihaug_cg`) | Trust-region globalization |
-| `setup_problem_NN_2d_from_xhat.m` | `src/problems/sparse_problem.py` + `src/PDAP/insertion.py` | Kernel/loss evaluation and candidate search, respectively |
+| `setup_problem_NN_2d_from_xhat.m` | `src/models/sparse_model.py` + `src/PDAP/insertion.py` | Kernel/loss evaluation and candidate search, respectively |
 | `run_vdp_2d_from_mat.m` | `notebook/pdpa_vdp.ipynb` | Experiment runner |
 
 ### Known differences from MATLAB
@@ -139,10 +139,10 @@ search's L-BFGS optimizer.
 
 The implemented ownership and its verification are recorded in
 [REFACTOR_HANDOFF.md](../REFACTOR_HANDOFF.md). PDAP owns insertion acceptance and
-warm-start selection; SparseProblem and Proximal supply their mathematical evaluations.
+warm-start selection; SparseModel and Proximal supply their mathematical evaluations.
 
-- `problems/` — network representation and problem mathematics:
-  - `sparse_problem.py` — `SparseProblem(nn.Module)` reads resolved configuration
+- `models/` — the network, its fitting and its proximal penalty:
+  - `sparse_model.py` — `SparseModel(nn.Module)` reads resolved configuration
     and registers `inner_weight` and
     `inner_bias` as buffers and `c` as its parameter. `forward` returns network
     values and input gradients; `kernel` supplies the kernel matrices of the
@@ -189,7 +189,7 @@ warm-start selection; SparseProblem and Proximal supply their mathematical evalu
 - `config/` — Hydra structured configuration for PDAP training:
   - `schema.py` — typed model/training/data/env config objects, activation and
     geometry resolution, and training compatibility validation. Setup resolves
-    and validates configuration before constructing `SparseProblem`; the model
+    and validates configuration before constructing `SparseModel`; the model
     and optimizers do not initiate those configuration operations. Raw Hydra
     settings remain unchanged for serialization.
   - `activations.py` — canonical activation registry used by configs and scripts.
@@ -213,7 +213,7 @@ warm-start selection; SparseProblem and Proximal supply their mathematical evalu
 
 ```
 VDP / pendulum samples -> external preprocessing -> DataLoaders
-SparseProblem + Proximal + PDAP + DataLoaders -> run_training -> History -> saved-run evaluation
+SparseModel + Proximal + PDAP + DataLoaders -> run_training -> History -> saved-run evaluation
 ```
 
 ```python

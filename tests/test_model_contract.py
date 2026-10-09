@@ -1,4 +1,4 @@
-"""SparseProblem is the network, with exact atoms and native module behavior."""
+"""SparseModel is the network, with exact atoms and native module behavior."""
 
 import pytest
 import torch
@@ -6,8 +6,8 @@ from ssn_test_problem import proximal_for
 
 from src.config import get_activation, resolve_model, validate_training
 from src.config.schema import ExperimentConfig
+from src.models import SparseModel
 from src.PDAP import PDAP
-from src.problems import SparseProblem
 
 
 def _atoms(n=4, d=2):
@@ -21,7 +21,7 @@ def _atoms(n=4, d=2):
 def test_exact_atom_assignment_preserves_rng_and_module_state():
     atoms = _atoms()
     rng = torch.random.get_rng_state().clone()
-    problem = SparseProblem(resolve_model({}, 2))
+    problem = SparseModel(resolve_model({}, 2))
     problem.set_atoms(*atoms)
 
     assert isinstance(problem, torch.nn.Module)
@@ -39,7 +39,7 @@ def test_exact_atom_assignment_preserves_rng_and_module_state():
 
 def test_problem_predicts_values_and_input_gradients():
     x = torch.randn(6, 2, dtype=torch.float64)
-    problem = SparseProblem(resolve_model({}, 2))
+    problem = SparseModel(resolve_model({}, 2))
     problem.set_atoms(*_atoms())
 
     value, gradient = problem(x)
@@ -55,7 +55,7 @@ def test_registered_callable_preserves_named_prediction_and_training(activation)
     direct_config = resolve_model({"activation": get_activation(activation), "moment_order": 2.}, 2)
     validate_training(named_config)
     validate_training(direct_config)
-    named, direct = SparseProblem(named_config), SparseProblem(direct_config)
+    named, direct = SparseModel(named_config), SparseModel(direct_config)
     atoms = _atoms()
     x = torch.tensor([[-1., 2.], [3., -4.]], dtype=torch.float64)
     for problem in (named, direct):
@@ -68,7 +68,7 @@ def test_registered_callable_preserves_named_prediction_and_training(activation)
 
 
 def test_gradient_only_loss_backpropagates_to_coefficients_and_input_graph():
-    problem = SparseProblem(resolve_model({"power": 2., "loss_weights": (0., 1.)}, 2))
+    problem = SparseModel(resolve_model({"power": 2., "loss_weights": (0., 1.)}, 2))
     problem.set_atoms(
         torch.tensor([[2., -1.]], dtype=torch.float64),
         torch.tensor([.5], dtype=torch.float64),
@@ -95,7 +95,7 @@ def test_gradient_only_loss_backpropagates_to_coefficients_and_input_graph():
 
 
 def test_empty_support_predicts_and_prepares_zero_features():
-    problem = SparseProblem(resolve_model({}, 2))
+    problem = SparseModel(resolve_model({}, 2))
     x = torch.ones(3, 2, dtype=torch.float64, requires_grad=True)
 
     value, gradient = problem(x)
@@ -119,7 +119,7 @@ def test_empty_support_predicts_and_prepares_zero_features():
 
 
 def test_module_conversion_and_forward_gradients_follow_exact_atoms():
-    problem = SparseProblem(resolve_model({}, 2))
+    problem = SparseModel(resolve_model({}, 2))
     assert problem.c.dtype == problem.inner_weight.dtype == problem.inner_bias.dtype == torch.float64
     problem.float()
     problem.set_atoms(torch.tensor([[2., -1.]]), torch.tensor([.5]), torch.tensor([3.]))
@@ -136,7 +136,7 @@ def test_module_conversion_and_forward_gradients_follow_exact_atoms():
 
 def test_setting_and_pruning_atoms_preserves_float64_coefficients():
     config = resolve_model({}, 2)
-    problem = SparseProblem(config)
+    problem = SparseModel(config)
     W, b, _ = _atoms(n=2)
     c = torch.tensor([1.123456789012345, -1.0000000001], dtype=torch.float64)
     problem.set_atoms(W, b, c)
@@ -155,7 +155,7 @@ def test_setting_and_pruning_atoms_preserves_float64_coefficients():
 ])
 def test_prediction_only_settings_remain_usable_without_training_validation(specifications, message):
     config = resolve_model(specifications, 2)
-    problem = SparseProblem(config)
+    problem = SparseModel(config)
     problem.set_atoms(
         torch.tensor([[1., 0.]], dtype=torch.float64),
         torch.tensor([0.], dtype=torch.float64),

@@ -10,8 +10,8 @@ from ssn_test_problem import proximal_for
 from src.config import resolve_model, validate_training
 from src.config.schema import EnvConfig, ExperimentConfig, ModelConfig, TrainingConfig
 from src.data import make_dataloaders
+from src.models import SparseModel
 from src.PDAP import PDAP
-from src.problems import SparseProblem
 from src.training import run_training
 
 
@@ -46,7 +46,7 @@ def test_algorithm2_fits_an_exact_relu_power_atom(power: float) -> None:
     )
     model_config = resolve_model(cfg.model, input_dim=2)
     validate_training(model_config)
-    model = SparseProblem(model_config)
+    model = SparseModel(model_config)
     train_loader, valid_loader = make_dataloaders(data, cfg.data.train_fraction)
 
     history = run_training(

@@ -7,12 +7,12 @@ import torch
 from ssn_test_problem import proximal_for
 
 from src.config import resolve_model, validate_training
+from src.models import SparseModel
 from src.PDAP import insertion
-from src.problems import SparseProblem
 
 
 def _insert(monkeypatch, config, profile, curvature=1.0):
-    problem = SparseProblem(config)
+    problem = SparseModel(config)
     W = torch.zeros((1, 1), dtype=torch.float64)
     b = torch.ones(1, dtype=torch.float64)
     monkeypatch.setattr(insertion, "_generate_candidates", lambda *args, **kwargs: (W, b, 1, 0))

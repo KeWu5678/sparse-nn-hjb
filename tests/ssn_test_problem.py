@@ -10,8 +10,8 @@ import torch
 
 from src.config import resolve_model, validate_training
 from src.config.schema import TrainingConfig
+from src.models import Proximal, SparseModel
 from src.PDAP import PDAP
-from src.problems import Proximal, SparseProblem
 from src.SSN import SSN
 
 
@@ -25,7 +25,7 @@ def synthetic_correction(fitting, hess_obj, **specifications):
              if name in specifications}
     config = resolve_model(specifications, hess_obj.shape[0])
     validate_training(config)
-    proximal = proximal_for(config, SparseProblem(config), **masks)
+    proximal = proximal_for(config, SparseModel(config), **masks)
 
     def coefficient_loss(u):
         return fitting(u) + proximal.penalty(u)

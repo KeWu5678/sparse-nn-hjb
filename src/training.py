@@ -18,8 +18,8 @@ from torch.utils.data import DataLoader
 
 from .data import ValueSampleNormalizer
 from .eval import metrics
+from .models import Proximal, SparseModel
 from .PDAP import PDAP, History
-from .problems import Proximal, SparseProblem
 
 logger = structlog.get_logger(__name__)
 
@@ -35,7 +35,7 @@ _COUNTERS = {
 
 def run_training(
     pdap: PDAP,
-    problem: SparseProblem,
+    problem: SparseModel,
     train_loader: DataLoader,
     valid_loader: DataLoader | None = None,
     *,
@@ -109,7 +109,7 @@ def run_training(
 
 
 def _measure(
-    operation: Callable[..., dict], problem: SparseProblem, loader: DataLoader,
+    operation: Callable[..., dict], problem: SparseModel, loader: DataLoader,
     history: History, verbose: bool,
 ) -> dict:
     """Time executed solver work and count it even when no checkpoint follows."""
@@ -124,7 +124,7 @@ def _measure(
 
 
 def _record(
-    problem: SparseProblem, proximal: Proximal, train_loader: DataLoader,
+    problem: SparseModel, proximal: Proximal, train_loader: DataLoader,
     valid_loader: DataLoader | None, history: History, diagnostics: dict,
     verbose: bool, display_every: int,
 ) -> None:

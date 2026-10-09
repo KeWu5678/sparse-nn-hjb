@@ -3,7 +3,7 @@
 import pytest
 import torch
 
-from src.problems.penalty import (
+from src.models.penalty import (
     _ddphi,
     _dphi,
     _noncvx_correction,

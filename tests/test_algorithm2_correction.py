@@ -9,9 +9,9 @@ from ssn_test_problem import proximal_for, synthetic_correction
 from src.config import resolve_model, validate_training
 from src.config.schema import TrainingConfig
 from src.data import make_dataloader
+from src.models import Proximal, SparseModel
+from src.models.penalty import _noncvx_penalty
 from src.PDAP import PDAP
-from src.problems import Proximal, SparseProblem
-from src.problems.penalty import _noncvx_penalty
 from src.SSN import SSN, fractional_prox_scale
 
 
@@ -55,7 +55,7 @@ def test_fractional_problem_rejects_a_log_penalty(power: float) -> None:
 def test_fractional_correction_reports_an_all_zero_warm_start() -> None:
     config = resolve_model({"alpha": 1.0, "gamma": 0.0, "power": 2.0}, 1)
     validate_training(config)
-    problem = SparseProblem(config)
+    problem = SparseModel(config)
     problem.set_atoms(
         torch.tensor([[1.0]], dtype=torch.float64),
         torch.tensor([0.0], dtype=torch.float64),
