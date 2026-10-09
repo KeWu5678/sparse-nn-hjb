@@ -19,6 +19,7 @@ from src.PDAP.radius import certificate_radius, sample_extent
 from src.problems import SparseProblem
 from src.problems.moment import moment_weight
 from src.problems.penalty import _phi
+from src.training import run_training
 
 
 def _data(n: int = 60, seed: int = 0) -> dict:
@@ -61,10 +62,12 @@ def _fit(cfg: ExperimentConfig, iterations: int = 4, seed: int = 0):
     validate_training(model_config)
     model = SparseProblem(model_config)
     train, valid = split_value_samples(data, cfg.data.train_fraction)
-    history = PDAP(cfg.training, insertion=model_config["insertion"]).fit(
+    cfg.training.num_insertion = 20
+    history = run_training(
+        PDAP(cfg.training, insertion=model_config["insertion"]),
         model,
         make_dataloader(train), make_dataloader(valid),
-        num_iterations=iterations, num_insertion=20, verbose=False,
+        num_iterations=iterations, verbose=False,
     )
     return model, history, train
 
@@ -122,7 +125,7 @@ def test_normalized_dictionary_reproduces_the_network() -> None:
     model, _, train = _fit(cfg)
     W, b, c = (model.inner_weight, model.inner_bias, model.c.detach())
     w_p = moment_weight(W, b, 2.01).reshape(-1)
-    Phi, _ = model.jac_forward(train[0])
+    Phi, _ = model.kernel(train[0])
     assert torch.allclose(Phi @ c, (Phi / w_p) @ (w_p * c), atol=1e-12)
 
 
@@ -301,12 +304,12 @@ def test_insertion_reuses_the_residual_for_the_theorem_radius() -> None:
         return original_predict(x)
 
     model.forward = counted_predict
-    PDAP(cfg.training, insertion=model_config["insertion"]).fit(
+    cfg.training.num_insertion = cfg.training.max_insert = 1
+    run_training(
+        PDAP(cfg.training, insertion=model_config["insertion"]),
         model,
         make_dataloader(data),
         num_iterations=1,
-        num_insertion=1,
-        max_insert=1,
         verbose=False,
     )
 

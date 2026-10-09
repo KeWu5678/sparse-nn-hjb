@@ -95,10 +95,10 @@ def _generate_candidates(
             def closure():
                 opt.zero_grad()
                 w_s = w / w.norm().clamp_min(eps) if use_sphere else w
-                features = problem.jac_forward(X, w_s[:d_dim].reshape(1, -1), w_s[d_dim].reshape(1))
+                features = problem.kernel(X, w_s[:d_dim].reshape(1, -1), w_s[d_dim].reshape(1))
                 profile = problem.jac_obj(*features, normalized_residual)[0]
                 score = profile.abs() if two_sided else profile
-                obj = score / problem.normalization_weight(w_s[:d_dim], w_s[d_dim])
+                obj = score / problem.moment_weight_of_atoms(w_s[:d_dim], w_s[d_dim])
                 (-obj).backward()
                 return -obj
 
@@ -240,23 +240,22 @@ def profile_threshold(
     accepted_b: List[torch.Tensor] = []
     accepted_scores: List[float] = []
     accepted_c: List[float] = []
-    with torch.enable_grad():
-        for a_i, b_i in zip(a_t, b_t):
-            features = problem.jac_forward(residual[0], a_i.reshape(1, -1), b_i.reshape(1))
-            slope = float(problem.jac_obj(*features, residual)[0].detach())
-            curvature = float(problem.hess_obj(*features)[0, 0].detach())
-            v = abs(slope) if two_sided else slope
-            scale = float(problem.normalization_weight(a_i, b_i))
-            threshold = problem.alpha * scale
-            # Retain the physical-profile comparison, including its rounding.
-            if v <= threshold or (guaranteed and curvature < 1e-30):
-                continue
-            accepted_a.append(a_i.detach())
-            accepted_b.append(b_i.detach())
-            accepted_scores.append(v / scale - problem.alpha)
-            if guaranteed:
-                magnitude = (v - threshold) / curvature
-                accepted_c.append(-magnitude if slope > 0 else magnitude)
+    for a_i, b_i in zip(a_t, b_t):
+        features = problem.kernel(residual[0], a_i.reshape(1, -1), b_i.reshape(1))
+        slope = float(problem.jac_obj(*features, residual)[0])
+        curvature = float(problem.hess_obj(*features)[0, 0])
+        v = abs(slope) if two_sided else slope
+        scale = float(problem.moment_weight_of_atoms(a_i, b_i))
+        threshold = problem.alpha * scale
+        # Retain the physical-profile comparison, including its rounding.
+        if v <= threshold or (guaranteed and curvature < 1e-30):
+            continue
+        accepted_a.append(a_i.detach())
+        accepted_b.append(b_i.detach())
+        accepted_scores.append(v / scale - problem.alpha)
+        if guaranteed:
+            magnitude = (v - threshold) / curvature
+            accepted_c.append(-magnitude if slope > 0 else magnitude)
 
     if len(accepted_scores) > max_insert:
         order = sorted(range(len(accepted_scores)), key=lambda i: accepted_scores[i], reverse=True)[:max_insert]
@@ -330,29 +329,28 @@ def finite_step(
     accepted_b: List[torch.Tensor] = []
     accepted_c: List[float] = []
     accepted_dJ: List[float] = []
-    with torch.enable_grad():
-        for a_i, b_i in zip(a_t, b_t):
-            features = problem.jac_forward(residual[0], a_i.reshape(1, -1), b_i.reshape(1))
-            slope = float(problem.jac_obj(*features, residual)[0].detach())
-            curvature = float(problem.hess_obj(*features)[0, 0].detach())
-            if curvature < 1e-30 or abs(slope) < 1e-30:
-                continue
-            magnitude = problem.power_prox(abs(slope) / curvature, curvature)
-            if magnitude <= 0.0:
-                continue
-            c_star = magnitude if slope < 0 else -magnitude
-            # The insertion increment uses the exact power, without the tiny
-            # magnitude floor needed when differentiating the full penalty.
-            dJ = (
-                slope * c_star + 0.5 * curvature * c_star**2
-                + problem.alpha * abs(c_star)**problem.penalty_exponent
-            )
-            if dJ >= 0.0:
-                continue
-            accepted_a.append(a_i.detach())
-            accepted_b.append(b_i.detach())
-            accepted_c.append(c_star)
-            accepted_dJ.append(dJ)
+    for a_i, b_i in zip(a_t, b_t):
+        features = problem.kernel(residual[0], a_i.reshape(1, -1), b_i.reshape(1))
+        slope = float(problem.jac_obj(*features, residual)[0])
+        curvature = float(problem.hess_obj(*features)[0, 0])
+        if curvature < 1e-30 or abs(slope) < 1e-30:
+            continue
+        magnitude = problem.power_prox(abs(slope) / curvature, curvature)
+        if magnitude <= 0.0:
+            continue
+        c_star = magnitude if slope < 0 else -magnitude
+        # The insertion increment uses the exact power, without the tiny
+        # magnitude floor needed when differentiating the full penalty.
+        dJ = (
+            slope * c_star + 0.5 * curvature * c_star**2
+            + problem.alpha * abs(c_star)**problem.penalty_exponent
+        )
+        if dJ >= 0.0:
+            continue
+        accepted_a.append(a_i.detach())
+        accepted_b.append(b_i.detach())
+        accepted_c.append(c_star)
+        accepted_dJ.append(dJ)
 
     if len(accepted_dJ) > max_insert:
         order = sorted(range(len(accepted_dJ)), key=lambda i: accepted_dJ[i])[:max_insert]

@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 
 import torch
+from torch.nn import functional as F
 
 from ..problems import SparseProblem
 
@@ -24,8 +25,8 @@ def warm_start(W_new: torch.Tensor, b_new: torch.Tensor, residual,
     n_new = W_new.shape[0]
     if n_new == 0:
         return torch.zeros(0, dtype=torch.float64)
-    S_val, S_grad = problem.jac_forward(residual[0], W_new, b_new, warm_start=True)
-    scale = problem.normalization_weight(W_new, b_new)
+    S_val, S_grad = _warm_start_kernel(problem, residual[0], W_new, b_new)
+    scale = problem.moment_weight_of_atoms(W_new, b_new)
     S_val, S_grad = S_val / scale, S_grad / scale
     profiles = problem.jac_obj(S_val, S_grad, residual)
     abs_profiles = profiles.abs()
@@ -48,3 +49,20 @@ def warm_start(W_new: torch.Tensor, b_new: torch.Tensor, residual,
             n_new, float(out.abs().max().item()) if out.numel() else 0.0,
         )
     return out.reshape(-1)
+
+
+def _warm_start_kernel(problem: SparseProblem, X: torch.Tensor, W: torch.Tensor, b: torch.Tensor):
+    """Kernel of the new atoms with the historical sphere-comparator derivative.
+
+    On the sphere, the activation derivative in the input-gradient kernel is the
+    positive-preactivation indicator, including for leaky_relu and relu2; relu
+    is unaffected. Nonhomogeneous activations use the exact kernel.
+    """
+    value_kernel, gradient_kernel = problem.kernel(X, W, b)
+    if not problem.use_sphere:
+        return value_kernel, gradient_kernel
+    z = F.linear(X, W, b)
+    indicator = (z > 0).to(z.dtype)
+    power = problem.power
+    derivative = indicator if power == 1.0 else power * problem.activation(z) ** (power - 1) * indicator
+    return value_kernel, (derivative.unsqueeze(1) * W.T.unsqueeze(0)).reshape(X.shape[0] * X.shape[1], W.shape[0])

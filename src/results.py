@@ -74,7 +74,7 @@ def model_from_history(
     w, b, c = history_atoms(history, iteration, run_index)
     config = resolve_model({"activation": activation, "power": power}, w.shape[1])
     model = SparseProblem(config)
-    model.set_atoms(torch.as_tensor(w), torch.as_tensor(b), torch.as_tensor(c))
+    model.set_atoms(torch.as_tensor(w), torch.as_tensor(b), torch.as_tensor(c).reshape(-1))
     model.eval()
     return model
 

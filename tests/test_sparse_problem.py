@@ -2,11 +2,13 @@
 
 import pytest
 import torch
+from ssn_test_problem import capture_coefficient_solve
 
 from src.config import resolve_model, validate_training
 from src.config.activations import ACTIVATIONS
 from src.data import make_dataloader
 from src.eval import metrics
+from src.PDAP.warmstart import _warm_start_kernel
 from src.problems import SparseProblem
 
 
@@ -112,22 +114,28 @@ def test_validated_power_selects_the_proximal_map_and_derivative(
         ("relu", 3.0, 0.0),
     ],
 )
-def test_samples_define_the_objective_and_its_derivatives(activation, power, gamma):
+def test_samples_define_the_objective_and_its_derivatives(monkeypatch, activation, power, gamma):
     data = _samples()
     loader = make_dataloader(data)
     problem = _problem(activation, power, alpha=0.1, gamma=gamma, loss_weights=(0.4, 1.3))
     before = {name: tensor.clone() for name, tensor in problem.state_dict().items()}
-    obj, hess_obj, normalization_weight = problem.prepare_coefficients(loader)
-    u = problem.c.detach() * normalization_weight
+    loss, hess_obj, u = capture_coefficient_solve(monkeypatch, problem, loader)
+    moment_weight = problem.moment_weight_of_atoms()
+    value_jacobian, gradient_jacobian = problem.kernel(data[0])
+
+    def fitting(u):
+        c = u / moment_weight
+        prediction = value_jacobian @ c, gradient_jacobian @ c
+        return problem.obj(prediction, (data[1].reshape(-1), data[2].reshape(-1)))
+
     Vp, dVp = problem(data[0])
     expected_obj = (0.4 * (Vp - data[1]).square().sum() + 1.3 * (dVp - data[2]).square().sum()) / (
         2 * len(data[0])
     )
     torch.testing.assert_close(problem.obj((Vp, dVp), data[1:]), expected_obj)
-    torch.testing.assert_close(obj(u), expected_obj)
-    torch.testing.assert_close(hess_obj, torch.func.hessian(obj)(u))
-    loss = lambda u: problem.loss(u, obj)
-    obj_augmented = lambda u: problem.obj_augmented(u, obj)
+    torch.testing.assert_close(fitting(u), expected_obj)
+    torch.testing.assert_close(hess_obj, torch.func.hessian(fitting)(u))
+    obj_augmented = lambda u: problem.obj_augmented(u, fitting(u))
     assert float(loss(u)) == pytest.approx(metrics(problem, loader)["train_loss"], rel=1e-12)
 
     jac_loss = torch.func.grad(loss)(u)
@@ -140,12 +148,12 @@ def test_samples_define_the_objective_and_its_derivatives(activation, power, gam
     if power == 1.0:
         torch.testing.assert_close(loss(u), obj_augmented(u) + 0.1 * u.abs().sum())
     else:
-        torch.testing.assert_close(obj_augmented(u), obj(u), rtol=0, atol=0)
+        torch.testing.assert_close(obj_augmented(u), fitting(u), rtol=0, atol=0)
     for name, tensor in problem.state_dict().items():
         torch.testing.assert_close(tensor, before[name], rtol=0, atol=0)
 
 
-def test_one_problem_handles_empty_and_replaced_supports():
+def test_one_problem_handles_empty_and_replaced_supports(monkeypatch):
     data = _samples()
     loader = make_dataloader(data)
     config = resolve_model({"activation": "softplus", "alpha": 0.01, "moment_order": 2.0}, 2)
@@ -158,17 +166,16 @@ def test_one_problem_handles_empty_and_replaced_supports():
     initial_loss = metrics(problem, loader)["train_loss"]
     a = torch.tensor([0.2, -0.3], dtype=torch.float64, requires_grad=True)
     b = a.new_tensor(0.1, requires_grad=True)
-    Kv, Kg = problem.jac_forward(data[0], a.reshape(1, -1), b.reshape(1))
-    score = problem.jac_obj(Kv, Kg, residual)[0].abs() / problem.normalization_weight(a, b)
+    Kv, Kg = problem.kernel(data[0], a.reshape(1, -1), b.reshape(1))
+    score = problem.jac_obj(Kv, Kg, residual)[0].abs() / problem.moment_weight_of_atoms(a, b)
     assert all(torch.isfinite(g).all() for g in torch.autograd.grad(score, (a, b)))
 
     for width in (0, 2, 1, 3):
         W = torch.arange(1, 2 * width + 1, dtype=torch.float64).reshape(width, 2) / 5
         problem.set_atoms(W, torch.zeros(width, dtype=W.dtype), torch.ones(width, dtype=W.dtype))
-        obj, hess_obj, normalization_weight = problem.prepare_coefficients(loader)
-        u = problem.c.detach() * normalization_weight
+        loss, hess_obj, u = capture_coefficient_solve(monkeypatch, problem, loader)
         assert hess_obj.shape == (width, width)
-        assert float(problem.loss(u, obj)) == pytest.approx(metrics(problem, loader)["train_loss"], rel=1e-12)
+        assert float(loss(u)) == pytest.approx(metrics(problem, loader)["train_loss"], rel=1e-12)
 
     problem.set_atoms(W[:0], W.new_zeros(0), W.new_zeros(0))
     assert metrics(problem, loader)["train_loss"] == pytest.approx(initial_loss)
@@ -182,7 +189,7 @@ def test_candidate_objective_gradient_retains_inner_weight_derivatives(activatio
     residual = X, prediction[0] - V, prediction[1] - dV
     omega = X.new_tensor([.7, -.2, .4], requires_grad=True)
     def candidate_gradient(omega):
-        Kv, Kg = problem.jac_forward(X, omega[:2].reshape(1, -1), omega[2:].reshape(1))
+        Kv, Kg = problem.kernel(X, omega[:2].reshape(1, -1), omega[2:].reshape(1))
         return problem.jac_obj(Kv, Kg, residual)[0]
 
     slope = candidate_gradient(omega)
@@ -216,8 +223,8 @@ def test_warmstart_preserves_the_historical_sphere_derivative_convention(activat
     problem = SparseProblem(resolve_model({"activation": activation}, 1))
     X = torch.tensor([[-1.], [2.]], dtype=torch.float64)
     W, b = X.new_ones((1, 1)), X.new_zeros(1)
-    values, gradients = problem.jac_forward(X, W, b)
-    legacy_values, legacy_gradients = problem.jac_forward(X, W, b, warm_start=True)
+    values, gradients = problem.kernel(X, W, b)
+    legacy_values, legacy_gradients = _warm_start_kernel(problem, X, W, b)
     torch.testing.assert_close(values, legacy_values, rtol=0, atol=0)
     torch.testing.assert_close(gradients[:, 0], X.new_tensor(actual), rtol=0, atol=0)
     torch.testing.assert_close(legacy_gradients[:, 0], X.new_tensor([0., 1.]), rtol=0, atol=0)

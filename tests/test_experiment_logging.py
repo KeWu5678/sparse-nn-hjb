@@ -3,11 +3,13 @@ import json
 import logging
 import pickle
 import sys
+from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
 import pytest
+import structlog
 import torch
 from omegaconf import OmegaConf
 
@@ -15,7 +17,6 @@ from src.config.schema import ExperimentConfig
 from src.data import ValueSampleNormalizer, split_value_samples
 from src.eval import distance_binned_error, region_split_errors, relative_errors
 from src.experiment_logging import ExperimentRun
-from src.logging_config import configure_logging
 
 
 def load_train_module():
@@ -122,17 +123,6 @@ def test_experiment_run_records_artifacts(tmp_path):
     assert record["artifacts"] == [{"name": "pareto_plot", "path": str(plot_path)}]
 
 
-def test_configure_logging_writes_readable_diagnostics(tmp_path, capsys):
-    log_path = tmp_path / "run.log"
-    logger = configure_logging(verbose=True, log_file=log_path, level=logging.INFO)
-
-    logger.info("run started: name=activation_search seed=42")
-
-    captured = capsys.readouterr()
-    assert "INFO run started: name=activation_search seed=42" in captured.err
-    assert "INFO run started: name=activation_search seed=42" in log_path.read_text(encoding="utf-8")
-
-
 def test_experiment_run_preserves_runner_summary_fields(tmp_path):
     run = ExperimentRun(
         tmp_path,
@@ -231,7 +221,9 @@ def test_run_id_uses_experiment_data_date_and_suffix():
 
 
 @pytest.mark.parametrize("normalize", [True, False])
-def test_training_record_preserves_fitted_normalization(tmp_path, monkeypatch, normalize):
+def test_training_record_preserves_fitted_normalization(
+    tmp_path, monkeypatch, caplog, capsys, normalize,
+):
     train = load_train_module()
     monkeypatch.delenv("MLFLOW_TRACKING_URI", raising=False)
     samples = {
@@ -265,7 +257,15 @@ def test_training_record_preserves_fitted_normalization(tmp_path, monkeypatch, n
         return model
 
     monkeypatch.setattr(train, "SparseProblem", initialized_problem)
-    train.main.__wrapped__(cfg)
+    with _isolated_logging(), structlog.contextvars.bound_contextvars(
+        run_id="caller", experiment="outer", seed=-1,
+    ):
+        context = structlog.contextvars.get_contextvars()
+        train.main.__wrapped__(cfg)
+        assert structlog.contextvars.get_contextvars() == context
+    assert capsys.readouterr().err == ""
+    logging.getLogger(__name__).warning("pytest capture restored after training")
+    assert "pytest capture restored after training" in caplog.text
 
     record = json.loads(next(run_dir.glob("*.json")).read_text())
     assert record["config"]["data"]["normalize"] is normalize
@@ -335,6 +335,37 @@ def test_region_reporting_scores_original_value_units(tmp_path, normalize):
     assert got == pytest.approx(expected, nan_ok=True)
 
 
+@pytest.mark.parametrize("empty_region,distance", [("switching", 1.0), ("rest", 0.0)])
+def test_empty_region_logs_null_without_changing_saved_metrics(
+    tmp_path, monkeypatch, empty_region, distance,
+):
+    train = load_train_module()
+    monkeypatch.delenv("MLFLOW_TRACKING_URI", raising=False)
+    run_dir = tmp_path / "run"
+    hydra_cfg = OmegaConf.create({"runtime": {"output_dir": str(run_dir)}})
+    monkeypatch.setattr(train.HydraConfig, "get", lambda: hydra_cfg)
+    dataset = tmp_path / "samples.npz"
+    x = np.arange(1.0, 5.0).reshape(-1, 1)
+    np.savez(dataset, x=x, v=x**2, dv=2*x, distance=np.full(len(x), distance))
+    cfg = OmegaConf.structured(ExperimentConfig())
+    cfg.data.path = str(dataset)
+    cfg.training.loop_order = "insertion_first"
+    cfg.training.num_iterations = 0
+    cfg.env.verbose = False
+    cfg.eval.kind = "region_split"
+    cfg.eval.eval_pool = cfg.eval.distance_cache = str(dataset)
+    with _isolated_logging():
+        train.main.__wrapped__(cfg)
+
+    logs = [json.loads(line, parse_constant=lambda token: pytest.fail(f"non-JSON {token}"))
+            for line in (run_dir / "run.jsonl").read_text().splitlines()]
+    summary = next(event for event in logs if event["event"] == "region_summary")
+    assert summary[f"{empty_region}_count"] == 0
+    assert summary[f"{empty_region}_h1"] is None
+    record = json.loads(next(run_dir.glob("*.json")).read_text())
+    assert np.isnan(record["metrics"][-1]["values"][f"{empty_region}_h1"])
+
+
 def test_failed_training_keeps_logs_without_a_run_record(tmp_path, monkeypatch):
     train = load_train_module()
     monkeypatch.delenv("MLFLOW_TRACKING_URI", raising=False)
@@ -344,10 +375,15 @@ def test_failed_training_keeps_logs_without_a_run_record(tmp_path, monkeypatch):
     cfg.data.path = str(tmp_path / "missing.npz")
     cfg.env.verbose = False
 
-    with pytest.raises(FileNotFoundError):
-        train.main.__wrapped__(cfg)
+    with _isolated_logging(), structlog.contextvars.bound_contextvars(
+        run_id="caller", experiment="outer", seed=-1,
+    ):
+        context = structlog.contextvars.get_contextvars()
+        with pytest.raises(FileNotFoundError):
+            train.main.__wrapped__(cfg)
+        assert structlog.contextvars.get_contextvars() == context
 
-    assert (tmp_path / "run.log").exists()
+    assert (tmp_path / "run.jsonl").exists()
     assert not list(tmp_path.glob("*.json"))
 
 
@@ -380,7 +416,33 @@ def test_invalid_model_config_fails_before_model_solver_or_loader_setup(
 
     for name in ("SparseProblem", "PDAP", "make_dataloaders"):
         monkeypatch.setattr(train, name, premature_setup)
-    with pytest.raises(ValueError, match=message):
+    with _isolated_logging(), pytest.raises(ValueError, match=message):
         train.main.__wrapped__(cfg)
 
     assert OmegaConf.to_container(cfg.model, resolve=True) == raw_model
+
+
+@contextmanager
+def _isolated_logging():
+    """Detach pytest's handlers while the runner owns the process-wide setup."""
+    root = logging.getLogger()
+    handlers, level = root.handlers[:], root.level
+    logger_class = logging.getLoggerClass()
+    configured, config = structlog.is_configured(), structlog.get_config()
+    context = structlog.contextvars.get_contextvars()
+    root.handlers.clear()
+    try:
+        yield
+    finally:
+        for handler in root.handlers[:]:
+            root.removeHandler(handler)
+            handler.close()
+        for handler in handlers:
+            root.addHandler(handler)
+        root.setLevel(level)
+        logging.setLoggerClass(logger_class)
+        structlog.reset_defaults()
+        if configured:
+            structlog.configure(**config)
+        structlog.contextvars.clear_contextvars()
+        structlog.contextvars.bind_contextvars(**context)

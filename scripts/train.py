@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import logging
 import os
 import pickle
 import random
@@ -34,6 +33,7 @@ if hasattr(argparse.ArgumentParser, "_check_help"):
 
 import hydra
 import numpy as np
+import structlog
 import torch
 from hydra.core.config_store import ConfigStore
 from hydra.core.hydra_config import HydraConfig
@@ -47,11 +47,12 @@ from src.config.schema import ExperimentConfig
 from src.data import DATA_DIR, load_value_samples, make_dataloaders, normalize_value_samples
 from src.eval import distance_binned_error, region_split_errors
 from src.experiment_logging import ExperimentRun
-from src.logging_config import configure_logging
+from src.logging import configure_logging
 from src.PDAP import PDAP
 from src.problems import SparseProblem
+from src.training import run_training
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 def _slug(value: object) -> str:
     slug = re.sub(r"[^A-Za-z0-9]+", "", str(value).lower())
@@ -197,16 +198,29 @@ ConfigStore.instance().store(name="config_schema", node=ExperimentConfig)
 
 @hydra.main(version_base=None, config_path="../conf", config_name="config")
 def main(cfg: DictConfig) -> None:
-    # Every run logs to its own file in the Hydra output dir, so parallel sweep
-    # workers (joblib) don't interleave their progress tables on the shared
-    # console. `env.verbose` still controls console streaming; `env.log_file`
-    # overrides the per-run default when set.
-    if cfg.env.require_mlflow:
-        require_mlflow_tracking()
+    # This setup owns job logging; Hydra supplies each run's output directory.
+    # `env.verbose` controls stderr, and `env.log_file` overrides the JSONL path.
     hydra_cfg = HydraConfig.get()
     run_dir = Path(hydra_cfg.runtime.output_dir)
-    log_file = cfg.env.log_file or (run_dir / "run.log")
-    configure_logging(verbose=cfg.env.verbose, level=cfg.env.log_level, log_file=log_file)
+    log_file = cfg.env.log_file or (run_dir / "run.jsonl")
+    configure_logging(console=cfg.env.verbose, level=cfg.env.log_level, log_file=log_file)
+    run_id = run_id_from_config(cfg, hydra_cfg=hydra_cfg)
+    with structlog.contextvars.bound_contextvars(
+        run_id=run_id, experiment=cfg.name, seed=cfg.env.seed,
+    ):
+        logger.info("run_started")
+        try:
+            if cfg.env.require_mlflow:
+                require_mlflow_tracking()
+            record = _run_experiment(cfg, hydra_cfg, run_dir, run_id)
+        except Exception:
+            logger.exception("run_failed")
+            raise
+        logger.info("run_completed", record_path=str(record))
+
+
+def _run_experiment(cfg: DictConfig, hydra_cfg, run_dir: Path, run_id: str) -> Path:
+    """Execute one configured experiment and persist its successful Run Record."""
     set_seed(cfg.env.seed)
 
     # Create the run record before model construction/training so elapsed_s covers
@@ -214,7 +228,7 @@ def main(cfg: DictConfig) -> None:
     run = ExperimentRun(
         output_dir=run_dir,
         name=cfg.name,
-        run_id=run_id_from_config(cfg, hydra_cfg=hydra_cfg),
+        run_id=run_id,
         config=OmegaConf.to_container(cfg, resolve=True),
         hydra=hydra_metadata(hydra_cfg),
     )
@@ -233,7 +247,7 @@ def main(cfg: DictConfig) -> None:
     if cfg.data.normalize:
         data, normalizer = normalize_value_samples(data)
     input_dim = data["x"].shape[1]
-    logger.info("loaded %s  (d=%d)", cfg.data.path, input_dim)
+    logger.info("data_loaded", path=cfg.data.path, input_dim=input_dim)
     model_config = resolve_model(cfg.model, input_dim)
     validate_training(model_config)
     train_loader, valid_loader = make_dataloaders(
@@ -241,28 +255,23 @@ def main(cfg: DictConfig) -> None:
     )
     trainer = PDAP(cfg.training, insertion=model_config["insertion"])
     problem = SparseProblem(model_config)
-    history = trainer.fit(
-        problem, train_loader, valid_loader,
+    history = run_training(
+        trainer, problem, train_loader, valid_loader,
         num_iterations=cfg.training.num_iterations,
-        num_insertion=cfg.training.num_insertion,
-        max_insert=cfg.training.max_insert,
-        amp_tol=cfg.training.prune_amp_tol,
+        display_every=cfg.training.display_every,
         reporting_normalizer=normalizer,
-        # Always emit the progress tables to the logger so every run's log file is
+        # Always emit progress to the logger so every run's log file is
         # complete. `env.verbose` only controls whether they also stream to the
         # console (configure_logging above) — which interleaves under parallel
-        # sweeps, so leave it off and read the per-run run.log instead.
+        # sweeps, so leave it off and read the per-run run.jsonl instead.
         verbose=True,
     )
 
     metrics = history.summary_metrics()
     logger.info(
-        "best iter %d | neurons %d | rel-L2 %.3e | rel-semiH1 %.3e | rel-H1 %.3e (val)",
-        metrics["best_iteration"],
-        metrics["best_neurons"],
-        metrics["rel_l2_val"],
-        metrics["rel_grad_val"],
-        metrics["rel_h1_val"],
+        "evaluation_summary", best_iteration=metrics["best_iteration"],
+        best_neurons=metrics["best_neurons"], rel_l2_val=metrics["rel_l2_val"],
+        rel_grad_val=metrics["rel_grad_val"], rel_h1_val=metrics["rel_h1_val"],
     )
 
     # Pluggable post-fit evaluation (conf/eval). The default `global` adds nothing;
@@ -275,9 +284,11 @@ def main(cfg: DictConfig) -> None:
         region = region_split_metrics(cfg, evaluation_model, data, normalizer)
         metrics.update(region)
         logger.info(
-            "region split | switching H1 %.3e (n=%d) | rest H1 %.3e (n=%d)",
-            region["switching_h1"], int(region["switching_count"]),
-            region["rest_h1"], int(region["rest_count"]),
+            "region_summary",
+            switching_h1=region["switching_h1"] if region["switching_count"] else None,
+            switching_count=int(region["switching_count"]),
+            rest_h1=region["rest_h1"] if region["rest_count"] else None,
+            rest_count=int(region["rest_count"]),
         )
 
     artifact = run_dir / f"result_{run.run_id}.pkl"
@@ -297,7 +308,7 @@ def main(cfg: DictConfig) -> None:
             "metric_coordinates": "physical",
         },
     )
-    logger.info("run record: %s", record)
+    return record
 
 
 if __name__ == "__main__":

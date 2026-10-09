@@ -28,6 +28,7 @@ from src.config.schema import EnvConfig, ExperimentConfig, ModelConfig, Training
 from src.data import make_dataloaders
 from src.PDAP import PDAP
 from src.problems import SparseProblem
+from src.training import run_training
 
 GOLDEN_PATH = Path(__file__).parent / "fixtures" / "pdap_direct_registration_golden.npz"
 SEED = 123
@@ -45,7 +46,7 @@ def _cfg(name: str) -> ExperimentConfig:
     return ExperimentConfig(
         model=ModelConfig(kind=c["kind"], insertion=c["insertion"],
                           power=1.0, alpha=1e-4, gamma=c["gamma"]),
-        training=TrainingConfig(),
+        training=TrainingConfig(num_insertion=20),
         env=EnvConfig(verbose=False),
     )
 
@@ -73,9 +74,10 @@ def _run_summary(name: str) -> np.ndarray:
     validate_training(model_config)
     model = SparseProblem(model_config)
     train_loader, valid_loader = make_dataloaders(data, cfg.data.train_fraction)
-    out = PDAP(cfg.training, insertion=model_config["insertion"]).fit(
+    out = run_training(
+        PDAP(cfg.training, insertion=model_config["insertion"]),
         model,
-        train_loader, valid_loader, num_iterations=3, num_insertion=20, verbose=False,
+        train_loader, valid_loader, num_iterations=3, verbose=False,
     )
     return np.array(
         [

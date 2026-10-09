@@ -51,15 +51,6 @@ def _penalty(theta, mask, alpha, gamma, q):
     return alpha * torch.sum(_phi(arg, gamma))
 
 
-class _LegacyProblem(SparseProblem):
-    """Preserve the clamped loss and signed gradient subtraction of the fixtures."""
-
-    def loss(self, u, obj):
-        return obj(u) + _penalty(
-            u, self._masks(u)[0], self._alpha, self._gamma, self.penalty_exponent,
-        )
-
-
 def _run_trajectory(config: dict) -> np.ndarray:
     """Run one optimizer config for N_STEPS, returning the (N_STEPS, P) theta trace."""
     torch.manual_seed(0)
@@ -81,21 +72,27 @@ def _run_trajectory(config: dict) -> np.ndarray:
     # rather than silently changing its objective or regenerating its fixtures.
     model_config = resolve_model({"alpha": alpha, "gamma": gamma, "power": power}, P)
     validate_training(model_config)
-    problem = _LegacyProblem(
+    problem = SparseProblem(
         model_config,
         penalized_mask=pen_mask, nonneg_mask=config.get("nonneg_mask"),
     )
+
+    def coefficient_loss(u):
+        return data_loss(u) + _penalty(
+            u, problem._masks(u)[0], problem.alpha, problem._gamma, problem.penalty_exponent,
+        )
+
     kind = config["kind"]
     if kind == "ssn":
         opt = SSN(
-            [theta], problem, data_loss, H, max_iter=1, correction_guard=False,
+            [theta], problem, coefficient_loss, H, max_iter=1, correction_guard=False,
             prox_scale=config.get("prox_scale"),
         )
     elif kind == "ssn_tr":
         # folded into the base SSN: trust-region (Steihaug-CG) globalization
-        opt = SSN([theta], problem, data_loss, H, method="steihaug_cg", max_iter=1, correction_guard=False)
+        opt = SSN([theta], problem, coefficient_loss, H, method="steihaug_cg", max_iter=1, correction_guard=False)
     elif kind == "ssn_masked":
-        opt = SSN([theta], problem, data_loss, H, max_iter=1, correction_guard=False)
+        opt = SSN([theta], problem, coefficient_loss, H, max_iter=1, correction_guard=False)
     else:  # pragma: no cover
         raise ValueError(kind)
 

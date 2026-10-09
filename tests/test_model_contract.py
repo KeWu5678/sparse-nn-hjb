@@ -68,7 +68,11 @@ def test_registered_callable_preserves_named_prediction_and_training(activation)
 
 def test_gradient_only_loss_backpropagates_to_coefficients_and_input_graph():
     problem = SparseProblem(resolve_model({"power": 2., "loss_weights": (0., 1.)}, 2))
-    problem.set_atoms(torch.tensor([[2., -1.]]), torch.tensor([.5]), torch.tensor([3.]))
+    problem.set_atoms(
+        torch.tensor([[2., -1.]], dtype=torch.float64),
+        torch.tensor([.5], dtype=torch.float64),
+        torch.tensor([3.], dtype=torch.float64),
+    )
     base = torch.tensor([[.5, .5]], dtype=torch.float64, requires_grad=True)
     x = 2 * base
 
@@ -108,7 +112,7 @@ def test_empty_support_predicts_and_prepares_zero_features():
     torch.testing.assert_close(empty_value, value)
     torch.testing.assert_close(empty_gradient, gradient)
     assert not empty_value.requires_grad and not empty_gradient.requires_grad
-    Phi_v, Phi_g = problem.jac_forward(x)
+    Phi_v, Phi_g = problem.kernel(x)
     assert Phi_v.shape == (3, 0)
     assert Phi_g.shape == (6, 0)
 
@@ -150,7 +154,11 @@ def test_setting_and_pruning_atoms_preserves_float64_coefficients():
 def test_prediction_only_settings_remain_usable_without_training_validation(specifications, message):
     config = resolve_model(specifications, 2)
     problem = SparseProblem(config)
-    problem.set_atoms(torch.tensor([[1., 0.]]), torch.tensor([0.]), torch.tensor([2.]))
+    problem.set_atoms(
+        torch.tensor([[1., 0.]], dtype=torch.float64),
+        torch.tensor([0.], dtype=torch.float64),
+        torch.tensor([2.], dtype=torch.float64),
+    )
     x = torch.tensor([[2., 3.]], dtype=torch.float64)
     value, gradient = problem(x)
     if specifications["activation"] == "softplus":

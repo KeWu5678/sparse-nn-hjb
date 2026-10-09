@@ -123,7 +123,7 @@ class TrainingConfig:
     tolerance_grad: float = 0.0
     sigmamax: float = 10.0
     fit_outer_iterations: int = 20
-    display_every: int = 2
+    display_every: int = 2  # Log checkpoint indices 0, N, 2N; <=0 disables periodic progress.
     # insertion numeric constants (src/PDAP/insertion.py)
     # Candidate-to-candidate deduplication: Algorithm 1 uses absolute Euclidean
     # distance in omega=(a,b); sphere searches use cosine-similarity gap.  The
@@ -192,9 +192,9 @@ class EnvConfig:
     # and discovering at run.finish() that publish_record_to_mlflow silently
     # returned False because MLFLOW_TRACKING_URI was unset. Sweeps set it.
     require_mlflow: bool = False
-    verbose: bool = True
-    log_level: str = "INFO"
-    log_file: Optional[str] = None
+    verbose: bool = True  # Readable stderr; JSONL file output is always enabled.
+    log_level: str = "INFO"  # Shared threshold for both outputs.
+    log_file: Optional[str] = None  # Defaults to run.jsonl in Hydra's output directory.
 
 
 @dataclass

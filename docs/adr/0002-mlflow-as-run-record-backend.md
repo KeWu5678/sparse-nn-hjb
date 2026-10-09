@@ -40,7 +40,7 @@ monitoring:
 - **Tags:** project `run_id`, status, local Run Record path, local artifact
   paths, Hydra output directory/job metadata, and failure metadata when present.
 
-Per-iteration curves and the full `PDAP.fit()` result stay local in the saved
+Per-iteration curves and the full training History stay local in the saved
 pickle artifact. MLflow records the pickle path, but does not read or upload the
 pickle.
 

@@ -1,22 +1,17 @@
-"""The training record produced by ``PDAP.fit``.
+"""The training record produced by ``run_training``.
 
-``PDAP`` is a pure trainer: the per-iteration metrics and weight snapshots are
-not its state, they are returned to the caller in a :class:`History` (the Keras
-``fit``-returns-``History`` convention). Evaluation computes the metrics;
-``History.record`` stores them alongside parameter snapshots and selects the
-best checkpoint.
+Evaluation computes the metrics; ``History.record`` receives those values,
+stores them alongside parameter snapshots and selects the best checkpoint.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, List
+from typing import Any, Dict, List
 
 import torch
-from torch.utils.data import DataLoader
 
 from ..data import ValueSampleNormalizer
-from ..eval import metrics
 from ..problems import SparseProblem
 
 
@@ -24,8 +19,8 @@ from ..problems import SparseProblem
 class History:
     """Per-iteration losses, relative errors, and support snapshots.
 
-    ``reporting_normalizer`` reverses a caller-applied data transform for relative
-    errors only; losses and checkpoint selection always use the training data.
+    ``reporting_normalizer`` records the transform used by the external evaluator
+    for relative errors. Losses and checkpoint selection use training coordinates.
     """
 
     train_loss: List[float] = field(default_factory=list)
@@ -66,27 +61,29 @@ class History:
     best_train_loss: float = float("inf")
     final_neurons: int = 0
     reporting_normalizer: ValueSampleNormalizer | None = None
+    diagnostics: List[dict[str, Any]] = field(default_factory=list)
+    #: Actual solver work and runtime, including searches without a checkpoint.
+    #: Seconds are wall time; process_peak_rss_bytes is the process lifetime peak.
+    run_metrics: dict[str, Any] = field(default_factory=dict)
 
     def record(
-        self, problem: SparseProblem,
-        train_loader: DataLoader, valid_loader: DataLoader | None = None,
-        *,
-        search_radius: float | None = None,
-        theorem_applied: float | None = None,
+        self, problem: SparseProblem, values: dict[str, float | None],
+        diagnostics: dict[str, Any] | None = None,
     ) -> None:
-        """Evaluate the current model and append one iteration's record.
+        """Store supplied measurements and an independent checkpoint.
 
-        ``search_radius``/``theorem_applied`` describe the search that produced
+        Search diagnostics describe the search that produced
         the support being evaluated, in either loop order. They separate a
         ``radial_cap=theorem`` run whose hypothesis failed from a
         ``radial_cap=fixed`` run: both search
         inside ``exp(5)``, and without these the records are identical.
         """
-        values = metrics(
-            problem, train_loader, valid_loader, reporting_normalizer=self.reporting_normalizer,
-        )
         for name, value in values.items():
             getattr(self, name).append(value)
+        diagnostics = dict(diagnostics or {})
+        self.diagnostics.append(diagnostics)
+        search_radius = diagnostics.get("search_radius")
+        theorem_applied = diagnostics.get("radius_theorem_applied")
         self.search_radius.append(None if search_radius is None else float(search_radius))
         self.radius_theorem_applied.append(None if theorem_applied is None else float(theorem_applied))
         self.penalty_exponent = problem.penalty_exponent
@@ -132,14 +129,14 @@ class History:
         if not state:
             state = {"inner_weight": self.inner_weights[i]["weight"],
                      "inner_bias": self.inner_weights[i]["bias"],
-                     "c": self.outer_weights[i]}
+                     "c": self.outer_weights[i].reshape(-1)}
         model.set_atoms(state["inner_weight"], state["inner_bias"], state["c"])
         return model
 
-    def summary_metrics(self) -> dict[str, float | int | None]:
-        """Scalar comparison metrics at the selected best iteration."""
+    def summary_metrics(self) -> dict[str, Any]:
+        """Selected-checkpoint metrics plus independently counted run work."""
         i = int(self.best_iteration)
-        metrics: dict[str, float | int | None] = {
+        metrics: dict[str, Any] = {
             "rel_l2_train": float(self.err_l2_train[i]),
             "rel_l2_val": float(self.err_l2_val[i]),
             "rel_grad_train": float(self.err_grad_train[i]),
@@ -149,11 +146,9 @@ class History:
             "best_iteration": i,
             "best_neurons": int(self.best_neurons),
             "final_neurons": int(self.final_neurons),
-            # How many outer iterations were actually recorded.  Under the paper's
-            # loop order this is less than the configured T_out exactly when the
-            # run stopped on its own rule -- no candidate cleared the insertion
-            # threshold -- which is the difference between converging in the
-            # algorithm's terms and merely exhausting the budget.
+            # Historical artifact field: checkpoint rows, including a terminal
+            # zero-model row when no correction ran. Actual work is counted in
+            # run_metrics, independently of observation/checkpoint positions.
             "iterations": int(len(self.train_loss)),
         }
         if getattr(self, "data_loss_train", []):
@@ -189,4 +184,5 @@ class History:
             values = getattr(self, name, [])
             if len(values) > i and values[i] is not None:
                 metrics[name] = float(values[i])
+        metrics.update(getattr(self, "run_metrics", {}))
         return metrics

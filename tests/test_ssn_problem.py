@@ -19,7 +19,7 @@ def test_problem_smooth_derivatives_match_the_splitting(dtype, power, gamma):
         residual = A @ u - target
         return 0.5 * (residual @ residual)
 
-    problem, obj, hess_obj = synthetic_problem(
+    problem, coefficient_loss, hess_obj = synthetic_problem(
         data_loss, A.T @ A, alpha=alpha, gamma=gamma, power=power, penalized_mask=mask,
     )
     u = torch.tensor([-0.6, 0.8, 1.2], dtype=dtype)
@@ -32,7 +32,7 @@ def test_problem_smooth_derivatives_match_the_splitting(dtype, power, gamma):
         remainder = -0.5 * magnitude + torch.log1p(2 * gamma * magnitude) / (4 * gamma)
         return data_loss(u) + alpha * remainder.sum()
 
-    jac_loss = torch.func.grad(problem.loss)(u, obj)
+    jac_loss = torch.func.grad(coefficient_loss)(u)
     with torch.no_grad():
         grad = problem.jac_obj_augmented(u, jac_loss)
         hessian = problem.hess_obj_augmented(u, hess_obj)
@@ -51,16 +51,16 @@ def test_problem_smooth_derivatives_match_the_splitting(dtype, power, gamma):
     else:
         slope = exponent * u[mask].abs().pow(exponent - 1)
     expected_grad[mask] += alpha * slope * u[mask].sign()
-    torch.testing.assert_close(torch.func.grad(problem.loss)(u, obj), expected_grad)
+    torch.testing.assert_close(torch.func.grad(coefficient_loss)(u), expected_grad)
 
 
 def test_problem_keeps_the_selected_hess_obj_augmented_at_zero():
-    problem, obj, hess_obj = synthetic_problem(
+    problem, coefficient_loss, hess_obj = synthetic_problem(
         lambda u: 0.5 * u.square().sum(), torch.eye(1, dtype=torch.float64),
         alpha=0.1, gamma=0.7,
     )
     u = torch.zeros(1, dtype=torch.float64)
-    jac_loss = torch.func.grad(problem.loss)(u, obj)
+    jac_loss = torch.func.grad(coefficient_loss)(u)
     torch.testing.assert_close(problem.jac_obj_augmented(u, jac_loss), u)
     torch.testing.assert_close(
         problem.hess_obj_augmented(u, hess_obj), torch.tensor([[0.93]], dtype=torch.float64),
@@ -76,7 +76,7 @@ def test_problem_normal_jacobian_matches_finite_differences(power, gamma):
         residual = A @ u - target
         return 0.5 * (residual @ residual)
 
-    problem, obj, hess_obj = synthetic_problem(
+    problem, coefficient_loss, hess_obj = synthetic_problem(
         data_loss, A.T @ A, alpha=0.1, gamma=gamma, power=power,
         penalized_mask=torch.tensor([True, True, False]),
     )
@@ -86,7 +86,7 @@ def test_problem_normal_jacobian_matches_finite_differences(power, gamma):
 
     def normal(q):
         u = problem.prox(q, inverse_step)
-        jac_loss = torch.func.grad(problem.loss)(u, obj)
+        jac_loss = torch.func.grad(coefficient_loss)(u)
         grad = problem.jac_obj_augmented(u, jac_loss)
         return problem.normal_map(q, u, grad, inverse_step)
 
@@ -114,10 +114,10 @@ def test_accepted_trials_leave_parameters_untouched_until_commit(method):
         evaluated.append(u.detach().clone())
         return 0.5 * u.square().sum()
 
-    problem, obj, hess_obj = synthetic_problem(
+    problem, coefficient_loss, hess_obj = synthetic_problem(
         data_loss, torch.eye(2, dtype=torch.float64), alpha=0.0, gamma=0.0,
     )
-    optimizer = SSN([coefficient], problem, obj, hess_obj, method=method, max_iter=1)
+    optimizer = SSN([coefficient], problem, coefficient_loss, hess_obj, method=method, max_iter=1)
     loss = optimizer.step()
 
     assert optimizer.last_step_success
@@ -129,13 +129,13 @@ def test_accepted_trials_leave_parameters_untouched_until_commit(method):
 
 
 def test_problem_applies_coordinate_masks_without_mutating_the_input():
-    problem, obj, hess_obj = synthetic_problem(
+    problem, coefficient_loss, hess_obj = synthetic_problem(
         lambda u: 0.5 * u.square().sum(), torch.eye(3, dtype=torch.float64),
         alpha=0.25, gamma=0.0,
         penalized_mask=torch.tensor([True, True, False]),
         nonneg_mask=torch.tensor([False, True, False]),
     )
     u = torch.tensor([2.0, -3.0, 4.0], dtype=torch.float64)
-    torch.testing.assert_close(problem.loss(u, obj), u.new_tensor(15.0))
+    torch.testing.assert_close(coefficient_loss(u), u.new_tensor(15.0))
     torch.testing.assert_close(problem.prox(u, 1.0), u.new_tensor([1.75, 0.0, 4.0]))
     torch.testing.assert_close(u, u.new_tensor([2.0, -3.0, 4.0]), rtol=0, atol=0)

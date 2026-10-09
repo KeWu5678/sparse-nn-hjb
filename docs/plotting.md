@@ -52,7 +52,7 @@ a common value scale leaves relative L2 unchanged.
 
 Current records include explicit normalization and
 `metric_coordinates: physical`. The runner passes `reporting_normalizer` to
-`PDAP.fit`; direct callers that normalize samples should do the same. Current
+`run_training`; direct callers that normalize samples should do the same. Current
 publication preflight rejects missing normalization and nonphysical metrics.
 Archived normalization recovery is not part of the fresh publication workflow.
 

@@ -146,7 +146,11 @@ def test_config_builds_trainer_and_model() -> None:
     assert pdap.ins_merge_tol == 1e-2
 
     assert isinstance(problem, torch.nn.Module)
-    problem.set_atoms(torch.tensor([[1., 0.]]), torch.tensor([0.]), torch.tensor([2.]))
+    problem.set_atoms(
+        torch.tensor([[1., 0.]], dtype=torch.float64),
+        torch.tensor([0.], dtype=torch.float64),
+        torch.tensor([2.], dtype=torch.float64),
+    )
     x = torch.tensor([[-1., 3.], [2., 3.]], dtype=torch.float64)
     value, _ = problem(x)
     torch.testing.assert_close(value, x.new_tensor([[0.], [4.]]))

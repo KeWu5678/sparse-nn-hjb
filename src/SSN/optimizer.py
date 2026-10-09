@@ -31,8 +31,8 @@ class SSN(Optimizer):
     Args:
         params: parameters to optimize (outer weights only).
         problem: sparse objective evaluated at a supplied flat vector.
-        obj: fitting objective for this fixed-support coefficient correction.
-        hess_obj: Hessian of that fitting objective.
+        loss: complete loss callable for this fixed-support coefficient correction.
+        hess_obj: Hessian of the fitting term only, excluding the penalty.
         max_iter: number of Newton iterations in one complete correction.
         correction_guard: reject an increased final loss; False preserves the
             explicitly configured historical unguarded comparison.
@@ -55,7 +55,7 @@ class SSN(Optimizer):
         self,
         params: Iterable[Tensor],
         problem: SparseProblem,
-        obj: Callable[[Tensor], Tensor],
+        loss: Callable[[Tensor], Tensor],
         hess_obj: Tensor,
         *,
         max_iter: int = 20,
@@ -88,7 +88,7 @@ class SSN(Optimizer):
         if len(self.param_groups) > 1:
             raise ValueError("SSN doesn't support per-parameter options")
         self.problem = problem
-        self.obj = obj
+        self.loss = loss
         self.hess_obj = hess_obj
         self._params = self.param_groups[0]["params"]
         group = self.param_groups[0]
@@ -145,7 +145,7 @@ class SSN(Optimizer):
     def _evaluate_current(self) -> tuple[Tensor, Tensor]:
         with torch.enable_grad():
             u = parameters_to_vector(self._params).detach().requires_grad_(True)
-            loss = self.problem.loss(u, self.obj)
+            loss = self.loss(u)
         return u, loss
 
     def _iteration(self, u: Tensor, loss: Tensor) -> Tensor:
@@ -174,7 +174,7 @@ class SSN(Optimizer):
         group = self.param_groups[0]
 
         def evaluate_trial(q_trial: Tensor) -> Tensor:
-            return self.problem.loss(self.problem.prox(q_trial, inverse_step), self.obj)
+            return self.loss(self.problem.prox(q_trial, inverse_step))
 
         if group["method"] == "levenberg_marquardt":
             q_trial, loss_trial, accepted = damped_newton_step(
@@ -198,7 +198,7 @@ class SSN(Optimizer):
 
     def _report(self, initial_loss: Tensor, loss: Tensor) -> None:
         group = self.param_groups[0]
-        logger.info(
+        logger.debug(
             "SSN correction  iterations=%d  objective=%.6e->%.6e  accepted=%s  "
             "failed_steps=%d  prox_scale=%s  inverse_step=%.6e",
             self.iterations_run, float(initial_loss.detach()), float(loss.detach()),

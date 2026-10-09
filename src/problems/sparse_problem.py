@@ -1,13 +1,11 @@
 """Neuron and objective mathematics evaluated on externally supplied data."""
 
 import math
-from collections.abc import Callable
 
 import torch
 from torch import Tensor, nn
 from torch.nn import functional as F
 
-from ..data import full_batch
 from .moment import moment_weight
 from .penalty import (
     _noncvx_correction,
@@ -23,15 +21,11 @@ from .prox import _power_prox, _power_prox_derivative
 class SparseProblem(nn.Module):
     """Own the sparse network and regularized objective without owning samples.
 
-    DataLoaders deliver (X, V, dV), shaped (n, d), (n, 1), and (n, d).
-    The data module assembles full samples for this full-objective algorithm.
-    prepare_coefficients returns an independent objective for one SSN solve.
-
-    The prepared obj is data fitting. obj_augmented adds the nonconvex
-    normal-map correction; loss adds the full penalty.
-    For the log family loss = obj_augmented + alpha*||u||_1. For a fractional
+    obj evaluates data fitting from predictions and targets. obj_augmented adds the nonconvex
+    normal-map correction; callers form the objective obj + alpha*sparsity_functional.
+    For the log family that objective is obj_augmented + alpha*||u||_1. For a fractional
     penalty obj_augmented = obj and the proximal map handles the full penalty.
-    Optimizers own parameter mutation, differentiation of loss, and iterations.
+    Optimizers own parameter mutation, differentiation of the objective, and iterations.
     Construction consumes an already resolved configuration. Training setup must
     validate its penalty, geometry and insertion before constructing the problem.
     """
@@ -69,6 +63,10 @@ class SparseProblem(nn.Module):
         return self._alpha
 
     @property
+    def activation(self):
+        return self._activation
+
+    @property
     def activation_name(self) -> str | None:
         return self._activation_name
 
@@ -89,6 +87,10 @@ class SparseProblem(nn.Module):
         return not self._use_sphere
 
     @property
+    def power(self) -> float:
+        return self._power
+
+    @property
     def penalty_exponent(self) -> float:
         return 2.0 / (self._power + 1.0)
 
@@ -97,110 +99,72 @@ class SparseProblem(nn.Module):
         return self._loss_weights
 
     def set_atoms(self, inner_weight: Tensor, inner_bias: Tensor, c: Tensor) -> None:
-        """Replace support with exact atoms, preserving the module's dtype/device.
+        """Replace support with independent copies of the supplied atom tensors.
 
-        inner_weight is (n, input_dim); inner_bias and c contain one entry per atom.
+        Inputs must be detached tensors shaped (n, input_dim), (n,), and (n,),
+        respectively, already matching the module's dtype and device.
         Replacing support replaces c's Parameter, so subsequent corrections use the new c.
         """
-        inner_weight, inner_bias, c = (
-            torch.as_tensor(
-                tensor, dtype=self.inner_weight.dtype, device=self.inner_weight.device,
-            ).detach().clone()
-            for tensor in (inner_weight, inner_bias, c)
-        )
-        inner_bias, c = inner_bias.reshape(-1), c.reshape(-1)
-        if inner_weight.ndim != 2 or inner_weight.shape[1] != self.input_dim:
-            raise ValueError("inner_weight must have shape (n, input_dim)")
-        if inner_bias.numel() != inner_weight.shape[0] or c.numel() != inner_weight.shape[0]:
-            raise ValueError("inner_bias and c must contain one entry per atom")
-        self.inner_weight, self.inner_bias, self.c = inner_weight, inner_bias, nn.Parameter(c)
-
-    def prepare_coefficients(self, loader) -> tuple[Callable[[Tensor], Tensor], Tensor, Tensor]:
-        """Return a fixed-feature objective, Hessian and normalization weights.
-
-        The closure references this problem's objective; it does not copy the
-        network or retain later changes to the sampled targets or neuron support.
-        Training configuration must have been validated before construction.
-        """
-        X, V, dV = full_batch(loader)
-        Phi_v, Phi_g = self.jac_forward(X)
-        normalization_weight = self.normalization_weight(self.inner_weight, self.inner_bias)
-        Phi_v = Phi_v / normalization_weight
-        Phi_g = Phi_g / normalization_weight
-        V, dV = (target.detach().reshape(-1).clone() for target in (V, dV))
-
-        def obj(u):
-            return self.obj((Phi_v @ u, Phi_g @ u), (V, dV))
-
-        return obj, self.hess_obj(Phi_v, Phi_g), normalization_weight
+        self.inner_weight = inner_weight.clone()
+        self.inner_bias = inner_bias.clone()
+        self.c = nn.Parameter(c.clone())
 
     def forward(self, x: Tensor) -> tuple[Tensor, Tensor]:
         """Return value (N,1) and input gradient (N,d), including empty support.
 
-        Both outputs retain autograd in ordinary gradient mode, including the
-        caller's input graph. Under no_grad the input derivative is still
-        evaluated, but neither output retains its graph.
+        The input gradient is a torch.func vector-Jacobian product, so both
+        outputs follow the caller's grad mode, including the caller's input
+        graph. Samples are independent, so a unit cotangent gives each
+        sample's gradient.
         """
-        differentiable = torch.is_grad_enabled()
-        x = x if x.requires_grad else x.detach().requires_grad_(True)
-        with torch.enable_grad():
-            features = self._activation(F.linear(x, self.inner_weight, self.inner_bias)) ** self._power
-            V = F.linear(features, self.c.unsqueeze(0))
-            dV = torch.autograd.grad(V.sum(), x, create_graph=differentiable)[0]
-        return (V, dV) if differentiable else (V.detach(), dV.detach())
+        def value(x: Tensor) -> Tensor:
+            return F.linear(self._rho(F.linear(x, self.inner_weight, self.inner_bias)), self.c.unsqueeze(0))
 
-    def jac_forward(
-        self, x: Tensor,
-        inner_weight: Tensor | None = None, inner_bias: Tensor | None = None,
-        *, warm_start: bool = False,
+        V, value_vjp = torch.func.vjp(value, x)
+        dV, = value_vjp(torch.ones_like(V))
+        return V, dV
+
+    def kernel(
+        self, x: Tensor, inner_weight: Tensor | None = None, inner_bias: Tensor | None = None,
     ) -> tuple[Tensor, Tensor]:
-        """Jacobians of network values and input gradients with respect to c.
+        """Kernel matrices of the atoms K(omega) sampled at x.
 
-        Given samples x and current or supplied inner_weight and inner_bias,
-        return the value Jacobian (N,n) and input-gradient Jacobian (N*d,n)
-        with respect to outer coefficients c. Gradient rows are sample-major.
-
-        Supplied atom parameters retain their gradients for candidate search.
-        warm_start preserves the historical sphere-comparator derivative:
-        its activation derivative is the positive-preactivation indicator,
-        including for leaky_relu and relu2. It does not select an initial step.
+        Columns are the current or supplied atoms; the network is the kernel
+        applied to c. Return the value kernel (N,n) and input-gradient kernel
+        (N*d,n), whose rows are sample-major. Both follow the caller's grad
+        mode, so supplied atoms remain differentiable during candidate search.
         """
         inner_weight = self.inner_weight if inner_weight is None else inner_weight
         inner_bias = self.inner_bias if inner_bias is None else inner_bias
-        differentiable = inner_weight.requires_grad or inner_bias.requires_grad
-        with torch.enable_grad():
-            z = F.linear(x.detach(), inner_weight, inner_bias).requires_grad_(True)
-            act = self._activation(z)
-            Phi_v = act ** self._power
-            if warm_start and self.use_sphere:
-                act_deriv = (z > 0).to(z.dtype)
-                dS_dz = (
-                    act_deriv if self._power == 1.0
-                    else self._power * act ** (self._power - 1) * act_deriv
-                )
-            else:
-                dS_dz = torch.autograd.grad(
-                    Phi_v, z, grad_outputs=torch.ones_like(Phi_v),
-                    create_graph=differentiable,
-                )[0]
-            dS_dx = dS_dz.unsqueeze(2) * inner_weight.unsqueeze(0)
-            Phi_g = dS_dx.permute(0, 2, 1).reshape(x.shape[0] * self.input_dim, inner_weight.shape[0])
-        return (Phi_v, Phi_g) if differentiable else (Phi_v.detach(), Phi_g.detach())
+        z = F.linear(x.detach(), inner_weight, inner_bias)
+        value_kernel, rho_vjp = torch.func.vjp(self._rho, z)
+        rho_derivative, = rho_vjp(torch.ones_like(value_kernel))
+        gradient_kernel = (rho_derivative.unsqueeze(1) * inner_weight.T.unsqueeze(0)).reshape(
+            x.shape[0] * self.input_dim, inner_weight.shape[0],
+        )
+        return value_kernel, gradient_kernel
 
-    def normalization_weight(self, inner_weight: Tensor, inner_bias: Tensor) -> Tensor:
-        """Per-neuron moment divisor for normalized atoms, or one on the sphere.
+    def _rho(self, z: Tensor) -> Tensor:
+        """The paper's activation rho = activation**power, applied elementwise.
 
-        The moment order is fixed, but these weights depend on the supplied
-        neurons and remain differentiable during candidate search.
+        Being elementwise, its Jacobian is diagonal: a unit cotangent gives rho'(z).
         """
+        return self._activation(z) ** self._power
+
+    def moment_weight_of_atoms(
+        self, inner_weight: Tensor | None = None, inner_bias: Tensor | None = None,
+    ) -> Tensor:
+        """Moment weights w_p(omega) = 1 + |omega|^p of the current or supplied atoms.
+
+        Return one weight per atom, or ones on the sphere; the atoms are not
+        modified. The weights remain differentiable during candidate search.
+        """
+        inner_weight = self.inner_weight if inner_weight is None else inner_weight
+        inner_bias = self.inner_bias if inner_bias is None else inner_bias
         return (
             moment_weight(inner_weight, inner_bias, self._moment_order)
             if self.normalized else torch.ones_like(inner_bias)
         )
-
-    def loss(self, u: Tensor, obj: Callable[[Tensor], Tensor]) -> Tensor:
-        """Evaluate the complete objective at u, without modifying u."""
-        return obj(u) + self._alpha * self.sparsity_functional(u)
 
     def obj(self, prediction: tuple[Tensor, Tensor], target: tuple[Tensor, Tensor]) -> Tensor:
         """Weighted empirical H1 quadratic, excluding the sparsity penalty.
@@ -258,16 +222,20 @@ class SparseProblem(nn.Module):
         I = torch.eye(u.numel(), device=u.device, dtype=u.dtype)
         return inverse_step * (I - jac_prox) + self.hess_obj_augmented(u, hess_obj) @ jac_prox
 
-    def obj_augmented(self, u: Tensor, obj: Callable[[Tensor], Tensor]) -> Tensor:
-        """Objective plus the nonconvex correction in the proximal splitting."""
+    def obj_augmented(self, u: Tensor, fitting: Tensor) -> Tensor:
+        """Add the nonconvex splitting correction to the scalar fitting value.
+
+        fitting is obj evaluated at the same u; the caller preserves its
+        autograd graph when derivatives of the augmented objective are needed.
+        """
         if self.penalty_exponent != 1.0:
-            return obj(u)
+            return fitting
         penalized, nonneg = self._masks(u)
         magnitudes = torch.where(nonneg[penalized], u[penalized].clamp_min(0), u[penalized].abs())
-        return obj(u) + self._alpha * (_phi(magnitudes, self._gamma) - magnitudes).sum()
+        return fitting + self._alpha * (_phi(magnitudes, self._gamma) - magnitudes).sum()
 
     def jac_obj_augmented(self, u: Tensor, jac_loss: Tensor) -> Tensor:
-        """Derivative of obj_augmented from the supplied derivative of loss(u).
+        """Derivative of obj_augmented from the supplied derivative of the objective at u.
 
         Retain the original full-gradient subtraction and correction arithmetic,
         including its derivative selection at masked nonsmooth coordinates.

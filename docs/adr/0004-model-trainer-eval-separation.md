@@ -16,28 +16,39 @@ not additional user requirements. Direct registration avoids randomly
 initialized layers that would immediately be overwritten with exact atoms.
 
 The single `forward(x)` returns the network value and its gradient with respect
-to x; callers use `problem(x)` and unpack the pair. `jac_forward` returns the
-Jacobians of both outputs with respect to outer coefficients. Ordinary gradient
-mode preserves differentiation through both outputs; reporting requests
-`no_grad`. Loss weights belong to the objective, not the prediction outputs.
+to x; callers use `problem(x)` and unpack the pair. `kernel` returns the
+value and input-gradient kernel matrices of the current or supplied atoms
+`K(ω)`, which are the Jacobians of both outputs with respect to outer
+coefficients. Both compute input derivatives with `torch.func.vjp`, so they
+follow the caller's grad mode: ordinary gradient mode preserves
+differentiation through both outputs; reporting requests `no_grad`. The
+warm start's historical indicator derivative lives in the warm-start module,
+not in `kernel`. Loss weights belong to the objective, not the prediction outputs.
 This replaces the separate value-only and value-and-gradient prediction methods.
 
 Data stays outside the module, supplied through standard Dataset/DataLoader
 delivery. Data utilities own reading, validation, physical normalization,
 splitting and assembly; the problem owns mathematical evaluations of delivered
 samples. The agreed preparation lifetime is one correction, outside persistent
-problem state. The user rejected the `PreparedObjective` carrier class: useful
-reuse does not require a named type. Preparation returns an objective callable,
-fitting Hessian and normalization tensor as ordinary values. PDAP keeps the
-normalization tensor local for coefficient conversion; SSN receives the callable
-and Hessian. Features, targets and fitting Hessian are reused while SSN changes
-outer coefficients. These calculations provide no network backup. The
+problem state. The user rejected the `PreparedObjective` carrier class and
+subsequently requested that preparation occur directly inside
+`PDAP.train_ssn_outerweights`, renamed from `_correct` and then
+`correct_outer_weights`. That method assembles
+the samples, computes fixed features, normalization and the fitting Hessian,
+and defines the complete coefficient-loss callable locally. There is no
+`SparseProblem.prepare_coefficients` method or preparation-return tuple.
+SSN receives the loss callable and fitting Hessian, evaluating the callable
+directly at current and trial coefficients. Features, targets and fitting
+Hessian are reused while SSN changes outer coefficients. These calculations
+provide no network backup. The
 normalization tensor contains ones for sphere atoms; otherwise its values depend
 on the neurons even when the configured moment order stays fixed.
 `SparseProblem.obj(prediction, target)` is the canonical scalar H1 fitting
-objective. Prepared coefficient fitting calls it using the fixed features and
-targets. This closure can reference the same problem during its correction;
-avoiding a second network does not require forbidding that reference.
+objective. The local coefficient-loss callable evaluates it from the fixed
+features and targets, then adds `alpha * sparsity_functional(u)` itself; there
+is no `SparseProblem.loss` method. `obj_augmented(u, fitting)` receives the
+evaluated scalar and adds the nonconvex correction; it receives no callable. The closure references the same problem during its correction;
+there is no second network or persistent sample cache.
 `jac_obj` and `hess_obj` provide the coefficient gradient and full Hessian of
 that objective, including cross terms. PDAP uses those derivatives for individual
 neuron or combined-direction slopes and curvatures. The former `profile` and
@@ -105,9 +116,24 @@ sphere models while retaining their total variation.
 The user subsequently requested separation of metrics from mathematics.
 Evaluation owns split iteration, reporting denormalization, support diagnostics
 and metric dictionaries; it calls the problem's objective and raw sparsity
-functional. History invokes evaluation and owns one detached checkpoint with
-existing artifact views and a single restoration. Broader logging/backend
-redesign remains deferred. Read-only activation identity and moment order expose
+functional. The accepted metrics/measuring refactor introduces one complete
+`PDAP.step` and an external `run_training` function that owns the outer budget,
+timing, evaluation and recording. PDAP remains a plain class: its support
+insertion/pruning needs structural operations, while a second optimizer parameter
+registry offers no established simplification. SSN retains the native optimizer
+interface for its fixed-support coefficient solve. No observer callback or metric
+framework is needed for the direct external calls.
+
+History stores supplied metrics, solver diagnostics and detached checkpoints,
+retaining existing artifact views, restoration and best-by-training-objective
+selection. Metric calculations remain native PyTorch over the full evaluation
+split. Solver facts originate in PDAP/SSN; runtime measurements surround the
+operations they describe. A failed candidate search is an ordinary algorithmic
+stop, not a convergence proof, and checkpoint rows are distinct from actual work.
+The historical correction-first order keeps its observation position and final
+uncorrected insertion through an explicit runner branch; the complete paper step
+uses insertion-first order. Broader logging/backend redesign remains separate.
+Read-only activation identity and moment order expose
 the existing mathematical facts needed by PDAP and evaluation without copying
 configuration or inspecting private fields.
 
@@ -299,11 +325,12 @@ cache, including on an empty support. A problem has one prepared coefficient
 system at a time, so simultaneous coefficient solves need separate instances.
 
 The mathematical API uses `obj` for the fitting objective, `obj_augmented` for
-that objective plus the nonconvex correction, and `loss` for the fitting
-objective plus the full penalty. Derivatives use `jac_` and `hess_`, including
+that objective plus the nonconvex correction; callers add
+`alpha * sparsity_functional(u)` to form the full objective (updated 2026-10-08:
+the former `loss` method is removed). Derivatives use `jac_` and `hess_`, including
 `jac_obj_augmented`, `hess_obj_augmented`, `jac_prox`, and `jac_normal`.
 `penalty_exponent` names the scalar exponent; `q` remains the proximal preimage.
-For the log family, `loss = obj_augmented + alpha*||u||_1`; for the fractional
+For the log family, the full objective is `obj_augmented + alpha*||u||_1`; for the fractional
 family, `obj_augmented = obj` and the prox handles the complete penalty.
 
 The mathematical radius is returned before applying a numerical cap; PDAP owns

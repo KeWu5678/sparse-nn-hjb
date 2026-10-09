@@ -9,12 +9,12 @@ from src.SSN import SSN
 
 def _make_optimizer(method="levenberg_marquardt", *, curvature=1.0, **options):
     coefficient = torch.nn.Parameter(torch.tensor([1.0], dtype=torch.float64))
-    problem, obj, hess_obj = synthetic_problem(
+    problem, coefficient_loss, hess_obj = synthetic_problem(
         lambda u: 0.5 * curvature * u.square().sum(),
         torch.tensor([[curvature]], dtype=torch.float64),
         alpha=0.0, gamma=0.0,
     )
-    optimizer = SSN([coefficient], problem, obj, hess_obj, method=method, max_iter=1, **options)
+    optimizer = SSN([coefficient], problem, coefficient_loss, hess_obj, method=method, max_iter=1, **options)
     return optimizer, coefficient
 
 
@@ -23,7 +23,7 @@ def test_damped_newton_accepts_the_last_allowed_trial(monkeypatch, max_ls_iter):
     optimizer, coefficient = _make_optimizer(max_ls_iter=max_ls_iter)
     calls = 0
 
-    def loss(u, obj):
+    def loss(u):
         nonlocal calls
         calls += 1
         loss = 0.5 * u.square().sum()
@@ -32,7 +32,7 @@ def test_damped_newton_accepts_the_last_allowed_trial(monkeypatch, max_ls_iter):
             return loss + 1.0
         return loss
 
-    monkeypatch.setattr(optimizer.problem, "loss", loss)
+    monkeypatch.setattr(optimizer, "loss", loss)
     loss = optimizer.step()
 
     assert calls == max_ls_iter + 2  # Initial loss, initial trial, then retries.
@@ -48,7 +48,7 @@ def test_rejection_preserves_parameters_and_returns_original_loss(monkeypatch, m
     original = coefficient.detach().clone()
     losses = []
 
-    def loss(u, obj):
+    def loss(u):
         torch.testing.assert_close(coefficient, original, rtol=0, atol=0)
         loss = 0.5 * u.square().sum()
         if losses:
@@ -56,7 +56,7 @@ def test_rejection_preserves_parameters_and_returns_original_loss(monkeypatch, m
         losses.append(loss)
         return loss
 
-    monkeypatch.setattr(optimizer.problem, "loss", loss)
+    monkeypatch.setattr(optimizer, "loss", loss)
     loss = optimizer.step()
 
     assert loss is losses[0]
@@ -80,7 +80,7 @@ def test_trial_exception_preserves_parameters_and_cause(
     error = exception_type("objective failed")
     calls = 0
 
-    def loss(u, obj):
+    def loss(u):
         nonlocal calls
         calls += 1
         if calls == failure_call:
@@ -90,7 +90,7 @@ def test_trial_exception_preserves_parameters_and_cause(
         loss = 0.5 * u.square().sum()
         return loss if calls == 1 else loss + 1.0
 
-    monkeypatch.setattr(optimizer.problem, "loss", loss)
+    monkeypatch.setattr(optimizer, "loss", loss)
     with pytest.raises(exception_type, match="objective failed") as caught:
         optimizer.step()
 
@@ -118,14 +118,14 @@ def test_linear_solve_exception_restores_parameters_and_propagates(
             raise error
         return solve(*args, **kwargs)
 
-    def loss(u, obj):
+    def loss(u):
         nonlocal value_calls
         value_calls += 1
         loss = 0.5 * u.square().sum()
         return loss if value_calls == 1 else loss + 1.0
 
     monkeypatch.setattr(torch.linalg, "solve", failing_solve)
-    monkeypatch.setattr(optimizer.problem, "loss", loss)
+    monkeypatch.setattr(optimizer, "loss", loss)
     with pytest.raises(exception_type, match="linear solve failed") as caught:
         optimizer.step()
 
@@ -149,13 +149,13 @@ def test_accepted_trust_region_step_updates_persistent_radius(
     optimizer, coefficient = _make_optimizer("steihaug_cg", curvature=curvature, sigmamax=10.0)
     optimizer.state[coefficient]["sigma"] = sigma
 
-    def loss(u, obj):
+    def loss(u):
         return 1.0 + 0.5 * curvature * u.square().sum()
 
-    monkeypatch.setattr(optimizer.problem, "loss", loss)
+    monkeypatch.setattr(optimizer, "loss", loss)
     loss = optimizer.step()
 
     assert optimizer.last_step_success
     assert coefficient.item() == pytest.approx(expected_coefficient)
     assert optimizer.state[coefficient]["sigma"] == pytest.approx(expected_sigma)
-    torch.testing.assert_close(loss, optimizer.problem.loss(coefficient, optimizer.obj))
+    torch.testing.assert_close(loss, optimizer.loss(coefficient))

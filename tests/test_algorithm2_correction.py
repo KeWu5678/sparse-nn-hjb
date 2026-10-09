@@ -7,7 +7,9 @@ import torch
 from ssn_test_problem import synthetic_problem
 
 from src.config import resolve_model, validate_training
+from src.config.schema import TrainingConfig
 from src.data import make_dataloader
+from src.PDAP import PDAP
 from src.problems import SparseProblem
 from src.problems.penalty import _noncvx_penalty
 from src.SSN import SSN
@@ -35,12 +37,12 @@ def test_prox_scale_for_fractional_penalty_preserves_a_smaller_existing_scale() 
 
 def test_fractional_ssn_chooses_the_scale_from_its_starting_coefficients() -> None:
     coefficient = torch.nn.Parameter(torch.tensor([0.5], dtype=torch.float64))
-    problem, obj, hess_obj = synthetic_problem(
+    problem, coefficient_loss, hess_obj = synthetic_problem(
         lambda u: 0.5 * u.square().sum(), torch.eye(1, dtype=torch.float64),
         alpha=1.0, gamma=0.0, power=3.0,
     )
 
-    optimizer = SSN([coefficient], problem, obj, hess_obj)
+    optimizer = SSN([coefficient], problem, coefficient_loss, hess_obj)
     assert optimizer.param_groups[0]["inverse_step"] == pytest.approx(4 * 2 ** .5)
 
 
@@ -66,12 +68,12 @@ def test_fractional_correction_reports_an_all_zero_warm_start() -> None:
         torch.zeros_like(X),
     )
 
-    obj, hess_obj, _ = problem.prepare_coefficients(make_dataloader(data))
-    theta = torch.nn.Parameter(problem.c.detach().clone())
     with pytest.raises(
         ValueError, match="warm-start proximal scaling requires a nonzero coefficient"
     ):
-        SSN([theta], problem, obj, hess_obj, max_iter=1)
+        PDAP(TrainingConfig(fit_outer_iterations=1)).train_ssn_outerweights(
+            problem, make_dataloader(data),
+        )
 
 
 def test_fractional_ssn_preserves_a_prox_consistent_warm_start() -> None:
@@ -89,16 +91,16 @@ def test_fractional_ssn_preserves_a_prox_consistent_warm_start() -> None:
             + 0.5 * curvature * value.square()
         )
 
-    problem, obj, hess_obj = synthetic_problem(
+    problem, coefficient_loss, hess_obj = synthetic_problem(
         data_loss, torch.tensor([[curvature]], dtype=torch.float64),
         alpha=alpha, gamma=0.0, power=3.0,
     )
     prox_scale = problem.prox_scale_for_fractional_penalty(coefficient.detach(), rho=0.9)
-    optimizer = SSN([coefficient], problem, obj, hess_obj, prox_scale=prox_scale, tolerance_grad=0.0, max_iter=1)
+    optimizer = SSN([coefficient], problem, coefficient_loss, hess_obj, prox_scale=prox_scale, tolerance_grad=0.0, max_iter=1)
 
-    before = float(problem.loss(coefficient, obj).detach())
+    before = float(coefficient_loss(coefficient).detach())
     optimizer.step()
-    after = float(problem.loss(coefficient, obj).detach())
+    after = float(coefficient_loss(coefficient).detach())
 
     assert optimizer.last_step_success
     assert after <= before
@@ -142,11 +144,11 @@ def test_fractional_ssn_uses_the_closed_form_prox_derivative(
         value = u[0]
         return linear * value + value.square()
 
-    problem, obj, hess_obj = synthetic_problem(
+    problem, coefficient_loss, hess_obj = synthetic_problem(
         data_loss, torch.tensor([[2.0]], dtype=torch.float64),
         alpha=alpha, gamma=0.0, power=power,
     )
-    optimizer = SSN([coefficient], problem, obj, hess_obj, prox_scale=prox_scale, tolerance_grad=0.0, max_iter=1)
+    optimizer = SSN([coefficient], problem, coefficient_loss, hess_obj, prox_scale=prox_scale, tolerance_grad=0.0, max_iter=1)
     optimizer.step()
 
     assert optimizer.last_step_success

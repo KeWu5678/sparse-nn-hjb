@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Dict, Tuple
 import torch
 
 from .data import full_batch
-from .problems.moment import amplitude_mass_radius, moment_weight
+from .problems.moment import amplitude_mass_radius
 
 if TYPE_CHECKING:
     from .problems import SparseProblem
@@ -21,12 +21,10 @@ if TYPE_CHECKING:
 def metrics(problem: SparseProblem, train_loader, valid_loader=None, reporting_normalizer=None) -> dict[str, float | None]:
     """Evaluate splits and support diagnostics using the persisted metric names."""
     inner_weight, inner_bias, c = problem.inner_weight, problem.inner_bias, problem.c.detach()
-    u = c * problem.normalization_weight(inner_weight, inner_bias)
+    u = c * problem.moment_weight_of_atoms()
     phi = problem.sparsity_functional(u) if c.numel() else c.new_zeros(())
-    psi = None  # The sphere formulation has no moment order or moment diagnostic.
-    if problem.moment_order is not None:
-        weights = moment_weight(inner_weight, inner_bias, problem.moment_order)
-        psi = float(torch.sum(weights.reshape(-1) * c.reshape(-1).abs()))
+    # psi_p = sum w_p|c| = ||u||_1. The sphere formulation has no moment diagnostic.
+    psi = float(u.abs().sum()) if problem.moment_order is not None else None
     alpha_phi = float(problem.alpha * phi)
     radius = torch.sqrt((inner_weight * inner_weight).sum(dim=-1) + inner_bias * inner_bias)
     values = {

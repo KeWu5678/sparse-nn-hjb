@@ -11,6 +11,7 @@ from src.config.schema import EnvConfig, ExperimentConfig, ModelConfig, Training
 from src.data import make_dataloaders
 from src.PDAP import PDAP
 from src.problems import SparseProblem
+from src.training import run_training
 
 
 @pytest.mark.parametrize("power", [1.0, 2.0, 3.0])
@@ -33,6 +34,7 @@ def test_algorithm2_fits_an_exact_relu_power_atom(power: float) -> None:
             gamma=0.0,
         ),
         training=TrainingConfig(
+            num_insertion=20, max_insert=1,
             insert_mode="sequential",
             loop_order="insertion_first",
             correction_guard=True,
@@ -46,13 +48,12 @@ def test_algorithm2_fits_an_exact_relu_power_atom(power: float) -> None:
     model = SparseProblem(model_config)
     train_loader, valid_loader = make_dataloaders(data, cfg.data.train_fraction)
 
-    history = PDAP(cfg.training, insertion=model_config["insertion"]).fit(
+    history = run_training(
+        PDAP(cfg.training, insertion=model_config["insertion"]),
         model,
         train_loader,
         valid_loader,
         num_iterations=2,
-        num_insertion=20,
-        max_insert=1,
         verbose=False,
     )
 

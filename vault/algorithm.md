@@ -7,7 +7,7 @@ critical parameters, implementation gotchas, and a script index.
 ## PDAP loop (one `PDAP` class, configured by `model=` / `insertion=`)
 
 ```
-PDAP.fit() outer iteration:
+PDAP.step() — one complete paper iteration:
   1. Candidate search
        - Algorithm 1: random starts inside R_search, one unconstrained joint
          L-BFGS solve, final-radius filter, Euclidean deduplication.
@@ -27,8 +27,12 @@ PDAP.fit() outer iteration:
   4. Prune coefficients at or below the amplitude tolerance.
 ```
 
-The single `PDAP` loop drives `SparseProblem` and the insertion strategy from
-`src/PDAP/insertion.py`. The historical semiconcave
+The plain `PDAP` class updates `SparseProblem` using the insertion strategy from
+`src/PDAP/insertion.py`. `run_training` in `src/training.py` repeats the steps,
+evaluates their results, and records History. Its explicit historical
+`correction_first` branch preserves initialization, correction/pruning,
+observation, and then insertion, including the last uncorrected insertion.
+The historical semiconcave
 parametrization was retired by ADR 0012; its archived design and empirical notes
 remain in `semiconcave_model.md`. The insertion-candidate merge tolerance
 (1e-2) is distinct from the prune amplitude tolerance.
@@ -119,7 +123,7 @@ search's L-BFGS optimizer.
    the exact one-atom coefficient. Its smallest nonzero magnitude fixes the
    proximal scale for the entire correction.
 2. **Use the normal-map smooth gradient**: Autograd differentiates the full
-   `loss`; `SparseProblem.jac_obj_augmented` subtracts the full penalty gradient
+   objective `obj + alpha*sparsity_functional` built by PDAP; `SparseProblem.jac_obj_augmented` subtracts the full penalty gradient
    and applies the smooth nonconvex correction. SSN uses this returned gradient.
 3. **SSN line search uses full objective**: Data loss + regularization. Without regularization, sparsifying steps get rejected.
 4. **Loss normalization**: The empirical fidelity divides the value and full
@@ -141,22 +145,27 @@ warm-start selection; SparseProblem supplies their mathematical evaluations.
   - `sparse_problem.py` — `SparseProblem(nn.Module)` reads resolved configuration
     and registers `inner_weight` and
     `inner_bias` as buffers and `c` as its parameter. `forward` returns network
-    values and input gradients; `jac_forward` supplies their coefficient
-    Jacobians. `obj`, `jac_obj`, and `hess_obj` supply fitting and its coefficient
-    derivatives, alongside penalty/proximal/normal-map calculations. Preparation
-    returns an objective callable, Hessian and normalization tensor for one
-    coefficient correction. There is no separate model or objective-carrier
-    class, or persistent feature cache.
+    values and input gradients; `kernel` supplies the kernel matrices of the
+    current or supplied atoms, i.e. their coefficient Jacobians. `obj`, `jac_obj`,
+    and `hess_obj` supply fitting and its coefficient derivatives, alongside
+    penalty/proximal/normal-map calculations. `PDAP.train_ssn_outerweights`
+    prepares the coefficient loss, Hessian and normalization for one correction.
+    There is no separate model or objective-carrier class, or persistent
+    feature cache.
   - `penalty.py`, `prox.py`, `moment.py` — mathematical helpers.
 - `PDAP/` — candidate search/acceptance, warm-start, support changes, and correction scheduling:
-  - `pdap.py` — `PDAP.fit(problem, train_loader, valid_loader, ...)`, configured
-    by `insertion=` ("profile" or "finite_step").
+  - `pdap.py` — plain `PDAP` with `step(problem, train_loader)` for one complete
+    paper iteration, configured by `insertion=` ("profile" or "finite_step").
+    Returns solver facts and an algorithmic stop reason; evaluation and History
+    are outside the class.
   - `insertion.py` — profile-threshold and finite-step candidate selection and
     insertion objective change.
   - `radius.py` — theorem certificate radius; PDAP applies its cap and fallback.
-  - `warmstart.py` — warm-start procedure and initialization using problem calculations.
-  - `history.py` — invokes evaluation, owns one snapshot per checkpoint with
-    artifact views, and selects the best checkpoint.
+  - `warmstart.py` — warm-start procedure and initialization using problem calculations,
+    including the historical indicator derivative of its sphere kernel.
+  - `history.py` — stores supplied measurements and one detached snapshot per
+    checkpoint with artifact views; selects the earliest minimum training
+    objective. Execution totals also include work without a new checkpoint.
 - `SSN/` — the semismooth Newton optimizer:
   - `optimizer.py` — `SSN(Optimizer)`. One `step()` runs the complete configured
     correction on supplied coefficients and owns its final acceptance/fallback.
@@ -166,6 +175,10 @@ warm-start selection; SparseProblem supplies their mathematical evaluations.
   and complete-sample assembly. Loaders and samples remain external to the model.
 - `eval.py` — relative errors and metric/report assembly, using the problem's
   canonical `obj` and sparsity functional for its objective mathematics.
+- `training.py` — external `run_training` loop, timing, evaluation, recording
+  and progress output. The budget belongs here; PDAP decides whether candidate
+  search provides another admissible update. Native PyTorch evaluates each full
+  split without a metric-framework dependency or streaming accumulator.
 - `results.py` — saved-history reconstruction and physical-coordinate prediction.
 - `metric.py` — experiment-analysis utilities (per-gamma neuron/loss tables, plots).
 - `config/` — Hydra structured configuration for PDAP training:
@@ -195,8 +208,31 @@ warm-start selection; SparseProblem supplies their mathematical evaluations.
 
 ```
 VDP / pendulum samples -> external preprocessing -> DataLoaders
-SparseProblem + DataLoaders -> PDAP.fit -> History -> saved-run evaluation
+SparseProblem + PDAP + DataLoaders -> run_training -> History -> saved-run evaluation
 ```
+
+```python
+pdap = PDAP(cfg.training, insertion=model_config["insertion"])
+history = run_training(
+    pdap, problem, train_loader, valid_loader,
+    num_iterations=cfg.training.num_iterations,
+    reporting_normalizer=normalizer,
+)
+```
+
+The runner passes any reporting normalizer directly to evaluation. History
+receives the resulting scalar values and never initiates data loading or metric
+evaluation. Existing quality keys and best-checkpoint selection stay unchanged.
+`iterations` remains the historical checkpoint-row count; explicit execution
+counters describe searches and coefficient corrections, including a terminal
+failed search or the legacy final insertion. No-candidate termination and budget
+exhaustion are distinct from a mathematical convergence guarantee.
+
+Runtime fields distinguish wall time spent in solver operations from evaluation.
+`process_peak_rss_bytes` is the current process's lifetime high-water resident
+memory on macOS/Linux, excluding child workers. It is not a solver-only peak or
+an isolated per-run allocation measurement. Detailed profiling is separate.
+
 Training data may be a legacy key-based `.npy` file or a newer `.npz` file; both must expose `x`, `v`, and `dv` arrays.
 VDP experiments: `notebook/pdpa_vdp.ipynb` (pickles in `models/experiment_N/`).
 Activation/model studies: `scripts/*` -> `autoresearch/*`.
