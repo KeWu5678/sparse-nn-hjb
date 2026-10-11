@@ -41,7 +41,7 @@ def test_damped_newton_accepts_the_last_allowed_trial(max_ls_iter):
 
 
 @pytest.mark.parametrize("method", ["levenberg_marquardt", "steihaug_cg"])
-@pytest.mark.parametrize("trial_loss", [1.0, float("nan")])
+@pytest.mark.parametrize("trial_loss", [1.0, float("nan"), float("-inf")])
 def test_rejection_restores_parameters_and_returns_original_loss(method, trial_loss):
     optimizer, coefficient = _make_optimizer(method, max_ls_iter=2)
     original = coefficient.detach().clone()

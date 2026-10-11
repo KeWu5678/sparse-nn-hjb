@@ -52,12 +52,18 @@ def test_final_guard_rejects_a_worsening_trial_allowed_by_local_tolerance(guard)
 @pytest.mark.parametrize("guard", [True, False])
 def test_nonfinite_final_loss_restores_starting_coefficients(guard):
     coefficient = torch.nn.Parameter(torch.tensor([1.], dtype=torch.float64))
+    calls = 0
 
     def fitting(u):
-        return torch.where(u.abs() < .1, u.new_tensor(-torch.inf), .5 * u.square()).sum()
+        nonlocal calls
+        calls += 1
+        value = .5 * u.square().sum()
+        # The step's own objective (after the starting one) is NaN with a finite
+        # gradient, so every trial is rejected and the step returns that NaN.
+        return value + torch.nan if calls == 2 else value
 
     proximal, coefficient_loss, hess_obj = synthetic_correction(fitting, torch.eye(1, dtype=torch.float64), alpha=0.)
-    optimizer = SSN([coefficient], proximal, hess_obj)
+    optimizer = SSN([coefficient], proximal, hess_obj, max_ls_iter=2)
     diagnostics = correct_coefficients(
         optimizer, coefficient, closure_for(optimizer, coefficient, coefficient_loss),
         iterations=1, correction_guard=guard,

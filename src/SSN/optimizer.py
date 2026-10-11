@@ -33,7 +33,8 @@ class SSN(Optimizer):
         proximal: penalty and proximal maps evaluated at a supplied flat vector.
         hess_obj: Hessian of the fitting term only, excluding the penalty.
         max_ls_iter: maximum damping retries after the initial trial.
-        tolerance_ls: accept damped loss <= tolerance_ls * current loss.
+        tolerance_ls: accept a finite damped trial whose objective is at most
+            loss + (tolerance_ls - 1)*|loss|, the current objective loss.
         method: "levenberg_marquardt" (legacy damped-Newton name) or "steihaug_cg".
         sigmamax: maximum trust-region radius.
         tolerance_grad: skip the step's Newton work when ||G(q)||_inf is at or
