@@ -140,12 +140,7 @@ def test_recorded_checkpoints_stay_independent_of_models_and_each_other():
 
 
 @pytest.mark.parametrize("alpha", [0.0, 0.1])
-@pytest.mark.parametrize("penalized,nonnegative,expected_phi", [
-    (None, None, 455.0),
-    ([True, False, True], None, 230.0),
-    (None, [False, True, False], 230.0),
-])
-def test_history_summary_records_normalized_objective_decomposition(alpha, penalized, nonnegative, expected_phi) -> None:
+def test_history_summary_records_normalized_objective_decomposition(alpha) -> None:
     W = torch.tensor([[1.0, 0.0], [0.0, 2.0], [3.0, 4.0]], dtype=torch.float64)
     b = torch.zeros(3, dtype=torch.float64)
     c = torch.tensor([50.0, -45.0, 5.0], dtype=torch.float64)
@@ -154,11 +149,7 @@ def test_history_summary_records_normalized_objective_decomposition(alpha, penal
     config = resolve_model({"activation": "tanh", "alpha": alpha, "gamma": 0.0,
                             "loss_weights": (1.0, 1.0), "moment_order": 2.0}, 2)
     problem = SparseModel(config)
-    proximal = proximal_for(
-        config, problem,
-        penalized_mask=None if penalized is None else torch.tensor(penalized),
-        nonneg_mask=None if nonnegative is None else torch.tensor(nonnegative),
-    )
+    proximal = proximal_for(config, problem)
     problem.set_atoms(W, b, c)
     samples = (x, *problem(x))
 
@@ -167,10 +158,9 @@ def test_history_summary_records_normalized_objective_decomposition(alpha, penal
     metrics = history.summary_metrics()
 
     # The full moment is 50*(1+1) + 45*(1+4) + 5*(1+25) = 455.
-    # Either mask removes the middle coefficient's 225 penalty contribution.
-    assert math.isclose(metrics["phi_1"], expected_phi, rel_tol=1e-12)
+    assert math.isclose(metrics["phi_1"], 455.0, rel_tol=1e-12)
     assert math.isclose(metrics["psi_p"], 455.0, rel_tol=1e-12)
-    assert math.isclose(metrics["alpha_phi_1"], alpha * expected_phi, rel_tol=1e-12)
+    assert math.isclose(metrics["alpha_phi_1"], alpha * 455.0, rel_tol=1e-12)
     assert math.isclose(metrics["radius_r95"], 2.0, rel_tol=1e-12)
     assert math.isclose(metrics["radius_max"], 5.0, rel_tol=1e-12)
     assert math.isclose(metrics["total_variation"], 100.0, rel_tol=1e-12)
@@ -179,7 +169,7 @@ def test_history_summary_records_normalized_objective_decomposition(alpha, penal
     # complete objective is exactly the normalized-measure penalty.
     assert metrics["data_value_term_train"] == 0.0
     assert metrics["data_gradient_term_train"] == 0.0
-    assert math.isclose(metrics["objective_train"], alpha * expected_phi, rel_tol=1e-12)
+    assert math.isclose(metrics["objective_train"], alpha * 455.0, rel_tol=1e-12)
     assert math.isclose(
         metrics["objective_train"],
         metrics["data_value_term_train"]

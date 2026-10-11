@@ -1,7 +1,6 @@
 """Golden characterization tests locking the behaviour of the SSN optimizer.
 
-These tests pin step-by-step iterates for both globalization strategies and the
-generic masked-coordinate API.
+These tests pin step-by-step iterates for both globalization strategies.
 
 Golden values live in ``tests/fixtures/ssn_golden.npz``.  Regenerate them only
 from a known-good tree:  ``SSN_UPDATE_GOLDEN=1 pytest tests/test_ssn_equivalence.py``.
@@ -43,10 +42,9 @@ def _make_quadratic(P: int, Nx: int, seed: int):
     return A, y, H
 
 
-def _penalty(theta, mask, alpha, gamma, q):
+def _penalty(theta, alpha, gamma, q):
     """Log or power regularizer with the legacy nonnegative clamp."""
-    sel = theta[mask]
-    sel = sel.clamp_min(0.0)
+    sel = theta.clamp_min(0.0)
     arg = sel if q == 1.0 else sel.clamp_min(1e-30) ** q
     return alpha * torch.sum(_phi(arg, gamma))
 
@@ -61,8 +59,6 @@ def _run_trajectory(config: dict) -> np.ndarray:
     A, y, H = _make_quadratic(P, Nx, seed=config["seed"])
     theta = torch.nn.Parameter(config["theta0"].clone())
 
-    pen_mask = config.get("penalized_mask", torch.ones(P, dtype=torch.bool))
-
     def data_loss(u):
         r = A @ u - y
         return 0.5 / Nx * (r @ r)
@@ -72,15 +68,10 @@ def _run_trajectory(config: dict) -> np.ndarray:
     # rather than silently changing its objective or regenerating its fixtures.
     model_config = resolve_model({"alpha": alpha, "gamma": gamma, "power": power}, P)
     validate_training(model_config)
-    proximal = Proximal(
-        alpha, gamma, SparseModel(model_config).penalty_exponent,
-        penalized_mask=pen_mask, nonneg_mask=config.get("nonneg_mask"),
-    )
+    proximal = Proximal(alpha, gamma, SparseModel(model_config).penalty_exponent)
 
     def coefficient_loss(u):
-        return data_loss(u) + _penalty(
-            u, proximal.masks(u)[0], proximal.alpha, proximal.gamma, proximal.penalty_exponent,
-        )
+        return data_loss(u) + _penalty(u, proximal.alpha, proximal.gamma, proximal.penalty_exponent)
 
     kind = config["kind"]
     if kind == "ssn":
@@ -91,8 +82,6 @@ def _run_trajectory(config: dict) -> np.ndarray:
     elif kind == "ssn_tr":
         # folded into the base SSN: trust-region (Steihaug-CG) globalization
         opt = SSN([theta], proximal, coefficient_loss, H, method="steihaug_cg", max_iter=1, correction_guard=False)
-    elif kind == "ssn_masked":
-        opt = SSN([theta], proximal, coefficient_loss, H, max_iter=1, correction_guard=False)
     else:  # pragma: no cover
         raise ValueError(kind)
 
@@ -117,12 +106,6 @@ def _configs() -> dict[str, dict]:
         "ssn_tr_signed": dict(
             kind="ssn_tr", P=4, Nx=20, alpha=1e-2, gamma=1.0, power=1.0,
             seed=3, theta0=t4,
-        ),
-        "ssn_masked_free_coord": dict(
-            kind="ssn_masked", P=4, Nx=20, alpha=1e-2, gamma=1.0,
-            power=1.0, seed=4, theta0=torch.tensor([0.5, 0.5, 0.3, 0.0], dtype=torch.float64),
-            penalized_mask=torch.tensor([True, True, False, False]),
-            nonneg_mask=torch.tensor([True, True, True, False]),
         ),
     }
 

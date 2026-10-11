@@ -25,25 +25,11 @@ class Proximal:
     alpha*sum(phi_gamma(|u|) - |u|). For the power family q < 1 and the
     correction is zero. Proximal maps take the proximal constant lambda_:
     prox(v) = argmin_c (c - v)^2/2 + lambda_*|c|^q.
-
-    Optional masks select penalized and nonnegative coordinates of u and must
-    match its length. Unpenalized coordinates carry no penalty; nonnegative
-    coordinates are clamped at zero by the proximal maps.
     """
 
-    def __init__(
-        self,
-        alpha: float,
-        gamma: float,
-        penalty_exponent: float,
-        *,
-        penalized_mask: Tensor | None = None,
-        nonneg_mask: Tensor | None = None,
-    ) -> None:
+    def __init__(self, alpha: float, gamma: float, penalty_exponent: float) -> None:
         self._alpha, self._gamma = alpha, gamma
         self._penalty_exponent = penalty_exponent
-        self._penalized_mask = penalized_mask
-        self._nonneg_mask = nonneg_mask
 
     @property
     def alpha(self) -> float:
@@ -62,10 +48,8 @@ class Proximal:
         return self._alpha * self.sparsity_functional(u)
 
     def sparsity_functional(self, u: Tensor) -> Tensor:
-        """Unweighted log/power functional Phi on the supplied penalty coordinates."""
-        magnitudes = self._magnitudes(u)
-        if magnitudes.numel() == 0:
-            return u.new_zeros(())
+        """Unweighted log/power functional Phi."""
+        magnitudes = torch.abs(u)
         if self._penalty_exponent == 1.0:
             return torch.sum(_phi(magnitudes, self._gamma))
         powers = torch.where(
@@ -75,72 +59,34 @@ class Proximal:
         )
         return torch.sum(powers)
 
-    def _magnitudes(self, u: Tensor) -> Tensor:
-        """Penalized |u|, using max(u, 0) on nonnegative coordinates."""
-        penalized, nonneg = self.masks(u)
-        coefficients = u[penalized]
-        return torch.where(nonneg[penalized], coefficients.clamp_min(0.0), coefficients.abs())
-
-    def masks(self, u: Tensor) -> tuple[Tensor, Tensor]:
-        """Penalized and nonnegative coordinate masks for u, defaulting to all and none."""
-        return (
-            self._mask(self._penalized_mask, u, True, "penalized_mask"),
-            self._mask(self._nonneg_mask, u, False, "nonneg_mask"),
-        )
-
-    @staticmethod
-    def _mask(mask: Tensor | None, coordinates: Tensor, default: bool, name: str) -> Tensor:
-        if mask is None:
-            return torch.full_like(coordinates, default, dtype=torch.bool)
-        if mask.shape != coordinates.shape:
-            raise ValueError(f"{name} length must match the problem dimension")
-        return mask.to(dtype=torch.bool, device=coordinates.device)
-
     def jac_penalty(self, u: Tensor) -> Tensor:
         """Derivative of the penalty, selecting zero at u = 0 for the power family."""
         if self._penalty_exponent == 1.0:
-            return self._alpha_vec(u) * _dphi(torch.abs(u), self._gamma) * torch.sign(u)
+            return self._alpha * _dphi(torch.abs(u), self._gamma) * torch.sign(u)
         return torch.where(torch.abs(u) > 0, self.jac_fractional_penalty(u), torch.zeros_like(u))
-
-    def _alpha_vec(self, u: Tensor) -> Tensor:
-        return self._penalized_constant(u, self._alpha)
-
-    def _penalized_constant(self, u: Tensor, value: float) -> Tensor:
-        penalized, _ = self.masks(u)
-        return torch.where(penalized, torch.full_like(u, float(value)), torch.zeros_like(u))
 
     def jac_fractional_penalty(self, u: Tensor) -> Tensor:
         """Derivative of alpha*sum|u|^q where u != 0; the value at u = 0 is unspecified."""
-        alpha_vec = self._alpha_vec(u)
         if self._penalty_exponent == 1.0:
-            return alpha_vec * torch.sign(u)
+            return self._alpha * torch.sign(u)
         s = torch.abs(u).clamp(min=1e-30)
-        return alpha_vec * self._penalty_exponent * s ** (self._penalty_exponent - 1) * torch.sign(u)
-
-    def correction(self, u: Tensor) -> Tensor:
-        """Smooth correction: the penalty minus the fractional penalty."""
-        if self._penalty_exponent != 1.0:
-            return u.new_zeros(())
-        magnitudes = self._magnitudes(u)
-        return self._alpha * (_phi(magnitudes, self._gamma) - magnitudes).sum()
+        return self._alpha * self._penalty_exponent * s ** (self._penalty_exponent - 1) * torch.sign(u)
 
     def jac_correction(self, u: Tensor) -> Tensor:
         """Derivative of the smooth correction."""
         if self._penalty_exponent != 1.0:
             return torch.zeros_like(u)
-        return self._alpha_vec(u) * (torch.sign(u) * (_dphi(torch.abs(u), self._gamma) - 1.0))
+        return self._alpha * (torch.sign(u) * (_dphi(torch.abs(u), self._gamma) - 1.0))
 
     def hess_correction(self, u: Tensor) -> Tensor:
         """Diagonal Hessian matrix of the smooth correction."""
         if self._penalty_exponent != 1.0:
             return torch.diag(torch.zeros_like(u))
-        return torch.diag(self._alpha_vec(u) * _ddphi(torch.abs(u), self._gamma))
+        return torch.diag(self._alpha * _ddphi(torch.abs(u), self._gamma))
 
     def prox(self, q: Tensor, lambda_: float) -> Tensor:
-        """Proximal map of the fractional penalty, including nonnegative coordinates."""
-        out = self._closed_form_prox(q, self._penalized_constant(q, lambda_))
-        kill = self.masks(q)[1] & (q < 0)
-        return torch.where(kill, torch.zeros_like(out), out)
+        """Proximal map of the fractional penalty."""
+        return self._closed_form_prox(q, torch.full_like(q, float(lambda_)))
 
     def _closed_form_prox(self, v: Tensor, lambda_) -> Tensor:
         """Global proximal map of lambda_*|.|^q, choosing the closed form by the exact q."""
@@ -152,13 +98,12 @@ class Proximal:
 
     def jac_prox(self, q: Tensor, lambda_: float, *, prox_image: Tensor) -> Tensor:
         """Selected proximal Jacobian at q; prox_image must be prox(q, lambda_)."""
-        constant = self._penalized_constant(q, lambda_)
+        constant = torch.full_like(q, float(lambda_))
         if self._penalty_exponent == 1.0:
             diagonal = _compute_prox_derivative_q_one(q, constant)
         else:
             diagonal = _compute_prox_derivative_fractional(q, constant, self._penalty_exponent, prox_image)
-        kill = self.masks(q)[1] & (q < 0)
-        return torch.diag(torch.where(kill, torch.zeros_like(prox_image), diagonal))
+        return torch.diag(diagonal)
 
     def penalty_prox(self, value: float, lambda_: float) -> float:
         """Selected nonnegative proximal value for the full scalar penalty.
@@ -174,7 +119,7 @@ class Proximal:
     def fractional_prox(self, value: float, lambda_: float) -> float:
         """Scalar proximal value of the fractional penalty, including its q=1 safeguard.
 
-        Retain scalar scale arithmetic; the masked vector prox has a different
+        Retain scalar scale arithmetic; the vector prox has a different
         floating-point evaluation order and must keep its own numerical contract.
         """
         v = torch.tensor([value], dtype=torch.float64)

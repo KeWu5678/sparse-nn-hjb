@@ -1,4 +1,4 @@
-"""Fixed log penalty, its SSN splitting, and masked objective evaluation."""
+"""Fixed log penalty, its SSN splitting, and objective evaluation."""
 
 import pytest
 import torch
@@ -36,16 +36,13 @@ def test_penalty_gradient_and_ssn_remainder(q: float, gamma: float) -> None:
     remainder = value - alpha * u.abs().sum() if q == 1 else (0 * u.square()).sum()
     (first,) = torch.autograd.grad(remainder, u, create_graph=True)
     (second,) = torch.autograd.grad(first.sum(), u)
-    torch.testing.assert_close(proximal.correction(u), remainder)
     torch.testing.assert_close(proximal.jac_correction(u), first)
     torch.testing.assert_close(proximal.hess_correction(u), torch.diag(second))
 
 
 @pytest.mark.parametrize(("q", "gamma"), [(1.0, 0.0), (1.0, 1.0), (0.5, 0.0), (2 / 3, 0.0)])
-def test_penalty_respects_masks_and_signed_magnitudes(q: float, gamma: float) -> None:
-    coefficients = torch.tensor([-2.0, -3.0, 4.0, 100.0, 0.0], dtype=torch.float64)
-    penalized = torch.tensor([True, True, True, False, True])
-    nonneg = torch.tensor([False, True, True, False, False])
+def test_penalty_uses_the_magnitudes_of_signed_coefficients(q: float, gamma: float) -> None:
+    coefficients = torch.tensor([-2.0, 4.0, 0.0], dtype=torch.float64)
     magnitudes = torch.tensor([2.0, 4.0], dtype=torch.float64)
     if q != 1:
         expected = magnitudes.pow(q).sum()
@@ -54,19 +51,6 @@ def test_penalty_respects_masks_and_signed_magnitudes(q: float, gamma: float) ->
     else:
         expected = (magnitudes / 2 + torch.log1p(2 * gamma * magnitudes) / (4 * gamma)).sum()
 
-    proximal = Proximal(0.3, gamma, q, penalized_mask=penalized, nonneg_mask=nonneg)
-    actual = proximal.penalty(coefficients)
+    actual = Proximal(0.3, gamma, q).penalty(coefficients)
 
     torch.testing.assert_close(actual, 0.3 * expected)
-
-
-def test_unpenalized_coordinates_give_a_scalar_zero() -> None:
-    coefficients = torch.tensor([-2.0, 3.0], dtype=torch.float64)
-    mask = torch.zeros(2, dtype=torch.bool)
-
-    value = Proximal(1.0, 1.0, 1.0, penalized_mask=mask, nonneg_mask=mask).penalty(coefficients)
-
-    assert value.shape == ()
-    assert value.dtype == coefficients.dtype
-    assert value.device == coefficients.device
-    assert value.item() == 0.0

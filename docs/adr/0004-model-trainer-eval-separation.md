@@ -81,8 +81,8 @@ when accepted changes are applied to the persistent network.
 Update 2026-10-09: `Proximal` (`src/models/proximal.py`) owns the penalty
 term αΦ of the objective and its proximal maps: Φ, the penalty and its
 derivative, the split into the fractional penalty α·Σ|u|^q that the prox
-handles and a smooth correction, the vector and scalar proximal maps, and the
-optional coordinate masks. Its maps take the proximal constant λ. It is built
+handles and a smooth correction, and the vector and scalar proximal maps.
+Its maps take the proximal constant λ. It is built
 from the configured α and γ and the problem's penalty exponent q = 2/(k+1),
 the only penalty value `SparseModel` supplies. `SparseModel` keeps the
 network, kernel, moment weights and fitting objective. Training setup builds one
@@ -114,8 +114,9 @@ ordinary runtime mapping, keeping the original Hydra settings unchanged for
 serialization. Training setup calls `validate_training(runtime)` with the same
 insertion selection used by PDAP, then constructs `SparseModel(runtime)`.
 Prediction setup resolves its settings without imposing training restrictions,
-preserving callable activations and historical powers. Runtime coefficient
-masks are `Proximal` constructor arguments. There is no model-owned configuration
+preserving callable activations and historical powers. `Proximal` has no
+coordinate masks: their only production user, the semiconcave model, was
+retired in ADR 0012. There is no model-owned configuration
 factory or validation wrapper, replacement configuration class, or stored
 validation flag.
 

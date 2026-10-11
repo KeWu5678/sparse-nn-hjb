@@ -171,7 +171,7 @@ class SSN(Optimizer):
         """Smooth part of the objective's derivative, from the supplied full derivative at u.
 
         Retain the original full-gradient subtraction and correction arithmetic,
-        including its derivative selection at masked nonsmooth coordinates.
+        including its derivative selection at nonsmooth coordinates.
         """
         return (jac_loss - self.proximal.jac_penalty(u)) + self.proximal.jac_correction(u)
 
@@ -182,15 +182,12 @@ class SSN(Optimizer):
     def prox_preimage(self, u: Tensor, jac_obj_augmented: Tensor) -> Tensor:
         """Reconstruct q from a prox-consistent iterate, following MATLAB SSN.m.
 
-        Nonzero penalized entries use the fractional penalty's stationarity
-        equation; zero entries use the smooth gradient. The proximal map is the
-        identity on unpenalized coordinates, whose preimage remains u.
+        Nonzero entries use the fractional penalty's stationarity equation;
+        zero entries use the smooth gradient.
         """
-        penalized, _ = self.proximal.masks(u)
-        active = (torch.abs(u) > 0) & penalized
+        active = torch.abs(u) > 0
         grad = torch.where(active, -self.proximal.jac_fractional_penalty(u), jac_obj_augmented)
-        q = u - self.param_groups[0]["tau"] * grad
-        return torch.where(penalized, q, u)
+        return u - self.param_groups[0]["tau"] * grad
 
     def normal_map(self, q: Tensor, u: Tensor, jac_obj_augmented: Tensor) -> Tensor:
         """Evaluate G(q), using u = P(q) and the smooth gradient at u."""
@@ -277,8 +274,7 @@ def fractional_prox_scale(proximal: Proximal, coefficients: Tensor, rho: float) 
     alpha = proximal.alpha
     if alpha <= 0.0:
         raise ValueError(f"alpha must be positive, got {alpha}")
-    penalized, _ = proximal.masks(coefficients)
-    magnitudes = coefficients[penalized].abs()
+    magnitudes = coefficients.abs()
     nonzero = magnitudes[magnitudes > 0]
     if nonzero.numel() == 0:
         raise ValueError("warm-start proximal scaling requires a nonzero coefficient")

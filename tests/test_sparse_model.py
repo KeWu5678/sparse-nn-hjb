@@ -9,6 +9,7 @@ from src.config.activations import ACTIVATIONS
 from src.data import make_dataloader
 from src.eval import metrics
 from src.models import Proximal, SparseModel
+from src.models.proximal import _phi
 from src.PDAP.warmstart import _warm_start_kernel
 
 
@@ -70,13 +71,10 @@ def test_coefficient_gradient_and_full_hessian_match_the_scalar_objective():
 
 
 @pytest.mark.parametrize("alpha", [0., .3])
-def test_sparsity_functional_remains_unweighted_and_respects_masks(alpha):
-    proximal = Proximal(
-        alpha, 0.0, 1.0, penalized_mask=torch.tensor([True, True, False]),
-        nonneg_mask=torch.tensor([False, True, False]),
-    )
-    u = torch.tensor([-2., -3., 100.], dtype=torch.float64)
-    torch.testing.assert_close(proximal.sparsity_functional(u), u.new_tensor(2.))
+def test_sparsity_functional_remains_unweighted(alpha):
+    proximal = Proximal(alpha, 0.0, 1.0)
+    u = torch.tensor([-2., 3.], dtype=torch.float64)
+    torch.testing.assert_close(proximal.sparsity_functional(u), u.new_tensor(5.))
 
 
 @pytest.mark.parametrize("power", [1.5, 4.0, 1.0 + 5e-13, 2.0 + 5e-13, 3.0 - 5e-13])
@@ -137,7 +135,11 @@ def test_samples_define_the_objective_and_its_derivatives(monkeypatch, activatio
     torch.testing.assert_close(problem.obj((Vp, dVp), data[1:]), expected_obj)
     torch.testing.assert_close(fitting(u), expected_obj)
     torch.testing.assert_close(hess_obj, torch.func.hessian(fitting)(u))
-    obj_augmented = lambda u: fitting(u) + proximal.correction(u)
+    if power == 1.0:
+        correction = lambda u: 0.1 * (_phi(u.abs(), gamma) - u.abs()).sum()
+    else:
+        correction = lambda u: u.new_zeros(())
+    obj_augmented = lambda u: fitting(u) + correction(u)
     assert float(loss(u)) == pytest.approx(metrics(problem, proximal, loader)["train_loss"], rel=1e-12)
 
     optimizer = correction_optimizer(proximal, loss, hess_obj, u)

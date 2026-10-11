@@ -15,17 +15,15 @@ from src.PDAP import PDAP
 from src.SSN import SSN
 
 
-def proximal_for(config, problem, **masks):
+def proximal_for(config, problem):
     """The penalty of a resolved configuration, with q supplied by its problem."""
-    return Proximal(config["alpha"], config["gamma"], problem.penalty_exponent, **masks)
+    return Proximal(config["alpha"], config["gamma"], problem.penalty_exponent)
 
 
 def synthetic_correction(fitting, hess_obj, **specifications):
-    masks = {name: specifications.pop(name) for name in ("penalized_mask", "nonneg_mask")
-             if name in specifications}
     config = resolve_model(specifications, hess_obj.shape[0])
     validate_training(config)
-    proximal = proximal_for(config, SparseModel(config), **masks)
+    proximal = proximal_for(config, SparseModel(config))
 
     def coefficient_loss(u):
         return fitting(u) + proximal.penalty(u)

@@ -12,7 +12,6 @@ from src.SSN import SSN
 def test_problem_smooth_derivatives_match_the_splitting(dtype, power, gamma):
     A = torch.tensor([[2.0, 0.4, -0.2], [0.1, 1.0, 0.5]], dtype=dtype)
     target = torch.tensor([0.2, -0.3], dtype=dtype)
-    mask = torch.tensor([True, False, True])
     alpha = 0.1
 
     def data_loss(u):
@@ -20,7 +19,7 @@ def test_problem_smooth_derivatives_match_the_splitting(dtype, power, gamma):
         return 0.5 * (residual @ residual)
 
     proximal, coefficient_loss, hess_obj = synthetic_correction(
-        data_loss, A.T @ A, alpha=alpha, gamma=gamma, power=power, penalized_mask=mask,
+        data_loss, A.T @ A, alpha=alpha, gamma=gamma, power=power,
     )
     u = torch.tensor([-0.6, 0.8, 1.2], dtype=dtype)
     original = u.clone()
@@ -29,7 +28,7 @@ def test_problem_smooth_derivatives_match_the_splitting(dtype, power, gamma):
     def smooth(u):
         if gamma == 0.0:
             return data_loss(u)
-        magnitude = u[mask].abs()
+        magnitude = u.abs()
         remainder = -0.5 * magnitude + torch.log1p(2 * gamma * magnitude) / (4 * gamma)
         return data_loss(u) + alpha * remainder.sum()
 
@@ -48,10 +47,10 @@ def test_problem_smooth_derivatives_match_the_splitting(dtype, power, gamma):
     expected_grad = torch.func.grad(data_loss)(u)
     exponent = 2.0 / (power + 1.0)
     if power == 1.0:
-        slope = 0.5 + 0.5 / (1 + 2 * gamma * u[mask].abs())
+        slope = 0.5 + 0.5 / (1 + 2 * gamma * u.abs())
     else:
-        slope = exponent * u[mask].abs().pow(exponent - 1)
-    expected_grad[mask] += alpha * slope * u[mask].sign()
+        slope = exponent * u.abs().pow(exponent - 1)
+    expected_grad += alpha * slope * u.sign()
     torch.testing.assert_close(torch.func.grad(coefficient_loss)(u), expected_grad)
 
 
@@ -80,9 +79,8 @@ def test_problem_normal_jacobian_matches_finite_differences(power, gamma):
 
     proximal, coefficient_loss, hess_obj = synthetic_correction(
         data_loss, A.T @ A, alpha=0.1, gamma=gamma, power=power,
-        penalized_mask=torch.tensor([True, True, False]),
     )
-    # Active, inactive, and unpenalized coordinates, away from switching points.
+    # Active and inactive coordinates, away from switching points.
     q = torch.tensor([-1.2, 0.01, 0.8], dtype=torch.float64)
     optimizer = correction_optimizer(proximal, coefficient_loss, hess_obj, q, prox_scale=0.1 / 1.3)
     lambda_ = proximal.alpha * optimizer.param_groups[0]["tau"]
@@ -131,14 +129,12 @@ def test_accepted_trials_leave_parameters_untouched_until_commit(method):
     torch.testing.assert_close(loss, 0.5 * coefficient.square().sum())
 
 
-def test_problem_applies_coordinate_masks_without_mutating_the_input():
+def test_problem_applies_the_penalty_and_prox_without_mutating_the_input():
     proximal, coefficient_loss, hess_obj = synthetic_correction(
         lambda u: 0.5 * u.square().sum(), torch.eye(3, dtype=torch.float64),
         alpha=0.25, gamma=0.0,
-        penalized_mask=torch.tensor([True, True, False]),
-        nonneg_mask=torch.tensor([False, True, False]),
     )
     u = torch.tensor([2.0, -3.0, 4.0], dtype=torch.float64)
-    torch.testing.assert_close(coefficient_loss(u), u.new_tensor(15.0))
-    torch.testing.assert_close(proximal.prox(u, 0.25), u.new_tensor([1.75, 0.0, 4.0]))
+    torch.testing.assert_close(coefficient_loss(u), u.new_tensor(16.75))
+    torch.testing.assert_close(proximal.prox(u, 0.25), u.new_tensor([1.75, -2.75, 3.75]))
     torch.testing.assert_close(u, u.new_tensor([2.0, -3.0, 4.0]), rtol=0, atol=0)
