@@ -142,21 +142,22 @@ class PDAP:
     ) -> dict:
         """Prepare a correction, run SSN, and apply its accepted coefficients."""
         coefficient_loss, hess_obj, moment_weight = self.coefficient_objective(problem, train_loader)
-        theta = torch.nn.Parameter(problem.c.detach() * moment_weight)
-        optimizer = SSN([theta], self.proximal, hess_obj, **self.solver)
+        # The normalized coefficients u = w_p*c; the physical ones are c = u/w_p.
+        u = torch.nn.Parameter(problem.c.detach() * moment_weight)
+        optimizer = SSN([u], self.proximal, hess_obj, **self.solver)
 
         def closure() -> torch.Tensor:
             optimizer.zero_grad()
-            loss = coefficient_loss(theta)
+            loss = coefficient_loss(u)
             loss.backward()
             return loss
 
         diagnostics = correct_coefficients(
-            optimizer, theta, closure, iterations=self.fit_outer_iterations,
+            optimizer, u, closure, iterations=self.fit_outer_iterations,
             correction_guard=self.correction_guard, verbose=verbose,
         )
         with torch.no_grad():
-            problem.c.copy_(theta.detach() / moment_weight)
+            problem.c.copy_(u.detach() / moment_weight)
         return diagnostics
 
     def coefficient_objective(
