@@ -25,13 +25,13 @@ from .warmstart import warm_start
 
 
 class PDAP:
-    def __init__(self, training, proximal: Penalty, *, insertion: str = "profile") -> None:
+    def __init__(self, training, penalty: Penalty, *, insertion: str = "profile") -> None:
         """Read the settings for one outer step; run_training owns its repetition.
 
-        proximal is the penalty shared by insertion, correction and evaluation.
+        penalty is shared by insertion, correction and evaluation.
         """
         t = training
-        self.proximal = proximal
+        self.penalty = penalty
         if insertion not in ("profile", "finite_step"):
             raise ValueError(f"insertion must be 'profile' or 'finite_step', got {insertion!r}")
         self.insertion_kind = insertion
@@ -144,7 +144,7 @@ class PDAP:
         coefficient_loss, hess_obj, moment_weight = self.coefficient_objective(problem, train_loader)
         # The normalized coefficients u = w_p*c; the physical ones are c = u/w_p.
         u = torch.nn.Parameter(problem.c.detach() * moment_weight)
-        optimizer = SSN([u], self.proximal, hess_obj, **self.solver)
+        optimizer = SSN([u], self.penalty, hess_obj, **self.solver)
 
         def closure() -> torch.Tensor:
             optimizer.zero_grad()
@@ -174,7 +174,7 @@ class PDAP:
         def coefficient_loss(u: torch.Tensor) -> torch.Tensor:
             return (
                 problem.obj((value_jacobian @ u, gradient_jacobian @ u), (V, dV))
-                + self.proximal.penalty(u)
+                + self.penalty.value(u)
             )
 
         return coefficient_loss, problem.hess_obj(value_jacobian, gradient_jacobian), moment_weight
@@ -205,18 +205,18 @@ class PDAP:
         radius = self._search_radius(problem, residual)
         if self.insertion_kind == "profile":
             W, b, c = profile_threshold(
-                problem, self.proximal, residual, two_sided=True, insert_init=self.insert_init,
+                problem, self.penalty, residual, two_sided=True, insert_init=self.insert_init,
                 radius=radius, **common,
             )
         else:
             W, b, c = finite_step(
-                problem, self.proximal, residual, radius=radius, **common,
+                problem, self.penalty, residual, radius=radius, **common,
             )
         if c is None and W.shape[0] > 0:
             c = warm_start(
                 torch.as_tensor(W, dtype=torch.float64),
                 torch.as_tensor(b, dtype=torch.float64),
-                residual, problem, self.proximal, verbose=verbose,
+                residual, problem, self.penalty, verbose=verbose,
             )
         return W, b, c
 
@@ -274,7 +274,7 @@ class PDAP:
         radius = certificate_radius(
             get_growth(problem.activation_name) if problem.activation_name is not None else None,
             extent=sample_extent(X), residual_norm=residual_norm,
-            alpha=self.proximal.alpha, moment_order=problem.moment_order,
+            alpha=self.penalty.alpha, moment_order=problem.moment_order,
         )
         self._last_search_radius = cap if radius is None else min(float(radius), cap)
         self._last_theorem_applied = 0.0 if radius is None else 1.0

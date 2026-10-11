@@ -14,7 +14,7 @@ from src.PDAP import PDAP
 from src.SSN import SSN
 
 
-def proximal_for(config, problem):
+def penalty_for(config, problem):
     """The penalty of a resolved configuration, with q supplied by its problem."""
     return make_penalty(config["alpha"], config["gamma"], problem.penalty_exponent)
 
@@ -22,17 +22,17 @@ def proximal_for(config, problem):
 def synthetic_correction(fitting, hess_obj, **specifications):
     config = resolve_model(specifications, hess_obj.shape[0])
     validate_training(config)
-    proximal = proximal_for(config, SparseModel(config))
+    penalty = penalty_for(config, SparseModel(config))
 
     def coefficient_loss(u):
-        return fitting(u) + proximal.penalty(u)
+        return fitting(u) + penalty.value(u)
 
-    return proximal, coefficient_loss, hess_obj
+    return penalty, coefficient_loss, hess_obj
 
 
-def correction_optimizer(proximal, hess_obj, u, **options):
+def correction_optimizer(penalty, hess_obj, u, **options):
     """An SSN whose normal-map operations are evaluated directly at u."""
-    return SSN([torch.nn.Parameter(u.detach().clone())], proximal, hess_obj, **options)
+    return SSN([torch.nn.Parameter(u.detach().clone())], penalty, hess_obj, **options)
 
 
 def closure_for(optimizer, coefficient, objective):
@@ -46,7 +46,7 @@ def closure_for(optimizer, coefficient, objective):
     return closure
 
 
-def coefficient_problem(problem, proximal, loader):
+def coefficient_problem(problem, penalty, loader):
     """The objective, fitting Hessian and starting coefficients PDAP gives SSN, without a solve."""
-    loss, hess_obj, moment_weight = PDAP(TrainingConfig(), proximal).coefficient_objective(problem, loader)
+    loss, hess_obj, moment_weight = PDAP(TrainingConfig(), penalty).coefficient_objective(problem, loader)
     return loss, hess_obj, problem.c.detach() * moment_weight

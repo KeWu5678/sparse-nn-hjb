@@ -2,7 +2,7 @@
 
 import pytest
 import torch
-from ssn_test_problem import coefficient_problem, correction_optimizer, proximal_for
+from ssn_test_problem import coefficient_problem, correction_optimizer, penalty_for
 
 from src.config import resolve_model, validate_training
 from src.config.activations import ACTIVATIONS
@@ -31,7 +31,7 @@ def _problem(activation="relu", power=1.0, **specifications):
         torch.tensor([0.2, 0.3], dtype=torch.float64),
         torch.tensor([-0.6, 0.8], dtype=torch.float64),
     )
-    return problem, proximal_for(config, problem)
+    return problem, penalty_for(config, problem)
 
 
 def test_obj_is_the_weighted_h1_quadratic():
@@ -72,9 +72,9 @@ def test_coefficient_gradient_and_full_hessian_match_the_scalar_objective():
 
 @pytest.mark.parametrize("alpha", [0., .3])
 def test_sparsity_functional_remains_unweighted(alpha):
-    proximal = LogPenalty(alpha, 0.0)
+    penalty = LogPenalty(alpha, 0.0)
     u = torch.tensor([-2., 3.], dtype=torch.float64)
-    torch.testing.assert_close(proximal.sparsity_functional(u), u.new_tensor(5.))
+    torch.testing.assert_close(penalty.sparsity_functional(u), u.new_tensor(5.))
 
 
 @pytest.mark.parametrize("power", [1.5, 4.0, 1.0 + 5e-13, 2.0 + 5e-13, 3.0 - 5e-13])
@@ -97,10 +97,10 @@ def test_validated_power_selects_the_proximal_map_and_derivative(
     config = resolve_model({"power": power, "alpha": alpha}, 2)
     problem = SparseModel(config)
     assert problem.penalty_exponent == exponent
-    proximal = proximal_for(config, problem)
+    penalty = penalty_for(config, problem)
     q = torch.tensor([-value, value], dtype=torch.float64)
-    prox = proximal.prox(q, alpha)
-    jac = proximal.jac_prox(q, alpha, prox_image=prox)
+    prox = penalty.prox(q, alpha)
+    jac = penalty.jac_prox(q, alpha, prox_image=prox)
     torch.testing.assert_close(prox, q.new_tensor([-expected, expected]))
     torch.testing.assert_close(jac, derivative * torch.eye(2, dtype=q.dtype))
 
@@ -117,9 +117,9 @@ def test_validated_power_selects_the_proximal_map_and_derivative(
 def test_samples_define_the_objective_and_its_derivatives(activation, power, gamma):
     data = _samples()
     loader = make_dataloader(data)
-    problem, proximal = _problem(activation, power, alpha=0.1, gamma=gamma, loss_weights=(0.4, 1.3))
+    problem, penalty = _problem(activation, power, alpha=0.1, gamma=gamma, loss_weights=(0.4, 1.3))
     before = {name: tensor.clone() for name, tensor in problem.state_dict().items()}
-    loss, hess_obj, u = coefficient_problem(problem, proximal, loader)
+    loss, hess_obj, u = coefficient_problem(problem, penalty, loader)
     moment_weight = problem.moment_weight_of_atoms()
     value_jacobian, gradient_jacobian = problem.kernel(data[0])
 
@@ -140,9 +140,9 @@ def test_samples_define_the_objective_and_its_derivatives(activation, power, gam
     else:
         correction = lambda u: u.new_zeros(())
     obj_augmented = lambda u: fitting(u) + correction(u)
-    assert float(loss(u)) == pytest.approx(metrics(problem, proximal, loader)["train_loss"], rel=1e-12)
+    assert float(loss(u)) == pytest.approx(metrics(problem, penalty, loader)["train_loss"], rel=1e-12)
 
-    optimizer = correction_optimizer(proximal, hess_obj, u)
+    optimizer = correction_optimizer(penalty, hess_obj, u)
     jac_loss = torch.func.grad(loss)(u)
     torch.testing.assert_close(
         optimizer.jac_obj_augmented(u, jac_loss), torch.func.grad(obj_augmented)(u)
@@ -164,12 +164,12 @@ def test_one_problem_handles_empty_and_replaced_supports():
     config = resolve_model({"activation": "softplus", "alpha": 0.01, "moment_order": 2.0}, 2)
     validate_training(config)
     problem = SparseModel(config)
-    proximal = proximal_for(config, problem)
+    penalty = penalty_for(config, problem)
     prediction = problem(data[0])
     residual = data[0], *(p - t for p, t in zip(prediction, data[1:]))
     torch.testing.assert_close(residual[1], -data[1])
     torch.testing.assert_close(residual[2], -data[2])
-    initial_loss = metrics(problem, proximal, loader)["train_loss"]
+    initial_loss = metrics(problem, penalty, loader)["train_loss"]
     a = torch.tensor([0.2, -0.3], dtype=torch.float64, requires_grad=True)
     b = a.new_tensor(0.1, requires_grad=True)
     Kv, Kg = problem.kernel(data[0], a.reshape(1, -1), b.reshape(1))
@@ -179,12 +179,12 @@ def test_one_problem_handles_empty_and_replaced_supports():
     for width in (0, 2, 1, 3):
         W = torch.arange(1, 2 * width + 1, dtype=torch.float64).reshape(width, 2) / 5
         problem.set_atoms(W, torch.zeros(width, dtype=W.dtype), torch.ones(width, dtype=W.dtype))
-        loss, hess_obj, u = coefficient_problem(problem, proximal, loader)
+        loss, hess_obj, u = coefficient_problem(problem, penalty, loader)
         assert hess_obj.shape == (width, width)
-        assert float(loss(u)) == pytest.approx(metrics(problem, proximal, loader)["train_loss"], rel=1e-12)
+        assert float(loss(u)) == pytest.approx(metrics(problem, penalty, loader)["train_loss"], rel=1e-12)
 
     problem.set_atoms(W[:0], W.new_zeros(0), W.new_zeros(0))
-    assert metrics(problem, proximal, loader)["train_loss"] == pytest.approx(initial_loss)
+    assert metrics(problem, penalty, loader)["train_loss"] == pytest.approx(initial_loss)
 
 
 @pytest.mark.parametrize("activation,power", [("relu", 1.), ("relu", 2.), ("relu", 3.), ("softplus", 1.)])

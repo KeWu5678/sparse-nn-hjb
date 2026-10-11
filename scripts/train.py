@@ -254,8 +254,8 @@ def _run_experiment(cfg: DictConfig, hydra_cfg, run_dir: Path, run_id: str) -> P
         data, cfg.data.train_fraction, seed=cfg.env.seed,
     )
     problem = SparseModel(model_config)
-    proximal = make_penalty(model_config["alpha"], model_config["gamma"], problem.penalty_exponent)
-    trainer = PDAP(cfg.training, proximal, insertion=model_config["insertion"])
+    penalty = make_penalty(model_config["alpha"], model_config["gamma"], problem.penalty_exponent)
+    trainer = PDAP(cfg.training, penalty, insertion=model_config["insertion"])
     history = run_training(
         trainer, problem, train_loader, valid_loader,
         num_iterations=cfg.training.num_iterations,

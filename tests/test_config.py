@@ -134,15 +134,15 @@ def test_config_builds_trainer_and_model() -> None:
     model_config = resolve_model(cfg.model, 2)
     validate_training(model_config)
     problem = SparseModel(model_config)
-    proximal = make_penalty(model_config["alpha"], model_config["gamma"], problem.penalty_exponent)
-    pdap = PDAP(cfg.training, proximal, insertion=model_config["insertion"])
+    penalty = make_penalty(model_config["alpha"], model_config["gamma"], problem.penalty_exponent)
+    pdap = PDAP(cfg.training, penalty, insertion=model_config["insertion"])
     assert model_config["activation"] is torch.relu
     assert OmegaConf.to_container(cfg.model, resolve=True) == raw_model
     assert cfg.model.activation == "relu"
-    assert pdap.proximal.alpha == cfg.model.alpha == 1e-5
+    assert pdap.penalty.alpha == cfg.model.alpha == 1e-5
     # Configured alpha and gamma determine the log penalty's normal-map scaling.
     optimizer = SSN(
-        [torch.nn.Parameter(torch.zeros(1, dtype=torch.float64))], proximal,
+        [torch.nn.Parameter(torch.zeros(1, dtype=torch.float64))], penalty,
         torch.eye(1, dtype=torch.float64),
     )
     assert optimizer.param_groups[0]["tau"] == pytest.approx(1 / 1.000005, rel=0, abs=1e-12)

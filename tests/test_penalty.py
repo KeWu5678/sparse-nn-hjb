@@ -27,17 +27,17 @@ def test_fixed_log_penalty_and_derivatives(gamma: float) -> None:
 def test_penalty_gradient_and_ssn_remainder(q: float, gamma: float) -> None:
     u = torch.tensor([-2.0, -0.5, 0.25, 4.0], dtype=torch.float64, requires_grad=True)
     alpha = 0.3
-    proximal = make_penalty(alpha, gamma, q)
+    penalty = make_penalty(alpha, gamma, q)
     value = alpha * (_phi(u.abs(), gamma) if q == 1 else u.abs().pow(q)).sum()
     (gradient,) = torch.autograd.grad(value, u, create_graph=True)
-    torch.testing.assert_close(proximal.jac_penalty(u), gradient)
+    torch.testing.assert_close(penalty.jac_penalty(u), gradient)
 
     # Only the log family has a smooth remainder after the power-prox step.
     remainder = value - alpha * u.abs().sum() if q == 1 else (0 * u.square()).sum()
     (first,) = torch.autograd.grad(remainder, u, create_graph=True)
     (second,) = torch.autograd.grad(first.sum(), u)
-    torch.testing.assert_close(proximal.jac_correction(u), first)
-    torch.testing.assert_close(proximal.hess_correction(u), torch.diag(second))
+    torch.testing.assert_close(penalty.jac_correction(u), first)
+    torch.testing.assert_close(penalty.hess_correction(u), torch.diag(second))
 
 
 @pytest.mark.parametrize(("q", "gamma"), [(1.0, 0.0), (1.0, 1.0), (0.5, 0.0), (2 / 3, 0.0)])
@@ -51,7 +51,7 @@ def test_penalty_uses_the_magnitudes_of_signed_coefficients(q: float, gamma: flo
     else:
         expected = (magnitudes / 2 + torch.log1p(2 * gamma * magnitudes) / (4 * gamma)).sum()
 
-    actual = make_penalty(0.3, gamma, q).penalty(coefficients)
+    actual = make_penalty(0.3, gamma, q).value(coefficients)
 
     torch.testing.assert_close(actual, 0.3 * expected)
 
@@ -64,7 +64,7 @@ def test_make_penalty_selects_the_family_by_its_exponent(q: float, gamma: float,
     penalty = make_penalty(0.3, gamma, q)
 
     assert type(penalty) is family
-    vector = penalty.penalty(torch.tensor([-2.0], dtype=torch.float64))
+    vector = penalty.value(torch.tensor([-2.0], dtype=torch.float64))
     assert penalty.scalar_penalty(-2.0) == pytest.approx(float(vector), rel=1e-15)
 
 

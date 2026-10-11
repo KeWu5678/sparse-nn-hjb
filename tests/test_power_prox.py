@@ -14,8 +14,8 @@ def power_prox(v: torch.Tensor, lambda_: float, q: float) -> torch.Tensor:
 
 
 def jac_power_prox(v: torch.Tensor, lambda_: float, q: float) -> torch.Tensor:
-    proximal = make_penalty(1.0, 0.0, q)
-    return proximal.jac_prox(v, lambda_, prox_image=proximal.prox(v, lambda_))
+    penalty = make_penalty(1.0, 0.0, q)
+    return penalty.jac_prox(v, lambda_, prox_image=penalty.prox(v, lambda_))
 
 
 @pytest.mark.parametrize(

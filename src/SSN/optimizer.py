@@ -20,7 +20,7 @@ ALGORITHM2_PROX_RHO = 0.5
 class SSN(Optimizer):
     """Semismooth Newton optimizer on the normal map of a proximal splitting.
 
-    ``proximal`` owns the penalty and its proximal maps. SSN owns the normal map
+    ``penalty`` owns the penalty and its proximal maps. SSN owns the normal map
     built on them, the parameters, and globalization state.
     Each ``step(closure)`` runs one globalized Newton iteration. The closure follows
     the ``torch.optim`` contract: it clears the gradients, evaluates the full
@@ -30,7 +30,7 @@ class SSN(Optimizer):
 
     Args:
         params: parameters to optimize (outer weights only).
-        proximal: penalty and proximal maps evaluated at a supplied flat vector.
+        penalty: the penalty term and its proximal maps, evaluated at a supplied flat vector.
         hess_obj: Hessian of the fitting term only, excluding the penalty.
         max_ls_iter: maximum damping retries after the initial trial.
         tolerance_ls: accept a finite damped trial whose objective is at most
@@ -50,7 +50,7 @@ class SSN(Optimizer):
     def __init__(
         self,
         params: Iterable[Tensor],
-        proximal: Penalty,
+        penalty: Penalty,
         hess_obj: Tensor,
         *,
         max_ls_iter: int = 500,
@@ -75,12 +75,12 @@ class SSN(Optimizer):
         super().__init__(params, defaults)
         if len(self.param_groups) > 1:
             raise ValueError("SSN doesn't support per-parameter options")
-        self.proximal = proximal
+        self.penalty = penalty
         self.hess_obj = hess_obj
         self._params = self.param_groups[0]["params"]
         group = self.param_groups[0]
         if prox_scale is None:
-            prox_scale = proximal.prox_scale(
+            prox_scale = penalty.prox_scale(
                 parameters_to_vector(self._params).detach(), ALGORITHM2_PROX_RHO,
             )
         group["prox_scale"] = prox_scale
@@ -91,7 +91,7 @@ class SSN(Optimizer):
         """The penalty's proximal step tau, after checking a supplied scale."""
         if prox_scale is not None and (not math.isfinite(prox_scale) or prox_scale <= 0.0):
             raise ValueError(f"prox_scale must be positive and finite, got {prox_scale}")
-        return self.proximal.proximal_step(prox_scale)
+        return self.penalty.proximal_step(prox_scale)
 
     @torch.no_grad()
     def step(self, closure: Callable[[], Tensor]) -> Tensor:  # pyright: ignore[reportIncompatibleMethodOverride]
@@ -123,7 +123,7 @@ class SSN(Optimizer):
         if tolerance_grad > 0.0 and torch.norm(normal_q, p=float("inf")).item() <= tolerance_grad:
             return loss
 
-        jac_prox = self.proximal.jac_prox(q, self._prox_constant(), prox_image=u)
+        jac_prox = self.penalty.jac_prox(q, self._prox_constant(), prox_image=u)
         jac_normal = self.jac_normal(u, jac_prox)
         return self._globalized_step(closure, u, q, normal_q, jac_normal, jac_prox, loss)
 
@@ -140,7 +140,7 @@ class SSN(Optimizer):
         Retain the original full-gradient subtraction and correction arithmetic,
         including its derivative selection at nonsmooth coordinates.
         """
-        return (jac_loss - self.proximal.jac_penalty(u)) + self.proximal.jac_correction(u)
+        return (jac_loss - self.penalty.jac_penalty(u)) + self.penalty.jac_correction(u)
 
     def prox_preimage(self, u: Tensor, jac_obj_augmented: Tensor) -> Tensor:
         """Reconstruct q from a prox-consistent iterate, following MATLAB SSN.m.
@@ -149,7 +149,7 @@ class SSN(Optimizer):
         zero entries use the smooth gradient.
         """
         active = torch.abs(u) > 0
-        grad = torch.where(active, -self.proximal.jac_nonsmooth_term(u), jac_obj_augmented)
+        grad = torch.where(active, -self.penalty.jac_nonsmooth_term(u), jac_obj_augmented)
         return u - self.param_groups[0]["tau"] * grad
 
     def normal_map(self, q: Tensor, u: Tensor, jac_obj_augmented: Tensor) -> Tensor:
@@ -157,7 +157,7 @@ class SSN(Optimizer):
         return (q - u) / self.param_groups[0]["tau"] + jac_obj_augmented
 
     def _prox_constant(self) -> float:
-        return self.proximal.alpha * self.param_groups[0]["tau"]
+        return self.penalty.alpha * self.param_groups[0]["tau"]
 
     def jac_normal(self, u: Tensor, jac_prox: Tensor) -> Tensor:
         """Selected G'(q), using u = P(q) and jac_prox = P'(q)."""
@@ -169,7 +169,7 @@ class SSN(Optimizer):
 
     def hess_obj_augmented(self, u: Tensor) -> Tensor:
         """Hessian of the fitting term plus the diagonal Hessian of the correction."""
-        return self.proximal.hess_correction(u) + self.hess_obj
+        return self.penalty.hess_correction(u) + self.hess_obj
 
     def _globalized_step(
         self, closure: Callable[[], Tensor], u: Tensor, q: Tensor, normal_q: Tensor,
@@ -182,7 +182,7 @@ class SSN(Optimizer):
         group = self.param_groups[0]
 
         def evaluate_trial(q_trial: Tensor) -> Tensor:
-            vector_to_parameters(self.proximal.prox(q_trial, self._prox_constant()), self._params)
+            vector_to_parameters(self.penalty.prox(q_trial, self._prox_constant()), self._params)
             return closure()
 
         if group["method"] == "levenberg_marquardt":

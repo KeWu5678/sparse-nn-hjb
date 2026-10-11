@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 @torch.no_grad()
 def warm_start(W_new: torch.Tensor, b_new: torch.Tensor, residual,
-               problem: SparseModel, proximal: Penalty, *, verbose: bool = False) -> torch.Tensor:
+               problem: SparseModel, penalty: Penalty, *, verbose: bool = False) -> torch.Tensor:
     """Select the largest-profile direction and evaluate its proximal step."""
     n_new = W_new.shape[0]
     if n_new == 0:
@@ -39,7 +39,7 @@ def warm_start(W_new: torch.Tensor, b_new: torch.Tensor, residual,
     direction_features = (S_val @ direction).reshape(-1, 1), (S_grad @ direction).reshape(-1, 1)
     slope = float(problem.jac_obj(*direction_features, residual)[0])
     curvature = float(problem.hess_obj(*direction_features)[0, 0])
-    tau = proximal.descent_step(slope, curvature)
+    tau = penalty.descent_step(slope, curvature)
     out = (tau * direction) / scale
     if verbose:
         logger.debug(

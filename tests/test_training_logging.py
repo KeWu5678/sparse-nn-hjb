@@ -69,8 +69,8 @@ def _train_with_logging(output_dir, settings):
         problem = SparseModel(resolve_model({"alpha": 0.0}, 1))
         x = torch.tensor([[0.25], [0.75]], dtype=torch.float64)
         loader = make_dataloader((x, x.clone(), torch.ones_like(x)))
-        proximal = make_penalty(0.0, 0.0, problem.penalty_exponent)
-        pdap = PDAP(TrainingConfig(loop_order=settings.pop("order"), fit_outer_iterations=0), proximal)
+        penalty = make_penalty(0.0, 0.0, problem.penalty_exponent)
+        pdap = PDAP(TrainingConfig(loop_order=settings.pop("order"), fit_outer_iterations=0), penalty)
         size = int(settings.pop("accepted"))
         pdap._insert = lambda *args, **kwargs: (
             x.new_ones((size, 1)), x.new_zeros(size), x.new_ones(size),

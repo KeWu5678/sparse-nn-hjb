@@ -7,7 +7,7 @@ import math
 import numpy as np
 import pytest
 import torch
-from ssn_test_problem import proximal_for
+from ssn_test_problem import penalty_for
 
 from src.config import resolve_model, validate_training
 from src.config.activations import ACTIVATIONS, GROWTH, get_growth
@@ -64,7 +64,7 @@ def _fit(cfg: ExperimentConfig, iterations: int = 4, seed: int = 0):
     train, valid = split_value_samples(data, cfg.data.train_fraction)
     cfg.training.num_insertion = 20
     history = run_training(
-        PDAP(cfg.training, proximal_for(model_config, model), insertion=model_config["insertion"]),
+        PDAP(cfg.training, penalty_for(model_config, model), insertion=model_config["insertion"]),
         model,
         make_dataloader(train), make_dataloader(valid),
         num_iterations=iterations, verbose=False,
@@ -114,10 +114,10 @@ def test_normalized_objective_is_phi_of_the_scaled_coefficient() -> None:
         / (2 * train[0].shape[0])
     )
     w_p = model.moment_weight_of_atoms().reshape(-1)
-    penalty = float(cfg.model.alpha * torch.sum(_phi(w_p * c.abs(), cfg.model.gamma)))
+    expected_penalty = float(cfg.model.alpha * torch.sum(_phi(w_p * c.abs(), cfg.model.gamma)))
 
-    proximal = proximal_for(resolve_model(cfg.model, 2), model)
-    assert metrics(model, proximal, make_dataloader(train))["train_loss"] == pytest.approx(fidelity + penalty, rel=1e-12)
+    penalty = penalty_for(resolve_model(cfg.model, 2), model)
+    assert metrics(model, penalty, make_dataloader(train))["train_loss"] == pytest.approx(fidelity + expected_penalty, rel=1e-12)
 
 
 def test_normalized_dictionary_reproduces_the_network() -> None:
@@ -144,16 +144,16 @@ def test_guaranteed_insertion_delivers_the_promised_decrease() -> None:
                insert_init="guaranteed", loop_order="insertion_first")
     model, _, train = _fit(cfg, iterations=3)
     train_loader = make_dataloader(train)
-    trainer = PDAP(cfg.training, proximal_for(resolve_model(cfg.model, 2), model), insertion=cfg.model.insertion)
+    trainer = PDAP(cfg.training, penalty_for(resolve_model(cfg.model, 2), model), insertion=cfg.model.insertion)
 
-    before = metrics(model, trainer.proximal, train_loader)["train_loss"]
+    before = metrics(model, trainer.penalty, train_loader)["train_loss"]
     with torch.no_grad():
         value, grad = model(train[0])
     res_v, res_dv = (value - train[1]).detach(), (grad - train[2]).detach()
 
     W_old, b_old, c_old = (model.inner_weight, model.inner_bias, model.c.detach())
     W_new, b_new, c_new = profile_threshold(
-        model, trainer.proximal, (train[0], res_v, res_dv),
+        model, trainer.penalty, (train[0], res_v, res_dv),
         sample_sphere=lambda n: trainer._sphere(2, n), N=20,
         max_insert=1, merge_tol=1e-2, two_sided=True,
         existing_atoms=(W_old, b_old), verbose=False,
@@ -191,7 +191,7 @@ def test_guaranteed_insertion_delivers_the_promised_decrease() -> None:
         torch.cat([b_old, bias.reshape(1)]),
         torch.cat([c_old, torch.as_tensor(c_new[:1], dtype=torch.float64)]),
     )
-    after = metrics(model, trainer.proximal, train_loader)["train_loss"]
+    after = metrics(model, trainer.penalty, train_loader)["train_loss"]
     assert before - after >= delta ** 2 / (2 * a_p) - 1e-12
 
 
@@ -239,7 +239,7 @@ def test_search_radius_never_exceeds_the_fixed_clamp() -> None:
         model_config = resolve_model(cfg.model, 2)
         validate_training(model_config)
         problem = SparseModel(model_config)
-        trainer = PDAP(cfg.training, proximal_for(model_config, problem))
+        trainer = PDAP(cfg.training, penalty_for(model_config, problem))
         radius = trainer._search_radius(problem, (data[0], -data[1], -data[2]))
         assert radius is not None and radius <= math.exp(5.0) + 1e-9
 
@@ -307,7 +307,7 @@ def test_insertion_reuses_the_residual_for_the_theorem_radius() -> None:
     model.forward = counted_predict
     cfg.training.num_insertion = cfg.training.max_insert = 1
     run_training(
-        PDAP(cfg.training, proximal_for(model_config, model), insertion=model_config["insertion"]),
+        PDAP(cfg.training, penalty_for(model_config, model), insertion=model_config["insertion"]),
         model,
         make_dataloader(data),
         num_iterations=1,
@@ -360,5 +360,5 @@ def test_incoherent_configurations_are_rejected(over: dict, message: str) -> Non
         cfg = _cfg(**over)
         model_config = resolve_model(cfg.model, 2)
         validate_training(model_config)
-        PDAP(cfg.training, proximal_for(model_config, SparseModel(model_config)),
+        PDAP(cfg.training, penalty_for(model_config, SparseModel(model_config)),
              insertion=model_config["insertion"])

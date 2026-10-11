@@ -123,7 +123,7 @@ search's L-BFGS optimizer.
    the exact one-atom coefficient. Its smallest nonzero magnitude fixes the
    proximal scale for the entire correction.
 2. **Use the normal-map smooth gradient**: Autograd differentiates the full
-   objective `obj + Penalty.penalty` built by PDAP; `SSN.jac_obj_augmented` subtracts the full penalty gradient
+   objective `obj + Penalty.value` built by PDAP; `SSN.jac_obj_augmented` subtracts the full penalty gradient
    and applies the smooth nonconvex correction. SSN uses this returned gradient.
 3. **SSN line search uses full objective**: Data loss + regularization. Without regularization, sparsifying steps get rejected.
 4. **Loss normalization**: The empirical fidelity divides the value and full

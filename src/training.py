@@ -76,7 +76,7 @@ def run_training(
                 diagnostics = {**search, **correction}
                 diagnostics["solver_seconds"] = search["solver_seconds"] + correction["solver_seconds"]
                 _record(
-                    problem, pdap.proximal, train_loader, valid_loader, history, diagnostics,
+                    problem, pdap.penalty, train_loader, valid_loader, history, diagnostics,
                     verbose, display_every,
                 )
                 search = _measure(pdap.insert, problem, train_loader, history, verbose)
@@ -87,13 +87,13 @@ def run_training(
                 history.run_metrics["stop_reason"] = diagnostics["stop_reason"]
                 break
             _record(
-                problem, pdap.proximal, train_loader, valid_loader, history, diagnostics,
+                problem, pdap.penalty, train_loader, valid_loader, history, diagnostics,
                 verbose, display_every,
             )
 
     if not history.train_loss:
         _record(
-            problem, pdap.proximal, train_loader, valid_loader, history, diagnostics,
+            problem, pdap.penalty, train_loader, valid_loader, history, diagnostics,
             verbose, display_every,
         )
     history.final_neurons = problem.n_neurons
@@ -124,14 +124,14 @@ def _measure(
 
 
 def _record(
-    problem: SparseModel, proximal: Penalty, train_loader: DataLoader,
+    problem: SparseModel, penalty: Penalty, train_loader: DataLoader,
     valid_loader: DataLoader | None, history: History, diagnostics: dict,
     verbose: bool, display_every: int,
 ) -> None:
     """Evaluate the current state before capturing its checkpoint."""
     started = perf_counter()
     values = metrics(
-        problem, proximal, train_loader, valid_loader,
+        problem, penalty, train_loader, valid_loader,
         reporting_normalizer=history.reporting_normalizer,
     )
     elapsed = perf_counter() - started

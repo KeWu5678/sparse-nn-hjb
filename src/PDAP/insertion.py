@@ -196,7 +196,7 @@ def _generate_candidates(
 # ---------------------------------------------------------------------------- #
 def profile_threshold(
     problem: SparseModel,
-    proximal: Penalty,
+    penalty: Penalty,
     residual: tuple[torch.Tensor, torch.Tensor, torch.Tensor], *,
     sample_sphere: Callable[[int], Tuple[torch.Tensor, torch.Tensor]],
     N: int,
@@ -248,13 +248,13 @@ def profile_threshold(
         curvature = float(problem.hess_obj(*features)[0, 0])
         v = abs(slope) if two_sided else slope
         scale = float(problem.moment_weight_of_atoms(a_i, b_i))
-        threshold = proximal.alpha * scale
+        threshold = penalty.alpha * scale
         # Retain the physical-profile comparison, including its rounding.
         if v <= threshold or (guaranteed and curvature < 1e-30):
             continue
         accepted_a.append(a_i.detach())
         accepted_b.append(b_i.detach())
-        accepted_scores.append(v / scale - proximal.alpha)
+        accepted_scores.append(v / scale - penalty.alpha)
         if guaranteed:
             magnitude = (v - threshold) / curvature
             accepted_c.append(-magnitude if slope > 0 else magnitude)
@@ -308,7 +308,7 @@ def profile_threshold(
 # ---------------------------------------------------------------------------- #
 def finite_step(
     problem: SparseModel,
-    proximal: Penalty,
+    penalty: Penalty,
     residual: tuple[torch.Tensor, torch.Tensor, torch.Tensor], *,
     sample_sphere: Callable[[int], Tuple[torch.Tensor, torch.Tensor]],
     N: int,
@@ -338,13 +338,13 @@ def finite_step(
         curvature = float(problem.hess_obj(*features)[0, 0])
         if curvature < 1e-30 or abs(slope) < 1e-30:
             continue
-        c_star = proximal.insertion_weight(slope, curvature)
+        c_star = penalty.insertion_weight(slope, curvature)
         if c_star == 0.0:
             continue
         # The one-atom objective increment, eq. algorithm2-increment.
         dJ = (
             slope * c_star + 0.5 * curvature * c_star**2
-            + proximal.scalar_penalty(c_star)
+            + penalty.scalar_penalty(c_star)
         )
         if dJ >= 0.0:
             continue

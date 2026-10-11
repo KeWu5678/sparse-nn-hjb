@@ -9,12 +9,12 @@ from src.SSN import SSN
 
 def _make_optimizer(method="levenberg_marquardt", *, curvature=1.0, **options):
     coefficient = torch.nn.Parameter(torch.tensor([1.0], dtype=torch.float64))
-    proximal, _, hess_obj = synthetic_correction(
+    penalty, _, hess_obj = synthetic_correction(
         lambda u: 0.5 * curvature * u.square().sum(),
         torch.tensor([[curvature]], dtype=torch.float64),
         alpha=0.0, gamma=0.0,
     )
-    optimizer = SSN([coefficient], proximal, hess_obj, method=method, **options)
+    optimizer = SSN([coefficient], penalty, hess_obj, method=method, **options)
     return optimizer, coefficient
 
 

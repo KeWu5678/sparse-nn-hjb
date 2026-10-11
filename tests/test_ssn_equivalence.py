@@ -70,17 +70,17 @@ def _run_trajectory(config: dict) -> np.ndarray:
     model_config = resolve_model({"alpha": alpha, "gamma": gamma, "power": power}, P)
     validate_training(model_config)
     penalty_exponent = SparseModel(model_config).penalty_exponent
-    proximal = make_penalty(alpha, gamma, penalty_exponent)
+    penalty = make_penalty(alpha, gamma, penalty_exponent)
 
     def coefficient_loss(u):
         return data_loss(u) + _penalty(u, alpha, gamma, penalty_exponent)
 
     kind = config["kind"]
     if kind == "ssn":
-        opt = SSN([theta], proximal, H, prox_scale=config.get("prox_scale"))
+        opt = SSN([theta], penalty, H, prox_scale=config.get("prox_scale"))
     elif kind == "ssn_tr":
         # folded into the base SSN: trust-region (Steihaug-CG) globalization
-        opt = SSN([theta], proximal, H, method="steihaug_cg")
+        opt = SSN([theta], penalty, H, method="steihaug_cg")
     else:  # pragma: no cover
         raise ValueError(kind)
 

@@ -44,7 +44,7 @@ class Penalty(ABC):
     def alpha(self) -> float:
         return self._alpha
 
-    def penalty(self, u: Tensor) -> Tensor:
+    def value(self, u: Tensor) -> Tensor:
         """The penalty term alpha*Phi(u) of the objective."""
         return self._alpha * self.sparsity_functional(u)
 
