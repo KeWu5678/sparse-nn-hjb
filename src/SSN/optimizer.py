@@ -9,7 +9,7 @@ from torch import Tensor
 from torch.nn.utils import parameters_to_vector, vector_to_parameters
 from torch.optim import Optimizer
 
-from ..models import Proximal
+from ..models import LogPenalty, Penalty
 from .strategies import damped_newton_step, trust_region_step
 
 __all__ = ["SSN", "fractional_prox_scale"]
@@ -56,7 +56,7 @@ class SSN(Optimizer):
     def __init__(
         self,
         params: Iterable[Tensor],
-        proximal: Proximal,
+        proximal: Penalty,
         loss: Callable[[Tensor], Tensor],
         hess_obj: Tensor,
         *,
@@ -182,11 +182,11 @@ class SSN(Optimizer):
     def prox_preimage(self, u: Tensor, jac_obj_augmented: Tensor) -> Tensor:
         """Reconstruct q from a prox-consistent iterate, following MATLAB SSN.m.
 
-        Nonzero entries use the fractional penalty's stationarity equation;
+        Nonzero entries use the nonsmooth term's stationarity equation;
         zero entries use the smooth gradient.
         """
         active = torch.abs(u) > 0
-        grad = torch.where(active, -self.proximal.jac_fractional_penalty(u), jac_obj_augmented)
+        grad = torch.where(active, -self.proximal.jac_nonsmooth_term(u), jac_obj_augmented)
         return u - self.param_groups[0]["tau"] * grad
 
     def normal_map(self, q: Tensor, u: Tensor, jac_obj_augmented: Tensor) -> Tensor:
@@ -219,6 +219,7 @@ class SSN(Optimizer):
         if proximal.penalty_exponent < 1.0:
             assert prox_scale is not None
             return prox_scale / proximal.alpha
+        assert isinstance(proximal, LogPenalty)
         return 1.0 / (1.0 + proximal.alpha * proximal.gamma)
 
     def _globalized_step(
@@ -262,10 +263,12 @@ class SSN(Optimizer):
         )
 
 
-def fractional_prox_scale(proximal: Proximal, coefficients: Tensor, rho: float) -> float | None:
+def fractional_prox_scale(proximal: Penalty, coefficients: Tensor, rho: float) -> float | None:
     """Fractional proximal scale satisfying the warm-start upper bound.
 
-    Return None for the log family, whose scale is fixed by 1 + alpha*gamma.
+    lambda_t = min(alpha, rho*m^(2-q)/(2(1-q))), eq. algorithm2-prox-scale, with
+    m the smallest nonzero magnitude. Return None for the log family, whose
+    scale is fixed by 1 + alpha*gamma.
     """
     if proximal.penalty_exponent == 1.0:
         return None
@@ -281,4 +284,4 @@ def fractional_prox_scale(proximal: Proximal, coefficients: Tensor, rho: float) 
     minimum = float(nonzero.min())
     exponent = proximal.penalty_exponent
     bound = rho * minimum ** (2.0 - exponent) / (2.0 * (1.0 - exponent))
-    return min(alpha / (1.0 + alpha * proximal.gamma), bound)
+    return min(alpha, bound)

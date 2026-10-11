@@ -97,6 +97,16 @@ fractional family, with proximal constant ατ; this remains defined at α = 0.
 SSN had read only α, γ, q and the masks from the problem, so this reverses the
 "one shared problem for PDAP and SSN" follow-up below for the penalty.
 
+Update 2026-10-11: `Proximal` is split into an abstract `Penalty` and two
+families, `LogPenalty(α, γ)` with q = 1 and `FractionalPenalty(α, q)` with
+q ∈ {1/2, 2/3} and γ = 0. The base holds what both share: the penalty αΦ, the
+vector and scalar proximal maps of the nonsmooth term α·Σ|u|^q, and a smooth
+correction that is zero by default. Each family supplies Φ, its derivative, its
+closed-form prox and the full scalar prox; the log family adds its correction.
+`make_penalty(α, γ, q)` selects the family from the configured values, so
+penalty selection stays config-driven (see "Penalty selection stays
+config-driven" below).
+
 SSN remains a `torch.optim.Optimizer`; its `step()` owns the complete configured
 iteration budget and the final objective acceptance/fallback on temporary
 coefficients. PDAP applies the result. The old `ssn_solve` layer is removed.

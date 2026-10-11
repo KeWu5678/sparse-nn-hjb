@@ -8,7 +8,7 @@ from src.config import resolve_model, validate_training
 from src.config.activations import ACTIVATIONS
 from src.data import make_dataloader
 from src.eval import metrics
-from src.models import Proximal, SparseModel
+from src.models import LogPenalty, SparseModel
 from src.models.proximal import _phi
 from src.PDAP.warmstart import _warm_start_kernel
 
@@ -72,7 +72,7 @@ def test_coefficient_gradient_and_full_hessian_match_the_scalar_objective():
 
 @pytest.mark.parametrize("alpha", [0., .3])
 def test_sparsity_functional_remains_unweighted(alpha):
-    proximal = Proximal(alpha, 0.0, 1.0)
+    proximal = LogPenalty(alpha, 0.0)
     u = torch.tensor([-2., 3.], dtype=torch.float64)
     torch.testing.assert_close(proximal.sparsity_functional(u), u.new_tensor(5.))
 

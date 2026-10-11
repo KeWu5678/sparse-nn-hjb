@@ -18,7 +18,7 @@ from torch.utils.data import DataLoader
 
 from .data import ValueSampleNormalizer
 from .eval import metrics
-from .models import Proximal, SparseModel
+from .models import Penalty, SparseModel
 from .PDAP import PDAP, History
 
 logger = structlog.get_logger(__name__)
@@ -124,7 +124,7 @@ def _measure(
 
 
 def _record(
-    problem: SparseModel, proximal: Proximal, train_loader: DataLoader,
+    problem: SparseModel, proximal: Penalty, train_loader: DataLoader,
     valid_loader: DataLoader | None, history: History, diagnostics: dict,
     verbose: bool, display_every: int,
 ) -> None:

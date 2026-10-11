@@ -1,7 +1,7 @@
 """PDAP support updates and complete outer steps.
 
-SparseModel owns the network and its fitting; Proximal owns the penalty and
-its proximal maps. PDAP owns candidate search, insertion, coefficient
+SparseModel owns the network and its fitting; Penalty owns the penalty term
+and its proximal maps. PDAP owns candidate search, insertion, coefficient
 correction, pruning and the no-candidate stopping rule.
 The external training loop owns repetition, measurement and history.
 """
@@ -16,7 +16,7 @@ from torch.utils.data import DataLoader
 
 from ..config.activations import get_growth
 from ..data import full_batch
-from ..models import Proximal, SparseModel
+from ..models import Penalty, SparseModel
 from ..SSN import SSN
 from .insertion import FIXED_LOG_CLAMP, finite_step, profile_threshold
 from .radius import certificate_radius, sample_extent
@@ -24,7 +24,7 @@ from .warmstart import warm_start
 
 
 class PDAP:
-    def __init__(self, training, proximal: Proximal, *, insertion: str = "profile") -> None:
+    def __init__(self, training, proximal: Penalty, *, insertion: str = "profile") -> None:
         """Read the settings for one outer step; run_training owns its repetition.
 
         proximal is the penalty shared by insertion, correction and evaluation.

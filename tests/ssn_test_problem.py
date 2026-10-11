@@ -10,14 +10,14 @@ import torch
 
 from src.config import resolve_model, validate_training
 from src.config.schema import TrainingConfig
-from src.models import Proximal, SparseModel
+from src.models import SparseModel, make_penalty
 from src.PDAP import PDAP
 from src.SSN import SSN
 
 
 def proximal_for(config, problem):
     """The penalty of a resolved configuration, with q supplied by its problem."""
-    return Proximal(config["alpha"], config["gamma"], problem.penalty_exponent)
+    return make_penalty(config["alpha"], config["gamma"], problem.penalty_exponent)
 
 
 def synthetic_correction(fitting, hess_obj, **specifications):

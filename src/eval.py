@@ -1,6 +1,6 @@
 """Evaluation and reporting for a model and its external value samples.
 
-SparseModel supplies the fitting objective and Proximal the sparsity functional;
+SparseModel supplies the fitting objective and Penalty the sparsity functional;
 evaluation assembles their reported values, prediction errors and support diagnostics.
 """
 
@@ -13,12 +13,12 @@ import torch
 from .data import full_batch
 
 if TYPE_CHECKING:
-    from .models import Proximal, SparseModel
+    from .models import Penalty, SparseModel
 
 
 @torch.no_grad()
 def metrics(
-    problem: SparseModel, proximal: Proximal, train_loader, valid_loader=None,
+    problem: SparseModel, proximal: Penalty, train_loader, valid_loader=None,
     reporting_normalizer=None,
 ) -> dict[str, float | None]:
     """Evaluate splits and support diagnostics using the persisted metric names."""

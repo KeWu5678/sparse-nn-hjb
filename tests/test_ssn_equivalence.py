@@ -16,7 +16,7 @@ import pytest
 import torch
 
 from src.config import resolve_model, validate_training
-from src.models import Proximal, SparseModel
+from src.models import SparseModel, make_penalty
 from src.models.proximal import _phi
 from src.SSN import SSN
 
@@ -68,10 +68,10 @@ def _run_trajectory(config: dict) -> np.ndarray:
     # rather than silently changing its objective or regenerating its fixtures.
     model_config = resolve_model({"alpha": alpha, "gamma": gamma, "power": power}, P)
     validate_training(model_config)
-    proximal = Proximal(alpha, gamma, SparseModel(model_config).penalty_exponent)
+    proximal = make_penalty(alpha, gamma, SparseModel(model_config).penalty_exponent)
 
     def coefficient_loss(u):
-        return data_loss(u) + _penalty(u, proximal.alpha, proximal.gamma, proximal.penalty_exponent)
+        return data_loss(u) + _penalty(u, alpha, gamma, proximal.penalty_exponent)
 
     kind = config["kind"]
     if kind == "ssn":

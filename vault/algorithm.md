@@ -123,7 +123,7 @@ search's L-BFGS optimizer.
    the exact one-atom coefficient. Its smallest nonzero magnitude fixes the
    proximal scale for the entire correction.
 2. **Use the normal-map smooth gradient**: Autograd differentiates the full
-   objective `obj + Proximal.penalty` built by PDAP; `SSN.jac_obj_augmented` subtracts the full penalty gradient
+   objective `obj + Penalty.penalty` built by PDAP; `SSN.jac_obj_augmented` subtracts the full penalty gradient
    and applies the smooth nonconvex correction. SSN uses this returned gradient.
 3. **SSN line search uses full objective**: Data loss + regularization. Without regularization, sparsifying steps get rejected.
 4. **Loss normalization**: The empirical fidelity divides the value and full
@@ -139,7 +139,7 @@ search's L-BFGS optimizer.
 
 The implemented ownership and its verification are recorded in
 [REFACTOR_HANDOFF.md](../REFACTOR_HANDOFF.md). PDAP owns insertion acceptance and
-warm-start selection; SparseModel and Proximal supply their mathematical evaluations.
+warm-start selection; SparseModel and the Penalty supply their mathematical evaluations.
 
 - `models/` — the network, its fitting and its proximal penalty:
   - `sparse_model.py` — `SparseModel(nn.Module)` reads resolved configuration
@@ -152,11 +152,12 @@ warm-start selection; SparseModel and Proximal supply their mathematical evaluat
     also supplies the penalty exponent q = 2/(power+1). `PDAP.train_ssn_outerweights`
     prepares the coefficient loss, Hessian and normalization for one correction.
     There is no objective-carrier class or persistent feature cache.
-  - `proximal.py` — `Proximal(alpha, gamma, penalty_exponent)`: the penalty αΦ,
-    its split into the fractional penalty α·Σ|u|^q and a smooth correction, the
-    vector and scalar proximal maps (taking the proximal constant λ). Shared by
-    PDAP, SSN and evaluation. The scalar log-penalty formulas and closed-form
-    proximal roots sit below the class.
+  - `proximal.py` — `make_penalty(alpha, gamma, penalty_exponent)` selects
+    `LogPenalty(alpha, gamma)` (q = 1) or `FractionalPenalty(alpha, q)`. Their
+    base `Penalty` holds the penalty αΦ, its split into the nonsmooth term
+    α·Σ|u|^q and a smooth correction, and the vector and scalar proximal maps
+    (taking the proximal constant λ). Shared by PDAP, SSN and evaluation. The
+    scalar formulas sit below the classes, grouped by family.
 - `PDAP/` — candidate search/acceptance, warm-start, support changes, and correction scheduling:
   - `pdap.py` — plain `PDAP` with `step(problem, train_loader)` for one complete
     paper iteration, configured by `insertion=` ("profile" or "finite_step").
@@ -171,7 +172,7 @@ warm-start selection; SparseModel and Proximal supply their mathematical evaluat
     checkpoint with artifact views; selects the earliest minimum training
     objective. Execution totals also include work without a new checkpoint.
 - `SSN/` — the semismooth Newton optimizer:
-  - `optimizer.py` — `SSN(Optimizer)` on a `Proximal`. One `step()` runs the
+  - `optimizer.py` — `SSN(Optimizer)` on a `Penalty`. One `step()` runs the
     complete configured correction on supplied coefficients and owns its final
     acceptance/fallback; SSN owns the normal map, its Jacobian, the prox
     preimage and the prox-scale selection `fractional_prox_scale`.
@@ -180,7 +181,7 @@ warm-start selection; SparseModel and Proximal supply their mathematical evaluat
 - `data.py` — reading, normalization, splitting, standard DataLoader factories,
   and complete-sample assembly. Loaders and samples remain external to the model.
 - `eval.py` — relative errors and metric/report assembly, using the problem's
-  canonical `obj` and Proximal's sparsity functional for its objective mathematics.
+  canonical `obj` and the Penalty's sparsity functional for its objective mathematics.
 - `training.py` — external `run_training` loop, timing, evaluation, recording
   and progress output. The budget belongs here; PDAP decides whether candidate
   search provides another admissible update. Native PyTorch evaluates each full
@@ -214,7 +215,7 @@ warm-start selection; SparseModel and Proximal supply their mathematical evaluat
 
 ```
 VDP / pendulum samples -> external preprocessing -> DataLoaders
-SparseModel + Proximal + PDAP + DataLoaders -> run_training -> History -> saved-run evaluation
+SparseModel + Penalty + PDAP + DataLoaders -> run_training -> History -> saved-run evaluation
 ```
 
 ```python

@@ -13,14 +13,14 @@ import logging
 import torch
 from torch.nn import functional as F
 
-from ..models import Proximal, SparseModel
+from ..models import Penalty, SparseModel
 
 logger = logging.getLogger(__name__)
 
 
 @torch.no_grad()
 def warm_start(W_new: torch.Tensor, b_new: torch.Tensor, residual,
-               problem: SparseModel, proximal: Proximal, *, verbose: bool = False) -> torch.Tensor:
+               problem: SparseModel, proximal: Penalty, *, verbose: bool = False) -> torch.Tensor:
     """Select the largest-profile direction and evaluate its proximal step."""
     n_new = W_new.shape[0]
     if n_new == 0:

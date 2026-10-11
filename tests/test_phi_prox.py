@@ -6,12 +6,12 @@ import math
 
 import pytest
 
-from src.models import Proximal
+from src.models import LogPenalty
 
 
 def phi_prox(v: float, lambda_: float, gamma: float) -> float:
     """The log-family penalty prox; alpha does not enter it."""
-    return Proximal(1.0, gamma, 1.0).penalty_prox(v, lambda_)
+    return LogPenalty(1.0, gamma).penalty_prox(v, lambda_)
 
 
 @pytest.mark.parametrize(("v", "expected"), [(-1.0, 0.0), (0.5, 0.0), (3.0, 2.5)])

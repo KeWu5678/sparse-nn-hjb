@@ -27,7 +27,7 @@ from typing import Callable, List, Optional, Tuple
 import numpy as np
 import torch
 
-from ..models import Proximal, SparseModel
+from ..models import Penalty, SparseModel
 
 # Numerical bound for random starts and final candidate filtering.
 FIXED_LOG_CLAMP = 5.0
@@ -196,7 +196,7 @@ def _generate_candidates(
 # ---------------------------------------------------------------------------- #
 def profile_threshold(
     problem: SparseModel,
-    proximal: Proximal,
+    proximal: Penalty,
     residual: tuple[torch.Tensor, torch.Tensor, torch.Tensor], *,
     sample_sphere: Callable[[int], Tuple[torch.Tensor, torch.Tensor]],
     N: int,
@@ -308,7 +308,7 @@ def profile_threshold(
 # ---------------------------------------------------------------------------- #
 def finite_step(
     problem: SparseModel,
-    proximal: Proximal,
+    proximal: Penalty,
     residual: tuple[torch.Tensor, torch.Tensor, torch.Tensor], *,
     sample_sphere: Callable[[int], Tuple[torch.Tensor, torch.Tensor]],
     N: int,
@@ -338,7 +338,7 @@ def finite_step(
         curvature = float(problem.hess_obj(*features)[0, 0])
         if curvature < 1e-30 or abs(slope) < 1e-30:
             continue
-        magnitude = proximal.fractional_prox(abs(slope) / curvature, proximal.alpha / curvature)
+        magnitude = proximal.scalar_prox(abs(slope) / curvature, proximal.alpha / curvature)
         if magnitude <= 0.0:
             continue
         c_star = magnitude if slope < 0 else -magnitude

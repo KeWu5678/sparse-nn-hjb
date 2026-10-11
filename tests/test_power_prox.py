@@ -5,16 +5,16 @@ from __future__ import annotations
 import pytest
 import torch
 
-from src.models import Proximal
+from src.models import make_penalty
 
 
 def power_prox(v: torch.Tensor, lambda_: float, q: float) -> torch.Tensor:
     """The vector prox of lambda_*|.|^q; alpha does not enter it."""
-    return Proximal(1.0, 0.0, q).prox(v, lambda_)
+    return make_penalty(1.0, 0.0, q).prox(v, lambda_)
 
 
 def jac_power_prox(v: torch.Tensor, lambda_: float, q: float) -> torch.Tensor:
-    proximal = Proximal(1.0, 0.0, q)
+    proximal = make_penalty(1.0, 0.0, q)
     return proximal.jac_prox(v, lambda_, prox_image=proximal.prox(v, lambda_))
 
 

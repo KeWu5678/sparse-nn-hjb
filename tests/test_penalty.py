@@ -3,7 +3,7 @@
 import pytest
 import torch
 
-from src.models import Proximal
+from src.models import FractionalPenalty, LogPenalty, make_penalty
 from src.models.proximal import _ddphi, _dphi, _phi
 
 
@@ -27,7 +27,7 @@ def test_fixed_log_penalty_and_derivatives(gamma: float) -> None:
 def test_penalty_gradient_and_ssn_remainder(q: float, gamma: float) -> None:
     u = torch.tensor([-2.0, -0.5, 0.25, 4.0], dtype=torch.float64, requires_grad=True)
     alpha = 0.3
-    proximal = Proximal(alpha, gamma, q)
+    proximal = make_penalty(alpha, gamma, q)
     value = alpha * (_phi(u.abs(), gamma) if q == 1 else u.abs().pow(q)).sum()
     (gradient,) = torch.autograd.grad(value, u, create_graph=True)
     torch.testing.assert_close(proximal.jac_penalty(u), gradient)
@@ -51,6 +51,19 @@ def test_penalty_uses_the_magnitudes_of_signed_coefficients(q: float, gamma: flo
     else:
         expected = (magnitudes / 2 + torch.log1p(2 * gamma * magnitudes) / (4 * gamma)).sum()
 
-    actual = Proximal(0.3, gamma, q).penalty(coefficients)
+    actual = make_penalty(0.3, gamma, q).penalty(coefficients)
 
     torch.testing.assert_close(actual, 0.3 * expected)
+
+
+@pytest.mark.parametrize(("q", "family"), [(1.0, LogPenalty), (0.5, FractionalPenalty), (2 / 3, FractionalPenalty)])
+def test_make_penalty_selects_the_family_by_its_exponent(q: float, family: type) -> None:
+    penalty = make_penalty(0.3, 0.0, q)
+
+    assert type(penalty) is family
+    assert penalty.penalty_exponent == q
+
+
+def test_fractional_penalty_rejects_a_log_parameter() -> None:
+    with pytest.raises(ValueError, match="requires gamma == 0"):
+        make_penalty(0.3, 1.0, 0.5)

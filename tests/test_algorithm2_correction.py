@@ -9,7 +9,7 @@ from ssn_test_problem import proximal_for, synthetic_correction
 from src.config import resolve_model, validate_training
 from src.config.schema import TrainingConfig
 from src.data import make_dataloader
-from src.models import Proximal, SparseModel
+from src.models import FractionalPenalty, SparseModel
 from src.PDAP import PDAP
 from src.SSN import SSN, fractional_prox_scale
 
@@ -17,7 +17,7 @@ from src.SSN import SSN, fractional_prox_scale
 def test_prox_scale_for_fractional_penalty_uses_all_nonzero_coefficients() -> None:
     coefficients = torch.tensor([0.0, -0.5, 2.0], dtype=torch.float64)
 
-    proximal = Proximal(1.0, 0.0, 0.5)
+    proximal = FractionalPenalty(1.0, 0.5)
     scale = fractional_prox_scale(proximal, coefficients, rho=0.9)
 
     assert scale == pytest.approx(0.3181980515339464)
@@ -26,7 +26,7 @@ def test_prox_scale_for_fractional_penalty_uses_all_nonzero_coefficients() -> No
 def test_prox_scale_for_fractional_penalty_preserves_a_smaller_existing_scale() -> None:
     coefficients = torch.tensor([0.5], dtype=torch.float64)
 
-    proximal = Proximal(1e-5, 0.0, 0.5)
+    proximal = FractionalPenalty(1e-5, 0.5)
     scale = fractional_prox_scale(proximal, coefficients, rho=0.9)
 
     assert scale == pytest.approx(1e-5)
@@ -107,7 +107,7 @@ def test_fractional_ssn_preserves_a_prox_consistent_warm_start() -> None:
 def test_fractional_penalty_is_exactly_zero_at_zero() -> None:
     coefficients = torch.zeros(2, dtype=torch.float64)
 
-    proximal = Proximal(1.0, 0.0, 0.5)
+    proximal = FractionalPenalty(1.0, 0.5)
     penalty = proximal.penalty(coefficients)
 
     assert penalty.item() == 0.0
