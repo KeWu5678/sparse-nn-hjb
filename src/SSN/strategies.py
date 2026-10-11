@@ -19,39 +19,56 @@ from .mpcg import MPCG
 
 logger = logging.getLogger(__name__)
 
+# Keeps the damped-Newton reciprocal damping from underflowing to zero.
+_MIN_RECIPROCAL_DAMPING = 1e-12
+
 
 def damped_newton_step(
     q: Tensor, normal_q: Tensor, jac_normal: Tensor, loss: Tensor,
     evaluate_trial: Callable[[Tensor], Tensor],
     *, max_ls_iter: int, tolerance_ls: float,
 ) -> tuple[Tensor, Tensor, bool]:
-    """Return (q_trial, loss_trial, accepted), increasing damping on retries."""
-    iter_ls: int = 0
+    """Return (q_trial, loss_trial, accepted), increasing the damping on each retry.
 
+    A trial solves (jac_normal + I/reciprocal_damping) dq = -normal_q. The first
+    trial is nearly undamped; its step length seeds the reciprocal damping of
+    the retries, and each retry divides it by four, down to a floor.
+    """
     I: Tensor = torch.eye(q.numel(), device=q.device, dtype=q.dtype)
-    theta0: float = 1.0 / (1e-12 * torch.norm(jac_normal, p=float("inf")).item())
-    dq = _solve_damped_system(jac_normal, normal_q, theta0, I)
-    q_trial = q + dq
-    loss_trial = evaluate_trial(q_trial)
 
-    # theta is reciprocal damping; dividing it by four increases the damping.
-    dq_norm: float = torch.norm(dq).item()
-    normal_q_norm: float = max(torch.norm(normal_q).item(), 1e-20)  # avoid div-by-zero
-    theta: float = max(dq_norm / normal_q_norm, theta0)
-
-    min_theta: float = 1e-12  # prevent theta from underflowing to zero
-    while not _damped_trial_acceptable(loss_trial, loss, tolerance_ls) and iter_ls < max_ls_iter:
-        theta_safe = max(theta, min_theta)
-        dq = _solve_damped_system(jac_normal, normal_q, theta_safe, I)
+    def trial(reciprocal_damping: float) -> tuple[Tensor, Tensor, Tensor]:
+        dq = _solve_damped_system(jac_normal, normal_q, reciprocal_damping, I)
         q_trial = q + dq
-        loss_trial = evaluate_trial(q_trial)
-        theta = max(theta / 4.0, min_theta)
-        iter_ls += 1
+        return dq, q_trial, evaluate_trial(q_trial)
+
+    nearly_undamped: float = 1.0 / (1e-12 * torch.norm(jac_normal, p=float("inf")).item())
+    dq, q_trial, loss_trial = trial(nearly_undamped)
+    normal_q_norm: float = max(torch.norm(normal_q).item(), 1e-20)  # avoid div-by-zero
+    reciprocal_damping: float = max(
+        torch.norm(dq).item() / normal_q_norm, nearly_undamped, _MIN_RECIPROCAL_DAMPING,
+    )
+    retries = 0
+    while not _damped_trial_acceptable(loss_trial, loss, tolerance_ls) and retries < max_ls_iter:
+        _, q_trial, loss_trial = trial(reciprocal_damping)
+        reciprocal_damping = max(reciprocal_damping / 4.0, _MIN_RECIPROCAL_DAMPING)
+        retries += 1
 
     accepted = _damped_trial_acceptable(loss_trial, loss, tolerance_ls)
     if not accepted:
-        logger.debug("Damping backtracking exhausted after %d retries", iter_ls)
+        logger.debug("Damping backtracking exhausted after %d retries", retries)
     return q_trial, loss_trial, accepted
+
+
+def _solve_damped_system(
+    jac_normal: Tensor, normal_q: Tensor, reciprocal_damping: float, I: Tensor,
+) -> Tensor:
+    """Return dq solving (jac_normal + I/reciprocal_damping) dq = -normal_q."""
+    return -torch.linalg.solve(jac_normal + (1 / reciprocal_damping) * I, normal_q)
+
+
+def _damped_trial_acceptable(loss_trial: Tensor, loss: Tensor, tolerance_ls: float) -> bool:
+    """Check the damped-Newton loss tolerance, retaining its NaN rejection rule."""
+    return not bool(torch.isnan(loss_trial) or loss_trial > tolerance_ls * loss)
 
 
 def trust_region_step(
@@ -76,16 +93,6 @@ def trust_region_step(
             (loss_trial - loss).item(), sigma, next_sigma,
         )
     return (q_trial, loss_trial, accepted), next_sigma
-
-
-def _solve_damped_system(jac_normal: Tensor, normal_q: Tensor, theta: float, I: Tensor) -> Tensor:
-    """Return dq solving (jac_normal + I/theta) dq = -normal_q."""
-    return -torch.linalg.solve(jac_normal + (1 / theta) * I, normal_q)
-
-
-def _damped_trial_acceptable(loss_trial: Tensor, loss: Tensor, tolerance_ls: float) -> bool:
-    """Check the damped-Newton loss tolerance, retaining its NaN rejection rule."""
-    return not bool(torch.isnan(loss_trial) or loss_trial > tolerance_ls * loss)
 
 
 def _tr_trial_acceptable(loss_trial: Tensor, loss: Tensor) -> bool:
