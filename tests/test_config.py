@@ -143,7 +143,7 @@ def test_config_builds_trainer_and_model() -> None:
     # Configured alpha and gamma determine the log penalty's normal-map scaling.
     optimizer = SSN(
         [torch.nn.Parameter(torch.zeros(1, dtype=torch.float64))], proximal,
-        lambda u: u.sum(), torch.eye(1, dtype=torch.float64),
+        torch.eye(1, dtype=torch.float64),
     )
     assert optimizer.param_groups[0]["tau"] == pytest.approx(1 / 1.000005, rel=0, abs=1e-12)
     assert pdap.insertion_kind == "profile"

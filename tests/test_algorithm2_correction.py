@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 import torch
-from ssn_test_problem import proximal_for, synthetic_correction
+from ssn_test_problem import closure_for, proximal_for, synthetic_correction
 
 from src.config import resolve_model, validate_training
 from src.config.schema import TrainingConfig
@@ -39,7 +39,7 @@ def test_fractional_ssn_chooses_the_scale_from_its_starting_coefficients() -> No
         alpha=1.0, gamma=0.0, power=3.0,
     )
 
-    optimizer = SSN([coefficient], proximal, coefficient_loss, hess_obj)
+    optimizer = SSN([coefficient], proximal, hess_obj)
     assert optimizer.param_groups[0]["tau"] == pytest.approx(1 / (4 * 2 ** .5))
 
 
@@ -93,10 +93,10 @@ def test_fractional_ssn_preserves_a_prox_consistent_warm_start() -> None:
         alpha=alpha, gamma=0.0, power=3.0,
     )
     prox_scale = proximal.prox_scale(coefficient.detach(), rho=0.9)
-    optimizer = SSN([coefficient], proximal, coefficient_loss, hess_obj, prox_scale=prox_scale, tolerance_grad=0.0)
+    optimizer = SSN([coefficient], proximal, hess_obj, prox_scale=prox_scale, tolerance_grad=0.0)
 
     before = float(coefficient_loss(coefficient).detach())
-    optimizer.step()
+    optimizer.step(closure_for(optimizer, coefficient, coefficient_loss))
     after = float(coefficient_loss(coefficient).detach())
 
     assert optimizer.last_step_success
@@ -137,8 +137,8 @@ def test_fractional_ssn_uses_the_closed_form_prox_derivative(
         data_loss, torch.tensor([[2.0]], dtype=torch.float64),
         alpha=alpha, gamma=0.0, power=power,
     )
-    optimizer = SSN([coefficient], proximal, coefficient_loss, hess_obj, prox_scale=prox_scale, tolerance_grad=0.0)
-    optimizer.step()
+    optimizer = SSN([coefficient], proximal, hess_obj, prox_scale=prox_scale, tolerance_grad=0.0)
+    optimizer.step(closure_for(optimizer, coefficient, coefficient_loss))
 
     assert optimizer.last_step_success
     assert coefficient.item() == pytest.approx(expected, abs=1e-9)

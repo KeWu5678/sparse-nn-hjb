@@ -5,7 +5,6 @@ so that negative curvature, additive constants, and historical losses remain
 exactly as originally tested.
 """
 
-import pytest
 import torch
 
 from src.config import resolve_model, validate_training
@@ -31,21 +30,23 @@ def synthetic_correction(fitting, hess_obj, **specifications):
     return proximal, coefficient_loss, hess_obj
 
 
-def correction_optimizer(proximal, coefficient_loss, hess_obj, u, **options):
+def correction_optimizer(proximal, hess_obj, u, **options):
     """An SSN whose normal-map operations are evaluated directly at u."""
-    return SSN([torch.nn.Parameter(u.detach().clone())], proximal, coefficient_loss, hess_obj, **options)
+    return SSN([torch.nn.Parameter(u.detach().clone())], proximal, hess_obj, **options)
 
 
-def capture_coefficient_solve(monkeypatch, problem, proximal, loader):
-    """Inspect the real PDAP-to-SSN inputs without running or applying a solve."""
-    captured = []
+def closure_for(optimizer, coefficient, objective):
+    """The torch.optim closure that evaluates objective at the coefficient."""
+    def closure():
+        optimizer.zero_grad()
+        loss = objective(coefficient)
+        loss.backward()
+        return loss
 
-    def capture(params, proximal, loss, hess_obj, **options):
-        captured.extend((loss, hess_obj, params[0].detach().clone()))
-        raise StopIteration("captured coefficient correction")
+    return closure
 
-    with monkeypatch.context() as patch:
-        patch.setattr("src.PDAP.pdap.SSN", capture)
-        with pytest.raises(StopIteration, match="captured coefficient correction"):
-            PDAP(TrainingConfig(), proximal).train_ssn_outerweights(problem, loader)
-    return tuple(captured)
+
+def coefficient_problem(problem, proximal, loader):
+    """The objective, fitting Hessian and starting coefficients PDAP gives SSN, without a solve."""
+    loss, hess_obj, moment_weight = PDAP(TrainingConfig(), proximal).coefficient_objective(problem, loader)
+    return loss, hess_obj, problem.c.detach() * moment_weight

@@ -2,7 +2,7 @@
 
 import pytest
 import torch
-from ssn_test_problem import capture_coefficient_solve, proximal_for
+from ssn_test_problem import coefficient_problem, proximal_for
 from torch.utils.data import (
     BatchSampler,
     DataLoader,
@@ -32,10 +32,10 @@ def _linear_case(**specifications):
 
 
 @pytest.mark.parametrize("batch_size", [None, 1, 2])
-def test_prepared_objective_matches_worked_value_gradient_and_hessian(monkeypatch, batch_size):
+def test_prepared_objective_matches_worked_value_gradient_and_hessian(batch_size):
     data, problem, proximal = _linear_case(alpha=.1)
-    loss, hess_obj, u = capture_coefficient_solve(
-        monkeypatch, problem, proximal, make_dataloader(data, batch_size=batch_size),
+    loss, hess_obj, u = coefficient_problem(
+        problem, proximal, make_dataloader(data, batch_size=batch_size),
     )
     c = problem.c.detach()
 
@@ -101,7 +101,7 @@ def test_candidate_profile_combines_signed_batches_before_acceptance(monkeypatch
 
 
 @pytest.mark.parametrize("activation,power", [("relu", 1.), ("relu", 2.), ("relu", 3.), ("softplus", 1.)])
-def test_chunking_preserves_correction_candidate_and_warmstart_calculations(monkeypatch, activation, power):
+def test_chunking_preserves_correction_candidate_and_warmstart_calculations(activation, power):
     x = torch.tensor([[-1., .2], [.3, -.4], [.8, .9], [-.2, .7], [.5, -.8]], dtype=torch.float64)
     data = x, x.square().sum(dim=1, keepdim=True), 2 * x
     W = x.new_tensor([[.5, -.3], [.1, .7]])
@@ -115,8 +115,8 @@ def test_chunking_preserves_correction_candidate_and_warmstart_calculations(monk
     proximal = proximal_for(config, problem)
     problem.set_atoms(W, b, c)
     full, chunked = make_dataloader(data), make_dataloader(data, batch_size=2)
-    reference_loss, reference_hessian, reference_u = capture_coefficient_solve(monkeypatch, problem, proximal, full)
-    loss, hess_obj, u = capture_coefficient_solve(monkeypatch, problem, proximal, chunked)
+    reference_loss, reference_hessian, reference_u = coefficient_problem(problem, proximal, full)
+    loss, hess_obj, u = coefficient_problem(problem, proximal, chunked)
     torch.testing.assert_close(u, c * problem.moment_weight_of_atoms(W, b))
     torch.testing.assert_close(loss(u), reference_loss(u))
     torch.testing.assert_close(hess_obj, reference_hessian)
@@ -150,15 +150,15 @@ def test_chunking_preserves_correction_candidate_and_warmstart_calculations(monk
 
 
 @pytest.mark.parametrize("activation", ["relu", "softplus"])
-def test_prepared_objective_survives_later_data_and_support_changes(monkeypatch, activation):
+def test_prepared_objective_survives_later_data_and_support_changes(activation):
     data, problem, proximal = _linear_case(alpha=.1, activation=activation)
     loader = make_dataloader(data)
-    loss, hess_obj, u = capture_coefficient_solve(monkeypatch, problem, proximal, loader)
+    loss, hess_obj, u = coefficient_problem(problem, proximal, loader)
     expected_loss, expected_hessian = loss(u).clone(), hess_obj.clone()
     expected_coefficients = u.clone()
     data[1].add_(10)
     problem.set_atoms(data[0].new_tensor([[2., -1.]]), u.new_tensor([.1]), u.new_tensor([.5]))
-    _, later_hessian, _ = capture_coefficient_solve(monkeypatch, problem, proximal, loader)
+    _, later_hessian, _ = coefficient_problem(problem, proximal, loader)
     assert later_hessian.shape == (1, 1)
     torch.testing.assert_close(loss(u), expected_loss, rtol=0, atol=0)
     torch.testing.assert_close(hess_obj, expected_hessian, rtol=0, atol=0)
@@ -208,7 +208,7 @@ def test_logging_accepts_a_finite_loader_without_a_sample_count(verbose):
 
 
 @pytest.mark.parametrize("drop_last", [False, True])
-def test_native_batch_sampler_keeps_full_data_evaluation_and_no_drop_contract(monkeypatch, drop_last):
+def test_native_batch_sampler_keeps_full_data_evaluation_and_no_drop_contract(drop_last):
     data, problem, proximal = _linear_case(alpha=.1)
     dataset = TensorDataset(*data)
     loader = DataLoader(
@@ -222,9 +222,9 @@ def test_native_batch_sampler_keeps_full_data_evaluation_and_no_drop_contract(mo
     else:
         for actual, expected in zip(full_batch(loader), data):
             torch.testing.assert_close(actual, expected, rtol=0, atol=0)
-        loss, hess_obj, _ = capture_coefficient_solve(monkeypatch, problem, proximal, loader)
-        reference_loss, reference_hessian, _ = capture_coefficient_solve(
-            monkeypatch, problem, proximal, make_dataloader(data),
+        loss, hess_obj, _ = coefficient_problem(problem, proximal, loader)
+        reference_loss, reference_hessian, _ = coefficient_problem(
+            problem, proximal, make_dataloader(data),
         )
         torch.testing.assert_close(loss(problem.c), reference_loss(problem.c))
         torch.testing.assert_close(hess_obj, reference_hessian)

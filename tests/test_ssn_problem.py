@@ -2,7 +2,7 @@
 
 import pytest
 import torch
-from ssn_test_problem import correction_optimizer, synthetic_correction
+from ssn_test_problem import closure_for, correction_optimizer, synthetic_correction
 
 from src.SSN import SSN
 
@@ -23,7 +23,7 @@ def test_problem_smooth_derivatives_match_the_splitting(dtype, power, gamma):
     )
     u = torch.tensor([-0.6, 0.8, 1.2], dtype=dtype)
     original = u.clone()
-    optimizer = correction_optimizer(proximal, coefficient_loss, hess_obj, u)
+    optimizer = correction_optimizer(proximal, hess_obj, u)
 
     def smooth(u):
         if gamma == 0.0:
@@ -60,7 +60,7 @@ def test_problem_keeps_the_selected_hess_obj_augmented_at_zero():
         alpha=0.1, gamma=0.7,
     )
     u = torch.zeros(1, dtype=torch.float64)
-    optimizer = correction_optimizer(proximal, coefficient_loss, hess_obj, u)
+    optimizer = correction_optimizer(proximal, hess_obj, u)
     jac_loss = torch.func.grad(coefficient_loss)(u)
     torch.testing.assert_close(optimizer.jac_obj_augmented(u, jac_loss), u)
     torch.testing.assert_close(
@@ -82,7 +82,7 @@ def test_problem_normal_jacobian_matches_finite_differences(power, gamma):
     )
     # Active and inactive coordinates, away from switching points.
     q = torch.tensor([-1.2, 0.01, 0.8], dtype=torch.float64)
-    optimizer = correction_optimizer(proximal, coefficient_loss, hess_obj, q, prox_scale=0.1 / 1.3)
+    optimizer = correction_optimizer(proximal, hess_obj, q, prox_scale=0.1 / 1.3)
     lambda_ = proximal.alpha * optimizer.param_groups[0]["tau"]
 
     def normal(q):
@@ -105,21 +105,20 @@ def test_problem_normal_jacobian_matches_finite_differences(power, gamma):
 
 
 @pytest.mark.parametrize("method", ["levenberg_marquardt", "steihaug_cg"])
-def test_accepted_trials_leave_parameters_untouched_until_commit(method):
+def test_an_accepted_trial_stays_in_the_parameters(method):
     coefficient = torch.nn.Parameter(torch.tensor([1.0, -0.5], dtype=torch.float64))
     original = coefficient.detach().clone()
     evaluated = []
 
     def data_loss(u):
-        torch.testing.assert_close(coefficient, original, rtol=0, atol=0)
         evaluated.append(u.detach().clone())
         return 0.5 * u.square().sum()
 
     proximal, coefficient_loss, hess_obj = synthetic_correction(
         data_loss, torch.eye(2, dtype=torch.float64), alpha=0.0, gamma=0.0,
     )
-    optimizer = SSN([coefficient], proximal, coefficient_loss, hess_obj, method=method)
-    loss = optimizer.step()
+    optimizer = SSN([coefficient], proximal, hess_obj, method=method)
+    loss = optimizer.step(closure_for(optimizer, coefficient, coefficient_loss))
 
     assert optimizer.last_step_success
     assert len(evaluated) == 2

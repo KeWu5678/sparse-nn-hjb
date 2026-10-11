@@ -14,6 +14,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 import torch
+from ssn_test_problem import closure_for
 
 from src.config import resolve_model, validate_training
 from src.models import SparseModel, make_penalty
@@ -76,18 +77,17 @@ def _run_trajectory(config: dict) -> np.ndarray:
 
     kind = config["kind"]
     if kind == "ssn":
-        opt = SSN(
-            [theta], proximal, coefficient_loss, H, prox_scale=config.get("prox_scale"),
-        )
+        opt = SSN([theta], proximal, H, prox_scale=config.get("prox_scale"))
     elif kind == "ssn_tr":
         # folded into the base SSN: trust-region (Steihaug-CG) globalization
-        opt = SSN([theta], proximal, coefficient_loss, H, method="steihaug_cg")
+        opt = SSN([theta], proximal, H, method="steihaug_cg")
     else:  # pragma: no cover
         raise ValueError(kind)
 
+    closure = closure_for(opt, theta, coefficient_loss)
     traj = np.zeros((N_STEPS, P), dtype=np.float64)
     for k in range(N_STEPS):
-        opt.step()
+        opt.step(closure)
         traj[k] = theta.detach().reshape(-1).numpy()
     return traj
 

@@ -1,8 +1,9 @@
 """Damped-Newton and MPCG trust-region globalization for SSN.
 
 Strategies receive tensors, numerical settings, and a trial-loss callback.
-They return their acceptance decision; SSN commits parameters and stores the
-updated trust-region radius. Trial evaluation does not install parameters.
+They return their acceptance decision for the last trial they evaluated; SSN
+keeps or undoes that trial and stores the updated trust-region radius. The
+callback installs each trial in the parameters before evaluating it.
 The input normal_q is the normal-map value G(q) at the current iterate.
 """
 

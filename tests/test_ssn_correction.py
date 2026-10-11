@@ -2,7 +2,7 @@
 
 import pytest
 import torch
-from ssn_test_problem import synthetic_correction
+from ssn_test_problem import closure_for, synthetic_correction
 
 from src.config.schema import TrainingConfig
 from src.PDAP import PDAP
@@ -16,9 +16,10 @@ def test_correction_runs_the_configured_budget(iterations):
     proximal, coefficient_loss, hess_obj = synthetic_correction(
         lambda u: .5 * u.square().sum(), torch.eye(1, dtype=torch.float64), alpha=0.,
     )
-    optimizer = SSN([coefficient], proximal, coefficient_loss, hess_obj)
+    optimizer = SSN([coefficient], proximal, hess_obj)
     diagnostics = correct_coefficients(
-        optimizer, coefficient, coefficient_loss, iterations=iterations, correction_guard=True,
+        optimizer, coefficient, closure_for(optimizer, coefficient, coefficient_loss),
+        iterations=iterations, correction_guard=True,
     )
 
     assert diagnostics["ssn_iterations"] == iterations
@@ -36,9 +37,10 @@ def test_final_guard_rejects_a_worsening_trial_allowed_by_local_tolerance(guard)
     proximal, coefficient_loss, hess_obj = synthetic_correction(
         lambda u: 2 - .5 * u.square().sum(), -torch.eye(1, dtype=torch.float64), alpha=0.,
     )
-    optimizer = SSN([coefficient], proximal, coefficient_loss, hess_obj, tolerance_ls=2.)
+    optimizer = SSN([coefficient], proximal, hess_obj, tolerance_ls=2.)
     diagnostics = correct_coefficients(
-        optimizer, coefficient, coefficient_loss, iterations=1, correction_guard=guard,
+        optimizer, coefficient, closure_for(optimizer, coefficient, coefficient_loss),
+        iterations=1, correction_guard=guard,
     )
 
     assert optimizer.last_step_success
@@ -55,9 +57,10 @@ def test_nonfinite_final_loss_restores_starting_coefficients(guard):
         return torch.where(u.abs() < .1, u.new_tensor(-torch.inf), .5 * u.square()).sum()
 
     proximal, coefficient_loss, hess_obj = synthetic_correction(fitting, torch.eye(1, dtype=torch.float64), alpha=0.)
-    optimizer = SSN([coefficient], proximal, coefficient_loss, hess_obj)
+    optimizer = SSN([coefficient], proximal, hess_obj)
     diagnostics = correct_coefficients(
-        optimizer, coefficient, coefficient_loss, iterations=1, correction_guard=guard,
+        optimizer, coefficient, closure_for(optimizer, coefficient, coefficient_loss),
+        iterations=1, correction_guard=guard,
     )
 
     assert not diagnostics["correction_accepted"]
@@ -68,16 +71,24 @@ def test_nonfinite_final_loss_restores_starting_coefficients(guard):
 def test_exception_after_an_accepted_iteration_restores_the_whole_correction():
     coefficient = torch.nn.Parameter(torch.tensor([1.], dtype=torch.float64))
     error = RuntimeError("second iteration failed")
+    calls = 0
 
     def fitting(u):
-        if u.requires_grad and u.abs().max() < 1e-6:
+        nonlocal calls
+        calls += 1
+        # Calls: starting objective, first iteration and its accepted trial,
+        # then the second iteration's own evaluation.
+        if calls == 4:
             raise error
         return .5 * u.square().sum()
 
     proximal, coefficient_loss, hess_obj = synthetic_correction(fitting, torch.eye(1, dtype=torch.float64), alpha=0.)
-    optimizer = SSN([coefficient], proximal, coefficient_loss, hess_obj)
+    optimizer = SSN([coefficient], proximal, hess_obj)
     with pytest.raises(RuntimeError, match="second iteration failed") as caught:
-        correct_coefficients(optimizer, coefficient, coefficient_loss, iterations=2, correction_guard=True)
+        correct_coefficients(
+            optimizer, coefficient, closure_for(optimizer, coefficient, coefficient_loss),
+            iterations=2, correction_guard=True,
+        )
 
     assert caught.value is error
     assert not optimizer.last_step_success
@@ -86,27 +97,28 @@ def test_exception_after_an_accepted_iteration_restores_the_whole_correction():
 
 def test_complete_trust_region_correction_continues_after_a_rejected_trial():
     coefficient = torch.nn.Parameter(torch.tensor([1.], dtype=torch.float64))
-    evaluations = 0
+    calls = 0
 
     def fitting(u):
-        nonlocal evaluations
+        nonlocal calls
+        calls += 1
         value = .5 * u.square().sum()
-        if not u.requires_grad:
-            evaluations += 1
-            # The correction first evaluates its starting objective. Reject the
-            # second trial after it to exercise radius reduction and recovery
-            # within one correction, after an earlier iterate was accepted.
-            if evaluations == 3:
-                return value + 1.
+        # Calls: the starting objective, then an evaluation and one trial per
+        # trust-region iteration. Reject the second trial to exercise radius
+        # reduction and recovery after an earlier iterate was accepted.
+        if calls == 5:
+            return value + 1.
         return value
 
     proximal, coefficient_loss, hess_obj = synthetic_correction(fitting, torch.eye(1, dtype=torch.float64), alpha=0.)
-    optimizer = SSN([coefficient], proximal, coefficient_loss, hess_obj, method="steihaug_cg")
+    optimizer = SSN([coefficient], proximal, hess_obj, method="steihaug_cg")
     diagnostics = correct_coefficients(
-        optimizer, coefficient, coefficient_loss, iterations=4, correction_guard=True,
+        optimizer, coefficient, closure_for(optimizer, coefficient, coefficient_loss),
+        iterations=4, correction_guard=True,
     )
 
-    assert diagnostics["ssn_iterations"] == evaluations - 1 == 4
+    assert calls == 1 + 2 * 4
+    assert diagnostics["ssn_iterations"] == 4
     assert diagnostics["ssn_failed_steps"] == 1
     assert optimizer.last_step_success and diagnostics["correction_accepted"]
     assert coefficient.item() == pytest.approx(.78)

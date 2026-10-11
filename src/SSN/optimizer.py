@@ -21,15 +21,16 @@ class SSN(Optimizer):
     """Semismooth Newton optimizer on the normal map of a proximal splitting.
 
     ``proximal`` owns the penalty and its proximal maps. SSN owns the normal map
-    built on them, autograd, the parameters, iteration control, and globalization state.
-    Each ``step()`` runs one globalized Newton iteration on supplied working
-    coefficients. The caller owns the iteration budget and the acceptance of the
+    built on them, the parameters, and globalization state.
+    Each ``step(closure)`` runs one globalized Newton iteration. The closure follows
+    the ``torch.optim`` contract: it clears the gradients, evaluates the full
+    objective at the current parameters, calls ``backward()`` and returns the
+    objective. The caller owns the iteration budget and the acceptance of the
     finished correction.
 
     Args:
         params: parameters to optimize (outer weights only).
         proximal: penalty and proximal maps evaluated at a supplied flat vector.
-        loss: complete loss callable for this fixed-support coefficient correction.
         hess_obj: Hessian of the fitting term only, excluding the penalty.
         max_ls_iter: maximum damping retries after the initial trial.
         tolerance_ls: accept damped loss <= tolerance_ls * current loss.
@@ -49,7 +50,6 @@ class SSN(Optimizer):
         self,
         params: Iterable[Tensor],
         proximal: Penalty,
-        loss: Callable[[Tensor], Tensor],
         hess_obj: Tensor,
         *,
         max_ls_iter: int = 500,
@@ -75,7 +75,6 @@ class SSN(Optimizer):
         if len(self.param_groups) > 1:
             raise ValueError("SSN doesn't support per-parameter options")
         self.proximal = proximal
-        self.loss = loss
         self.hess_obj = hess_obj
         self._params = self.param_groups[0]["params"]
         group = self.param_groups[0]
@@ -88,32 +87,28 @@ class SSN(Optimizer):
         self.last_step_success = True
 
     @torch.no_grad()
-    def step(self) -> Tensor:  # pyright: ignore[reportIncompatibleMethodOverride]
+    def step(self, closure: Callable[[], Tensor]) -> Tensor:  # pyright: ignore[reportIncompatibleMethodOverride]
         """Run one globalized Newton iteration and return the objective it keeps.
 
-        A rejected trial leaves the coefficients unchanged. An exception restores
-        them and propagates with its original cause.
+        The closure is required, as for LBFGS. Each trial is evaluated by writing
+        it into the parameters; a rejected trial is undone. An exception restores
+        the parameters and propagates with its original cause.
         """
+        closure = torch.enable_grad()(closure)
         start = parameters_to_vector(self._params).detach().clone()
         try:
-            return self._iteration(*self._evaluate_current())
+            return self._iteration(closure, start)
         except Exception:
             vector_to_parameters(start, self._params)
             self.last_step_success = False
             raise
 
-    def _evaluate_current(self) -> tuple[Tensor, Tensor]:
-        with torch.enable_grad():
-            u = parameters_to_vector(self._params).detach().requires_grad_(True)
-            loss = self.loss(u)
-        return u, loss
-
-    def _iteration(self, u: Tensor, loss: Tensor) -> Tensor:
-        """Build and globalize one normal-map Newton step."""
+    def _iteration(self, closure: Callable[[], Tensor], u: Tensor) -> Tensor:
+        """Build and globalize one normal-map Newton step from the coefficients u."""
         self.last_step_success = True
         group = self.param_groups[0]
-        jac_loss, = torch.autograd.grad(loss, u, retain_graph=True)
-        jac_obj_augmented = self.jac_obj_augmented(u, jac_loss)
+        loss = closure()
+        jac_obj_augmented = self.jac_obj_augmented(u, self._gradient())
         q = self.prox_preimage(u, jac_obj_augmented)
         normal_q = self.normal_map(q, u, jac_obj_augmented)
 
@@ -123,7 +118,14 @@ class SSN(Optimizer):
 
         jac_prox = self.proximal.jac_prox(q, self._prox_constant(), prox_image=u)
         jac_normal = self.jac_normal(u, jac_prox)
-        return self._globalized_step(q, normal_q, jac_normal, jac_prox, loss)
+        return self._globalized_step(closure, u, q, normal_q, jac_normal, jac_prox, loss)
+
+    def _gradient(self) -> Tensor:
+        """The objective's gradient, left on the parameters by the closure's backward()."""
+        gradients = [parameter.grad for parameter in self._params]
+        if any(gradient is None for gradient in gradients):
+            raise RuntimeError("the SSN closure must call backward()")
+        return parameters_to_vector(gradients)
 
     def jac_obj_augmented(self, u: Tensor, jac_loss: Tensor) -> Tensor:
         """Smooth part of the objective's derivative, from the supplied full derivative at u.
@@ -169,14 +171,18 @@ class SSN(Optimizer):
         return self.proximal.proximal_step(prox_scale)
 
     def _globalized_step(
-        self, q: Tensor, normal_q: Tensor, jac_normal: Tensor, jac_prox: Tensor,
-        loss: Tensor,
+        self, closure: Callable[[], Tensor], u: Tensor, q: Tensor, normal_q: Tensor,
+        jac_normal: Tensor, jac_prox: Tensor, loss: Tensor,
     ) -> Tensor:
-        """Run a strategy, store its state, and commit an accepted trial."""
+        """Run a strategy, store its state, and keep an accepted trial or undo a rejected one.
+
+        A strategy returns the last trial it evaluated, which the parameters still hold.
+        """
         group = self.param_groups[0]
 
         def evaluate_trial(q_trial: Tensor) -> Tensor:
-            return self.loss(self.proximal.prox(q_trial, self._prox_constant()))
+            vector_to_parameters(self.proximal.prox(q_trial, self._prox_constant()), self._params)
+            return closure()
 
         if group["method"] == "levenberg_marquardt":
             q_trial, loss_trial, accepted = damped_newton_step(
@@ -194,6 +200,7 @@ class SSN(Optimizer):
 
         self.last_step_success = accepted
         if accepted:
-            vector_to_parameters(self.proximal.prox(q_trial, self._prox_constant()), self._params)
-            return loss_trial
+            loss = loss_trial
+        else:
+            vector_to_parameters(u, self._params)
         return loss

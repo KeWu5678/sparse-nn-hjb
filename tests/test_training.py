@@ -64,18 +64,28 @@ def test_ssn_trial_failure_and_final_acceptance_reach_history_and_run_totals(mon
     pdap.solver["method"] = "steihaug_cg"
     trials = 0
 
-    def objective(u):
-        nonlocal trials
-        value = .5 * u.square().sum()
-        if not u.requires_grad:
-            trials += 1
-            # Reject one trial, then let the same real SSN correction recover.
-            if trials == 2:
-                return value + 1.
-        return value
+    def scripted_correction(params, model, hess_obj, **options):
+        coefficient, calls = params[0], count(1)
 
-    def scripted_correction(params, model, loss, hess_obj, **options):
-        return SSN(params, model, objective, torch.eye(1, dtype=torch.float64), **options)
+        def objective():
+            nonlocal trials
+            optimizer.zero_grad()
+            value = .5 * coefficient.square().sum()
+            # Trust-region iterations alternate an evaluation and one trial.
+            if next(calls) % 2 == 0:
+                trials += 1
+                # Reject one trial, then let the same real SSN correction recover.
+                if trials == 2:
+                    value = value + 1.
+            value.backward()
+            return value
+
+        class ScriptedSSN(SSN):
+            def step(self, closure):
+                return super().step(objective)
+
+        optimizer = ScriptedSSN(params, model, torch.eye(1, dtype=torch.float64), **options)
+        return optimizer
 
     monkeypatch.setattr("src.PDAP.pdap.SSN", scripted_correction)
     history = training.run_training(pdap, problem, loader, num_iterations=1, verbose=False)

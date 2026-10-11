@@ -2,7 +2,7 @@
 
 import pytest
 import torch
-from ssn_test_problem import capture_coefficient_solve, correction_optimizer, proximal_for
+from ssn_test_problem import coefficient_problem, correction_optimizer, proximal_for
 
 from src.config import resolve_model, validate_training
 from src.config.activations import ACTIVATIONS
@@ -114,12 +114,12 @@ def test_validated_power_selects_the_proximal_map_and_derivative(
         ("relu", 3.0, 0.0),
     ],
 )
-def test_samples_define_the_objective_and_its_derivatives(monkeypatch, activation, power, gamma):
+def test_samples_define_the_objective_and_its_derivatives(activation, power, gamma):
     data = _samples()
     loader = make_dataloader(data)
     problem, proximal = _problem(activation, power, alpha=0.1, gamma=gamma, loss_weights=(0.4, 1.3))
     before = {name: tensor.clone() for name, tensor in problem.state_dict().items()}
-    loss, hess_obj, u = capture_coefficient_solve(monkeypatch, problem, proximal, loader)
+    loss, hess_obj, u = coefficient_problem(problem, proximal, loader)
     moment_weight = problem.moment_weight_of_atoms()
     value_jacobian, gradient_jacobian = problem.kernel(data[0])
 
@@ -142,7 +142,7 @@ def test_samples_define_the_objective_and_its_derivatives(monkeypatch, activatio
     obj_augmented = lambda u: fitting(u) + correction(u)
     assert float(loss(u)) == pytest.approx(metrics(problem, proximal, loader)["train_loss"], rel=1e-12)
 
-    optimizer = correction_optimizer(proximal, loss, hess_obj, u)
+    optimizer = correction_optimizer(proximal, hess_obj, u)
     jac_loss = torch.func.grad(loss)(u)
     torch.testing.assert_close(
         optimizer.jac_obj_augmented(u, jac_loss), torch.func.grad(obj_augmented)(u)
@@ -158,7 +158,7 @@ def test_samples_define_the_objective_and_its_derivatives(monkeypatch, activatio
         torch.testing.assert_close(tensor, before[name], rtol=0, atol=0)
 
 
-def test_one_problem_handles_empty_and_replaced_supports(monkeypatch):
+def test_one_problem_handles_empty_and_replaced_supports():
     data = _samples()
     loader = make_dataloader(data)
     config = resolve_model({"activation": "softplus", "alpha": 0.01, "moment_order": 2.0}, 2)
@@ -179,7 +179,7 @@ def test_one_problem_handles_empty_and_replaced_supports(monkeypatch):
     for width in (0, 2, 1, 3):
         W = torch.arange(1, 2 * width + 1, dtype=torch.float64).reshape(width, 2) / 5
         problem.set_atoms(W, torch.zeros(width, dtype=W.dtype), torch.ones(width, dtype=W.dtype))
-        loss, hess_obj, u = capture_coefficient_solve(monkeypatch, problem, proximal, loader)
+        loss, hess_obj, u = coefficient_problem(problem, proximal, loader)
         assert hess_obj.shape == (width, width)
         assert float(loss(u)) == pytest.approx(metrics(problem, proximal, loader)["train_loss"], rel=1e-12)
 

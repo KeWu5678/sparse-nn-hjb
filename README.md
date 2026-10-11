@@ -93,10 +93,11 @@ states; model selection uses switching-region error on that pool.
 **A semismooth Newton optimizer, written as a native PyTorch optimizer.** The
 outer-weight problem is nonsmooth and nonconvex. `src/SSN/` is a
 `torch.optim.Optimizer` subclass implementing a normal-map semismooth Newton
-method with matrix-free CG for the Newton system, closed-form global proximal
-maps for the fractional penalties $q\in\{1/2,\ 2/3,\ 1\}$, and a guard that
-discards a correction which increases the objective — the property that keeps
-the outer loop monotone.
+method with matrix-free CG for the Newton system and closed-form global proximal
+maps for the fractional penalties $q\in\{1/2,\ 2/3,\ 1\}$. It follows the
+`step(closure)` contract, one Newton iteration per step. PDAP runs the iteration
+budget and discards a correction which increases the objective — the property
+that keeps the outer loop monotone.
 
 **Golden-output tests.** Refactors of the numerical core are checked against
 stored reference solutions, not just unit assertions. A change in solver

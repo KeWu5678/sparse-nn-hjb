@@ -13,8 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 def correct_coefficients(
-    optimizer: SSN, coefficients: torch.nn.Parameter,
-    objective: Callable[[torch.Tensor], torch.Tensor], *,
+    optimizer: SSN, coefficients: torch.nn.Parameter, closure: Callable[[], torch.Tensor], *,
     iterations: int, correction_guard: bool, verbose: bool = False,
 ) -> dict:
     """Run the SSN iteration budget, discarding a correction that increases the objective.
@@ -23,15 +22,15 @@ def correct_coefficients(
     J, the post-insertion coefficients are kept. A nonfinite result is always
     discarded; correction_guard=False preserves the historical unguarded
     comparison. An exception restores the post-insertion coefficients and
-    propagates. No convergence claim is made after the fixed budget.
+    propagates. No convergence claim is made after the fixed budget. The
+    optimizer's closure also evaluates the starting objective.
     """
     start = coefficients.detach().clone()
-    with torch.no_grad():
-        initial_loss = objective(start)
+    initial_loss = closure()
     if not torch.isfinite(start).all() or not torch.isfinite(initial_loss):
         raise ValueError("SSN requires finite starting coefficients and loss")
     try:
-        loss, failed_steps = _run_budget(optimizer, initial_loss, iterations)
+        loss, failed_steps = _run_budget(optimizer, closure, initial_loss, iterations)
     except Exception:
         _restore(coefficients, start)
         raise
@@ -56,11 +55,13 @@ def correct_coefficients(
     }
 
 
-def _run_budget(optimizer: SSN, initial_loss: torch.Tensor, iterations: int) -> tuple[torch.Tensor, int]:
+def _run_budget(
+    optimizer: SSN, closure: Callable[[], torch.Tensor], initial_loss: torch.Tensor, iterations: int,
+) -> tuple[torch.Tensor, int]:
     """Run the fixed number of SSN steps; return the last objective and the failed steps."""
     loss, failed_steps = initial_loss, 0
     for _ in range(iterations):
-        loss = optimizer.step()
+        loss = optimizer.step(closure)
         failed_steps += int(not optimizer.last_step_success)
     return loss, failed_steps
 

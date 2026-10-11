@@ -9,7 +9,7 @@ The external training loop owns repetition, measurement and history.
 from __future__ import annotations
 
 import math
-from typing import Any, Tuple
+from typing import Any, Callable, Tuple
 
 import torch
 from torch.utils.data import DataLoader
@@ -141,6 +141,28 @@ class PDAP:
         self, problem: SparseModel, train_loader: DataLoader, *, verbose: bool = False,
     ) -> dict:
         """Prepare a correction, run SSN, and apply its accepted coefficients."""
+        coefficient_loss, hess_obj, moment_weight = self.coefficient_objective(problem, train_loader)
+        theta = torch.nn.Parameter(problem.c.detach() * moment_weight)
+        optimizer = SSN([theta], self.proximal, hess_obj, **self.solver)
+
+        def closure() -> torch.Tensor:
+            optimizer.zero_grad()
+            loss = coefficient_loss(theta)
+            loss.backward()
+            return loss
+
+        diagnostics = correct_coefficients(
+            optimizer, theta, closure, iterations=self.fit_outer_iterations,
+            correction_guard=self.correction_guard, verbose=verbose,
+        )
+        with torch.no_grad():
+            problem.c.copy_(theta.detach() / moment_weight)
+        return diagnostics
+
+    def coefficient_objective(
+        self, problem: SparseModel, train_loader: DataLoader,
+    ) -> tuple[Callable[[torch.Tensor], torch.Tensor], torch.Tensor, torch.Tensor]:
+        """The objective of the normalized coefficients u = w_p*c, its fitting Hessian, and w_p."""
         X, V, dV = full_batch(train_loader)
         value_jacobian, gradient_jacobian = problem.kernel(X)
         moment_weight = problem.moment_weight_of_atoms()
@@ -154,16 +176,7 @@ class PDAP:
                 + self.proximal.penalty(u)
             )
 
-        hess_obj = problem.hess_obj(value_jacobian, gradient_jacobian)
-        theta = torch.nn.Parameter(problem.c.detach() * moment_weight)
-        optimizer = SSN([theta], self.proximal, coefficient_loss, hess_obj, **self.solver)
-        diagnostics = correct_coefficients(
-            optimizer, theta, coefficient_loss, iterations=self.fit_outer_iterations,
-            correction_guard=self.correction_guard, verbose=verbose,
-        )
-        with torch.no_grad():
-            problem.c.copy_(theta.detach() / moment_weight)
-        return diagnostics
+        return coefficient_loss, problem.hess_obj(value_jacobian, gradient_jacobian), moment_weight
 
     def _insert(
         self, problem, train_loader, num_insertion: int, max_insert: int, verbose: bool
