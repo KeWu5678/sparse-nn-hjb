@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING, Dict, Tuple
 import torch
 
 from .data import full_batch
-from .models.moment import amplitude_mass_radius
 
 if TYPE_CHECKING:
     from .models import Proximal, SparseModel
@@ -35,7 +34,7 @@ def metrics(
         "psi_p": psi,
         "alpha_phi": alpha_phi,
         "total_variation": float(c.reshape(-1).abs().sum()),
-        "radius_r95": float(amplitude_mass_radius(inner_weight, inner_bias, c)),
+        "radius_r95": float(amplitude_mass_radius(radius, c)),
         "radius_max": float(radius.max()) if c.numel() else 0.0,
     }
     if valid_loader is None:
@@ -56,6 +55,31 @@ def metrics(
         for name, error in zip(("l2", "grad", "h1"), relative_errors(*prediction, *target)):
             values[f"err_{name}_{split}"] = error
     return values
+
+
+def amplitude_mass_radius(
+    radius: torch.Tensor, c: torch.Tensor, mass_fraction: float = 0.95,
+) -> torch.Tensor:
+    """Smallest atom radius ``|omega_j|`` containing ``mass_fraction`` of ``sum |c_j|``.
+
+    This is the R_0.95-type radius diagnostic for normalized Algorithm 1. Atoms
+    are sorted by radius and accumulated with weights ``|c_j|``. Empty supports
+    and supports with zero total variation have radius zero.
+    """
+    if not 0.0 < mass_fraction <= 1.0:
+        raise ValueError("mass_fraction must lie in (0, 1]")
+    if c.numel() == 0:
+        return c.new_zeros(())
+
+    amplitude = c.abs()
+    total = amplitude.sum()
+    if float(total) == 0.0:
+        return total
+
+    order = torch.argsort(radius)
+    cumulative = torch.cumsum(amplitude[order], dim=0)
+    index = torch.searchsorted(cumulative, mass_fraction * total).clamp_max(c.numel() - 1)
+    return radius[order][index]
 
 
 @torch.no_grad()

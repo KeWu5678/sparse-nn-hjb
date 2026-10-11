@@ -4,8 +4,6 @@ import torch
 from torch import Tensor, nn
 from torch.nn import functional as F
 
-from .moment import moment_weight
-
 
 class SparseModel(nn.Module):
     """Own the sparse network and its data fitting without owning samples.
@@ -136,10 +134,10 @@ class SparseModel(nn.Module):
         """
         inner_weight = self.inner_weight if inner_weight is None else inner_weight
         inner_bias = self.inner_bias if inner_bias is None else inner_bias
-        return (
-            moment_weight(inner_weight, inner_bias, self._moment_order)
-            if self.normalized else torch.ones_like(inner_bias)
-        )
+        if not self.normalized:
+            return torch.ones_like(inner_bias)
+        squared_norm = (inner_weight * inner_weight).sum(dim=-1) + inner_bias * inner_bias
+        return 1.0 + squared_norm.clamp_min(0.0).pow(self._moment_order / 2.0)
 
     def obj(self, prediction: tuple[Tensor, Tensor], target: tuple[Tensor, Tensor]) -> Tensor:
         """Weighted empirical H1 quadratic, excluding the sparsity penalty.

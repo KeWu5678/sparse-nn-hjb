@@ -146,7 +146,8 @@ warm-start selection; SparseModel and Proximal supply their mathematical evaluat
     and registers `inner_weight` and
     `inner_bias` as buffers and `c` as its parameter. `forward` returns network
     values and input gradients; `kernel` supplies the kernel matrices of the
-    current or supplied atoms, i.e. their coefficient Jacobians. `obj`, `jac_obj`,
+    current or supplied atoms, i.e. their coefficient Jacobians, and
+    `moment_weight_of_atoms` their moment weights w_p. `obj`, `jac_obj`,
     and `hess_obj` supply fitting and its coefficient derivatives; the problem
     also supplies the penalty exponent q = 2/(power+1). `PDAP.train_ssn_outerweights`
     prepares the coefficient loss, Hessian and normalization for one correction.
@@ -156,7 +157,6 @@ warm-start selection; SparseModel and Proximal supply their mathematical evaluat
     vector and scalar proximal maps (taking the proximal constant λ), and the
     optional coordinate masks. Shared by PDAP, SSN and evaluation. The scalar
     log-penalty formulas and closed-form proximal roots sit below the class.
-  - `moment.py` — normalized-measure primitives (moment weights w_p).
 - `PDAP/` — candidate search/acceptance, warm-start, support changes, and correction scheduling:
   - `pdap.py` — plain `PDAP` with `step(problem, train_loader)` for one complete
     paper iteration, configured by `insertion=` ("profile" or "finite_step").

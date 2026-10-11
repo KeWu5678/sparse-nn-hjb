@@ -15,7 +15,6 @@ from src.config.schema import EnvConfig, ExperimentConfig, ModelConfig, Training
 from src.data import make_dataloader, split_value_samples
 from src.eval import metrics
 from src.models import SparseModel
-from src.models.moment import moment_weight
 from src.models.proximal import _phi
 from src.PDAP import PDAP
 from src.PDAP.insertion import profile_threshold
@@ -106,7 +105,7 @@ def test_normalized_objective_is_phi_of_the_scaled_coefficient() -> None:
     cfg = _cfg(moment_order=2.01)
     model, _, train = _fit(cfg)
 
-    W, b, c = (model.inner_weight, model.inner_bias, model.c.detach())
+    c = model.c.detach()
     with torch.no_grad():
         value, grad = model(train[0])
     w1, w2 = cfg.model.loss_weights
@@ -114,7 +113,7 @@ def test_normalized_objective_is_phi_of_the_scaled_coefficient() -> None:
         (w1 * (value - train[1]).square().sum() + w2 * (grad - train[2]).square().sum())
         / (2 * train[0].shape[0])
     )
-    w_p = moment_weight(W, b, cfg.model.moment_order).reshape(-1)
+    w_p = model.moment_weight_of_atoms().reshape(-1)
     penalty = float(cfg.model.alpha * torch.sum(_phi(w_p * c.abs(), cfg.model.gamma)))
 
     proximal = proximal_for(resolve_model(cfg.model, 2), model)
@@ -125,8 +124,8 @@ def test_normalized_dictionary_reproduces_the_network() -> None:
     """K_p @ u == K @ c, which is what makes the substitution legitimate."""
     cfg = _cfg(moment_order=2.01)
     model, _, train = _fit(cfg)
-    W, b, c = (model.inner_weight, model.inner_bias, model.c.detach())
-    w_p = moment_weight(W, b, 2.01).reshape(-1)
+    c = model.c.detach()
+    w_p = model.moment_weight_of_atoms().reshape(-1)
     Phi, _ = model.kernel(train[0])
     assert torch.allclose(Phi @ c, (Phi / w_p) @ (w_p * c), atol=1e-12)
 
@@ -165,7 +164,7 @@ def test_guaranteed_insertion_delivers_the_promised_decrease() -> None:
 
     a = torch.as_tensor(W_new[0], dtype=torch.float64)
     bias = torch.as_tensor(b_new[0], dtype=torch.float64)
-    w_p = float(moment_weight(a, bias, 2.01))
+    w_p = float(model.moment_weight_of_atoms(a, bias))
 
     # Delta and A in normalized units, recomputed independently of the insertion.
     x = train[0].detach().clone().requires_grad_(True)
