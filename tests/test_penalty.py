@@ -71,3 +71,17 @@ def test_make_penalty_selects_the_family_by_its_exponent(q: float, gamma: float,
 def test_fractional_penalty_rejects_a_log_parameter() -> None:
     with pytest.raises(ValueError, match="requires gamma == 0"):
         make_penalty(0.3, 1.0, 0.5)
+
+
+def test_insertion_weight_is_the_prox_at_the_newton_point() -> None:
+    penalty = FractionalPenalty(1.0, 0.5)
+
+    assert penalty.insertion_weight(-4.25, 1.0) == pytest.approx(4.0)
+    assert penalty.insertion_weight(4.25, 1.0) == pytest.approx(-4.0)
+
+
+def test_descent_step_requires_the_slope_to_exceed_alpha() -> None:
+    penalty = LogPenalty(0.5, 0.0)
+
+    assert penalty.descent_step(-3.0, 1.0) == pytest.approx(2.5)
+    assert penalty.descent_step(-0.4, 1.0) == 0.0

@@ -97,6 +97,15 @@ class Penalty(ABC):
     def scalar_penalty(self, c: float) -> float:
         """The penalty alpha*phi(|c|) of one coefficient, in scalar arithmetic."""
 
+    def insertion_weight(self, slope: float, curvature: float) -> float:
+        """c* = prox_{(alpha/A)|.|^q}(-P/A), eq. algorithm2-insertion-weight.
+
+        The global minimizer of the one-atom increment c*P + A*c^2/2 + alpha*|c|^q,
+        for slope P and curvature A > 0.
+        """
+        magnitude = self.scalar_prox(abs(slope) / curvature, self._alpha / curvature)
+        return magnitude if slope < 0 else -magnitude
+
     def scalar_prox(self, value: float, lambda_: float) -> float:
         """Scalar proximal value of the nonsmooth term.
 
@@ -105,6 +114,17 @@ class Penalty(ABC):
         """
         v = torch.tensor([value], dtype=torch.float64)
         return float(self._closed_form_prox(v, lambda_)[0])
+
+    def descent_step(self, slope: float, curvature: float) -> float:
+        """The step t >= 0 minimizing slope*t + curvature*t^2/2 + alpha*phi(t).
+
+        Zero unless -slope >= alpha, where the log penalty's closed-form root is
+        a minimizer, and the curvature is positive.
+        """
+        step = 0.0
+        if -slope >= self._alpha and curvature > 1e-30:
+            step = self.penalty_prox(-slope / curvature, self._alpha / curvature)
+        return step
 
     @abstractmethod
     def penalty_prox(self, value: float, lambda_: float) -> float:

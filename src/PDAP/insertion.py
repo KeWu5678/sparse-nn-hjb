@@ -338,10 +338,9 @@ def finite_step(
         curvature = float(problem.hess_obj(*features)[0, 0])
         if curvature < 1e-30 or abs(slope) < 1e-30:
             continue
-        magnitude = proximal.scalar_prox(abs(slope) / curvature, proximal.alpha / curvature)
-        if magnitude <= 0.0:
+        c_star = proximal.insertion_weight(slope, curvature)
+        if c_star == 0.0:
             continue
-        c_star = magnitude if slope < 0 else -magnitude
         # The one-atom objective increment, eq. algorithm2-increment.
         dJ = (
             slope * c_star + 0.5 * curvature * c_star**2

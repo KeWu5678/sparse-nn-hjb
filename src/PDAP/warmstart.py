@@ -39,9 +39,7 @@ def warm_start(W_new: torch.Tensor, b_new: torch.Tensor, residual,
     direction_features = (S_val @ direction).reshape(-1, 1), (S_grad @ direction).reshape(-1, 1)
     slope = float(problem.jac_obj(*direction_features, residual)[0])
     curvature = float(problem.hess_obj(*direction_features)[0, 0])
-    tau = 0.0
-    if -slope >= proximal.alpha and curvature > 1e-30:
-        tau = proximal.penalty_prox(-slope / curvature, proximal.alpha / curvature)
+    tau = proximal.descent_step(slope, curvature)
     out = (tau * direction) / scale
     if verbose:
         logger.debug(

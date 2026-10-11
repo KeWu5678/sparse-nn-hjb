@@ -108,7 +108,9 @@ penalty selection stays config-driven (see "Penalty selection stays
 config-driven" below). The family also supplies what callers used to branch on
 q for: SSN's proximal scale λ_t and step τ (`prox_scale`, `proximal_step`,
 replacing `fractional_prox_scale` and the branch in SSN's `_tau`) and the
-penalty of one coefficient in the finite-step increment (`scalar_penalty`).
+penalty of one coefficient in the finite-step increment (`scalar_penalty`), and
+the scalar steps of finite-step insertion and the warm start
+(`insertion_weight`, `descent_step`).
 Callers read only α, the weight of the penalty in the objective; γ and q are
 no longer exposed.
 
