@@ -9,10 +9,10 @@ from torch import Tensor
 from torch.nn.utils import parameters_to_vector, vector_to_parameters
 from torch.optim import Optimizer
 
-from ..models import LogPenalty, Penalty
+from ..models import Penalty
 from .strategies import damped_newton_step, trust_region_step
 
-__all__ = ["SSN", "fractional_prox_scale"]
+__all__ = ["SSN"]
 
 logger = logging.getLogger(__name__)
 
@@ -95,8 +95,8 @@ class SSN(Optimizer):
         self._params = self.param_groups[0]["params"]
         group = self.param_groups[0]
         if prox_scale is None:
-            prox_scale = fractional_prox_scale(
-                proximal, parameters_to_vector(self._params).detach(), ALGORITHM2_PROX_RHO,
+            prox_scale = proximal.prox_scale(
+                parameters_to_vector(self._params).detach(), ALGORITHM2_PROX_RHO,
             )
         group["prox_scale"] = prox_scale
         group["tau"] = self._tau(prox_scale)
@@ -205,22 +205,10 @@ class SSN(Optimizer):
         return self.proximal.alpha * self.param_groups[0]["tau"]
 
     def _tau(self, prox_scale: float | None) -> float:
-        """The proximal step tau, so that the proximal constant is alpha*tau.
-
-        The log family uses tau = 1/(1 + alpha*gamma), eq. proximal-residual.
-        The fractional family requires the scale lambda_t chosen from its warm
-        start and uses tau = lambda_t/alpha, eq. algorithm2-normal-map.
-        """
-        proximal = self.proximal
-        if proximal.penalty_exponent < 1.0 and prox_scale is None:
-            raise ValueError("prox_scale is required when penalty_exponent < 1")
+        """The penalty's proximal step tau, after checking a supplied scale."""
         if prox_scale is not None and (not math.isfinite(prox_scale) or prox_scale <= 0.0):
             raise ValueError(f"prox_scale must be positive and finite, got {prox_scale}")
-        if proximal.penalty_exponent < 1.0:
-            assert prox_scale is not None
-            return prox_scale / proximal.alpha
-        assert isinstance(proximal, LogPenalty)
-        return 1.0 / (1.0 + proximal.alpha * proximal.gamma)
+        return self.proximal.proximal_step(prox_scale)
 
     def _globalized_step(
         self, q: Tensor, normal_q: Tensor, jac_normal: Tensor, jac_prox: Tensor,
@@ -261,27 +249,3 @@ class SSN(Optimizer):
             str(self.correction_accepted).lower(), self.failed_steps,
             group["prox_scale"], group["tau"],
         )
-
-
-def fractional_prox_scale(proximal: Penalty, coefficients: Tensor, rho: float) -> float | None:
-    """Fractional proximal scale satisfying the warm-start upper bound.
-
-    lambda_t = min(alpha, rho*m^(2-q)/(2(1-q))), eq. algorithm2-prox-scale, with
-    m the smallest nonzero magnitude. Return None for the log family, whose
-    scale is fixed by 1 + alpha*gamma.
-    """
-    if proximal.penalty_exponent == 1.0:
-        return None
-    if not 0.0 < rho < 1.0:
-        raise ValueError(f"rho must satisfy 0 < rho < 1, got {rho}")
-    alpha = proximal.alpha
-    if alpha <= 0.0:
-        raise ValueError(f"alpha must be positive, got {alpha}")
-    magnitudes = coefficients.abs()
-    nonzero = magnitudes[magnitudes > 0]
-    if nonzero.numel() == 0:
-        raise ValueError("warm-start proximal scaling requires a nonzero coefficient")
-    minimum = float(nonzero.min())
-    exponent = proximal.penalty_exponent
-    bound = rho * minimum ** (2.0 - exponent) / (2.0 * (1.0 - exponent))
-    return min(alpha, bound)

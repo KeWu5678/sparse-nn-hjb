@@ -56,12 +56,16 @@ def test_penalty_uses_the_magnitudes_of_signed_coefficients(q: float, gamma: flo
     torch.testing.assert_close(actual, 0.3 * expected)
 
 
-@pytest.mark.parametrize(("q", "family"), [(1.0, LogPenalty), (0.5, FractionalPenalty), (2 / 3, FractionalPenalty)])
-def test_make_penalty_selects_the_family_by_its_exponent(q: float, family: type) -> None:
-    penalty = make_penalty(0.3, 0.0, q)
+@pytest.mark.parametrize(
+    ("q", "gamma", "family"),
+    [(1.0, 1.0, LogPenalty), (0.5, 0.0, FractionalPenalty), (2 / 3, 0.0, FractionalPenalty)],
+)
+def test_make_penalty_selects_the_family_by_its_exponent(q: float, gamma: float, family: type) -> None:
+    penalty = make_penalty(0.3, gamma, q)
 
     assert type(penalty) is family
-    assert penalty.penalty_exponent == q
+    vector = penalty.penalty(torch.tensor([-2.0], dtype=torch.float64))
+    assert penalty.scalar_penalty(-2.0) == pytest.approx(float(vector), rel=1e-15)
 
 
 def test_fractional_penalty_rejects_a_log_parameter() -> None:

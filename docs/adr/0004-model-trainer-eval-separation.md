@@ -105,7 +105,12 @@ correction that is zero by default. Each family supplies Φ, its derivative, its
 closed-form prox and the full scalar prox; the log family adds its correction.
 `make_penalty(α, γ, q)` selects the family from the configured values, so
 penalty selection stays config-driven (see "Penalty selection stays
-config-driven" below).
+config-driven" below). The family also supplies what callers used to branch on
+q for: SSN's proximal scale λ_t and step τ (`prox_scale`, `proximal_step`,
+replacing `fractional_prox_scale` and the branch in SSN's `_tau`) and the
+penalty of one coefficient in the finite-step increment (`scalar_penalty`).
+Callers read only α, the weight of the penalty in the objective; γ and q are
+no longer exposed.
 
 SSN remains a `torch.optim.Optimizer`; its `step()` owns the complete configured
 iteration budget and the final objective acceptance/fallback on temporary

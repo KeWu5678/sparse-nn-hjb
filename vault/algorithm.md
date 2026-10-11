@@ -174,8 +174,9 @@ warm-start selection; SparseModel and the Penalty supply their mathematical eval
 - `SSN/` — the semismooth Newton optimizer:
   - `optimizer.py` — `SSN(Optimizer)` on a `Penalty`. One `step()` runs the
     complete configured correction on supplied coefficients and owns its final
-    acceptance/fallback; SSN owns the normal map, its Jacobian, the prox
-    preimage and the prox-scale selection `fractional_prox_scale`.
+    acceptance/fallback; SSN owns the normal map, its Jacobian and the prox
+    preimage. The penalty family supplies the proximal scale and step
+    (`prox_scale`, `proximal_step`).
   - `strategies.py` — Levenberg–Marquardt and Steihaug CG globalization.
   - `mpcg.py` — projected/trust-region CG inner solve.
 - `data.py` — reading, normalization, splitting, standard DataLoader factories,

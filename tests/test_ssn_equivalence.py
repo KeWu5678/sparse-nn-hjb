@@ -68,10 +68,11 @@ def _run_trajectory(config: dict) -> np.ndarray:
     # rather than silently changing its objective or regenerating its fixtures.
     model_config = resolve_model({"alpha": alpha, "gamma": gamma, "power": power}, P)
     validate_training(model_config)
-    proximal = make_penalty(alpha, gamma, SparseModel(model_config).penalty_exponent)
+    penalty_exponent = SparseModel(model_config).penalty_exponent
+    proximal = make_penalty(alpha, gamma, penalty_exponent)
 
     def coefficient_loss(u):
-        return data_loss(u) + _penalty(u, alpha, gamma, proximal.penalty_exponent)
+        return data_loss(u) + _penalty(u, alpha, gamma, penalty_exponent)
 
     kind = config["kind"]
     if kind == "ssn":

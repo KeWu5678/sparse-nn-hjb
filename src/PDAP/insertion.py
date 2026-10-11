@@ -342,11 +342,10 @@ def finite_step(
         if magnitude <= 0.0:
             continue
         c_star = magnitude if slope < 0 else -magnitude
-        # The insertion increment uses the exact power, without the tiny
-        # magnitude floor needed when differentiating the full penalty.
+        # The one-atom objective increment, eq. algorithm2-increment.
         dJ = (
             slope * c_star + 0.5 * curvature * c_star**2
-            + proximal.alpha * abs(c_star)**proximal.penalty_exponent
+            + proximal.scalar_penalty(c_star)
         )
         if dJ >= 0.0:
             continue
@@ -365,7 +364,7 @@ def finite_step(
         logger.debug(
             "Candidate search  sampled=%d  unique=%d  accepted=%d/%d  "
             "rule=adding atom reduces objective (q=%.3f)",
-            N, n_after, len(accepted_a), max_insert, proximal.penalty_exponent,
+            N, n_after, len(accepted_a), max_insert, problem.penalty_exponent,
         )
 
     if len(accepted_a) == 0:

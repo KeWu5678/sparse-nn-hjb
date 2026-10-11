@@ -44,10 +44,6 @@ class Penalty(ABC):
     def alpha(self) -> float:
         return self._alpha
 
-    @property
-    def penalty_exponent(self) -> float:
-        return self._penalty_exponent
-
     def penalty(self, u: Tensor) -> Tensor:
         """The penalty term alpha*Phi(u) of the objective."""
         return self._alpha * self.sparsity_functional(u)
@@ -89,6 +85,18 @@ class Penalty(ABC):
     def _prox_derivative(self, q: Tensor, lambda_: Tensor, prox_image: Tensor) -> Tensor:
         """Diagonal of the selected proximal Jacobian."""
 
+    @abstractmethod
+    def prox_scale(self, coefficients: Tensor, rho: float) -> float | None:
+        """The proximal scale chosen from warm-start coefficients; None if the family fixes it."""
+
+    @abstractmethod
+    def proximal_step(self, prox_scale: float | None) -> float:
+        """The proximal step tau of the normal map; the proximal constant is alpha*tau."""
+
+    @abstractmethod
+    def scalar_penalty(self, c: float) -> float:
+        """The penalty alpha*phi(|c|) of one coefficient, in scalar arithmetic."""
+
     def scalar_prox(self, value: float, lambda_: float) -> float:
         """Scalar proximal value of the nonsmooth term.
 
@@ -114,10 +122,6 @@ class LogPenalty(Penalty):
         super().__init__(alpha, 1.0)
         self._gamma = gamma
 
-    @property
-    def gamma(self) -> float:
-        return self._gamma
-
     def sparsity_functional(self, u: Tensor) -> Tensor:
         return torch.sum(_phi(torch.abs(u), self._gamma))
 
@@ -138,6 +142,17 @@ class LogPenalty(Penalty):
 
     def _prox_derivative(self, q: Tensor, lambda_: Tensor, prox_image: Tensor) -> Tensor:
         return _compute_prox_derivative_q_one(q, lambda_)
+
+    def prox_scale(self, coefficients: Tensor, rho: float) -> None:
+        """None: the log penalty fixes its scale by 1 + alpha*gamma."""
+        return None
+
+    def proximal_step(self, prox_scale: float | None) -> float:
+        """tau = 1/(1 + alpha*gamma), eq. proximal-residual; prox_scale does not enter."""
+        return 1.0 / (1.0 + self._alpha * self._gamma)
+
+    def scalar_penalty(self, c: float) -> float:
+        return self._alpha * float(_phi(torch.tensor(abs(c), dtype=torch.float64), self._gamma))
 
     def penalty_prox(self, value: float, lambda_: float) -> float:
         """The closed-form root, a minimizer when value >= lambda_; its caller checks that."""
@@ -172,6 +187,34 @@ class FractionalPenalty(Penalty):
 
     def _prox_derivative(self, q: Tensor, lambda_: Tensor, prox_image: Tensor) -> Tensor:
         return _compute_prox_derivative_fractional(q, lambda_, self._penalty_exponent, prox_image)
+
+    def prox_scale(self, coefficients: Tensor, rho: float) -> float:
+        """lambda_t = min(alpha, rho*m^(2-q)/(2(1-q))), eq. algorithm2-prox-scale.
+
+        m is the smallest nonzero magnitude among the warm-start coefficients.
+        """
+        if not 0.0 < rho < 1.0:
+            raise ValueError(f"rho must satisfy 0 < rho < 1, got {rho}")
+        if self._alpha <= 0.0:
+            raise ValueError(f"alpha must be positive, got {self._alpha}")
+        magnitudes = coefficients.abs()
+        nonzero = magnitudes[magnitudes > 0]
+        if nonzero.numel() == 0:
+            raise ValueError("warm-start proximal scaling requires a nonzero coefficient")
+        minimum = float(nonzero.min())
+        exponent = self._penalty_exponent
+        bound = rho * minimum ** (2.0 - exponent) / (2.0 * (1.0 - exponent))
+        return min(self._alpha, bound)
+
+    def proximal_step(self, prox_scale: float | None) -> float:
+        """tau = lambda_t/alpha, eq. algorithm2-normal-map."""
+        if prox_scale is None:
+            raise ValueError("the fractional penalty requires prox_scale")
+        return prox_scale / self._alpha
+
+    def scalar_penalty(self, c: float) -> float:
+        """The exact power, without the magnitude floor needed to differentiate the vector penalty."""
+        return self._alpha * abs(c) ** self._penalty_exponent
 
     def penalty_prox(self, value: float, lambda_: float) -> float:
         return max(self.scalar_prox(value, lambda_), 0.0)

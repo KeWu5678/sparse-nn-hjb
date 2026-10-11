@@ -11,14 +11,14 @@ from src.config.schema import TrainingConfig
 from src.data import make_dataloader
 from src.models import FractionalPenalty, SparseModel
 from src.PDAP import PDAP
-from src.SSN import SSN, fractional_prox_scale
+from src.SSN import SSN
 
 
 def test_prox_scale_for_fractional_penalty_uses_all_nonzero_coefficients() -> None:
     coefficients = torch.tensor([0.0, -0.5, 2.0], dtype=torch.float64)
 
     proximal = FractionalPenalty(1.0, 0.5)
-    scale = fractional_prox_scale(proximal, coefficients, rho=0.9)
+    scale = proximal.prox_scale(coefficients, rho=0.9)
 
     assert scale == pytest.approx(0.3181980515339464)
 
@@ -27,7 +27,7 @@ def test_prox_scale_for_fractional_penalty_preserves_a_smaller_existing_scale() 
     coefficients = torch.tensor([0.5], dtype=torch.float64)
 
     proximal = FractionalPenalty(1e-5, 0.5)
-    scale = fractional_prox_scale(proximal, coefficients, rho=0.9)
+    scale = proximal.prox_scale(coefficients, rho=0.9)
 
     assert scale == pytest.approx(1e-5)
 
@@ -92,7 +92,7 @@ def test_fractional_ssn_preserves_a_prox_consistent_warm_start() -> None:
         data_loss, torch.tensor([[curvature]], dtype=torch.float64),
         alpha=alpha, gamma=0.0, power=3.0,
     )
-    prox_scale = fractional_prox_scale(proximal, coefficient.detach(), rho=0.9)
+    prox_scale = proximal.prox_scale(coefficient.detach(), rho=0.9)
     optimizer = SSN([coefficient], proximal, coefficient_loss, hess_obj, prox_scale=prox_scale, tolerance_grad=0.0, max_iter=1)
 
     before = float(coefficient_loss(coefficient).detach())

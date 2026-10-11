@@ -4,6 +4,6 @@ Problem mathematics live in ``src.models``; MPCG and strategies consume
 already evaluated normal-map quantities.
 """
 
-from .optimizer import SSN, fractional_prox_scale
+from .optimizer import SSN
 
-__all__ = ["SSN", "fractional_prox_scale"]
+__all__ = ["SSN"]
