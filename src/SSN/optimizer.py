@@ -86,6 +86,12 @@ class SSN(Optimizer):
         group["tau"] = self._tau(prox_scale)
         self.last_step_success = True
 
+    def _tau(self, prox_scale: float | None) -> float:
+        """The penalty's proximal step tau, after checking a supplied scale."""
+        if prox_scale is not None and (not math.isfinite(prox_scale) or prox_scale <= 0.0):
+            raise ValueError(f"prox_scale must be positive and finite, got {prox_scale}")
+        return self.proximal.proximal_step(prox_scale)
+
     @torch.no_grad()
     def step(self, closure: Callable[[], Tensor]) -> Tensor:  # pyright: ignore[reportIncompatibleMethodOverride]
         """Run one globalized Newton iteration and return the objective it keeps.
@@ -135,10 +141,6 @@ class SSN(Optimizer):
         """
         return (jac_loss - self.proximal.jac_penalty(u)) + self.proximal.jac_correction(u)
 
-    def hess_obj_augmented(self, u: Tensor) -> Tensor:
-        """Hessian of the fitting term plus the diagonal Hessian of the correction."""
-        return self.proximal.hess_correction(u) + self.hess_obj
-
     def prox_preimage(self, u: Tensor, jac_obj_augmented: Tensor) -> Tensor:
         """Reconstruct q from a prox-consistent iterate, following MATLAB SSN.m.
 
@@ -153,6 +155,9 @@ class SSN(Optimizer):
         """Evaluate G(q), using u = P(q) and the smooth gradient at u."""
         return (q - u) / self.param_groups[0]["tau"] + jac_obj_augmented
 
+    def _prox_constant(self) -> float:
+        return self.proximal.alpha * self.param_groups[0]["tau"]
+
     def jac_normal(self, u: Tensor, jac_prox: Tensor) -> Tensor:
         """Selected G'(q), using u = P(q) and jac_prox = P'(q)."""
         I = torch.eye(u.numel(), device=u.device, dtype=u.dtype)
@@ -161,14 +166,9 @@ class SSN(Optimizer):
             + self.hess_obj_augmented(u) @ jac_prox
         )
 
-    def _prox_constant(self) -> float:
-        return self.proximal.alpha * self.param_groups[0]["tau"]
-
-    def _tau(self, prox_scale: float | None) -> float:
-        """The penalty's proximal step tau, after checking a supplied scale."""
-        if prox_scale is not None and (not math.isfinite(prox_scale) or prox_scale <= 0.0):
-            raise ValueError(f"prox_scale must be positive and finite, got {prox_scale}")
-        return self.proximal.proximal_step(prox_scale)
+    def hess_obj_augmented(self, u: Tensor) -> Tensor:
+        """Hessian of the fitting term plus the diagonal Hessian of the correction."""
+        return self.proximal.hess_correction(u) + self.hess_obj
 
     def _globalized_step(
         self, closure: Callable[[], Tensor], u: Tensor, q: Tensor, normal_q: Tensor,
