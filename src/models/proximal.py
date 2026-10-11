@@ -57,6 +57,10 @@ class Proximal:
     def penalty_exponent(self) -> float:
         return self._penalty_exponent
 
+    def penalty(self, u: Tensor) -> Tensor:
+        """The penalty term alpha*Phi(u) of the objective."""
+        return self._alpha * self.sparsity_functional(u)
+
     def sparsity_functional(self, u: Tensor) -> Tensor:
         """Unweighted log/power functional Phi on the supplied penalty coordinates."""
         magnitudes = self._magnitudes(u)
@@ -70,10 +74,6 @@ class Proximal:
             torch.zeros_like(magnitudes),
         )
         return torch.sum(powers)
-
-    def penalty(self, u: Tensor) -> Tensor:
-        """The penalty term alpha*Phi(u) of the objective."""
-        return self._alpha * self.sparsity_functional(u)
 
     def jac_penalty(self, u: Tensor) -> Tensor:
         """Derivative of the penalty, selecting zero at u = 0 for the power family."""
@@ -144,13 +144,6 @@ class Proximal:
         v = torch.tensor([value], dtype=torch.float64)
         return float(self._closed_form_prox(v, lambda_)[0])
 
-    def masks(self, u: Tensor) -> tuple[Tensor, Tensor]:
-        """Penalized and nonnegative coordinate masks for u, defaulting to all and none."""
-        return (
-            self._mask(self._penalized_mask, u, True, "penalized_mask"),
-            self._mask(self._nonneg_mask, u, False, "nonneg_mask"),
-        )
-
     def _magnitudes(self, u: Tensor) -> Tensor:
         """Penalized |u|, using max(u, 0) on nonnegative coordinates."""
         penalized, nonneg = self.masks(u)
@@ -172,6 +165,13 @@ class Proximal:
         penalized, _ = self.masks(u)
         return torch.where(penalized, torch.full_like(u, float(value)), torch.zeros_like(u))
 
+    def masks(self, u: Tensor) -> tuple[Tensor, Tensor]:
+        """Penalized and nonnegative coordinate masks for u, defaulting to all and none."""
+        return (
+            self._mask(self._penalized_mask, u, True, "penalized_mask"),
+            self._mask(self._nonneg_mask, u, False, "nonneg_mask"),
+        )
+
     @staticmethod
     def _mask(mask: Tensor | None, coordinates: Tensor, default: bool, name: str) -> Tensor:
         if mask is None:
@@ -181,7 +181,7 @@ class Proximal:
         return mask.to(dtype=torch.bool, device=coordinates.device)
 
 
-# Scalar log-penalty formulas
+# The log penalty phi and its derivatives
 
 
 def _phi(t, gamma):
@@ -208,36 +208,7 @@ def _ddphi(t, gamma):
     return -0.5 * gamma_bar / ((1 + gamma_bar * t) ** 2)
 
 
-def _phi_prox(v: float, lambda_: float, gamma: float) -> float:
-    """MATLAB's closed-form nonnegative step for ``lambda * phi(t)``.
-
-    The objective is J(t) = (t-v)^2/2 + lambda*phi(t), t >= 0.
-    At gamma=0 the step is nonnegative soft thresholding. Otherwise, with
-    gamma_bar = 2*gamma, stationarity gives
-        t^2 - a*t + (lambda-v)/gamma_bar = 0,
-        a = v - lambda/2 - 1/gamma_bar.
-    Delta is its discriminant; the larger root is clipped to t >= 0, as in
-    MATLAB setup_problem_NN_2d.m (theta=1/2).
-
-    For lambda, gamma >= 0, this is a global minimizer when lambda*gamma < 1
-    or v >= lambda. PDAP's warm-start acceptance guard ensures the latter.
-    Outside these regimes the root need not be globally optimal; no extra
-    objective comparison or rejection is performed, matching the reference.
-    """
-    if gamma == 0:
-        return max(v - lambda_, 0.0)
-
-    gamma_bar = 2.0 * gamma
-    a = v - lambda_ * 0.5 - 1.0 / gamma_bar
-    delta = a * a + 4.0 * (v - lambda_) / gamma_bar
-    if delta < 0:
-        return 0.0
-
-    t = 0.5 * (a + math.sqrt(delta))
-    return max(t, 0.0)
-
-
-# Fractional proximal maps and their derivatives
+# Closed-form proximal maps of lambda*|.|^q and their derivatives
 
 
 def _compute_prox_q_one(v, lambda_):
@@ -365,3 +336,35 @@ def _compute_prox_derivative_fractional(v, lambda_, penalty_exponent, prox_resul
         torch.ones_like(v),
         torch.where(active, 1.0 / denom, torch.zeros_like(v)),
     )
+
+
+# The nonnegative proximal step of lambda*phi
+
+
+def _phi_prox(v: float, lambda_: float, gamma: float) -> float:
+    """MATLAB's closed-form nonnegative step for ``lambda * phi(t)``.
+
+    The objective is J(t) = (t-v)^2/2 + lambda*phi(t), t >= 0.
+    At gamma=0 the step is nonnegative soft thresholding. Otherwise, with
+    gamma_bar = 2*gamma, stationarity gives
+        t^2 - a*t + (lambda-v)/gamma_bar = 0,
+        a = v - lambda/2 - 1/gamma_bar.
+    Delta is its discriminant; the larger root is clipped to t >= 0, as in
+    MATLAB setup_problem_NN_2d.m (theta=1/2).
+
+    For lambda, gamma >= 0, this is a global minimizer when lambda*gamma < 1
+    or v >= lambda. PDAP's warm-start acceptance guard ensures the latter.
+    Outside these regimes the root need not be globally optimal; no extra
+    objective comparison or rejection is performed, matching the reference.
+    """
+    if gamma == 0:
+        return max(v - lambda_, 0.0)
+
+    gamma_bar = 2.0 * gamma
+    a = v - lambda_ * 0.5 - 1.0 / gamma_bar
+    delta = a * a + 4.0 * (v - lambda_) / gamma_bar
+    if delta < 0:
+        return 0.0
+
+    t = 0.5 * (a + math.sqrt(delta))
+    return max(t, 0.0)
