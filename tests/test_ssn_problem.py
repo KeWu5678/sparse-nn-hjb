@@ -118,7 +118,7 @@ def test_accepted_trials_leave_parameters_untouched_until_commit(method):
     proximal, coefficient_loss, hess_obj = synthetic_correction(
         data_loss, torch.eye(2, dtype=torch.float64), alpha=0.0, gamma=0.0,
     )
-    optimizer = SSN([coefficient], proximal, coefficient_loss, hess_obj, method=method, max_iter=1)
+    optimizer = SSN([coefficient], proximal, coefficient_loss, hess_obj, method=method)
     loss = optimizer.step()
 
     assert optimizer.last_step_success

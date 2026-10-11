@@ -1,6 +1,5 @@
-"""Complete semismooth Newton coefficient correction for a sparse problem."""
+"""Semismooth Newton iterations on the normal map of a proximal splitting."""
 
-import logging
 import math
 from typing import Callable, Iterable
 
@@ -14,8 +13,6 @@ from .strategies import damped_newton_step, trust_region_step
 
 __all__ = ["SSN"]
 
-logger = logging.getLogger(__name__)
-
 # Selected by the 24-cell VDP/pendulum pilot in experiments/algorithm2_rho_pilot.md.
 ALGORITHM2_PROX_RHO = 0.5
 
@@ -25,27 +22,22 @@ class SSN(Optimizer):
 
     ``proximal`` owns the penalty and its proximal maps. SSN owns the normal map
     built on them, autograd, the parameters, iteration control, and globalization state.
-    Each ``step()`` runs a complete configured correction on supplied working
-    coefficients. The final guard restores their starting values if the result
-    worsens the full objective; nonfinite results are always rejected.
+    Each ``step()`` runs one globalized Newton iteration on supplied working
+    coefficients. The caller owns the iteration budget and the acceptance of the
+    finished correction.
 
     Args:
         params: parameters to optimize (outer weights only).
         proximal: penalty and proximal maps evaluated at a supplied flat vector.
         loss: complete loss callable for this fixed-support coefficient correction.
         hess_obj: Hessian of the fitting term only, excluding the penalty.
-        max_iter: number of Newton iterations in one complete correction.
-        correction_guard: reject an increased final loss; False preserves the
-            explicitly configured historical unguarded comparison.
         max_ls_iter: maximum damping retries after the initial trial.
         tolerance_ls: accept damped loss <= tolerance_ls * current loss.
         method: "levenberg_marquardt" (legacy damped-Newton name) or "steihaug_cg".
         sigmamax: maximum trust-region radius.
-        tolerance_grad: skip this iteration's Newton work when ||G(q)||_inf is
-            at or below the tolerance; the correction still runs max_iter iterations.
-            Zero disables this check.
+        tolerance_grad: skip the step's Newton work when ||G(q)||_inf is at or
+            below the tolerance. Zero disables this check.
         prox_scale: optional override of the scale chosen from the warm start.
-        verbose: report correction iterations, acceptance, and diagnostics.
 
     q is the proximal preimage, normal_q = G(q), and jac_normal is its selected
     Jacobian. The Newton equation is jac_normal @ dq = -normal_q. tau is the
@@ -60,25 +52,18 @@ class SSN(Optimizer):
         loss: Callable[[Tensor], Tensor],
         hess_obj: Tensor,
         *,
-        max_iter: int = 20,
-        correction_guard: bool = True,
         max_ls_iter: int = 500,
         tolerance_ls: float = 1.0 + 1e-8,
         method: str = "levenberg_marquardt",
         sigmamax: float = 10.0,
         tolerance_grad: float = 0.0,
         prox_scale: float | None = None,
-        verbose: bool = False,
     ) -> None:
         """Use a proximal splitting whose configuration was validated by training setup."""
         methods = ("levenberg_marquardt", "steihaug_cg")
         if method not in methods:
             raise ValueError(f"unknown method {method!r}; expected one of {list(methods)}")
-        if not isinstance(max_iter, int) or isinstance(max_iter, bool) or max_iter < 0:
-            raise ValueError("max_iter must be a nonnegative integer")
         defaults = {
-            "max_iter": max_iter,
-            "correction_guard": correction_guard,
             "max_ls_iter": max_ls_iter,
             "tolerance_ls": tolerance_ls,
             "method": method,
@@ -100,49 +85,22 @@ class SSN(Optimizer):
             )
         group["prox_scale"] = prox_scale
         group["tau"] = self._tau(prox_scale)
-        self.verbose = verbose
         self.last_step_success = True
-        self.iterations_run = 0
-        self.failed_steps = 0
-        self.correction_accepted = False
 
     @torch.no_grad()
     def step(self) -> Tensor:  # pyright: ignore[reportIncompatibleMethodOverride]
-        """Run a complete correction and return the accepted full objective.
+        """Run one globalized Newton iteration and return the objective it keeps.
 
-        No convergence claim is made after the fixed iteration budget. Ordinary
-        rejected trials continue the correction; exceptions restore the starting
-        working coefficients and propagate with their original cause.
+        A rejected trial leaves the coefficients unchanged. An exception restores
+        them and propagates with its original cause.
         """
         start = parameters_to_vector(self._params).detach().clone()
-        self.iterations_run = self.failed_steps = 0
-        self.correction_accepted = False
-        self.last_step_success = True
         try:
-            u, initial_loss = self._evaluate_current()
-            if not torch.isfinite(start).all() or not torch.isfinite(initial_loss):
-                raise ValueError("SSN requires finite starting coefficients and loss")
-            loss = initial_loss
-            for iteration in range(self.param_groups[0]["max_iter"]):
-                if iteration:
-                    u, loss = self._evaluate_current()
-                loss = self._iteration(u, loss)
-                self.iterations_run += 1
-                self.failed_steps += int(not self.last_step_success)
-            finite = bool(torch.isfinite(loss) & torch.isfinite(parameters_to_vector(self._params)).all())
-            self.correction_accepted = finite and (
-                not self.param_groups[0]["correction_guard"] or bool(loss <= initial_loss)
-            )
+            return self._iteration(*self._evaluate_current())
         except Exception:
             vector_to_parameters(start, self._params)
             self.last_step_success = False
             raise
-        if not self.correction_accepted:
-            vector_to_parameters(start, self._params)
-            loss = initial_loss
-        if self.verbose:
-            self._report(initial_loss, loss)
-        return loss
 
     def _evaluate_current(self) -> tuple[Tensor, Tensor]:
         with torch.enable_grad():
@@ -239,13 +197,3 @@ class SSN(Optimizer):
             vector_to_parameters(self.proximal.prox(q_trial, self._prox_constant()), self._params)
             return loss_trial
         return loss
-
-    def _report(self, initial_loss: Tensor, loss: Tensor) -> None:
-        group = self.param_groups[0]
-        logger.debug(
-            "SSN correction  iterations=%d  objective=%.6e->%.6e  accepted=%s  "
-            "failed_steps=%d  prox_scale=%s  tau=%.6e",
-            self.iterations_run, float(initial_loss.detach()), float(loss.detach()),
-            str(self.correction_accepted).lower(), self.failed_steps,
-            group["prox_scale"], group["tau"],
-        )

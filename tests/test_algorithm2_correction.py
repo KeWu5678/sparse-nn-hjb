@@ -93,7 +93,7 @@ def test_fractional_ssn_preserves_a_prox_consistent_warm_start() -> None:
         alpha=alpha, gamma=0.0, power=3.0,
     )
     prox_scale = proximal.prox_scale(coefficient.detach(), rho=0.9)
-    optimizer = SSN([coefficient], proximal, coefficient_loss, hess_obj, prox_scale=prox_scale, tolerance_grad=0.0, max_iter=1)
+    optimizer = SSN([coefficient], proximal, coefficient_loss, hess_obj, prox_scale=prox_scale, tolerance_grad=0.0)
 
     before = float(coefficient_loss(coefficient).detach())
     optimizer.step()
@@ -137,7 +137,7 @@ def test_fractional_ssn_uses_the_closed_form_prox_derivative(
         data_loss, torch.tensor([[2.0]], dtype=torch.float64),
         alpha=alpha, gamma=0.0, power=power,
     )
-    optimizer = SSN([coefficient], proximal, coefficient_loss, hess_obj, prox_scale=prox_scale, tolerance_grad=0.0, max_iter=1)
+    optimizer = SSN([coefficient], proximal, coefficient_loss, hess_obj, prox_scale=prox_scale, tolerance_grad=0.0)
     optimizer.step()
 
     assert optimizer.last_step_success

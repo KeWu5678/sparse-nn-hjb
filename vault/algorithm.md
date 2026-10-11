@@ -165,6 +165,8 @@ warm-start selection; SparseModel and the Penalty supply their mathematical eval
     are outside the class.
   - `insertion.py` — profile-threshold and finite-step candidate selection and
     insertion objective change.
+  - `correction.py` — `correct_coefficients` runs the SSN iteration budget and
+    discards a correction that increases the objective (or is nonfinite).
   - `radius.py` — theorem certificate radius; PDAP applies its cap and fallback.
   - `warmstart.py` — warm-start procedure and initialization using problem calculations,
     including the historical indicator derivative of its sphere kernel.
@@ -172,10 +174,9 @@ warm-start selection; SparseModel and the Penalty supply their mathematical eval
     checkpoint with artifact views; selects the earliest minimum training
     objective. Execution totals also include work without a new checkpoint.
 - `SSN/` — the semismooth Newton optimizer:
-  - `optimizer.py` — `SSN(Optimizer)` on a `Penalty`. One `step()` runs the
-    complete configured correction on supplied coefficients and owns its final
-    acceptance/fallback; SSN owns the normal map, its Jacobian and the prox
-    preimage. The penalty family supplies the proximal scale and step
+  - `optimizer.py` — `SSN(Optimizer)` on a `Penalty`. One `step()` runs one
+    globalized Newton iteration on supplied coefficients; SSN owns the normal
+    map, its Jacobian and the prox preimage. The penalty family supplies the proximal scale and step
     (`prox_scale`, `proximal_step`).
   - `strategies.py` — Levenberg–Marquardt and Steihaug CG globalization.
   - `mpcg.py` — projected/trust-region CG inner solve.

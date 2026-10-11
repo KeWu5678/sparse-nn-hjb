@@ -18,6 +18,7 @@ from ..config.activations import get_growth
 from ..data import full_batch
 from ..models import Penalty, SparseModel
 from ..SSN import SSN
+from .correction import correct_coefficients
 from .insertion import FIXED_LOG_CLAMP, finite_step, profile_threshold
 from .radius import certificate_radius, sample_extent
 from .warmstart import warm_start
@@ -63,7 +64,10 @@ class PDAP:
             tolerance_ls=t.tolerance_ls, tolerance_grad=t.tolerance_grad, sigmamax=t.sigmamax,
         )
         # outer-loop + insertion settings
-        self.fit_outer_iterations = t.fit_outer_iterations
+        iterations = t.fit_outer_iterations
+        if not isinstance(iterations, int) or isinstance(iterations, bool) or iterations < 0:
+            raise ValueError("training.fit_outer_iterations must be a nonnegative integer")
+        self.fit_outer_iterations = iterations
         self.ins_merge_tol = t.ins_merge_tol
         self.lbfgs_lr = t.lbfgs_lr
         self.lbfgs_steps = t.lbfgs_steps
@@ -152,19 +156,14 @@ class PDAP:
 
         hess_obj = problem.hess_obj(value_jacobian, gradient_jacobian)
         theta = torch.nn.Parameter(problem.c.detach() * moment_weight)
-        optimizer = SSN(
-            [theta], self.proximal, coefficient_loss, hess_obj, max_iter=self.fit_outer_iterations,
-            correction_guard=self.correction_guard, verbose=verbose, **self.solver,
+        optimizer = SSN([theta], self.proximal, coefficient_loss, hess_obj, **self.solver)
+        diagnostics = correct_coefficients(
+            optimizer, theta, coefficient_loss, iterations=self.fit_outer_iterations,
+            correction_guard=self.correction_guard, verbose=verbose,
         )
-        optimizer.step()
         with torch.no_grad():
             problem.c.copy_(theta.detach() / moment_weight)
-        return {
-            "ssn_iterations": optimizer.iterations_run,
-            "ssn_failed_steps": optimizer.failed_steps,
-            "ssn_last_step_success": optimizer.last_step_success,
-            "correction_accepted": optimizer.correction_accepted,
-        }
+        return diagnostics
 
     def _insert(
         self, problem, train_loader, num_insertion: int, max_insert: int, verbose: bool

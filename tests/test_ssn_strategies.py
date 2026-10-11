@@ -14,7 +14,7 @@ def _make_optimizer(method="levenberg_marquardt", *, curvature=1.0, **options):
         torch.tensor([[curvature]], dtype=torch.float64),
         alpha=0.0, gamma=0.0,
     )
-    optimizer = SSN([coefficient], proximal, coefficient_loss, hess_obj, method=method, max_iter=1, **options)
+    optimizer = SSN([coefficient], proximal, coefficient_loss, hess_obj, method=method, **options)
     return optimizer, coefficient
 
 

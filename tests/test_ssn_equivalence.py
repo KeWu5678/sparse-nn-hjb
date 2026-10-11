@@ -77,12 +77,11 @@ def _run_trajectory(config: dict) -> np.ndarray:
     kind = config["kind"]
     if kind == "ssn":
         opt = SSN(
-            [theta], proximal, coefficient_loss, H, max_iter=1, correction_guard=False,
-            prox_scale=config.get("prox_scale"),
+            [theta], proximal, coefficient_loss, H, prox_scale=config.get("prox_scale"),
         )
     elif kind == "ssn_tr":
         # folded into the base SSN: trust-region (Steihaug-CG) globalization
-        opt = SSN([theta], proximal, coefficient_loss, H, method="steihaug_cg", max_iter=1, correction_guard=False)
+        opt = SSN([theta], proximal, coefficient_loss, H, method="steihaug_cg")
     else:  # pragma: no cover
         raise ValueError(kind)
 
