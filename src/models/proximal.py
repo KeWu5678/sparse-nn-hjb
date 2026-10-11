@@ -96,6 +96,12 @@ class Proximal:
         magnitudes = self._magnitudes(u)
         return self._alpha * (_phi(magnitudes, self._gamma) - magnitudes).sum()
 
+    def _magnitudes(self, u: Tensor) -> Tensor:
+        """Penalized |u|, using max(u, 0) on nonnegative coordinates."""
+        penalized, nonneg = self.masks(u)
+        coefficients = u[penalized]
+        return torch.where(nonneg[penalized], coefficients.clamp_min(0.0), coefficients.abs())
+
     def jac_correction(self, u: Tensor) -> Tensor:
         """Derivative of the smooth correction."""
         if self._penalty_exponent != 1.0:
@@ -107,6 +113,9 @@ class Proximal:
         if self._penalty_exponent != 1.0:
             return torch.diag(torch.zeros_like(u))
         return torch.diag(self._alpha_vec(u) * _ddphi(torch.abs(u), self._gamma))
+
+    def _alpha_vec(self, u: Tensor) -> Tensor:
+        return self._penalized_constant(u, self._alpha)
 
     def prox(self, q: Tensor, lambda_: float) -> Tensor:
         """Proximal map of the fractional penalty, including nonnegative coordinates."""
@@ -123,6 +132,25 @@ class Proximal:
             diagonal = _compute_prox_derivative_fractional(q, constant, self._penalty_exponent, prox_image)
         kill = self.masks(q)[1] & (q < 0)
         return torch.diag(torch.where(kill, torch.zeros_like(prox_image), diagonal))
+
+    def _penalized_constant(self, u: Tensor, value: float) -> Tensor:
+        penalized, _ = self.masks(u)
+        return torch.where(penalized, torch.full_like(u, float(value)), torch.zeros_like(u))
+
+    def masks(self, u: Tensor) -> tuple[Tensor, Tensor]:
+        """Penalized and nonnegative coordinate masks for u, defaulting to all and none."""
+        return (
+            self._mask(self._penalized_mask, u, True, "penalized_mask"),
+            self._mask(self._nonneg_mask, u, False, "nonneg_mask"),
+        )
+
+    @staticmethod
+    def _mask(mask: Tensor | None, coordinates: Tensor, default: bool, name: str) -> Tensor:
+        if mask is None:
+            return torch.full_like(coordinates, default, dtype=torch.bool)
+        if mask.shape != coordinates.shape:
+            raise ValueError(f"{name} length must match the problem dimension")
+        return mask.to(dtype=torch.bool, device=coordinates.device)
 
     def penalty_prox(self, value: float, lambda_: float) -> float:
         """Selected nonnegative proximal value for the full scalar penalty.
@@ -144,12 +172,6 @@ class Proximal:
         v = torch.tensor([value], dtype=torch.float64)
         return float(self._closed_form_prox(v, lambda_)[0])
 
-    def _magnitudes(self, u: Tensor) -> Tensor:
-        """Penalized |u|, using max(u, 0) on nonnegative coordinates."""
-        penalized, nonneg = self.masks(u)
-        coefficients = u[penalized]
-        return torch.where(nonneg[penalized], coefficients.clamp_min(0.0), coefficients.abs())
-
     def _closed_form_prox(self, v: Tensor, lambda_) -> Tensor:
         """Global proximal map of lambda_*|.|^q, choosing the closed form by the exact q."""
         return {
@@ -157,28 +179,6 @@ class Proximal:
             0.5: _compute_prox_q_half,
             2.0 / 3.0: _compute_prox_q_twothirds,
         }[self._penalty_exponent](v, lambda_)
-
-    def _alpha_vec(self, u: Tensor) -> Tensor:
-        return self._penalized_constant(u, self._alpha)
-
-    def _penalized_constant(self, u: Tensor, value: float) -> Tensor:
-        penalized, _ = self.masks(u)
-        return torch.where(penalized, torch.full_like(u, float(value)), torch.zeros_like(u))
-
-    def masks(self, u: Tensor) -> tuple[Tensor, Tensor]:
-        """Penalized and nonnegative coordinate masks for u, defaulting to all and none."""
-        return (
-            self._mask(self._penalized_mask, u, True, "penalized_mask"),
-            self._mask(self._nonneg_mask, u, False, "nonneg_mask"),
-        )
-
-    @staticmethod
-    def _mask(mask: Tensor | None, coordinates: Tensor, default: bool, name: str) -> Tensor:
-        if mask is None:
-            return torch.full_like(coordinates, default, dtype=torch.bool)
-        if mask.shape != coordinates.shape:
-            raise ValueError(f"{name} length must match the problem dimension")
-        return mask.to(dtype=torch.bool, device=coordinates.device)
 
 
 # The log penalty phi and its derivatives
