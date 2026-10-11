@@ -103,7 +103,8 @@ q ∈ {1/2, 2/3} and γ = 0. The base holds what both share: the penalty αΦ, t
 vector and scalar proximal maps of the nonsmooth term α·Σ|u|^q, and a smooth
 correction that is zero by default. Each family supplies Φ, its derivative, its
 closed-form prox and the full scalar prox; the log family adds its correction.
-`make_penalty(α, γ, q)` selects the family from the configured values, so
+The module is now `src/models/penalty.py`, and callers name the instance
+`penalty`. `make_penalty(α, γ, q)` selects the family from the configured values, so
 penalty selection stays config-driven (see "Penalty selection stays
 config-driven" below). The family also supplies what callers used to branch on
 q for: SSN's proximal scale λ_t and step τ (`prox_scale`, `proximal_step`,

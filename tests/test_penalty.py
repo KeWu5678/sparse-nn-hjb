@@ -4,7 +4,7 @@ import pytest
 import torch
 
 from src.models import FractionalPenalty, LogPenalty, make_penalty
-from src.models.proximal import _ddphi, _dphi, _phi
+from src.models.penalty import _ddphi, _dphi, _phi
 
 
 @pytest.mark.parametrize("gamma", [0.0, 0.1, 1.0, 10.0])

@@ -9,7 +9,7 @@ from src.config.activations import ACTIVATIONS
 from src.data import make_dataloader
 from src.eval import metrics
 from src.models import LogPenalty, SparseModel
-from src.models.proximal import _phi
+from src.models.penalty import _phi
 from src.PDAP.warmstart import _warm_start_kernel
 
 

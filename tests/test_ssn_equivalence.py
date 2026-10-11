@@ -18,7 +18,7 @@ from ssn_test_problem import closure_for
 
 from src.config import resolve_model, validate_training
 from src.models import SparseModel, make_penalty
-from src.models.proximal import _phi
+from src.models.penalty import _phi
 from src.SSN import SSN
 
 GOLDEN_PATH = Path(__file__).parent / "fixtures" / "ssn_golden.npz"

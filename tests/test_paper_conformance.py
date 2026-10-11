@@ -15,7 +15,7 @@ from src.config.schema import EnvConfig, ExperimentConfig, ModelConfig, Training
 from src.data import make_dataloader, split_value_samples
 from src.eval import metrics
 from src.models import SparseModel
-from src.models.proximal import _phi
+from src.models.penalty import _phi
 from src.PDAP import PDAP
 from src.PDAP.insertion import profile_threshold
 from src.PDAP.radius import certificate_radius, sample_extent
