@@ -86,7 +86,7 @@ that increases the post-insertion objective.
 
 ## Source and tests
 
-- `src/SSN/prox.py`: closed-form global prox and derivative.
+- `src/models/proximal.py`: closed-form global prox and derivative (`Proximal.prox`, `Proximal.jac_prox`).
 - `src/SSN/optimizer.py`: normal map and generalized Jacobian.
 - `src/PDAP/insertion.py`: actual one-atom increment and warm coefficient.
 - `src/PDAP/ssn_solve.py`: fixed warm-start scale and correction diagnostics.

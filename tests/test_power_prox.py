@@ -5,10 +5,19 @@ from __future__ import annotations
 import pytest
 import torch
 
-from src.models.prox import _power_prox, _power_prox_derivative
+from src.models import Proximal
 
 
-@pytest.mark.parametrize("tensor_scale", [False, True])
+def power_prox(v: torch.Tensor, lambda_: float, q: float) -> torch.Tensor:
+    """The vector prox of lambda_*|.|^q; alpha does not enter it."""
+    return Proximal(1.0, 0.0, q).prox(v, lambda_)
+
+
+def jac_power_prox(v: torch.Tensor, lambda_: float, q: float) -> torch.Tensor:
+    proximal = Proximal(1.0, 0.0, q)
+    return proximal.jac_prox(v, lambda_, prox_image=proximal.prox(v, lambda_))
+
+
 @pytest.mark.parametrize(
     ("scale", "expected_diagonal"),
     [
@@ -17,13 +26,12 @@ from src.models.prox import _power_prox, _power_prox_derivative
     ],
 )
 def test_soft_threshold_derivative_at_threshold_and_zero_scale(
-    scale: float, expected_diagonal: list[float], tensor_scale: bool
+    scale: float, expected_diagonal: list[float]
 ) -> None:
     """Keep the active-side choice at the kink and the zero-scale identity."""
     v = torch.tensor([-2.0, -1.0, -0.5, 0.0, 0.5, 1.0, 2.0], dtype=torch.float64)
-    lambda_ = torch.full_like(v, scale) if tensor_scale else scale
 
-    derivative = _power_prox_derivative(v=v, lambda_=lambda_, penalty_exponent=1.0)
+    derivative = jac_power_prox(v, scale, 1.0)
 
     expected = torch.diag(torch.tensor(expected_diagonal, dtype=v.dtype))
     torch.testing.assert_close(derivative, expected, rtol=0.0, atol=0.0)
@@ -33,7 +41,7 @@ def test_q_half_prox_rejects_a_non_global_stationary_point() -> None:
     """The global prox is zero between the fold and the objective switch."""
     value = torch.tensor([1.3], dtype=torch.float64)
 
-    result = _power_prox(value, 1.0, penalty_exponent=0.5)
+    result = power_prox(value, 1.0, 0.5)
 
     torch.testing.assert_close(result, torch.zeros_like(value))
 
@@ -42,22 +50,15 @@ def test_q_two_thirds_prox_rejects_a_non_global_stationary_point() -> None:
     """The q=2/3 map also switches by objective value, not root existence."""
     value = torch.tensor([1.8], dtype=torch.float64)
 
-    result = _power_prox(value, 1.5, penalty_exponent=2.0 / 3.0)
+    result = power_prox(value, 1.5, 2.0 / 3.0)
 
     torch.testing.assert_close(result, torch.zeros_like(value))
 
 
-@pytest.mark.parametrize("q", [0.5, 2.0 / 3.0])
-def test_fractional_derivative_requires_the_precomputed_prox(q: float) -> None:
-    with pytest.raises(ValueError, match="prox_result from _power_prox is required"):
-        _power_prox_derivative(torch.tensor([2.0], dtype=torch.float64), 1.0, penalty_exponent=q)
-
-
 def test_fractional_prox_derivative_is_zero_when_global_prox_is_zero() -> None:
     value = torch.tensor([1.3], dtype=torch.float64)
-    prox = _power_prox(value, 1.0, penalty_exponent=0.5)
 
-    derivative = _power_prox_derivative(value, 1.0, penalty_exponent=0.5, prox_result=prox)
+    derivative = jac_power_prox(value, 1.0, 0.5)
 
     assert derivative.item() == 0.0
 
@@ -65,10 +66,9 @@ def test_fractional_prox_derivative_is_zero_when_global_prox_is_zero() -> None:
 @pytest.mark.parametrize("q", [0.5, 2.0 / 3.0])
 def test_fractional_prox_with_zero_scale_is_the_identity(q: float) -> None:
     value = torch.tensor([0.0, 1.0, -2.0], dtype=torch.float64)
-    scale = torch.zeros_like(value)
 
-    result = _power_prox(value, scale, penalty_exponent=q)
-    derivative = _power_prox_derivative(value, scale, penalty_exponent=q, prox_result=result)
+    result = power_prox(value, 0.0, q)
+    derivative = jac_power_prox(value, 0.0, q)
 
     torch.testing.assert_close(result, value)
     torch.testing.assert_close(derivative, torch.eye(3, dtype=torch.float64))
@@ -89,8 +89,8 @@ def test_fractional_prox_closed_forms_on_the_active_branch(
     expected_derivative: float,
 ) -> None:
     inputs = torch.tensor([-value, value], dtype=torch.float64)
-    prox = _power_prox(inputs, scale, penalty_exponent=q)
-    derivative = _power_prox_derivative(inputs, scale, penalty_exponent=q, prox_result=prox)
+    prox = power_prox(inputs, scale, q)
+    derivative = jac_power_prox(inputs, scale, q)
 
     torch.testing.assert_close(
         prox, torch.tensor([-expected, expected], dtype=torch.float64)
@@ -110,7 +110,7 @@ def test_fractional_prox_selects_zero_at_the_global_tie(
 ) -> None:
     value = torch.tensor([-switch_input, switch_input], dtype=torch.float64)
 
-    result = _power_prox(value, scale, penalty_exponent=q)
+    result = power_prox(value, scale, q)
 
     torch.testing.assert_close(result, torch.zeros_like(value))
 
@@ -124,10 +124,10 @@ def test_fractional_prox_respects_its_exact_scaling_law(
 ) -> None:
     base_input = torch.tensor([input_value], dtype=torch.float64)
     base_scale = 1.0
-    expected = _power_prox(base_input, base_scale, penalty_exponent=q) * normalization
+    expected = power_prox(base_input, base_scale, q) * normalization
     scaled_mu = normalization ** (2.0 - q)
 
-    result = _power_prox(base_input * normalization, scaled_mu, penalty_exponent=q)
+    result = power_prox(base_input * normalization, scaled_mu, q)
 
     torch.testing.assert_close(result, expected, rtol=1e-12, atol=0.0)
 
@@ -135,7 +135,7 @@ def test_fractional_prox_respects_its_exact_scaling_law(
 def test_q_two_thirds_closed_form_stays_finite_for_a_large_input() -> None:
     value = torch.tensor([1e100], dtype=torch.float64)
 
-    result = _power_prox(value, 1.0, penalty_exponent=2.0 / 3.0)
+    result = power_prox(value, 1.0, 2.0 / 3.0)
 
     assert torch.isfinite(result).all()
     residual = result + (2.0 / 3.0) * result.pow(-1.0 / 3.0) - value

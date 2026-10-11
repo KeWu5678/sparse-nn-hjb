@@ -10,7 +10,6 @@ from src.config import resolve_model, validate_training
 from src.config.schema import TrainingConfig
 from src.data import make_dataloader
 from src.models import Proximal, SparseModel
-from src.models.penalty import _noncvx_penalty
 from src.PDAP import PDAP
 from src.SSN import SSN, fractional_prox_scale
 
@@ -112,14 +111,8 @@ def test_fractional_penalty_is_exactly_zero_at_zero() -> None:
     penalized = torch.tensor([True, True])
     nonnegative = torch.tensor([False, False])
 
-    penalty = _noncvx_penalty(
-        coefficients,
-        penalized,
-        nonnegative,
-        alpha=1.0,
-        gamma=0.0,
-        penalty_exponent=0.5,
-    )
+    proximal = Proximal(1.0, 0.0, 0.5, penalized_mask=penalized, nonneg_mask=nonnegative)
+    penalty = proximal.penalty(coefficients)
 
     assert penalty.item() == 0.0
 

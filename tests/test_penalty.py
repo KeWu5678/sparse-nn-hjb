@@ -3,15 +3,8 @@
 import pytest
 import torch
 
-from src.models.penalty import (
-    _ddphi,
-    _dphi,
-    _noncvx_correction,
-    _noncvx_correction_dd,
-    _noncvx_penalty,
-    _phi,
-    jac_noncvx_penalty,
-)
+from src.models import Proximal
+from src.models.proximal import _ddphi, _dphi, _phi
 
 
 @pytest.mark.parametrize("gamma", [0.0, 0.1, 1.0, 10.0])
@@ -34,16 +27,18 @@ def test_fixed_log_penalty_and_derivatives(gamma: float) -> None:
 def test_penalty_gradient_and_ssn_remainder(q: float, gamma: float) -> None:
     u = torch.tensor([-2.0, -0.5, 0.25, 4.0], dtype=torch.float64, requires_grad=True)
     alpha = 0.3
+    proximal = Proximal(alpha, gamma, q)
     value = alpha * (_phi(u.abs(), gamma) if q == 1 else u.abs().pow(q)).sum()
     (gradient,) = torch.autograd.grad(value, u, create_graph=True)
-    torch.testing.assert_close(jac_noncvx_penalty(u.abs(), u.sign(), alpha, gamma, q), gradient)
+    torch.testing.assert_close(proximal.jac_penalty(u), gradient)
 
     # Only the log family has a smooth remainder after the power-prox step.
-    remainder = value / alpha - u.abs().sum() if q == 1 else (0 * u.square()).sum()
+    remainder = value - alpha * u.abs().sum() if q == 1 else (0 * u.square()).sum()
     (first,) = torch.autograd.grad(remainder, u, create_graph=True)
     (second,) = torch.autograd.grad(first.sum(), u)
-    torch.testing.assert_close(_noncvx_correction(u.abs(), u.sign(), gamma, q), first)
-    torch.testing.assert_close(_noncvx_correction_dd(u.abs(), gamma, q), second)
+    torch.testing.assert_close(proximal.correction(u), remainder)
+    torch.testing.assert_close(proximal.jac_correction(u), first)
+    torch.testing.assert_close(proximal.hess_correction(u), torch.diag(second))
 
 
 @pytest.mark.parametrize(("q", "gamma"), [(1.0, 0.0), (1.0, 1.0), (0.5, 0.0), (2 / 3, 0.0)])
@@ -59,7 +54,8 @@ def test_penalty_respects_masks_and_signed_magnitudes(q: float, gamma: float) ->
     else:
         expected = (magnitudes / 2 + torch.log1p(2 * gamma * magnitudes) / (4 * gamma)).sum()
 
-    actual = _noncvx_penalty(coefficients, penalized, nonneg, alpha=0.3, gamma=gamma, penalty_exponent=q)
+    proximal = Proximal(0.3, gamma, q, penalized_mask=penalized, nonneg_mask=nonneg)
+    actual = proximal.penalty(coefficients)
 
     torch.testing.assert_close(actual, 0.3 * expected)
 
@@ -68,7 +64,7 @@ def test_unpenalized_coordinates_give_a_scalar_zero() -> None:
     coefficients = torch.tensor([-2.0, 3.0], dtype=torch.float64)
     mask = torch.zeros(2, dtype=torch.bool)
 
-    value = _noncvx_penalty(coefficients, mask, mask, alpha=1.0, gamma=1.0, penalty_exponent=1.0)
+    value = Proximal(1.0, 1.0, 1.0, penalized_mask=mask, nonneg_mask=mask).penalty(coefficients)
 
     assert value.shape == ()
     assert value.dtype == coefficients.dtype

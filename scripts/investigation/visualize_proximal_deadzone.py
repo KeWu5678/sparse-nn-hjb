@@ -16,7 +16,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from src.models.prox import _compute_prox_q_half
+from src.models.proximal import _compute_prox_q_half
 
 
 alpha = 1e-5

@@ -154,8 +154,9 @@ warm-start selection; SparseModel and Proximal supply their mathematical evaluat
   - `proximal.py` — `Proximal(alpha, gamma, penalty_exponent)`: the penalty αΦ,
     its split into the fractional penalty α·Σ|u|^q and a smooth correction, the
     vector and scalar proximal maps (taking the proximal constant λ), and the
-    optional coordinate masks. Shared by PDAP, SSN and evaluation.
-  - `penalty.py`, `prox.py`, `moment.py` — mathematical helpers.
+    optional coordinate masks. Shared by PDAP, SSN and evaluation. The scalar
+    log-penalty formulas and closed-form proximal roots sit below the class.
+  - `moment.py` — normalized-measure primitives (moment weights w_p).
 - `PDAP/` — candidate search/acceptance, warm-start, support changes, and correction scheduling:
   - `pdap.py` — plain `PDAP` with `step(problem, train_loader)` for one complete
     paper iteration, configured by `insertion=` ("profile" or "finite_step").
