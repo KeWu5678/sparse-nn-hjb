@@ -13,14 +13,15 @@ class AllenCahnProblem:
     """Benchmark from Kunisch, Vásquez-Varas, and Walter (2023), §9.3.
 
     On ``(-1, 1)`` with zero Neumann boundary data, the state obeys
-    ``y' = nu L y + y - y**3 + B u``.  The finite-horizon cost is
-    ``integral(h |y|² + beta |u|²)`` with no terminal cost.  ``beta`` is
+    ``y' = nu L y + y - y**3 + B u``. The finite-horizon cost is
+    ``integral(h |y|² + beta |u|²)`` with no terminal cost. ``beta`` is
     an explicit benchmark choice; the spatial discretization uses cell
-    averages rather than the Chebyshev collocation and Clenshaw--Curtis
-    cost quadrature used in the source paper.
+    averages rather than the source paper's Chebyshev collocation and
+    Clenshaw--Curtis cost quadrature.
 
     State and adjoint arrays have shape ``(dimension,)`` or
-    ``(dimension, n_times)``; control arrays use three rows.
+    ``(dimension, n_times)``; control arrays use three rows. Pontryagin
+    operators accept stacked state/adjoint arrays ``(2 * dimension, n_times)``.
     """
 
     dimension: int = 6
@@ -35,6 +36,63 @@ class AllenCahnProblem:
             value = getattr(self, name)
             if not np.isfinite(value) or value <= 0.0:
                 raise ValueError(f"{name} must be finite and positive")
+
+    def pontryagin_rhs(self, t: np.ndarray, z: np.ndarray) -> np.ndarray:
+        """State/costate equations after eliminating the stationary control."""
+        y, p = z[:self.dimension], z[self.dimension:]
+        return np.vstack((
+            self._uncontrolled_dynamics(y) + self._control_adjoint @ p,
+            self.adjoint_rhs(t, y, p),
+        ))
+
+    def pontryagin_jacobian(self, _t: np.ndarray, z: np.ndarray) -> np.ndarray:
+        """Analytic derivative of :meth:`pontryagin_rhs` at each time node."""
+        d = self.dimension
+        y, p = z[:d], z[d:]
+        jacobian = np.zeros((2 * d, 2 * d, z.shape[1]))
+        jacobian[:d, :d] = self._linear_state[:, :, None]
+        jacobian[:d, d:] = self._control_adjoint[:, :, None]
+        jacobian[d:, d:] = -self._linear_state.T[:, :, None]
+        i = np.arange(d)
+        jacobian[i, i] -= 3.0 * y**2
+        jacobian[d + i, i] = -2.0 * self.cell_width + 6.0 * y * p
+        jacobian[d + i, d + i] += 3.0 * y**2
+        return jacobian
+
+    def dynamics(self, _t: float, y: np.ndarray, u: np.ndarray) -> np.ndarray:
+        return self._uncontrolled_dynamics(y) + self.control_matrix @ np.asarray(u, dtype=np.float64)
+
+    def adjoint_rhs(self, _t: float, y: np.ndarray, p: np.ndarray) -> np.ndarray:
+        y = np.asarray(y, dtype=np.float64)
+        p = np.asarray(p, dtype=np.float64)
+        return -2.0 * self.cell_width * y - self._linear_state.T @ p + 3.0 * y**2 * p
+
+    def running_cost(self, y: np.ndarray, u: np.ndarray) -> np.ndarray:
+        y = np.asarray(y, dtype=np.float64)
+        u = np.asarray(u, dtype=np.float64)
+        return self.cell_width * np.sum(y**2, axis=0) + self.beta * np.sum(u**2, axis=0)
+
+    def feedback_from_gradient(self, gradient: np.ndarray) -> np.ndarray:
+        return -(self.control_matrix.T @ np.asarray(gradient, dtype=np.float64)) / (2.0 * self.beta)
+
+    def reduced_gradient(self, p: np.ndarray, u: np.ndarray) -> np.ndarray:
+        """Stationarity residual; it vanishes by construction for eliminated controls."""
+        return self.control_matrix.T @ np.asarray(p, dtype=np.float64) + 2.0 * self.beta * np.asarray(u, dtype=np.float64)
+
+    def terminal_gradient(self, y_terminal: np.ndarray) -> np.ndarray:
+        return np.zeros_like(y_terminal, dtype=np.float64)
+
+    def _uncontrolled_dynamics(self, y: np.ndarray) -> np.ndarray:
+        y = np.asarray(y, dtype=np.float64)
+        return self._linear_state @ y - y**3
+
+    @cached_property
+    def _linear_state(self) -> np.ndarray:
+        return self.nu * self.laplacian + np.eye(self.dimension)
+
+    @cached_property
+    def _control_adjoint(self) -> np.ndarray:
+        return -(self.control_matrix @ self.control_matrix.T) / (2.0 * self.beta)
 
     @property
     def cell_width(self) -> float:
@@ -68,78 +126,6 @@ class AllenCahnProblem:
         result = np.maximum(overlap, 0.0) / self.cell_width
         result.setflags(write=False)
         return result
-
-    def dynamics(self, _t: float, y: np.ndarray, u: np.ndarray) -> np.ndarray:
-        y = np.asarray(y, dtype=np.float64)
-        return self.nu * (self.laplacian @ y) + y - y**3 + self.control_matrix @ np.asarray(u, dtype=np.float64)
-
-    def adjoint_rhs(self, _t: float, y: np.ndarray, p: np.ndarray) -> np.ndarray:
-        y = np.asarray(y, dtype=np.float64)
-        p = np.asarray(p, dtype=np.float64)
-        return -2.0 * self.cell_width * y - self.nu * (self.laplacian.T @ p) - (1.0 - 3.0 * y**2) * p
-
-    def running_cost(self, y: np.ndarray, u: np.ndarray) -> np.ndarray:
-        y = np.asarray(y, dtype=np.float64)
-        u = np.asarray(u, dtype=np.float64)
-        return self.cell_width * np.sum(y**2, axis=0) + self.beta * np.sum(u**2, axis=0)
-
-    def feedback_from_gradient(self, gradient: np.ndarray) -> np.ndarray:
-        return -(self.control_matrix.T @ np.asarray(gradient, dtype=np.float64)) / (2.0 * self.beta)
-
-    def reduced_gradient(self, p: np.ndarray, u: np.ndarray) -> np.ndarray:
-        return self.control_matrix.T @ np.asarray(p, dtype=np.float64) + 2.0 * self.beta * np.asarray(u, dtype=np.float64)
-
-    def terminal_gradient(self, y_terminal: np.ndarray) -> np.ndarray:
-        return np.zeros_like(y_terminal, dtype=np.float64)
-
-    def rk4_rollout(
-        self, u_of_x, x0, *, T: float | None = None, dt: float = 0.002,
-        u_clip: float = 50.0,
-    ):
-        """Roll out a held-per-step feedback and integrate its running cost.
-
-        Returns ``(time, states, controls, cost)`` with states and controls
-        stored as rows.  The final step reaches the requested horizon.
-        Nonfinite or divergent trajectories raise rather than return a
-        misleading partial-horizon cost.
-        """
-        horizon = self.T_final if T is None else float(T)
-        if not np.isfinite(horizon) or horizon <= 0 or not np.isfinite(dt) or dt <= 0:
-            raise ValueError("T and dt must be finite and positive")
-        if not np.isfinite(u_clip) or u_clip <= 0:
-            raise ValueError("u_clip must be finite and positive")
-        initial = np.asarray(x0, dtype=np.float64)
-        if initial.shape != (self.dimension,) or not np.all(np.isfinite(initial)):
-            raise ValueError(f"x0 must be a finite vector of length {self.dimension}")
-        n_steps = int(np.ceil(horizon / dt))
-        times = np.linspace(0.0, horizon, n_steps + 1)
-        states = np.empty((n_steps + 1, self.dimension))
-        controls = np.empty((n_steps + 1, self.control_matrix.shape[1]))
-        states[0] = initial
-        cost = 0.0
-        for i, step in enumerate(np.diff(times)):
-            state = states[i]
-            control = np.asarray(u_of_x(state), dtype=np.float64).reshape(-1)
-            if control.shape != (3,) or not np.all(np.isfinite(control)):
-                raise ValueError("feedback must return three finite controls")
-            control = np.clip(control, -u_clip, u_clip)
-            controls[i] = control
-            k1 = self.dynamics(times[i], state, control)
-            state2 = state + step * k1 / 2.0
-            k2 = self.dynamics(times[i] + step / 2.0, state2, control)
-            state3 = state + step * k2 / 2.0
-            k3 = self.dynamics(times[i] + step / 2.0, state3, control)
-            state4 = state + step * k3
-            k4 = self.dynamics(times[i + 1], state4, control)
-            states[i + 1] = state + step * (k1 + 2.0 * k2 + 2.0 * k3 + k4) / 6.0
-            cost += step * float(
-                self.running_cost(state, control) + 2.0 * self.running_cost(state2, control)
-                + 2.0 * self.running_cost(state3, control) + self.running_cost(state4, control)
-            ) / 6.0
-            if not np.all(np.isfinite(states[i + 1])) or np.max(np.abs(states[i + 1])) > 1e3 or not np.isfinite(cost):
-                raise RuntimeError(f"closed-loop rollout diverged at t={times[i + 1]:g}")
-        controls[-1] = controls[-2]
-        return times, states, controls, cost
 
 
 __all__ = ["AllenCahnProblem"]

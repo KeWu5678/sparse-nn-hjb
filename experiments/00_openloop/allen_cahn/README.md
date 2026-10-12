@@ -50,8 +50,10 @@ check uses `--samples 8 --tag smoke`.
 collocation with two initial guesses and an analytic Jacobian. The minimum
 cost among converged stationary candidates is retained. Five-point Gauss
 quadrature on each adaptive interval computes the cost; `p(0)` is the value
-gradient. Before saving the dataset, independently re-solved directional
-finite differences at three sampled states check the gradient labels.
+gradient. Before saving the dataset, directional finite differences at three
+sampled states check the gradient labels by re-solving with the same
+collocation method. This checks sensitivity consistency, not agreement with
+an independent optimizer.
 
 The directory also holds requested initial states, per-sample diagnostics,
 failure records, and metadata with all problem/solver/sampling settings,
@@ -61,7 +63,7 @@ Generated arrays remain ignored local artifacts, like the existing datasets.
 ## Generated data audit, October 12, 2026
 
 Both configured datasets were generated successfully from generator revision
-`5d712a0`. Later wording corrections do not change the numerical implementation;
+`5d712a0`. Subsequent changes are recorded below;
 the metadata retains hashes of the source bytes used during generation.
 
 | States | Samples | Failed solves | Maximum collocation residual | Maximum gradient spot-check error |
@@ -82,6 +84,57 @@ AllenCahn6_20261012/value_samples.npz
 AllenCahn10_20261012/value_samples.npz
 4c233f374dc36bbdb235dda373350b6dd714cda9b3bc5192bf93e3e44071efb0
 ```
+
+## Extended numerical and code review
+
+The initial generation checks were supplemented with the following audits.
+Detailed results and reproducible local scripts are kept in the ignored
+`rawdata/reports/allen_cahn_audit/` directory of the open-loop worktree.
+
+| Check | Coverage | Largest observed discrepancy |
+| --- | --- | ---: |
+| Finer PMP solve: tolerance `1e-9`, 161 initial mesh points | 25 dispersed/extreme rows per dimension | value 1.25e-9; gradient 1.49e-9 |
+| Independently integrated state/cost under the computed control | same 50 rows | state 3.77e-11; cost 7.95e-13 |
+| Sign and spatial-reflection symmetries | same 50 rows | 7.22e-16 |
+| Independent direct control optimization, 300 RK4 steps | 3 actual rows per dimension, zero/random starts | value 7.08e-9; gradient 2.04e-7 |
+
+The direct method separately implements the dynamics and discrete adjoint;
+Torch automatic differentiation and finite differences check its derivatives.
+All 24 optimizations at 150/300 time steps converged, and every selected
+sample's value error decreased on refinement. Twelve additional re-optimized
+initial-state perturbations agreed with stored directional costates within
+5.71e-9. The detailed report is `direct_control_results.json`.
+
+All 4,096 stored rows pass finite-array, requested-state, full-dimensional-rank,
+hash, and independently integrated zero-control upper-bound checks. The
+smallest improvement over zero control is 0.0381 (6D) and 0.0392 (10D).
+Another 200 boundary-value solves used nonzero-costate initial guesses:
+194 converged to the same costs; six exploratory starts did not converge.
+These six failed attempts are separate from the complete production datasets.
+No cheaper branch was found in this audit. See `scientific_audit_summary.json`.
+
+The algebraic `reduced_gradient_norm` is zero by construction after control
+elimination; it is not independent evidence of optimality. Independent
+optimization and refinement supply the additional numerical evidence.
+Tests also compare the nonlinear solver near zero to an independently solved
+finite-horizon Riccati equation, checking the value/costate factor of two.
+
+Review against the current `refactor.md` found duplicated equations, duplicated
+batch assembly, nullable failure results, mixed generation/reporting
+responsibilities, and explanatory ordering issues. The refactor puts the PMP
+operator and Jacobian in the problem, centralizes serial/parallel batch solving,
+raises diagnostic exceptions for failures, and separates generation stages.
+Single-sample results now guarantee value/gradient fields; a failed batch
+returns no partial training dataset. The unused feedback rollout was removed.
+
+After refactoring, all 4,096 original initial states were solved again with
+four workers. Every state, value, and gradient entry is exactly equal to the
+stored arrays; both batches completed with zero failures and the original
+dataset hashes remained unchanged. This full comparison took 270 seconds on
+the local machine. `refactor_equivalence.json` records the configurations,
+package versions, timings, and source hashes. `refactor_acceptance.json`
+records eleven rejection checks for invalid solver output and a mixed batch
+that retained failure diagnostics without producing partial training data.
 
 ## Interpretation
 
