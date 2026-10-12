@@ -9,7 +9,6 @@ import json
 import os
 import platform
 import sys
-from concurrent.futures import ProcessPoolExecutor
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -26,54 +25,34 @@ import scipy
 
 from src.data import DATA_DIR
 from src.OpenLoop.allen_cahn import (
+    AllenCahnBatchError,
     AllenCahnOpenLoopSolver,
     AllenCahnProblem,
+    AllenCahnSampleFailure,
     AllenCahnSolverConfig,
 )
 from src.OpenLoop.allen_cahn.sampling import sobol_initial_states
-from src.OpenLoop.value_samples import ValueSamples
-
-
-def _solve_one(payload):
-    problem, config, initial = payload
-    return AllenCahnOpenLoopSolver(problem, config).solve_sample(initial)
-
-
-def _diagnostic(result) -> dict:
-    return {
-        name: getattr(result, name)
-        for name in ("converged", "message", "iterations", "collocation_residual",
-                     "boundary_residual", "nodes", "reduced_gradient_norm")
-    }
-
-
-def _gradient_checks(solver, states, results) -> list[dict]:
-    """Compare initial costates to independently re-solved directional differences."""
-    rng = np.random.default_rng(1234)
-    checks = []
-    for index in np.linspace(0, len(states) - 1, min(3, len(states)), dtype=int):
-        direction = rng.normal(size=states.shape[1])
-        direction /= np.linalg.norm(direction)
-        epsilon = 1e-4
-        plus = solver.solve_sample(states[index] + epsilon * direction)
-        minus = solver.solve_sample(states[index] - epsilon * direction)
-        if not plus.converged or not minus.converged:
-            raise RuntimeError(f"finite-difference validation failed to converge at row {index}")
-        difference = (plus.value - minus.value) / (2 * epsilon)
-        costate = float(results[index].gradient @ direction)
-        error = float(abs(difference - costate))
-        tolerance = 2e-5 + 2e-4 * abs(difference)
-        checks.append({
-            "row": int(index), "direction": direction.tolist(), "epsilon": epsilon,
-            "finite_difference": float(difference), "costate_derivative": costate,
-            "absolute_error": error, "tolerance": tolerance,
-        })
-        if not np.isfinite(error) or error > tolerance:
-            raise RuntimeError(f"costate finite-difference check failed: {checks[-1]}")
-    return checks
 
 
 def main(argv=None) -> None:
+    args = _parse_args(argv)
+    problem = AllenCahnProblem(
+        dimension=args.dimension, nu=args.diffusion, beta=args.beta, T_final=args.horizon,
+    )
+    config = AllenCahnSolverConfig(
+        collocation_tol=args.tol, collocation_max_nodes=args.max_nodes,
+        initial_mesh_points=args.mesh_points,
+    )
+    states = sobol_initial_states(args.samples, args.dimension, bound=args.bound, seed=args.seed)
+    destination = args.output_dir / f"AllenCahn{args.dimension}_{args.tag}"
+    metadata = _generation_metadata(problem, config, args)
+    generate_dataset(destination, AllenCahnOpenLoopSolver(problem, config), states,
+                     metadata, workers=args.workers)
+    print(f"data: {destination / 'value_samples.npz'}\n"
+          f"metadata: {destination / 'metadata.json'}", flush=True)
+
+
+def _parse_args(argv):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dimension", type=int, choices=(6, 10), required=True)
     parser.add_argument("--samples", type=int, default=2048, help="power of two")
@@ -93,26 +72,20 @@ def main(argv=None) -> None:
         parser.error("--workers must be positive")
     if not args.tag or Path(args.tag).name != args.tag or args.tag in (".", ".."):
         parser.error("--tag must be a single directory-name component")
-    problem = AllenCahnProblem(
-        dimension=args.dimension, nu=args.diffusion, beta=args.beta, T_final=args.horizon,
-    )
-    config = AllenCahnSolverConfig(
-        collocation_tol=args.tol, collocation_max_nodes=args.max_nodes,
-        initial_mesh_points=args.mesh_points,
-    )
-    states = sobol_initial_states(args.samples, args.dimension, bound=args.bound, seed=args.seed)
-    destination = args.output_dir / f"AllenCahn{args.dimension}_{args.tag}"
-    destination.mkdir(parents=True, exist_ok=False)
-    # Preserve requested states even if solving fails; never silently omit rows.
-    np.savez(destination / "requested_states.npz", x=states)
-    metadata = {
+    return args
+
+
+def _generation_metadata(problem, config, args) -> dict:
+    sources = [Path(__file__), ROOT / "src/OpenLoop/value_samples.py",
+               *sorted((ROOT / "src/OpenLoop/allen_cahn").glob("*.py"))]
+    return {
         "created_utc": datetime.now(timezone.utc).isoformat(),
         "source": "https://jmlr.org/papers/volume24/22-1010/22-1010.pdf",
         "source_section": "9.3, equation (58)",
         "adaptation": (
             "Uniform cell-centered finite volumes with exact cell-averaged actuators, "
             "6/10 states instead of 19 Chebyshev degrees of freedom; "
-            "The control-cost coefficient is a repository choice; scrambled Sobol cube sampling."
+            "the control-cost coefficient is a repository choice; scrambled Sobol cube sampling."
         ),
         "target": "V_T(x)=V(0,x); free terminal state and zero terminal cost",
         "reference_scope": "least-cost converged PMP stationary solution; no global certificate",
@@ -121,54 +94,102 @@ def main(argv=None) -> None:
                      "bound": args.bound, "seed": args.seed},
         "versions": {"python": platform.python_version(), "numpy": np.__version__,
                      "scipy": scipy.__version__},
-        "requested_samples": args.samples, "complete": False,
+        "requested_samples": args.samples, "retained_samples": 0, "complete": False,
         "generator_sha256": {
             str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest()
-            for path in [Path(__file__), ROOT / "src/OpenLoop/value_samples.py",
-                         *sorted((ROOT / "src/OpenLoop/allen_cahn").glob("*.py"))]
+            for path in sources
         },
     }
-    meta_path = destination / "metadata.json"
-    meta_path.write_text(json.dumps(metadata, indent=2) + "\n")
-    payloads = ((problem, config, initial) for initial in states)
-    results = []
 
-    def collect(iterator):
-        for result in iterator:
-            results.append(result)
-            if len(results) % 64 == 0 or len(results) == len(states):
-                print(f"Allen–Cahn {args.dimension}D: {len(results)}/{len(states)}", flush=True)
 
-    if args.workers == 1:
-        collect(map(_solve_one, payloads))
-    else:
-        with ProcessPoolExecutor(max_workers=args.workers) as executor:
-            collect(executor.map(_solve_one, payloads, chunksize=4))
-    diagnostics = [_diagnostic(result) for result in results]
-    (destination / "diagnostics.json").write_text(json.dumps(diagnostics, indent=2) + "\n")
-    failures = [dict(row=index, initial_state=states[index].tolist(), **diagnostics[index])
-                for index, result in enumerate(results) if not result.converged]
-    (destination / "failures.json").write_text(json.dumps(failures, indent=2) + "\n")
-    metadata["failed_samples"] = len(failures)
-    metadata["retained_samples"] = len(results) - len(failures)
-    meta_path.write_text(json.dumps(metadata, indent=2) + "\n")
-    if failures:
-        raise RuntimeError(f"{len(failures)} failed solves; no training dataset saved in {destination}")
-    metadata["gradient_checks"] = _gradient_checks(AllenCahnOpenLoopSolver(problem, config), states, results)
-    samples = ValueSamples(
-        x=states, v=np.array([result.value for result in results]),
-        dv=np.stack([result.gradient for result in results]),
-    )
+def generate_dataset(destination, solver, states, metadata, *, workers=1) -> None:
+    """Persist a complete validated dataset, or leave diagnostics and raise.
+
+    ``destination`` must not exist. The supplied metadata is copied; callers
+    need not observe mutation to learn whether generation succeeded.
+    """
+    destination = Path(destination)
+    destination.mkdir(parents=True, exist_ok=False)
+    metadata = dict(metadata)
+    np.savez(destination / "requested_states.npz", x=states)
+    _write_json(destination / "metadata.json", metadata)
+    try:
+        solution = solver.solve(states, _progress(states.shape[1]), workers=workers)
+        _write_solver_records(destination, solution.sample_results)
+        metadata["gradient_checks"] = check_value_gradients(solver, solution.value_samples)
+        _save_validated_samples(destination, solution, metadata)
+    except AllenCahnBatchError as error:
+        _write_solver_records(destination, error.sample_results)
+        metadata.update(failed_samples=len(error.failed_initial_states), error=str(error))
+        raise
+    except Exception as error:
+        # Retain the reason for an interrupted solve/validation, then propagate it.
+        metadata["error"] = f"{type(error).__name__}: {error}"
+        raise
+    finally:
+        _write_json(destination / "metadata.json", metadata)
+
+
+def _progress(dimension):
+    def report(done, total):
+        if done and (done % 64 == 0 or done == total):
+            print(f"Allen–Cahn {dimension}D: {done}/{total}", flush=True)
+    return report
+
+
+def _write_solver_records(destination, results) -> None:
+    diagnostics = [asdict(result.diagnostics) for result in results]
+    failures = [dict(row=index, initial_state=result.initial_state.tolist(), **diagnostics[index])
+                for index, result in enumerate(results) if isinstance(result, AllenCahnSampleFailure)]
+    _write_json(destination / "diagnostics.json", diagnostics)
+    _write_json(destination / "failures.json", failures)
+
+
+def check_value_gradients(solver, samples) -> list[dict]:
+    """Check three stored costates against re-solved directional differences.
+
+    This checks sensitivity consistency of the same collocation method. It is
+    not a comparison with an independent optimizer or a global-optimality test.
+    """
+    rng = np.random.default_rng(1234)
+    checks = []
+    for index in np.linspace(0, samples.size - 1, min(3, samples.size), dtype=int):
+        direction = rng.normal(size=samples.x.shape[1])
+        direction /= np.linalg.norm(direction)
+        epsilon = 1e-4
+        plus = solver.solve_sample(samples.x[index] + epsilon * direction)
+        minus = solver.solve_sample(samples.x[index] - epsilon * direction)
+        difference = (plus.value - minus.value) / (2 * epsilon)
+        costate = float(samples.dv[index] @ direction)
+        error = float(abs(difference - costate))
+        tolerance = 2e-5 + 2e-4 * abs(difference)
+        checks.append({
+            "row": int(index), "direction": direction.tolist(), "epsilon": epsilon,
+            "finite_difference": float(difference), "costate_derivative": costate,
+            "absolute_error": error, "tolerance": tolerance,
+        })
+        if not np.isfinite(error) or error > tolerance:
+            raise RuntimeError(f"costate finite-difference check failed: {checks[-1]}")
+    return checks
+
+
+def _save_validated_samples(destination, solution, metadata) -> None:
+    samples = solution.value_samples
+    if not samples.size:
+        raise ValueError("a training dataset must contain at least one sample")
     if not all(np.isfinite(array).all() for array in (samples.x, samples.v, samples.dv)):
         raise RuntimeError("non-finite training samples; dataset not saved")
     path = samples.save_npz(destination / "value_samples.npz")
     metadata.update(
-        complete=True, data_sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
-        max_collocation_residual=max(result.collocation_residual for result in results),
-        max_boundary_residual=max(result.boundary_residual for result in results),
+        complete=True, retained_samples=samples.size, failed_samples=0,
+        data_sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
+        max_collocation_residual=max(r.diagnostics.collocation_residual for r in solution.sample_results),
+        max_boundary_residual=max(r.diagnostics.boundary_residual for r in solution.sample_results),
     )
-    meta_path.write_text(json.dumps(metadata, indent=2) + "\n")
-    print(f"data: {path}\nmetadata: {meta_path}", flush=True)
+
+
+def _write_json(path, payload) -> None:
+    path.write_text(json.dumps(payload, indent=2, allow_nan=False) + "\n", encoding="utf-8")
 
 
 if __name__ == "__main__":
