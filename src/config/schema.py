@@ -71,7 +71,7 @@ class TrainingConfig:
 
     # outer PDAP loop
     num_iterations: int = 10      # T_out
-    num_insertion: int = 50       # N_trial, candidates sampled per iteration
+    num_of_initial_pts: int = 50  # N_trial, initial points of the multistart search per iteration
     max_insert: int = 15          # N_ins, cap on atoms inserted per iteration (batch mode)
     prune_amp_tol: float = 1e-8   # eps_prune: drop atoms with |c_n| <= this
     # --- paper-conformance axes (paper/paper_0805.tex, Section 5) --------------

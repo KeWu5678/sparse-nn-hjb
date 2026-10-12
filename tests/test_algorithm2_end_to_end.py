@@ -35,7 +35,7 @@ def test_algorithm2_fits_an_exact_relu_power_atom(power: float) -> None:
             gamma=0.0,
         ),
         training=TrainingConfig(
-            num_insertion=20, max_insert=1,
+            num_of_initial_pts=20, max_insert=1,
             insert_mode="sequential",
             loop_order="insertion_first",
             correction_guard=True,

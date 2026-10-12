@@ -76,7 +76,7 @@ def _generate(
         SparseModel(config),
         (X, residual_v, residual_dv),
         sample_sphere=_starts(starts),
-        N=len(starts),
+        num_of_initial_pts=len(starts),
         merge_tol=merge_tol,
         existing_atoms=existing_atoms,
         radius=radius,
@@ -124,7 +124,7 @@ def test_algorithm1_distinguishes_radius_search_failure_from_threshold_stop(
         insertion.profile_threshold(
             problem, penalty, (X, residual_v, residual_dv),
             sample_sphere=_starts([[1.0, 0.0]]),
-            N=1,
+            num_of_initial_pts=1,
             max_insert=1,
             radius=1.0,
             verbose=True,
@@ -139,7 +139,7 @@ def test_algorithm1_distinguishes_radius_search_failure_from_threshold_stop(
         insertion.profile_threshold(
             problem, penalty, (X, residual_v, residual_dv),
             sample_sphere=_starts([[1.0, 0.0]]),
-            N=1,
+            num_of_initial_pts=1,
             max_insert=1,
             radius=1.0,
             verbose=True,
@@ -166,7 +166,7 @@ def test_sphere_search_reports_when_only_existing_support_is_returned(
         insertion.profile_threshold(
             problem, penalty, (X, residual_v, residual_dv),
             sample_sphere=_starts([[1.0, 0.0]]),
-            N=1,
+            num_of_initial_pts=1,
             max_insert=1,
             existing_atoms=existing,
             verbose=True,

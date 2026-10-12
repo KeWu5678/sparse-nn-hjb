@@ -15,7 +15,7 @@ model:
 training:
   # paper_0805.tex:3386 -- "All experiments use T_out = 150 outer iterations and
   # N_trial = 50 sampled candidate nodes per iteration. Each iteration inserts the
-  # single selected candidate (N_ins = 1)". num_insertion=50 is the schema default.
+  # single selected candidate (N_ins = 1)". num_of_initial_pts=50 is the schema default.
   num_iterations: 150
   insert_mode: sequential
   insert_init: guaranteed

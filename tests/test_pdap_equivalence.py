@@ -53,7 +53,7 @@ def _cfg(name: str) -> ExperimentConfig:
     return ExperimentConfig(
         model=ModelConfig(kind=c["kind"], insertion=c["insertion"],
                           power=1.0, alpha=1e-4, gamma=c["gamma"]),
-        training=TrainingConfig(num_insertion=20),
+        training=TrainingConfig(num_of_initial_pts=20),
         env=EnvConfig(verbose=False),
     )
 

@@ -84,7 +84,7 @@ def test_candidate_profile_combines_signed_batches_before_acceptance(monkeypatch
         a.detach().reshape(1, 1), b.detach().reshape(1), 0,
     ))
     W, bias, coefficient = insertion.profile_threshold(
-        problem, penalty, residuals, sample_sphere=lambda _: (a, b), N=1,
+        problem, penalty, residuals, sample_sphere=lambda _: (a, b), num_of_initial_pts=1,
         insert_init="guaranteed", verbose=False,
     )
     torch.testing.assert_close(torch.as_tensor(W[0]), a)
@@ -94,8 +94,8 @@ def test_candidate_profile_combines_signed_batches_before_acceptance(monkeypatch
     validate_model_config(config)
     problem = SparseModel(config)
     W, _, _ = insertion.profile_threshold(
-        problem, penalty_for(config, problem), residuals, sample_sphere=lambda _: (a, b), N=1,
-        insert_init="guaranteed", verbose=False,
+        problem, penalty_for(config, problem), residuals, sample_sphere=lambda _: (a, b),
+        num_of_initial_pts=1, insert_init="guaranteed", verbose=False,
     )
     assert len(W) == 0
 
@@ -174,7 +174,7 @@ def test_pdap_records_one_full_data_result_per_outer_iteration(batch_size):
     validate_model_config(config)
     problem = SparseModel(config)
     loader = make_dataloader(data, batch_size=batch_size)
-    training = TrainingConfig(fit_outer_iterations=2, lbfgs_steps=5, num_insertion=4)
+    training = TrainingConfig(fit_outer_iterations=2, lbfgs_steps=5, num_of_initial_pts=4)
     history = run_training(
         PDAP(training, penalty_for(config, problem), insertion=config["insertion"]),
         problem, loader, num_iterations=2, verbose=False,
@@ -201,7 +201,10 @@ def test_logging_accepts_a_finite_loader_without_a_sample_count(verbose):
     problem = SparseModel(config)
     loader = DataLoader(Samples(), batch_size=2, generator=torch.Generator().manual_seed(0))
     history = run_training(
-        PDAP(TrainingConfig(num_insertion=1), penalty_for(config, problem), insertion=config["insertion"]),
+        PDAP(
+            TrainingConfig(num_of_initial_pts=1), penalty_for(config, problem),
+            insertion=config["insertion"],
+        ),
         problem, loader, num_iterations=0, verbose=verbose,
     )
     assert history.train_loss == [0.]

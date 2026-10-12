@@ -62,7 +62,7 @@ def _fit(cfg: ExperimentConfig, iterations: int = 4, seed: int = 0):
     validate_model_config(model_config)
     model = SparseModel(model_config)
     train, valid = split_value_samples(data, cfg.data.train_fraction)
-    cfg.training.num_insertion = 20
+    cfg.training.num_of_initial_pts = 20
     history = run_training(
         PDAP(cfg.training, penalty_for(model_config, model), insertion=model_config["insertion"]),
         model,
@@ -154,7 +154,7 @@ def test_guaranteed_insertion_delivers_the_promised_decrease() -> None:
     W_old, b_old, c_old = (model.inner_weight, model.inner_bias, model.c.detach())
     W_new, b_new, c_new = profile_threshold(
         model, trainer.penalty, (train[0], res_v, res_dv),
-        sample_sphere=lambda n: trainer._sphere(2, n), N=20,
+        sample_sphere=lambda n: trainer._sphere(2, n), num_of_initial_pts=20,
         max_insert=1, merge_tol=1e-2,
         existing_atoms=(W_old, b_old), verbose=False,
         insert_init="guaranteed",
@@ -305,7 +305,7 @@ def test_insertion_reuses_the_residual_for_the_theorem_radius() -> None:
         return original_predict(x)
 
     model.forward = counted_predict
-    cfg.training.num_insertion = cfg.training.max_insert = 1
+    cfg.training.num_of_initial_pts = cfg.training.max_insert = 1
     run_training(
         PDAP(cfg.training, penalty_for(model_config, model), insertion=model_config["insertion"]),
         model,

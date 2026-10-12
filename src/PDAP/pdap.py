@@ -59,7 +59,7 @@ class PDAP:
         self.ins_merge_tol = training.ins_merge_tol
         self.lbfgs_lr = training.lbfgs_lr
         self.lbfgs_steps = training.lbfgs_steps
-        self.num_insertion = training.num_insertion
+        self.num_of_initial_pts = training.num_of_initial_pts
         self.max_insert = training.max_insert
         self.prune_amp_tol = training.prune_amp_tol
 
@@ -85,7 +85,7 @@ class PDAP:
     ) -> dict:
         """Perform the historical correction-first initial support replacement."""
         W, b, c = self._insert(
-            problem, train_loader, self.num_insertion, self.max_insert, verbose,
+            problem, train_loader, self.num_of_initial_pts, self.max_insert, verbose,
         )
         count = int(W.shape[0])
         if count:
@@ -103,7 +103,7 @@ class PDAP:
     ) -> dict:
         """Extend the current support with accepted, initialized candidates."""
         W_np, b_np, c_new = self._insert(
-            problem, train_loader, self.num_insertion, self.max_insert, verbose,
+            problem, train_loader, self.num_of_initial_pts, self.max_insert, verbose,
         )
         W_new = torch.as_tensor(W_np, dtype=torch.float64)
         b_new = torch.as_tensor(b_np, dtype=torch.float64)
@@ -168,7 +168,7 @@ class PDAP:
         return fitting, problem.hess_obj(value_jacobian, gradient_jacobian), moment_weight
 
     def _insert(
-        self, problem, train_loader, num_insertion: int, max_insert: int, verbose: bool
+        self, problem, train_loader, num_of_initial_pts: int, max_insert: int, verbose: bool
     ):
         """Return accepted atoms and their initialized outer weights."""
         # Sequential insertion admits the highest-ranked candidate returned by the
@@ -186,7 +186,8 @@ class PDAP:
         d = int(problem.input_dim)
         radius = self._search_radius(problem, residual)
         search_settings: dict[str, Any] = dict(
-            sample_sphere=lambda N: self._sphere(d, N), N=num_insertion,
+            sample_sphere=lambda num_of_initial_pts: self._sphere(d, num_of_initial_pts),
+            num_of_initial_pts=num_of_initial_pts,
             max_insert=max_insert, merge_tol=self.ins_merge_tol,
             existing_atoms=existing_neurons, radius=radius, verbose=verbose,
             lbfgs_lr=self.lbfgs_lr, lbfgs_steps=self.lbfgs_steps,
@@ -240,9 +241,9 @@ class PDAP:
         pruned = n - int(keep.sum().item())
         return w_out, b_out, ow_out, pruned
 
-    def _sphere(self, d: int, N: int) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Sample N candidate neurons uniformly on S^d in R^{d+1}."""
-        v = torch.randn(N, d + 1, dtype=torch.float64, device="cpu")
+    def _sphere(self, d: int, num_of_initial_pts: int) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Sample num_of_initial_pts points uniformly on S^d in R^{d+1}."""
+        v = torch.randn(num_of_initial_pts, d + 1, dtype=torch.float64, device="cpu")
         v = v / v.norm(dim=1, keepdim=True).clamp_min(1e-12)
         return v[:, :d].contiguous(), v[:, d].contiguous()
 

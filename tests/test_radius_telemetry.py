@@ -23,7 +23,7 @@ from src.training import run_training
 def test_nonzero_residual_records_computed_and_capped_theorem_radius(loop_order, alpha):
     cfg = ExperimentConfig(
         model=ModelConfig(activation="softplus", moment_order=4.0, alpha=alpha),
-        training=TrainingConfig(num_insertion=2, radial_cap="theorem", loop_order=loop_order,
+        training=TrainingConfig(num_of_initial_pts=2, radial_cap="theorem", loop_order=loop_order,
                                 lbfgs_steps=2, fit_outer_iterations=1),
     )
     model_config = resolve_model(cfg.model, input_dim=2)
@@ -58,7 +58,7 @@ def test_zero_measure_fit_records_the_actual_search_radius(
     cfg = ExperimentConfig(
         model=ModelConfig(activation=activation, power=power, insertion=insertion,
                           moment_order=order),
-        training=TrainingConfig(num_insertion=2, radial_cap=cap, lbfgs_steps=2),
+        training=TrainingConfig(num_of_initial_pts=2, radial_cap=cap, lbfgs_steps=2),
     )
     model_config = resolve_model(cfg.model, input_dim=2)
     validate_model_config(model_config)
@@ -104,8 +104,8 @@ def test_old_history_summary_does_not_invent_missing_search_diagnostics():
 def test_zero_iteration_fit_does_not_reuse_a_previous_search(activation, power, insertion):
     cfg = ExperimentConfig(
         model=ModelConfig(activation=activation, power=power, insertion=insertion, moment_order=2.0),
-        training=TrainingConfig(num_insertion=2, radial_cap="theorem", loop_order="insertion_first",
-                                lbfgs_steps=2),
+        training=TrainingConfig(num_of_initial_pts=2, radial_cap="theorem",
+                                loop_order="insertion_first", lbfgs_steps=2),
     )
     model_config = resolve_model(cfg.model, input_dim=2)
     validate_model_config(model_config)

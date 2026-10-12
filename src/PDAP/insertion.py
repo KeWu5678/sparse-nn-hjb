@@ -29,7 +29,7 @@ import torch
 
 from ..models import Penalty, SparseModel
 
-# Numerical bound for random starts and final candidate filtering.
+# Numerical bound for random initial points and final candidate filtering.
 FIXED_LOG_CLAMP = 5.0
 
 logger = logging.getLogger(__name__)
@@ -48,7 +48,7 @@ def profile_threshold(
     penalty: Penalty,
     residual: tuple[torch.Tensor, torch.Tensor, torch.Tensor], *,
     sample_sphere: Callable[[int], Tuple[torch.Tensor, torch.Tensor]],
-    N: int,
+    num_of_initial_pts: int,
     max_insert: int = 15, merge_tol: float = 1e-2,
     existing_atoms: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
     verbose: bool = True,
@@ -56,25 +56,13 @@ def profile_threshold(
     insert_init: str = "warm_start",
     radius: Optional[float] = None,
 ) -> Tuple[np.ndarray, np.ndarray, Optional[np.ndarray]]:
-    """Select candidates for Algorithm 1 or the ReLU--L1 baseline.
-
-    Normalized Algorithm 1 accepts ``|P(omega)| / w_p(omega) > alpha``.
-    The ReLU--L1 baseline has sphere-normalized inner parameters but no moment
-    normalization, so it accepts ``|P(omega)| > alpha``.
-    Both use the implemented log/L1 family with ``L_phi = phi'(0+) = 1``;
-    for a general penalty the threshold would be ``alpha * L_phi``.
-
-    Candidates are ranked by their margin above the applicable threshold. For
-    Algorithm 1 this is the certificate violation
-    ``Delta(mu, omega) = |P(omega)| / w_p(omega) - alpha``.
-
-    Returns ``(W, b, c)``; ``c`` is ``None`` unless ``insert_init="guaranteed"``,
-    in which case it carries the theorem's per-atom coefficient.
+    """Select candidates for Algorithm 1; accepts ``|P(omega)| / w_p(omega) > alpha``.
+    Candidates are ranked by their margin above the applicable threshold.
     """
     input_dim = problem.input_dim
 
     a, b, discarded_outside = _generate_candidates(
-        problem, residual, sample_sphere=sample_sphere, N=N,
+        problem, residual, sample_sphere=sample_sphere, num_of_initial_pts=num_of_initial_pts,
         merge_tol=merge_tol,
         existing_atoms=existing_atoms, lbfgs_lr=lbfgs_lr, lbfgs_steps=lbfgs_steps,
         radius=radius,
@@ -115,7 +103,7 @@ def profile_threshold(
         logger.debug(
             "Candidate search  sampled=%d  unique=%d  accepted=%d/%d  "
             "rule=%s (init=%s)",
-            N, a.shape[0], len(accepted_a), max_insert, rule, insert_init,
+            num_of_initial_pts, a.shape[0], len(accepted_a), max_insert, rule, insert_init,
         )
         if discarded_outside:
             logger.debug(
@@ -142,7 +130,7 @@ def finite_step(
     penalty: Penalty,
     residual: tuple[torch.Tensor, torch.Tensor, torch.Tensor], *,
     sample_sphere: Callable[[int], Tuple[torch.Tensor, torch.Tensor]],
-    N: int,
+    num_of_initial_pts: int,
     max_insert: int = 15, merge_tol: float = 1e-2,
     existing_atoms: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
     verbose: bool = True,
@@ -153,7 +141,7 @@ def finite_step(
     input_dim = problem.input_dim
 
     a, b, _ = _generate_candidates(
-        problem, residual, sample_sphere=sample_sphere, N=N,
+        problem, residual, sample_sphere=sample_sphere, num_of_initial_pts=num_of_initial_pts,
         merge_tol=merge_tol,
         existing_atoms=existing_atoms, lbfgs_lr=lbfgs_lr, lbfgs_steps=lbfgs_steps,
         radius=radius,
@@ -191,7 +179,7 @@ def finite_step(
         logger.debug(
             "Candidate search  sampled=%d  unique=%d  accepted=%d/%d  "
             "rule=adding atom reduces objective (q=%.3f)",
-            N, a.shape[0], len(accepted_a), max_insert, problem.penalty_exponent,
+            num_of_initial_pts, a.shape[0], len(accepted_a), max_insert, problem.penalty_exponent,
         )
 
     return *_as_arrays(accepted_a, accepted_b, input_dim), np.array(accepted_c, dtype=np.float64)
@@ -204,7 +192,7 @@ def _generate_candidates(
     problem: SparseModel,
     residual: tuple[torch.Tensor, torch.Tensor, torch.Tensor], *,
     sample_sphere: Callable[[int], Tuple[torch.Tensor, torch.Tensor]],
-    N: int,
+    num_of_initial_pts: int,
     merge_tol: float,
     existing_atoms: Optional[Tuple[torch.Tensor, torch.Tensor]],
     lbfgs_lr: float = 1e-2,
@@ -223,7 +211,7 @@ def _generate_candidates(
     """
     search_radius = float(radius) if radius is not None else math.exp(FIXED_LOG_CLAMP)
     normalized_residual = _normalize_residual(residual)
-    a, b = _sample_starts(problem, sample_sphere, N, search_radius)
+    a, b = _sample_initial_pts(problem, sample_sphere, num_of_initial_pts, search_radius)
     a, b, discarded_outside = _refine_and_deduplicate(
         problem, normalized_residual, a, b,
         search_radius=search_radius, merge_tol=merge_tol, steps=lbfgs_steps, lr=lbfgs_lr,
@@ -243,18 +231,18 @@ def _normalize_residual(
     return X, residual_value / residual_norm, residual_gradient / residual_norm
 
 
-def _sample_starts(
+def _sample_initial_pts(
     problem: SparseModel,
     sample_sphere: Callable[[int], Tuple[torch.Tensor, torch.Tensor]],
-    N: int,
+    num_of_initial_pts: int,
     search_radius: float,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
-    """Sample N search starts.
+    """Sample num_of_initial_pts initial points.
 
     Homogeneous models use the sampled directions directly; nonhomogeneous
     models give each direction a log-uniform radius (ADR 0006).
     """
-    a, b = sample_sphere(N)
+    a, b = sample_sphere(num_of_initial_pts)
     if not problem.use_sphere:
         log_r_min = math.log(math.exp(-3.0))
         log_r_max = math.log(max(search_radius, math.exp(-3.0) * 1.001))
@@ -271,11 +259,11 @@ def _refine_and_deduplicate(
     a: torch.Tensor, b: torch.Tensor, *,
     search_radius: float, merge_tol: float, steps: int, lr: float,
 ) -> Tuple[torch.Tensor, torch.Tensor, int]:
-    """Refine the starts and remove duplicates; also count those discarded outside the radius.
+    """Refine the initial points, drop duplicates, count those discarded outside the radius.
 
-    A nonhomogeneous search uses one joint solve from each random start, then
-    filters and deduplicates once.  Algorithm 2 retains its repeated sphere
-    refinement after merges.
+    A nonhomogeneous search uses one joint solve from each random initial
+    point, then filters and deduplicates once.  Algorithm 2 retains its
+    repeated sphere refinement after merges.
     """
     use_sphere = problem.use_sphere
     discarded_outside = 0
@@ -300,7 +288,7 @@ def _maximize_score(
     a: torch.Tensor, b: torch.Tensor, *,
     steps: int, lr: float, eps: float = 1e-12,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
-    """Locally maximize the score |P(omega)| / w_p(omega) from each starting point.
+    """Locally maximize the score |P(omega)| / w_p(omega) from each initial point.
 
     For a positively homogeneous activation the parameter is gauge-fixed to
     the sphere, so the profile is maximized over directions and the iterate
@@ -313,7 +301,7 @@ def _maximize_score(
     joint maximizer.
 
     The nonhomogeneous solve is unconstrained.  Its caller may subsequently
-    discard a final point outside the radius used to sample its start.
+    discard a final point outside the radius used to sample its initial point.
     """
     use_sphere = problem.use_sphere
     input_dim = problem.input_dim
@@ -377,7 +365,7 @@ def _reject_support_repeats(
     points are distinct atoms and must remain admissible.  In particular, do
     not reuse the much wider candidate-to-candidate deduplication tolerance.
     The k=1 ReLU--L1 baseline retains its established candidate behavior.
-    Existing atoms are used only for this check; they are not search starts.
+    Existing atoms are used only for this check; they are not initial points.
     """
     has_support = existing_atoms is not None and existing_atoms[0].shape[0] > 0
     if problem.use_sphere and problem.penalty_exponent < 1.0 and has_support and a.shape[0] > 0:
