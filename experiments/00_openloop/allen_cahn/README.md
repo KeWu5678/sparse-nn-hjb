@@ -58,6 +58,31 @@ failure records, and metadata with all problem/solver/sampling settings,
 package versions, source hashes, dataset hash, and gradient-validation errors.
 Generated arrays remain ignored local artifacts, like the existing datasets.
 
+## Generated data audit, October 12, 2026
+
+Both configured datasets were generated successfully from generator revision
+`5d712a0`. Later wording corrections do not change the numerical implementation;
+the metadata retains hashes of the source bytes used during generation.
+
+| States | Samples | Failed solves | Maximum collocation residual | Maximum gradient spot-check error |
+| ---: | ---: | ---: | ---: | ---: |
+| 6 | 2,048 | 0 | 9.99985e-7 | 9.93e-10 |
+| 10 | 2,048 | 0 | 9.99999e-7 | 4.29e-11 |
+
+The gradient errors above are absolute directional errors at three sampled
+states per dataset, not a bound over all samples. Independent tests also
+perturb every coordinate at representative 6D and 10D states and replay the
+computed open-loop controls with a separate initial-value integrator.
+
+Dataset SHA-256:
+
+```text
+AllenCahn6_20261012/value_samples.npz
+6f1f36bc87ad9cc5597f1d569f7a52ce7d67b7fb729fffc8906d7bad62d4ab22
+AllenCahn10_20261012/value_samples.npz
+4c233f374dc36bbdb235dda373350b6dd714cda9b3bc5192bf93e3e44071efb0
+```
+
 ## Interpretation
 
 These are finite-horizon `V(0,x)` samples with free terminal state and zero
