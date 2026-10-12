@@ -119,8 +119,8 @@ SSN remains a `torch.optim.Optimizer`; its `step()` owns the complete configured
 iteration budget and the final objective acceptance/fallback on temporary
 coefficients. PDAP applies the result. Update 2026-10-11: `step()` is one
 globalized Newton iteration. The iteration budget and the final discard, the
-correction step of Algorithms 1 and 2, move to PDAP's `correct_coefficients`
-(`src/PDAP/correction.py`), as the follow-up below already assigns acceptance
+correction step of Algorithms 1 and 2, move to PDAP's `ssn_refine_outerweights`
+(`src/PDAP/ssn_refine.py`), as the follow-up below already assigns acceptance
 guards to PDAP. `step(closure)` again follows the `torch.optim` contract: SSN
 no longer receives the loss; PDAP's closure clears the gradients, evaluates the
 coefficient fitting term, calls `backward()` and returns it, and SSN reads the

@@ -165,7 +165,7 @@ warm-start selection; SparseModel and the Penalty supply their mathematical eval
     are outside the class.
   - `insertion.py` — profile-threshold and finite-step candidate selection and
     insertion objective change.
-  - `correction.py` — `correct_coefficients` runs the SSN iteration budget and
+  - `ssn_refine.py` — `ssn_refine_outerweights` runs the SSN iteration budget and
     discards a correction that increases the objective (or is nonfinite).
   - `radius.py` — theorem certificate radius; PDAP applies its cap and fallback.
   - `warmstart.py` — warm-start procedure and initialization using problem calculations,

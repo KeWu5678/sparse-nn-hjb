@@ -6,7 +6,7 @@ from ssn_test_problem import closure_for, synthetic_correction
 
 from src.config.schema import TrainingConfig
 from src.PDAP import PDAP
-from src.PDAP.correction import correct_coefficients
+from src.PDAP.ssn_refine import ssn_refine_outerweights
 from src.SSN import SSN
 
 
@@ -17,7 +17,7 @@ def test_correction_runs_the_configured_budget(iterations):
         lambda u: .5 * u.square().sum(), torch.eye(1, dtype=torch.float64), alpha=0.,
     )
     optimizer = SSN([coefficient], penalty, hess_obj)
-    diagnostics = correct_coefficients(
+    diagnostics = ssn_refine_outerweights(
         optimizer, coefficient, closure_for(optimizer, coefficient, fitting),
         iterations=iterations, correction_guard=True,
     )
@@ -38,7 +38,7 @@ def test_final_guard_rejects_a_worsening_trial_allowed_by_local_tolerance(guard)
         lambda u: 2 - .5 * u.square().sum(), -torch.eye(1, dtype=torch.float64), alpha=0.,
     )
     optimizer = SSN([coefficient], penalty, hess_obj, tolerance_ls=2.)
-    diagnostics = correct_coefficients(
+    diagnostics = ssn_refine_outerweights(
         optimizer, coefficient, closure_for(optimizer, coefficient, fitting),
         iterations=1, correction_guard=guard,
     )
@@ -64,7 +64,7 @@ def test_nonfinite_final_loss_restores_starting_coefficients(guard):
 
     penalty, _, hess_obj = synthetic_correction(fitting, torch.eye(1, dtype=torch.float64), alpha=0.)
     optimizer = SSN([coefficient], penalty, hess_obj, max_ls_iter=2)
-    diagnostics = correct_coefficients(
+    diagnostics = ssn_refine_outerweights(
         optimizer, coefficient, closure_for(optimizer, coefficient, fitting),
         iterations=1, correction_guard=guard,
     )
@@ -91,7 +91,7 @@ def test_exception_after_an_accepted_iteration_restores_the_whole_correction():
     penalty, _, hess_obj = synthetic_correction(fitting, torch.eye(1, dtype=torch.float64), alpha=0.)
     optimizer = SSN([coefficient], penalty, hess_obj)
     with pytest.raises(RuntimeError, match="second iteration failed") as caught:
-        correct_coefficients(
+        ssn_refine_outerweights(
             optimizer, coefficient, closure_for(optimizer, coefficient, fitting),
             iterations=2, correction_guard=True,
         )
@@ -118,7 +118,7 @@ def test_complete_trust_region_correction_continues_after_a_rejected_trial():
 
     penalty, _, hess_obj = synthetic_correction(fitting, torch.eye(1, dtype=torch.float64), alpha=0.)
     optimizer = SSN([coefficient], penalty, hess_obj, method="steihaug_cg")
-    diagnostics = correct_coefficients(
+    diagnostics = ssn_refine_outerweights(
         optimizer, coefficient, closure_for(optimizer, coefficient, fitting),
         iterations=4, correction_guard=True,
     )

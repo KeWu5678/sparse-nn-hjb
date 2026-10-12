@@ -126,7 +126,7 @@ class SSN(Optimizer):
 
         jac_prox = self.penalty.jac_prox(q, self._prox_constant(), prox_image=u)
         jac_normal = self.jac_normal(u, jac_prox)
-        return self._globalized_step(closure, u, q, normal_q, jac_normal, jac_prox, loss)
+        return self._ssn_single_step(closure, u, q, normal_q, jac_normal, jac_prox, loss)
 
     def objective(self, closure: Callable[[], Tensor]) -> Tensor:
         """The objective f + alpha*Phi at the parameters; the closure evaluates the fitting term f."""
@@ -174,7 +174,7 @@ class SSN(Optimizer):
         """Hessian of the fitting term plus the diagonal Hessian of the correction."""
         return self.penalty.hess_correction(u) + self.hess_obj
 
-    def _globalized_step(
+    def _ssn_single_step(
         self, closure: Callable[[], Tensor], u: Tensor, q: Tensor, normal_q: Tensor,
         jac_normal: Tensor, jac_prox: Tensor, loss: Tensor,
     ) -> Tensor:

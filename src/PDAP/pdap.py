@@ -18,9 +18,9 @@ from ..config.activations import get_growth
 from ..data import full_batch
 from ..models import Penalty, SparseModel
 from ..SSN import SSN
-from .correction import correct_coefficients
 from .insertion import FIXED_LOG_CLAMP, finite_step, profile_threshold
 from .radius import certificate_radius, sample_extent
+from .ssn_refine import ssn_refine_outerweights
 from .warmstart import warm_start
 
 
@@ -152,7 +152,7 @@ class PDAP:
             value.backward()
             return value
 
-        diagnostics = correct_coefficients(
+        diagnostics = ssn_refine_outerweights(
             optimizer, u, closure, iterations=self.fit_outer_iterations,
             correction_guard=self.correction_guard, verbose=verbose,
         )

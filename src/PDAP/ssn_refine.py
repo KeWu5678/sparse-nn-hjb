@@ -12,7 +12,7 @@ from ..SSN import SSN
 logger = logging.getLogger(__name__)
 
 
-def correct_coefficients(
+def ssn_refine_outerweights(
     optimizer: SSN, coefficients: torch.nn.Parameter, closure: Callable[[], torch.Tensor], *,
     iterations: int, correction_guard: bool, verbose: bool = False,
 ) -> dict:
