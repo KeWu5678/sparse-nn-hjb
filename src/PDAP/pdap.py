@@ -193,7 +193,7 @@ class PDAP:
         )
         if self.insertion_kind == "profile":
             W, b, c = profile_threshold(
-                problem, self.penalty, residual, two_sided=True, insert_init=self.insert_init,
+                problem, self.penalty, residual, insert_init=self.insert_init,
                 **search_settings,
             )
         else:

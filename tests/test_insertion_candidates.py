@@ -78,7 +78,6 @@ def _generate(
         sample_sphere=_starts(starts),
         N=len(starts),
         merge_tol=merge_tol,
-        two_sided=True,
         existing_atoms=existing_atoms,
         radius=radius,
     )

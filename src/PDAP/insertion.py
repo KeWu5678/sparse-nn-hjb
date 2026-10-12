@@ -46,13 +46,12 @@ def _generate_candidates(
     sample_sphere: Callable[[int], Tuple[torch.Tensor, torch.Tensor]],
     N: int,
     merge_tol: float,
-    two_sided: bool,
     existing_atoms: Optional[Tuple[torch.Tensor, torch.Tensor]],
     lbfgs_lr: float = 1e-2,
     lbfgs_steps: int = 200,
     radius: Optional[float] = None,
 ) -> Tuple[torch.Tensor, torch.Tensor, int, int]:
-    """Return distinct locally refined maximizers of the configured search score.
+    """Return distinct locally refined maximizers of the score |P(omega)| / w_p(omega).
 
     Homogeneous activations are searched on ``S^d``.  For nonhomogeneous
     activations, initial points are sampled inside ``radius`` and all components
@@ -73,7 +72,7 @@ def _generate_candidates(
         a_batch: torch.Tensor, b_batch: torch.Tensor,
         steps: int = 200, lr: float = 1e-2, eps: float = 1e-12,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Locally maximize the configured profile score from each starting point.
+        """Locally maximize the score |P(omega)| / w_p(omega) from each starting point.
 
         For a positively homogeneous activation the parameter is gauge-fixed to
         the sphere, so the profile is maximized over directions and the iterate
@@ -98,8 +97,7 @@ def _generate_candidates(
                 w_s = w / w.norm().clamp_min(eps) if use_sphere else w
                 features = problem.kernel(X, w_s[:d_dim].reshape(1, -1), w_s[d_dim].reshape(1))
                 profile = problem.jac_obj(*features, normalized_residual)[0]
-                score = profile.abs() if two_sided else profile
-                obj = score / problem.moment_weight_of_atoms(w_s[:d_dim], w_s[d_dim])
+                obj = profile.abs() / problem.moment_weight_of_atoms(w_s[:d_dim], w_s[d_dim])
                 (-obj).backward()
                 return -obj
 
@@ -201,7 +199,6 @@ def profile_threshold(
     sample_sphere: Callable[[int], Tuple[torch.Tensor, torch.Tensor]],
     N: int,
     max_insert: int = 15, merge_tol: float = 1e-2,
-    two_sided: bool = True,
     existing_atoms: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
     verbose: bool = True,
     lbfgs_lr: float = 1e-2, lbfgs_steps: int = 200,
@@ -227,16 +224,12 @@ def profile_threshold(
 
     a_t, b_t, n_after, discarded_outside = _generate_candidates(
         problem, residual, sample_sphere=sample_sphere, N=N,
-        merge_tol=merge_tol, two_sided=two_sided,
+        merge_tol=merge_tol,
         existing_atoms=existing_atoms, lbfgs_lr=lbfgs_lr, lbfgs_steps=lbfgs_steps,
         radius=radius,
     )
 
     guaranteed = insert_init == "guaranteed"
-    if guaranteed and not two_sided:
-        raise ValueError(
-            "insert_init='guaranteed' requires a two-sided signed coefficient"
-        )
 
     accepted_a: List[torch.Tensor] = []
     accepted_b: List[torch.Tensor] = []
@@ -246,7 +239,7 @@ def profile_threshold(
         features = problem.kernel(residual[0], a_i.reshape(1, -1), b_i.reshape(1))
         slope = float(problem.jac_obj(*features, residual)[0])
         curvature = float(problem.hess_obj(*features)[0, 0])
-        v = abs(slope) if two_sided else slope
+        v = abs(slope)
         scale = float(problem.moment_weight_of_atoms(a_i, b_i))
         threshold = penalty.alpha * scale
         # Retain the physical-profile comparison, including its rounding.
@@ -323,7 +316,7 @@ def finite_step(
 
     a_t, b_t, n_after, _discarded_outside = _generate_candidates(
         problem, residual, sample_sphere=sample_sphere, N=N,
-        merge_tol=merge_tol, two_sided=True,
+        merge_tol=merge_tol,
         existing_atoms=existing_atoms, lbfgs_lr=lbfgs_lr, lbfgs_steps=lbfgs_steps,
         radius=radius,
     )

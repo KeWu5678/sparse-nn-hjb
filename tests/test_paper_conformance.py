@@ -155,7 +155,7 @@ def test_guaranteed_insertion_delivers_the_promised_decrease() -> None:
     W_new, b_new, c_new = profile_threshold(
         model, trainer.penalty, (train[0], res_v, res_dv),
         sample_sphere=lambda n: trainer._sphere(2, n), N=20,
-        max_insert=1, merge_tol=1e-2, two_sided=True,
+        max_insert=1, merge_tol=1e-2,
         existing_atoms=(W_old, b_old), verbose=False,
         insert_init="guaranteed",
     )
