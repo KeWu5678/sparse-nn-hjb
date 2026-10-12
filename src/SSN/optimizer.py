@@ -23,9 +23,10 @@ class SSN(Optimizer):
     ``penalty`` owns the penalty and its proximal maps. SSN owns the normal map
     built on them, the parameters, and globalization state.
     Each ``step(closure)`` runs one globalized Newton iteration. The closure follows
-    the ``torch.optim`` contract: it clears the gradients, evaluates the full
-    objective at the current parameters, calls ``backward()`` and returns the
-    objective. The caller owns the iteration budget and the acceptance of the
+    the ``torch.optim`` contract: it clears the gradients, evaluates the fitting
+    term f at the current parameters, calls ``backward()`` and returns f. SSN adds
+    the penalty itself, as AdamW adds its weight decay, and minimizes
+    f + alpha*Phi. The caller owns the iteration budget and the acceptance of the
     finished correction.
 
     Args:
@@ -114,7 +115,7 @@ class SSN(Optimizer):
         """Build and globalize one normal-map Newton step from the coefficients u."""
         self.last_step_success = True
         group = self.param_groups[0]
-        loss = closure()
+        loss = self.objective(closure)
         jac_obj_augmented = self.jac_obj_augmented(u, self._gradient())
         q = self.prox_preimage(u, jac_obj_augmented)
         normal_q = self.normal_map(q, u, jac_obj_augmented)
@@ -127,20 +128,22 @@ class SSN(Optimizer):
         jac_normal = self.jac_normal(u, jac_prox)
         return self._globalized_step(closure, u, q, normal_q, jac_normal, jac_prox, loss)
 
+    def objective(self, closure: Callable[[], Tensor]) -> Tensor:
+        """The objective f + alpha*Phi at the parameters; the closure evaluates the fitting term f."""
+        fitting = closure()
+        with torch.no_grad():
+            return fitting + self.penalty.value(parameters_to_vector(self._params))
+
     def _gradient(self) -> Tensor:
-        """The objective's gradient, left on the parameters by the closure's backward()."""
+        """The fitting term's gradient, left on the parameters by the closure's backward()."""
         gradients = [parameter.grad for parameter in self._params]
         if any(gradient is None for gradient in gradients):
             raise RuntimeError("the SSN closure must call backward()")
         return parameters_to_vector(gradients)
 
-    def jac_obj_augmented(self, u: Tensor, jac_loss: Tensor) -> Tensor:
-        """Smooth part of the objective's derivative, from the supplied full derivative at u.
-
-        Retain the original full-gradient subtraction and correction arithmetic,
-        including its derivative selection at nonsmooth coordinates.
-        """
-        return (jac_loss - self.penalty.jac_penalty(u)) + self.penalty.jac_correction(u)
+    def jac_obj_augmented(self, u: Tensor, jac_fitting: Tensor) -> Tensor:
+        """Gradient at u of the smooth part: the fitting term plus the penalty's smooth correction."""
+        return jac_fitting + self.penalty.jac_correction(u)
 
     def prox_preimage(self, u: Tensor, jac_obj_augmented: Tensor) -> Tensor:
         """Reconstruct q from a prox-consistent iterate, following MATLAB SSN.m.
@@ -183,7 +186,7 @@ class SSN(Optimizer):
 
         def evaluate_trial(q_trial: Tensor) -> Tensor:
             vector_to_parameters(self.penalty.prox(q_trial, self._prox_constant()), self._params)
-            return closure()
+            return self.objective(closure)
 
         if group["method"] == "levenberg_marquardt":
             q_trial, loss_trial, accepted = damped_newton_step(

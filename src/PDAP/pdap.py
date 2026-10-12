@@ -141,16 +141,16 @@ class PDAP:
         self, problem: SparseModel, train_loader: DataLoader, *, verbose: bool = False,
     ) -> dict:
         """Prepare a correction, run SSN, and apply its accepted coefficients."""
-        coefficient_loss, hess_obj, moment_weight = self.coefficient_objective(problem, train_loader)
+        fitting, hess_obj, moment_weight = self.coefficient_fitting(problem, train_loader)
         # The normalized coefficients u = w_p*c; the physical ones are c = u/w_p.
         u = torch.nn.Parameter(problem.c.detach() * moment_weight)
         optimizer = SSN([u], self.penalty, hess_obj, **self.solver)
 
         def closure() -> torch.Tensor:
             optimizer.zero_grad()
-            loss = coefficient_loss(u)
-            loss.backward()
-            return loss
+            value = fitting(u)
+            value.backward()
+            return value
 
         diagnostics = correct_coefficients(
             optimizer, u, closure, iterations=self.fit_outer_iterations,
@@ -160,10 +160,13 @@ class PDAP:
             problem.c.copy_(u.detach() / moment_weight)
         return diagnostics
 
-    def coefficient_objective(
+    def coefficient_fitting(
         self, problem: SparseModel, train_loader: DataLoader,
     ) -> tuple[Callable[[torch.Tensor], torch.Tensor], torch.Tensor, torch.Tensor]:
-        """The objective of the normalized coefficients u = w_p*c, its fitting Hessian, and w_p."""
+        """The fitting term of the normalized coefficients u = w_p*c, its Hessian, and w_p.
+
+        SSN adds the penalty to this fitting term.
+        """
         X, V, dV = full_batch(train_loader)
         value_jacobian, gradient_jacobian = problem.kernel(X)
         moment_weight = problem.moment_weight_of_atoms()
@@ -171,13 +174,10 @@ class PDAP:
         gradient_jacobian = gradient_jacobian / moment_weight
         V, dV = (target.detach().reshape(-1).clone() for target in (V, dV))
 
-        def coefficient_loss(u: torch.Tensor) -> torch.Tensor:
-            return (
-                problem.obj((value_jacobian @ u, gradient_jacobian @ u), (V, dV))
-                + self.penalty.value(u)
-            )
+        def fitting(u: torch.Tensor) -> torch.Tensor:
+            return problem.obj((value_jacobian @ u, gradient_jacobian @ u), (V, dV))
 
-        return coefficient_loss, problem.hess_obj(value_jacobian, gradient_jacobian), moment_weight
+        return fitting, problem.hess_obj(value_jacobian, gradient_jacobian), moment_weight
 
     def _insert(
         self, problem, train_loader, num_insertion: int, max_insert: int, verbose: bool

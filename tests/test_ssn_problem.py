@@ -18,7 +18,7 @@ def test_problem_smooth_derivatives_match_the_splitting(dtype, power, gamma):
         residual = A @ u - target
         return 0.5 * (residual @ residual)
 
-    penalty, coefficient_loss, hess_obj = synthetic_correction(
+    penalty, _, hess_obj = synthetic_correction(
         data_loss, A.T @ A, alpha=alpha, gamma=gamma, power=power,
     )
     u = torch.tensor([-0.6, 0.8, 1.2], dtype=dtype)
@@ -32,9 +32,9 @@ def test_problem_smooth_derivatives_match_the_splitting(dtype, power, gamma):
         remainder = -0.5 * magnitude + torch.log1p(2 * gamma * magnitude) / (4 * gamma)
         return data_loss(u) + alpha * remainder.sum()
 
-    jac_loss = torch.func.grad(coefficient_loss)(u)
+    jac_fitting = torch.func.grad(data_loss)(u)
     with torch.no_grad():
-        grad = optimizer.jac_obj_augmented(u, jac_loss)
+        grad = optimizer.jac_obj_augmented(u, jac_fitting)
         hessian = optimizer.hess_obj_augmented(u)
     torch.testing.assert_close(grad, torch.func.grad(smooth)(u))
     torch.testing.assert_close(hessian, torch.func.hessian(smooth)(u))
@@ -51,18 +51,18 @@ def test_problem_smooth_derivatives_match_the_splitting(dtype, power, gamma):
     else:
         slope = exponent * u.abs().pow(exponent - 1)
     expected_grad += alpha * slope * u.sign()
-    torch.testing.assert_close(torch.func.grad(coefficient_loss)(u), expected_grad)
+    torch.testing.assert_close(torch.func.grad(lambda u: data_loss(u) + penalty.value(u))(u), expected_grad)
 
 
 def test_problem_keeps_the_selected_hess_obj_augmented_at_zero():
-    penalty, coefficient_loss, hess_obj = synthetic_correction(
+    penalty, fitting, hess_obj = synthetic_correction(
         lambda u: 0.5 * u.square().sum(), torch.eye(1, dtype=torch.float64),
         alpha=0.1, gamma=0.7,
     )
     u = torch.zeros(1, dtype=torch.float64)
     optimizer = correction_optimizer(penalty, hess_obj, u)
-    jac_loss = torch.func.grad(coefficient_loss)(u)
-    torch.testing.assert_close(optimizer.jac_obj_augmented(u, jac_loss), u)
+    jac_fitting = torch.func.grad(fitting)(u)
+    torch.testing.assert_close(optimizer.jac_obj_augmented(u, jac_fitting), u)
     torch.testing.assert_close(
         optimizer.hess_obj_augmented(u), torch.tensor([[0.93]], dtype=torch.float64),
     )
@@ -77,7 +77,7 @@ def test_problem_normal_jacobian_matches_finite_differences(power, gamma):
         residual = A @ u - target
         return 0.5 * (residual @ residual)
 
-    penalty, coefficient_loss, hess_obj = synthetic_correction(
+    penalty, _, hess_obj = synthetic_correction(
         data_loss, A.T @ A, alpha=0.1, gamma=gamma, power=power,
     )
     # Active and inactive coordinates, away from switching points.
@@ -87,8 +87,7 @@ def test_problem_normal_jacobian_matches_finite_differences(power, gamma):
 
     def normal(q):
         u = penalty.prox(q, lambda_)
-        jac_loss = torch.func.grad(coefficient_loss)(u)
-        grad = optimizer.jac_obj_augmented(u, jac_loss)
+        grad = optimizer.jac_obj_augmented(u, torch.func.grad(data_loss)(u))
         return optimizer.normal_map(q, u, grad)
 
     u = penalty.prox(q, lambda_)
@@ -114,11 +113,11 @@ def test_an_accepted_trial_stays_in_the_parameters(method):
         evaluated.append(u.detach().clone())
         return 0.5 * u.square().sum()
 
-    penalty, coefficient_loss, hess_obj = synthetic_correction(
+    penalty, _, hess_obj = synthetic_correction(
         data_loss, torch.eye(2, dtype=torch.float64), alpha=0.0, gamma=0.0,
     )
     optimizer = SSN([coefficient], penalty, hess_obj, method=method)
-    loss = optimizer.step(closure_for(optimizer, coefficient, coefficient_loss))
+    loss = optimizer.step(closure_for(optimizer, coefficient, data_loss))
 
     assert optimizer.last_step_success
     assert len(evaluated) == 2
@@ -129,11 +128,11 @@ def test_an_accepted_trial_stays_in_the_parameters(method):
 
 
 def test_problem_applies_the_penalty_and_prox_without_mutating_the_input():
-    penalty, coefficient_loss, hess_obj = synthetic_correction(
+    penalty, fitting, hess_obj = synthetic_correction(
         lambda u: 0.5 * u.square().sum(), torch.eye(3, dtype=torch.float64),
         alpha=0.25, gamma=0.0,
     )
     u = torch.tensor([2.0, -3.0, 4.0], dtype=torch.float64)
-    torch.testing.assert_close(coefficient_loss(u), u.new_tensor(16.75))
+    torch.testing.assert_close(fitting(u) + penalty.value(u), u.new_tensor(16.75))
     torch.testing.assert_close(penalty.prox(u, 0.25), u.new_tensor([1.75, -2.75, 3.75]))
     torch.testing.assert_close(u, u.new_tensor([2.0, -3.0, 4.0]), rtol=0, atol=0)

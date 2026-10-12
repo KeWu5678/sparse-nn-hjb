@@ -23,11 +23,7 @@ def synthetic_correction(fitting, hess_obj, **specifications):
     config = resolve_model(specifications, hess_obj.shape[0])
     validate_training(config)
     penalty = penalty_for(config, SparseModel(config))
-
-    def coefficient_loss(u):
-        return fitting(u) + penalty.value(u)
-
-    return penalty, coefficient_loss, hess_obj
+    return penalty, fitting, hess_obj
 
 
 def correction_optimizer(penalty, hess_obj, u, **options):
@@ -35,18 +31,21 @@ def correction_optimizer(penalty, hess_obj, u, **options):
     return SSN([torch.nn.Parameter(u.detach().clone())], penalty, hess_obj, **options)
 
 
-def closure_for(optimizer, coefficient, objective):
-    """The torch.optim closure that evaluates objective at the coefficient."""
+def closure_for(optimizer, coefficient, fitting):
+    """The torch.optim closure that evaluates the fitting term at the coefficient."""
     def closure():
         optimizer.zero_grad()
-        loss = objective(coefficient)
-        loss.backward()
-        return loss
+        value = fitting(coefficient)
+        value.backward()
+        return value
 
     return closure
 
 
 def coefficient_problem(problem, penalty, loader):
-    """The objective, fitting Hessian and starting coefficients PDAP gives SSN, without a solve."""
-    loss, hess_obj, moment_weight = PDAP(TrainingConfig(), penalty).coefficient_objective(problem, loader)
-    return loss, hess_obj, problem.c.detach() * moment_weight
+    """The objective SSN minimizes, its fitting Hessian and the starting coefficients, without a solve.
+
+    The objective is PDAP's coefficient fitting term plus the penalty SSN adds.
+    """
+    fitting, hess_obj, moment_weight = PDAP(TrainingConfig(), penalty).coefficient_fitting(problem, loader)
+    return (lambda u: fitting(u) + penalty.value(u)), hess_obj, problem.c.detach() * moment_weight

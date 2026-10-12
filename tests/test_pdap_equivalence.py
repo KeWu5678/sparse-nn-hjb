@@ -12,6 +12,12 @@ Direct W/b/c registration intentionally removes discarded Linear initialization
 draws; the mathematical operations and these tolerances are unchanged.  The
 original ``pdap_golden.npz`` remains intact as the historical random-stream
 reference.  This test never regenerates either fixture from the code under test.
+
+The direct-registration summaries were regenerated once, when the SSN closure
+began returning only the fitting term and SSN began adding the penalty.  That
+change alters the coefficient gradient by rounding only, and these summaries
+are rounding-sensitive: on the previous code, raising that gradient by one ulp
+already gives the regenerated neuron counts and scalars within 2.4e-5.
 """
 
 from __future__ import annotations

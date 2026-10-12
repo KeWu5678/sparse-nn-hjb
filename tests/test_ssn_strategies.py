@@ -56,7 +56,7 @@ def test_rejection_restores_parameters_and_returns_original_loss(method, trial_l
 
     loss = optimizer.step(closure_for(optimizer, coefficient, objective))
 
-    assert loss is losses[0]
+    torch.testing.assert_close(loss, losses[0], rtol=0, atol=0, equal_nan=True)
     assert not optimizer.last_step_success
     torch.testing.assert_close(coefficient, original, rtol=0, atol=0)
     assert len(losses) == (4 if method == "levenberg_marquardt" else 2)

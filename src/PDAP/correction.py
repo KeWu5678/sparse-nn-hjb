@@ -23,10 +23,10 @@ def correct_coefficients(
     discarded; correction_guard=False preserves the historical unguarded
     comparison. An exception restores the post-insertion coefficients and
     propagates. No convergence claim is made after the fixed budget. The
-    optimizer's closure also evaluates the starting objective.
+    optimizer evaluates the starting objective with the closure.
     """
     start = coefficients.detach().clone()
-    initial_loss = closure()
+    initial_loss = optimizer.objective(closure)
     if not torch.isfinite(start).all() or not torch.isfinite(initial_loss):
         raise ValueError("SSN requires finite starting coefficients and loss")
     try:

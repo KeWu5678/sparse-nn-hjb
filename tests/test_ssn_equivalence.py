@@ -18,7 +18,6 @@ from ssn_test_problem import closure_for
 
 from src.config import resolve_model, validate_training
 from src.models import SparseModel, make_penalty
-from src.models.penalty import _phi
 from src.SSN import SSN
 
 GOLDEN_PATH = Path(__file__).parent / "fixtures" / "ssn_golden.npz"
@@ -43,13 +42,6 @@ def _make_quadratic(P: int, Nx: int, seed: int):
     return A, y, H
 
 
-def _penalty(theta, alpha, gamma, q):
-    """Log or power regularizer with the legacy nonnegative clamp."""
-    sel = theta.clamp_min(0.0)
-    arg = sel if q == 1.0 else sel.clamp_min(1e-30) ** q
-    return alpha * torch.sum(_phi(arg, gamma))
-
-
 def _run_trajectory(config: dict) -> np.ndarray:
     """Run one optimizer config for N_STEPS, returning the (N_STEPS, P) theta trace."""
     torch.manual_seed(0)
@@ -64,16 +56,10 @@ def _run_trajectory(config: dict) -> np.ndarray:
         r = A @ u - y
         return 0.5 / Nx * (r @ r)
 
-    # The historical optimizer subtracted the signed penalty gradient from the
-    # clamped loss, including on negative coordinates. Preserve that test problem
-    # rather than silently changing its objective or regenerating its fixtures.
+    # SSN adds the penalty to the closure's fitting term.
     model_config = resolve_model({"alpha": alpha, "gamma": gamma, "power": power}, P)
     validate_training(model_config)
-    penalty_exponent = SparseModel(model_config).penalty_exponent
-    penalty = make_penalty(alpha, gamma, penalty_exponent)
-
-    def coefficient_loss(u):
-        return data_loss(u) + _penalty(u, alpha, gamma, penalty_exponent)
+    penalty = make_penalty(alpha, gamma, SparseModel(model_config).penalty_exponent)
 
     kind = config["kind"]
     if kind == "ssn":
@@ -84,7 +70,7 @@ def _run_trajectory(config: dict) -> np.ndarray:
     else:  # pragma: no cover
         raise ValueError(kind)
 
-    closure = closure_for(opt, theta, coefficient_loss)
+    closure = closure_for(opt, theta, data_loss)
     traj = np.zeros((N_STEPS, P), dtype=np.float64)
     for k in range(N_STEPS):
         opt.step(closure)

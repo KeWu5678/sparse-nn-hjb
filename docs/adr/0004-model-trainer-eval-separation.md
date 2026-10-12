@@ -123,10 +123,11 @@ correction step of Algorithms 1 and 2, move to PDAP's `correct_coefficients`
 (`src/PDAP/correction.py`), as the follow-up below already assigns acceptance
 guards to PDAP. `step(closure)` again follows the `torch.optim` contract: SSN
 no longer receives the loss; PDAP's closure clears the gradients, evaluates the
-coefficient objective, calls `backward()` and returns it, and SSN reads the
-gradient from the parameter. Each trial is written into the parameter for its
-evaluation and undone if rejected. `PDAP.coefficient_objective` prepares that
-objective. The old `ssn_solve` layer is removed.
+coefficient fitting term, calls `backward()` and returns it, and SSN reads the
+gradient from the parameter and adds the penalty itself, as AdamW adds weight
+decay. Each trial is written into the parameter for its evaluation and undone if
+rejected. `PDAP.coefficient_fitting` prepares the fitting term. The old
+`ssn_solve` layer is removed.
 Historical explicit unguarded configurations remain comparators, with their
 setting passed to SSN. This and the exact iteration defaults are compatibility
 choices; an iteration budget does not establish convergence. Hydra stays at

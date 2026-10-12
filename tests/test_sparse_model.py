@@ -143,9 +143,8 @@ def test_samples_define_the_objective_and_its_derivatives(activation, power, gam
     assert float(loss(u)) == pytest.approx(metrics(problem, penalty, loader)["train_loss"], rel=1e-12)
 
     optimizer = correction_optimizer(penalty, hess_obj, u)
-    jac_loss = torch.func.grad(loss)(u)
     torch.testing.assert_close(
-        optimizer.jac_obj_augmented(u, jac_loss), torch.func.grad(obj_augmented)(u)
+        optimizer.jac_obj_augmented(u, torch.func.grad(fitting)(u)), torch.func.grad(obj_augmented)(u)
     )
     torch.testing.assert_close(
         optimizer.hess_obj_augmented(u), torch.func.hessian(obj_augmented)(u)

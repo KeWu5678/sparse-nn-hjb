@@ -24,13 +24,12 @@ def test_fixed_log_penalty_and_derivatives(gamma: float) -> None:
 
 
 @pytest.mark.parametrize(("q", "gamma"), [(1.0, 0.0), (1.0, 1.0), (0.5, 0.0), (2 / 3, 0.0)])
-def test_penalty_gradient_and_ssn_remainder(q: float, gamma: float) -> None:
+def test_penalty_value_and_ssn_remainder(q: float, gamma: float) -> None:
     u = torch.tensor([-2.0, -0.5, 0.25, 4.0], dtype=torch.float64, requires_grad=True)
     alpha = 0.3
     penalty = make_penalty(alpha, gamma, q)
     value = alpha * (_phi(u.abs(), gamma) if q == 1 else u.abs().pow(q)).sum()
-    (gradient,) = torch.autograd.grad(value, u, create_graph=True)
-    torch.testing.assert_close(penalty.jac_penalty(u), gradient)
+    torch.testing.assert_close(penalty.value(u), value)
 
     # Only the log family has a smooth remainder after the power-prox step.
     remainder = value - alpha * u.abs().sum() if q == 1 else (0 * u.square()).sum()

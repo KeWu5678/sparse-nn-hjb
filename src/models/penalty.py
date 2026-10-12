@@ -53,10 +53,6 @@ class Penalty(ABC):
         """Unweighted functional Phi."""
 
     @abstractmethod
-    def jac_penalty(self, u: Tensor) -> Tensor:
-        """Derivative of the penalty, selecting zero at u = 0."""
-
-    @abstractmethod
     def jac_nonsmooth_term(self, u: Tensor) -> Tensor:
         """Derivative of alpha*sum|u|^q where u != 0; the value at u = 0 is unspecified."""
 
@@ -145,9 +141,6 @@ class LogPenalty(Penalty):
     def sparsity_functional(self, u: Tensor) -> Tensor:
         return torch.sum(_phi(torch.abs(u), self._gamma))
 
-    def jac_penalty(self, u: Tensor) -> Tensor:
-        return self._alpha * _dphi(torch.abs(u), self._gamma) * torch.sign(u)
-
     def jac_nonsmooth_term(self, u: Tensor) -> Tensor:
         return self._alpha * torch.sign(u)
 
@@ -190,9 +183,6 @@ class FractionalPenalty(Penalty):
             torch.zeros_like(magnitudes),
         )
         return torch.sum(powers)
-
-    def jac_penalty(self, u: Tensor) -> Tensor:
-        return torch.where(torch.abs(u) > 0, self.jac_nonsmooth_term(u), torch.zeros_like(u))
 
     def jac_nonsmooth_term(self, u: Tensor) -> Tensor:
         s = torch.abs(u).clamp(min=1e-30)

@@ -34,7 +34,7 @@ def test_prox_scale_for_fractional_penalty_preserves_a_smaller_existing_scale() 
 
 def test_fractional_ssn_chooses_the_scale_from_its_starting_coefficients() -> None:
     coefficient = torch.nn.Parameter(torch.tensor([0.5], dtype=torch.float64))
-    penalty, coefficient_loss, hess_obj = synthetic_correction(
+    penalty, _, hess_obj = synthetic_correction(
         lambda u: 0.5 * u.square().sum(), torch.eye(1, dtype=torch.float64),
         alpha=1.0, gamma=0.0, power=3.0,
     )
@@ -88,16 +88,19 @@ def test_fractional_ssn_preserves_a_prox_consistent_warm_start() -> None:
             + 0.5 * curvature * value.square()
         )
 
-    penalty, coefficient_loss, hess_obj = synthetic_correction(
+    penalty, _, hess_obj = synthetic_correction(
         data_loss, torch.tensor([[curvature]], dtype=torch.float64),
         alpha=alpha, gamma=0.0, power=3.0,
     )
     prox_scale = penalty.prox_scale(coefficient.detach(), rho=0.9)
     optimizer = SSN([coefficient], penalty, hess_obj, prox_scale=prox_scale, tolerance_grad=0.0)
 
-    before = float(coefficient_loss(coefficient).detach())
-    optimizer.step(closure_for(optimizer, coefficient, coefficient_loss))
-    after = float(coefficient_loss(coefficient).detach())
+    def objective(c):
+        return float((data_loss(c) + penalty.value(c)).detach())
+
+    before = objective(coefficient)
+    optimizer.step(closure_for(optimizer, coefficient, data_loss))
+    after = objective(coefficient)
 
     assert optimizer.last_step_success
     assert after <= before
@@ -133,12 +136,12 @@ def test_fractional_ssn_uses_the_closed_form_prox_derivative(
         value = u[0]
         return linear * value + value.square()
 
-    penalty, coefficient_loss, hess_obj = synthetic_correction(
+    penalty, _, hess_obj = synthetic_correction(
         data_loss, torch.tensor([[2.0]], dtype=torch.float64),
         alpha=alpha, gamma=0.0, power=power,
     )
     optimizer = SSN([coefficient], penalty, hess_obj, prox_scale=prox_scale, tolerance_grad=0.0)
-    optimizer.step(closure_for(optimizer, coefficient, coefficient_loss))
+    optimizer.step(closure_for(optimizer, coefficient, data_loss))
 
     assert optimizer.last_step_success
     assert coefficient.item() == pytest.approx(expected, abs=1e-9)
