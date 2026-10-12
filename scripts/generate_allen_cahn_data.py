@@ -112,7 +112,7 @@ def main(argv=None) -> None:
         "adaptation": (
             "Uniform cell-centered finite volumes with exact cell-averaged actuators, "
             "6/10 states instead of 19 Chebyshev degrees of freedom; "
-            "beta=0.01 is a repository choice; scrambled Sobol cube sampling."
+            "The control-cost coefficient is a repository choice; scrambled Sobol cube sampling."
         ),
         "target": "V_T(x)=V(0,x); free terminal state and zero terminal cost",
         "reference_scope": "least-cost converged PMP stationary solution; no global certificate",

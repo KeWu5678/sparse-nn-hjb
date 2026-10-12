@@ -10,7 +10,7 @@ import numpy as np
 
 @dataclass(frozen=True)
 class AllenCahnProblem:
-    """Cell-centred discretization of the benchmark in Kunisch--Walter §9.3.
+    """Benchmark from Kunisch, Vásquez-Varas, and Walter (2023), §9.3.
 
     On ``(-1, 1)`` with zero Neumann boundary data, the state obeys
     ``y' = nu L y + y - y**3 + B u``.  The finite-horizon cost is
