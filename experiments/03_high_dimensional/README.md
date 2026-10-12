@@ -111,6 +111,13 @@ the multirun unexpectedly. For a scientific pilot, keep the normal training
 budget and restrict only the parameter grid, writing to a fresh output root.
 Keep repeated runs in separate roots so reports do not mix duplicate cells.
 
+The six smoke fits above completed on October 12, 2026, using the generated
+2,048-row datasets. Their saved models were reloaded and scored successfully;
+the local report is
+[`rawdata/reports/allen_cahn_smoke/results.md`](../../rawdata/reports/allen_cahn_smoke/results.md).
+These three-iteration runs validate the workflow. The full 500-cell study has
+not been run, and the report correctly counts zero completed full-grid cells.
+
 ## Analyze saved fits
 
 ```sh
