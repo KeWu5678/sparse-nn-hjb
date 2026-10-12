@@ -84,12 +84,10 @@ def profile_threshold(
 
     accepted_a: List[torch.Tensor] = []
     accepted_b: List[torch.Tensor] = []
-    accepted_scores: List[float] = []
+    margins: List[float] = []
     accepted_c: List[float] = []
     for a_i, b_i in zip(a_t, b_t):
-        features = problem.kernel(residual[0], a_i.reshape(1, -1), b_i.reshape(1))
-        slope = float(problem.jac_obj(*features, residual)[0])
-        curvature = float(problem.hess_obj(*features)[0, 0])
+        slope, curvature = _slope_and_curvature(problem, residual, a_i, b_i)
         v = abs(slope)
         scale = float(problem.moment_weight_of_atoms(a_i, b_i))
         threshold = penalty.alpha * scale
@@ -98,17 +96,16 @@ def profile_threshold(
             continue
         accepted_a.append(a_i.detach())
         accepted_b.append(b_i.detach())
-        accepted_scores.append(v / scale - penalty.alpha)
+        margins.append(v / scale - penalty.alpha)
         if guaranteed:
             magnitude = (v - threshold) / curvature
             accepted_c.append(-magnitude if slope > 0 else magnitude)
 
-    if len(accepted_scores) > max_insert:
-        order = sorted(range(len(accepted_scores)), key=lambda i: accepted_scores[i], reverse=True)[:max_insert]
-        accepted_a = [accepted_a[i] for i in order]
-        accepted_b = [accepted_b[i] for i in order]
-        if guaranteed:
-            accepted_c = [accepted_c[i] for i in order]
+    best = _best_indices(margins, max_insert)
+    accepted_a = [accepted_a[i] for i in best]
+    accepted_b = [accepted_b[i] for i in best]
+    if guaranteed:
+        accepted_c = [accepted_c[i] for i in best]
 
     if verbose:
         rule = (
@@ -133,18 +130,8 @@ def profile_threshold(
         elif not accepted_a:
             logger.debug("No retained candidate clears the insertion threshold")
 
-    if len(accepted_a) == 0:
-        empty_c = np.empty((0,), dtype=np.float64) if guaranteed else None
-        return (
-            np.empty((0, d_dim), dtype=np.float64),
-            np.empty((0,), dtype=np.float64),
-            empty_c,
-        )
-    return (
-        torch.stack(accepted_a, dim=0).detach().cpu().numpy(),
-        torch.stack(accepted_b, dim=0).detach().cpu().numpy(),
-        np.array(accepted_c, dtype=np.float64) if guaranteed else None,
-    )
+    W, b = _as_arrays(accepted_a, accepted_b, d_dim)
+    return W, b, np.array(accepted_c, dtype=np.float64) if guaranteed else None
 
 
 # ---------------------------------------------------------------------------- #
@@ -175,11 +162,9 @@ def finite_step(
     accepted_a: List[torch.Tensor] = []
     accepted_b: List[torch.Tensor] = []
     accepted_c: List[float] = []
-    accepted_dJ: List[float] = []
+    decreases: List[float] = []
     for a_i, b_i in zip(a_t, b_t):
-        features = problem.kernel(residual[0], a_i.reshape(1, -1), b_i.reshape(1))
-        slope = float(problem.jac_obj(*features, residual)[0])
-        curvature = float(problem.hess_obj(*features)[0, 0])
+        slope, curvature = _slope_and_curvature(problem, residual, a_i, b_i)
         if curvature < 1e-30 or abs(slope) < 1e-30:
             continue
         c_star = penalty.insertion_weight(slope, curvature)
@@ -195,13 +180,12 @@ def finite_step(
         accepted_a.append(a_i.detach())
         accepted_b.append(b_i.detach())
         accepted_c.append(c_star)
-        accepted_dJ.append(dJ)
+        decreases.append(-dJ)
 
-    if len(accepted_dJ) > max_insert:
-        order = sorted(range(len(accepted_dJ)), key=lambda i: accepted_dJ[i])[:max_insert]
-        accepted_a = [accepted_a[i] for i in order]
-        accepted_b = [accepted_b[i] for i in order]
-        accepted_c = [accepted_c[i] for i in order]
+    best = _best_indices(decreases, max_insert)
+    accepted_a = [accepted_a[i] for i in best]
+    accepted_b = [accepted_b[i] for i in best]
+    accepted_c = [accepted_c[i] for i in best]
 
     if verbose:
         logger.debug(
@@ -210,17 +194,8 @@ def finite_step(
             N, a_t.shape[0], len(accepted_a), max_insert, problem.penalty_exponent,
         )
 
-    if len(accepted_a) == 0:
-        return (
-            np.empty((0, d_dim), dtype=np.float64),
-            np.empty((0,), dtype=np.float64),
-            np.empty((0,), dtype=np.float64),
-        )
-    return (
-        torch.stack(accepted_a, dim=0).detach().cpu().numpy(),
-        torch.stack(accepted_b, dim=0).detach().cpu().numpy(),
-        np.array(accepted_c, dtype=np.float64),
-    )
+    W, b = _as_arrays(accepted_a, accepted_b, d_dim)
+    return W, b, np.array(accepted_c, dtype=np.float64)
 
 
 # ---------------------------------------------------------------------------- #
@@ -413,3 +388,38 @@ def _reject_support_repeats(
         )
         a_t, b_t = a_t[distinct], b_t[distinct]
     return a_t, b_t
+
+
+# ---------------------------------------------------------------------------- #
+# Candidate evaluation shared by both strategies
+# ---------------------------------------------------------------------------- #
+def _slope_and_curvature(
+    problem: SparseModel,
+    residual: tuple[torch.Tensor, torch.Tensor, torch.Tensor],
+    a: torch.Tensor, b: torch.Tensor,
+) -> Tuple[float, float]:
+    """The fitting term's slope and curvature in a new atom's coefficient, at zero."""
+    features = problem.kernel(residual[0], a.reshape(1, -1), b.reshape(1))
+    slope = float(problem.jac_obj(*features, residual)[0])
+    curvature = float(problem.hess_obj(*features)[0, 0])
+    return slope, curvature
+
+
+def _best_indices(gains: List[float], max_insert: int) -> List[int]:
+    """Indices of the max_insert largest gains, best first; all, in order, if they fit."""
+    indices = list(range(len(gains)))
+    if len(gains) > max_insert:
+        indices = sorted(indices, key=lambda i: gains[i], reverse=True)[:max_insert]
+    return indices
+
+
+def _as_arrays(
+    accepted_a: List[torch.Tensor], accepted_b: List[torch.Tensor], d_dim: int,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Stack the accepted atoms into W (n, d_dim) and b (n,), including n = 0."""
+    W = np.empty((0, d_dim), dtype=np.float64)
+    b = np.empty((0,), dtype=np.float64)
+    if accepted_a:
+        W = torch.stack(accepted_a, dim=0).detach().cpu().numpy()
+        b = torch.stack(accepted_b, dim=0).detach().cpu().numpy()
+    return W, b
