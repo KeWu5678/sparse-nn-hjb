@@ -15,6 +15,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from ..config.activations import get_growth
+from ..config.schema import TrainingConfig
 from ..data import full_batch
 from ..models import Penalty, SparseModel
 from ..SSN import SSN
@@ -25,12 +26,13 @@ from .warmstart import warm_start
 
 
 class PDAP:
-    def __init__(self, training, penalty: Penalty, *, insertion: str = "profile") -> None:
+    def __init__(
+        self, training: TrainingConfig, penalty: Penalty, *, insertion: str = "profile",
+    ) -> None:
         """Read the settings for one outer step; run_training owns its repetition.
 
         penalty is shared by insertion, correction and evaluation.
         """
-        t = training
         self.penalty = penalty
         if insertion not in ("profile", "finite_step"):
             raise ValueError(f"insertion must be 'profile' or 'finite_step', got {insertion!r}")
@@ -39,19 +41,19 @@ class PDAP:
         # Paper-conformance axes.  Each is validated here rather than at use, so a
         # typo fails at construction instead of midway through a sweep.
         for field, value, allowed in (
-            ("training.insert_init", t.insert_init, ("warm_start", "guaranteed")),
-            ("training.insert_mode", t.insert_mode, ("batch", "sequential")),
-            ("training.loop_order", t.loop_order, ("correction_first", "insertion_first")),
-            ("training.radial_cap", t.radial_cap, ("fixed", "theorem")),
+            ("training.insert_init", training.insert_init, ("warm_start", "guaranteed")),
+            ("training.insert_mode", training.insert_mode, ("batch", "sequential")),
+            ("training.loop_order", training.loop_order, ("correction_first", "insertion_first")),
+            ("training.radial_cap", training.radial_cap, ("fixed", "theorem")),
         ):
             if value not in allowed:
                 raise ValueError(f"{field} must be one of {allowed}, got {value!r}")
 
-        self.insert_init = t.insert_init
-        self.insert_mode = t.insert_mode
-        self.correction_guard = bool(t.correction_guard)
-        self.loop_order = t.loop_order
-        self.radial_cap = t.radial_cap
+        self.insert_init = training.insert_init
+        self.insert_mode = training.insert_mode
+        self.correction_guard = bool(training.correction_guard)
+        self.loop_order = training.loop_order
+        self.radial_cap = training.radial_cap
         # The cap the last insertion search used, and whether the theorem
         # supplied it. Recorded per iteration so a `radial_cap=theorem` run
         # whose hypothesis p > s1 fails stays distinguishable from `fixed`:
@@ -60,20 +62,21 @@ class PDAP:
         self._last_theorem_applied: float | None = None
 
         self.solver: dict[str, Any] = dict(
-            method=t.method, max_ls_iter=t.max_ls_iter,
-            tolerance_ls=t.tolerance_ls, tolerance_grad=t.tolerance_grad, sigmamax=t.sigmamax,
+            method=training.method, max_ls_iter=training.max_ls_iter,
+            tolerance_ls=training.tolerance_ls, tolerance_grad=training.tolerance_grad,
+            sigmamax=training.sigmamax,
         )
         # outer-loop + insertion settings
-        iterations = t.fit_outer_iterations
+        iterations = training.fit_outer_iterations
         if not isinstance(iterations, int) or isinstance(iterations, bool) or iterations < 0:
             raise ValueError("training.fit_outer_iterations must be a nonnegative integer")
         self.fit_outer_iterations = iterations
-        self.ins_merge_tol = t.ins_merge_tol
-        self.lbfgs_lr = t.lbfgs_lr
-        self.lbfgs_steps = t.lbfgs_steps
-        self.num_insertion = t.num_insertion
-        self.max_insert = t.max_insert
-        self.prune_amp_tol = t.prune_amp_tol
+        self.ins_merge_tol = training.ins_merge_tol
+        self.lbfgs_lr = training.lbfgs_lr
+        self.lbfgs_steps = training.lbfgs_steps
+        self.num_insertion = training.num_insertion
+        self.max_insert = training.max_insert
+        self.prune_amp_tol = training.prune_amp_tol
 
     def step(
         self, problem: SparseModel, train_loader: DataLoader, *, verbose: bool = False,
