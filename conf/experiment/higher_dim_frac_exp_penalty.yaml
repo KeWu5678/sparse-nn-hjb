@@ -1,0 +1,12 @@
+# @package _global_
+# The existing Algorithm 2 study, on the 6D and 10D Allen-Cahn datasets.
+defaults:
+  - frac_exp_penalty
+  - _self_
+
+name: ${hydra:runtime.choices.data}_higher_dim_frac_exp_penalty
+
+hydra:
+  sweeper:
+    params:
+      +data: allen_cahn6,allen_cahn10

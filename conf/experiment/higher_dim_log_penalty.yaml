@@ -1,0 +1,13 @@
+# @package _global_
+# The existing Algorithm 1 study, on the 6D and 10D Allen-Cahn datasets.
+# Inherit numerical settings and sweep axes so comparisons use the same method.
+defaults:
+  - log_penalty
+  - _self_
+
+name: ${hydra:runtime.choices.data}_higher_dim_log_penalty
+
+hydra:
+  sweeper:
+    params:
+      +data: allen_cahn6,allen_cahn10

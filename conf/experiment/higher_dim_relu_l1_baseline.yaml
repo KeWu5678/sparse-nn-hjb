@@ -1,0 +1,12 @@
+# @package _global_
+# The existing correction-first ReLU-L1 comparator, on Allen-Cahn data.
+defaults:
+  - relu_l1_baseline
+  - _self_
+
+name: ${hydra:runtime.choices.data}_higher_dim_relu_l1_baseline
+
+hydra:
+  sweeper:
+    params:
+      +data: allen_cahn6,allen_cahn10

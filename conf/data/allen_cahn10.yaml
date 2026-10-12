@@ -1,0 +1,7 @@
+# @package _global_
+# Ten finite-volume cell averages of the controlled Allen-Cahn equation.
+# See experiments/03_high_dimensional/README.md for the paper and adaptations.
+defaults:
+  - /eval: global
+data:
+  path: AllenCahn10_20261012/value_samples.npz

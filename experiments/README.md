@@ -1,6 +1,6 @@
 # Experiment workflow
 
-Current datasets were generated on September 24, 2026. Their paths are selected
+The two current manuscript datasets were generated on September 24, 2026. Their paths are selected
 by `conf/data/*.yaml`; training settings and sweep axes live in
 `conf/experiment/*.yaml`. All 588 configured fits and the 31 manuscript image panels
 have been regenerated. Numerical conclusions in the current paper use these runs.
@@ -31,7 +31,7 @@ points.
 
 ## Train the current grids
 
-The six presets currently define 588 experiment cells:
+The six current-manuscript presets define 588 experiment cells:
 
 | Preset | VDP runs | Pendulum runs, including variants |
 | --- | ---: | ---: |
@@ -120,6 +120,16 @@ then minimizes global H1 validation error within each family. The selection
 audit is saved as `controller_selection.json`; downstream generators reject
 stale selections. Families with no passing combination retain an explicitly
 failed comparator with the lowest global error.
+
+## Higher-dimensional extension
+
+The [Allen–Cahn study](03_high_dimensional/README.md) adds six- and
+ten-dimensional finite-volume adaptations of an example from Kunisch,
+Vásquez-Varas, and Walter (2023). Its three `higher_dim_*` presets inherit the
+existing algorithm settings and define a separate 500-cell grid. The guide
+includes data generation, restricted smoke runs, and a dimension-independent
+saved-fit report. Generated data, runs, and unpromoted figures remain under
+`rawdata/`; these new definitions do not change the current manuscript study.
 
 ## Archive boundary
 
