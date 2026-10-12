@@ -30,7 +30,7 @@ def correct_coefficients(
     if not torch.isfinite(start).all() or not torch.isfinite(initial_loss):
         raise ValueError("SSN requires finite starting coefficients and loss")
     try:
-        loss, failed_steps = _run_budget(optimizer, closure, initial_loss, iterations)
+        loss, failed_steps = _run_fixed_ssn_steps(optimizer, closure, initial_loss, iterations)
     except Exception:
         _restore(coefficients, start)
         raise
@@ -55,7 +55,7 @@ def correct_coefficients(
     }
 
 
-def _run_budget(
+def _run_fixed_ssn_steps(
     optimizer: SSN, closure: Callable[[], torch.Tensor], initial_loss: torch.Tensor, iterations: int,
 ) -> tuple[torch.Tensor, int]:
     """Run the fixed number of SSN steps; return the last objective and the failed steps."""
