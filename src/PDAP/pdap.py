@@ -181,7 +181,7 @@ class PDAP:
         with torch.no_grad():
             Vp, dVp = problem(X)
         residual = X.detach(), (Vp - V).detach(), (dVp - dV).detach()
-        existing_neurons = (problem.inner_weight.detach(), problem.inner_bias.detach()) if problem.n_neurons else None
+        existing_atoms = (problem.inner_weight.detach(), problem.inner_bias.detach()) if problem.n_neurons else None
 
         d = int(problem.input_dim)
         radius = self._search_radius(problem, residual)
@@ -189,7 +189,7 @@ class PDAP:
             sample_sphere=lambda num_of_initial_pts: self._sphere(d, num_of_initial_pts),
             num_of_initial_pts=num_of_initial_pts,
             max_insert=max_insert, merge_tol=self.ins_merge_tol,
-            existing_atoms=existing_neurons, radius=radius, verbose=verbose,
+            existing_atoms=existing_atoms, radius=radius, verbose=verbose,
             lbfgs_lr=self.lbfgs_lr, lbfgs_steps=self.lbfgs_steps,
         )
         if self.insertion_kind == "profile":
