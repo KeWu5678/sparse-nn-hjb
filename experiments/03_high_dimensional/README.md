@@ -118,6 +118,12 @@ the local report is
 These three-iteration runs validate the workflow. The full 500-cell study has
 not been run, and the report correctly counts zero completed full-grid cells.
 
+The subsequent `refactor.md` review separated report validation, checkpoint
+scoring, summary selection, frontier preparation, and exports. Re-running the
+six saved fits through the refactored reporter reproduced all seven report
+artifacts byte for byte (CSV, coverage, Markdown, two NPZ files, and two PNGs).
+The local evidence is `rawdata/reports/allen_cahn_audit/report_refactor_equivalence.json`.
+
 ## Analyze saved fits
 
 ```sh

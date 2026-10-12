@@ -39,24 +39,23 @@ EXPERIMENTS = {
 }
 
 
-def scientific_signature(config: dict) -> str:
-    """Identify a scientific config point, excluding presentation/runtime policy."""
-    point = {key: copy.deepcopy(config[key]) for key in ("model", "training", "data", "eval")}
-    point["seed"] = config["env"]["seed"]
-    point["training"].pop("display_every", None)
+def main(argv=None) -> int:
+    args = _parse_arguments(argv)
+    expected, paths = study_grid()
+    rows, curves, found = collect(args.records, expected, paths)
+    if args.require_complete and any(found[key] != expected[key] for key in expected):
+        raise ValueError("the configured higher-dimensional study is incomplete")
+    print(write_report(args.output, rows, curves, found, expected))
+    return 0
 
-    def numeric(value):
-        if isinstance(value, bool) or value is None:
-            return value
-        if isinstance(value, int | float):
-            return float(value)
-        if isinstance(value, dict):
-            return {key: numeric(item) for key, item in value.items()}
-        if isinstance(value, list | tuple):
-            return [numeric(item) for item in value]
-        return value
 
-    return json.dumps(numeric(point), sort_keys=True, allow_nan=False)
+def _parse_arguments(argv):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--records", type=Path, default=ROOT / "rawdata/logs/multirun")
+    parser.add_argument("--output", type=Path, default=ROOT / "rawdata/reports/allen_cahn")
+    parser.add_argument("--require-complete", action="store_true",
+                        help="fail before writing unless every configured sweep cell is present")
+    return parser.parse_args(argv)
 
 
 def study_grid() -> tuple[dict, dict]:
@@ -92,20 +91,49 @@ def study_grid() -> tuple[dict, dict]:
     return expected, data_paths
 
 
-def lower_envelope(neurons, errors) -> tuple[np.ndarray, np.ndarray]:
-    """Minimum observed error with at most N neurons, across all supplied rows."""
-    neurons, errors = np.asarray(neurons), np.asarray(errors)
-    if neurons.shape != errors.shape or not np.all(np.isfinite(errors) & (errors >= 0)):
-        raise ValueError("frontier inputs must have matching shapes and finite nonnegative errors")
-    counts = np.unique(neurons)
-    best = np.asarray([np.min(errors[neurons == count]) for count in counts])
-    return counts, np.minimum.accumulate(best)
+def scientific_signature(config: dict) -> str:
+    """Identify a scientific config point, excluding presentation/runtime policy."""
+    point = {key: copy.deepcopy(config[key]) for key in ("model", "training", "data", "eval")}
+    point["seed"] = config["env"]["seed"]
+    point["training"].pop("display_every", None)
+
+    def numeric(value):
+        normalized = value
+        if isinstance(value, int | float) and not isinstance(value, bool):
+            normalized = float(value)
+        elif isinstance(value, dict):
+            normalized = {key: numeric(item) for key, item in value.items()}
+        elif isinstance(value, list | tuple):
+            normalized = [numeric(item) for item in value]
+        return normalized
+
+    return json.dumps(numeric(point), sort_keys=True, allow_nan=False)
 
 
 def collect(records: Path, expected: dict, data_paths: dict) -> tuple[list, dict, dict]:
     """Validate provenance, then rescore every checkpoint on its recorded holdout."""
     rows, curves = [], defaultdict(list)
     found = {key: set() for key in expected}
+    for run, dataset, experiment, signature in _validated_runs(records, expected, data_paths):
+        history, validation_count = _score_checkpoints(run)
+        study = signature in expected[dataset, experiment]
+        if study:
+            found[dataset, experiment].add(signature)
+        kind = "configured" if study else "pilot/override"
+        row = _run_summary(run, history, validation_count, kind)
+        rows.append(row)
+        curves[dataset, row["loss_weights"], kind, experiment].append(history)
+    if not rows:
+        raise ValueError(f"no completed higher-dimensional Run Records found under {records}")
+    return rows, dict(curves), found
+
+
+def _validated_runs(records: Path, expected: dict, data_paths: dict):
+    """Yield restored runs with compatible provenance, dimensions, and holdouts.
+
+    Validation stays in record order, so a run is scored before the next record
+    is examined. This preserves which invalid input is reported first.
+    """
     seen, holdouts = set(), {}
     for path in sorted(records.rglob("*.json")):
         record = json.loads(path.read_text(encoding="utf-8"))
@@ -130,71 +158,75 @@ def collect(records: Path, expected: dict, data_paths: dict) -> tuple[list, dict
         run = load_run(path)  # Verifies the input-byte hash and recorded normalization.
         if run.model.input_dim != DATASETS[dataset]:
             raise ValueError(f"expected {DATASETS[dataset]} state variables: {path}")
-        samples = validation_samples(run)
-        history = evaluate_history(run, samples)
-        if not all(np.all(np.isfinite(history[key])) for key in ("rel_l2", "rel_grad", "rel_h1")):
-            raise ValueError(f"nonfinite physical-coordinate validation errors: {path}")
-        study = signature in expected[dataset, experiment]
-        if study:
-            found[dataset, experiment].add(signature)
-        kind = "configured" if study else "pilot/override"
-        model, training = config["model"], config["training"]
-        loss = ",".join(f"{weight:g}" for weight in model["loss_weights"])
-        row = {
-            "dataset": dataset, "dimension": run.model.input_dim,
-            "experiment": experiment, "kind": kind,
-            "activation": model["activation"], "power": model["power"],
-            "alpha": model["alpha"], "gamma": model["gamma"], "loss_weights": loss,
-            "iterations": training["num_iterations"], "candidates": training["num_insertion"],
-            "seed": split[0], "train_fraction": split[1], "validation_count": len(samples[0]),
-            "best_iteration": run.iteration, "neurons": int(history["neurons"][run.iteration]),
-            "rel_l2": float(history["rel_l2"][run.iteration]),
-            "rel_grad": float(history["rel_grad"][run.iteration]),
-            "rel_h1": float(history["rel_h1"][run.iteration]),
-            "elapsed_s": record.get("elapsed_s"), "run_id": record["run_id"],
-            "data_sha256": record["data_sha256"], "record": str(path.resolve()),
-        }
-        rows.append(row)
-        curves[dataset, loss, kind, experiment].append(history)
-    if not rows:
-        raise ValueError(f"no completed higher-dimensional Run Records found under {records}")
-    return rows, dict(curves), found
+        yield run, dataset, experiment, signature
+
+
+def _score_checkpoints(run) -> tuple[dict, int]:
+    """Recompute finite physical errors for all checkpoints on the saved holdout."""
+    samples = validation_samples(run)
+    history = evaluate_history(run, samples)
+    if not all(np.all(np.isfinite(history[key])) for key in ("rel_l2", "rel_grad", "rel_h1")):
+        raise ValueError(f"nonfinite physical-coordinate validation errors: {run.record_path}")
+    return history, len(samples[0])
+
+
+def _run_summary(run, history: dict, validation_count: int, kind: str) -> dict:
+    """Describe the training-selected checkpoint without changing its selection."""
+    record = run.record
+    config = record["config"]
+    choices = record["hydra"]["runtime"]["choices"]
+    model, training = config["model"], config["training"]
+    loss = ",".join(f"{weight:g}" for weight in model["loss_weights"])
+    return {
+        "dataset": choices["data"], "dimension": run.model.input_dim,
+        "experiment": choices["experiment"], "kind": kind,
+        "activation": model["activation"], "power": model["power"],
+        "alpha": model["alpha"], "gamma": model["gamma"], "loss_weights": loss,
+        "iterations": training["num_iterations"], "candidates": training["num_insertion"],
+        "seed": config["env"]["seed"], "train_fraction": config["data"]["train_fraction"],
+        "validation_count": validation_count,
+        "best_iteration": run.iteration, "neurons": int(history["neurons"][run.iteration]),
+        "rel_l2": float(history["rel_l2"][run.iteration]),
+        "rel_grad": float(history["rel_grad"][run.iteration]),
+        "rel_h1": float(history["rel_h1"][run.iteration]),
+        "elapsed_s": record.get("elapsed_s"), "run_id": record["run_id"],
+        "data_sha256": record["data_sha256"], "record": str(run.record_path.resolve()),
+    }
 
 
 def write_report(output: Path, rows: list, curves: dict, found: dict, expected: dict) -> Path:
+    """Prepare study summaries and export the report's tables and frontiers."""
     output.mkdir(parents=True, exist_ok=True)
-    with (output / "runs.csv").open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
-        writer.writeheader()
-        writer.writerows(rows)
-    coverage = [{"dataset": dataset, "experiment": experiment,
-                 "completed": len(found[dataset, experiment]),
-                 "expected": len(expected[dataset, experiment])}
-                for dataset, experiment in expected]
-    complete = all(item["completed"] == item["expected"] for item in coverage)
-    lines = ["# Higher-dimensional Allen-Cahn results", "",
-             f"Study status: **{'complete configured grid' if complete else 'partial study / pilot'}**.",
-             "", format_table(coverage, ["dataset", "experiment", "completed", "expected"]), "",
-             "Only exact configured scientific settings count toward completion; reduced budgets "
-             "or other overrides are labeled `pilot/override`. Duplicate cells, changed datasets, "
-             "nonphysical records, and mixed validation splits are rejected.", "",
-             "Errors below are recomputed in physical coordinates. The saved checkpoint minimizes "
-             "the training objective. For each dataset, loss, run kind, and algorithm, this table "
-             "selects the run with the smallest validation H1 error; this is a tuning diagnostic, "
-             "not an independent test estimate. All runs and their provenance are in [runs.csv](runs.csv).", ""]
+    coverage = _study_coverage(found, expected)
+    best = _best_validation_runs(rows)
+    frontiers = _prepare_frontiers(curves)
+    _write_run_table(output / "runs.csv", rows)
+    _write_frontiers(output, frontiers)
+    return _write_study_summary(output, coverage, best, frontiers)
+
+
+def _study_coverage(found: dict, expected: dict) -> dict:
+    cells = [{"dataset": dataset, "experiment": experiment,
+              "completed": len(found[dataset, experiment]),
+              "expected": len(expected[dataset, experiment])}
+             for dataset, experiment in expected]
+    return {"complete": all(item["completed"] == item["expected"] for item in cells),
+            "cells": cells}
+
+
+def _best_validation_runs(rows: list) -> list:
+    """Select each group's tuning diagnostic; ties retain the first run."""
     best = {}
     for row in rows:
         group = row["dataset"], row["loss_weights"], row["kind"], row["experiment"]
         if group not in best or row["rel_h1"] < best[group]["rel_h1"]:
             best[group] = row
-    columns = ["dataset", "experiment", "kind", "loss_weights", "activation", "power", "alpha",
-               "gamma", "neurons", "rel_l2", "rel_grad", "rel_h1", "iterations", "candidates"]
-    lines += [format_table([best[key] for key in sorted(best)], columns), "",
-              "Each frontier is the smallest observed validation H1 error with at most N neurons, "
-              "pooled across all checkpoints and parameter choices within one algorithm. Pilot "
-              "and configured runs appear in separate panels. These envelopes are descriptive "
-              "and do not change the training-objective checkpoint selection.", ""]
-    apply_publication_style()
+    return [best[key] for key in sorted(best)]
+
+
+def _prepare_frontiers(curves: dict) -> list:
+    """Pool exact neuron-budget envelopes and derive their plotting series."""
+    frontiers = []
     for dataset, loss, kind in sorted({key[:3] for key in curves}):
         series, arrays = [], {}
         for experiment, (_, label, color, marker) in EXPERIMENTS.items():
@@ -209,33 +241,64 @@ def write_report(output: Path, rows: list, curves: dict, found: dict, expected: 
             series.append({"ns": counts, "h1": np.maximum(errors, np.finfo(float).tiny),
                            "label": label, "color": PALETTE[color], "marker": marker})
         stem = f"{dataset}_loss_{loss.replace(',', '_')}_{kind.replace('/', '_')}"
-        figure = output / f"{stem}.png"
-        plot_neuron_h1_frontier(series, save_path=figure)
-        np.savez_compressed(output / f"{stem}.npz", **arrays)
-        lines += [f"![Neuron/H1 frontier]({figure.name})", "",
-                  f"{dataset}: loss weights ({loss}), {kind} runs. "
+        frontiers.append({"dataset": dataset, "loss": loss, "kind": kind,
+                          "stem": stem, "arrays": arrays, "series": series})
+    return frontiers
+
+
+def lower_envelope(neurons, errors) -> tuple[np.ndarray, np.ndarray]:
+    """Minimum observed error with at most N neurons, across all supplied rows."""
+    neurons, errors = np.asarray(neurons), np.asarray(errors)
+    if neurons.shape != errors.shape or not np.all(np.isfinite(errors) & (errors >= 0)):
+        raise ValueError("frontier inputs must have matching shapes and finite nonnegative errors")
+    counts = np.unique(neurons)
+    best = np.asarray([np.min(errors[neurons == count]) for count in counts])
+    return counts, np.minimum.accumulate(best)
+
+
+def _write_run_table(path: Path, rows: list) -> None:
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def _write_frontiers(output: Path, frontiers: list) -> None:
+    apply_publication_style()
+    for frontier in frontiers:
+        plot_neuron_h1_frontier(frontier["series"], save_path=output / f"{frontier['stem']}.png")
+        np.savez_compressed(output / f"{frontier['stem']}.npz", **frontier["arrays"])
+
+
+def _write_study_summary(output: Path, coverage: dict, best: list, frontiers: list) -> Path:
+    """Write the narrative report and its machine-readable coverage summary."""
+    lines = ["# Higher-dimensional Allen-Cahn results", "",
+             f"Study status: **{'complete configured grid' if coverage['complete'] else 'partial study / pilot'}**.",
+             "", format_table(coverage["cells"], ["dataset", "experiment", "completed", "expected"]), "",
+             "Only exact configured scientific settings count toward completion; reduced budgets "
+             "or other overrides are labeled `pilot/override`. Duplicate cells, changed datasets, "
+             "nonphysical records, and mixed validation splits are rejected.", "",
+             "Errors below are recomputed in physical coordinates. The saved checkpoint minimizes "
+             "the training objective. For each dataset, loss, run kind, and algorithm, this table "
+             "selects the run with the smallest validation H1 error; this is a tuning diagnostic, "
+             "not an independent test estimate. All runs and their provenance are in [runs.csv](runs.csv).", ""]
+    columns = ["dataset", "experiment", "kind", "loss_weights", "activation", "power", "alpha",
+               "gamma", "neurons", "rel_l2", "rel_grad", "rel_h1", "iterations", "candidates"]
+    lines += [format_table(best, columns), "",
+              "Each frontier is the smallest observed validation H1 error with at most N neurons, "
+              "pooled across all checkpoints and parameter choices within one algorithm. Pilot "
+              "and configured runs appear in separate panels. These envelopes are descriptive "
+              "and do not change the training-objective checkpoint selection.", ""]
+    for frontier in frontiers:
+        lines += [f"![Neuron/H1 frontier]({frontier['stem']}.png)", "",
+                  f"{frontier['dataset']}: loss weights ({frontier['loss']}), {frontier['kind']} runs. "
                   "Exact frontier arrays are saved beside the PNG as NPZ.", ""]
     path = output / "results.md"
     path.write_text("\n".join(lines), encoding="utf-8")
     (output / "coverage.json").write_text(
-        json.dumps({"complete": complete, "cells": coverage}, indent=2) + "\n", encoding="utf-8",
+        json.dumps(coverage, indent=2) + "\n", encoding="utf-8",
     )
     return path
-
-
-def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--records", type=Path, default=ROOT / "rawdata/logs/multirun")
-    parser.add_argument("--output", type=Path, default=ROOT / "rawdata/reports/allen_cahn")
-    parser.add_argument("--require-complete", action="store_true",
-                        help="fail before writing unless every configured sweep cell is present")
-    args = parser.parse_args(argv)
-    expected, paths = study_grid()
-    rows, curves, found = collect(args.records, expected, paths)
-    if args.require_complete and any(found[key] != expected[key] for key in expected):
-        raise ValueError("the configured higher-dimensional study is incomplete")
-    print(write_report(args.output, rows, curves, found, expected))
-    return 0
 
 
 if __name__ == "__main__":
