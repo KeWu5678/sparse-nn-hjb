@@ -15,7 +15,7 @@ def _insert(monkeypatch, config, profile, curvature=1.0):
     problem = SparseModel(config)
     W = torch.zeros((1, 1), dtype=torch.float64)
     b = torch.ones(1, dtype=torch.float64)
-    monkeypatch.setattr(insertion, "_generate_candidates", lambda *args, **kwargs: (W, b, 1, 0))
+    monkeypatch.setattr(insertion, "_generate_candidates", lambda *args, **kwargs: (W, b, 0))
     residual = W, W.new_tensor([[profile / curvature]]), torch.zeros_like(W)
     return insertion.finite_step(
         problem, penalty_for(config, problem), residual, sample_sphere=lambda n: (W, b), N=1, verbose=False,

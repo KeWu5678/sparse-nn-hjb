@@ -73,7 +73,7 @@ def profile_threshold(
     """
     d_dim = problem.input_dim
 
-    a_t, b_t, n_after, discarded_outside = _generate_candidates(
+    a_t, b_t, discarded_outside = _generate_candidates(
         problem, residual, sample_sphere=sample_sphere, N=N,
         merge_tol=merge_tol,
         existing_atoms=existing_atoms, lbfgs_lr=lbfgs_lr, lbfgs_steps=lbfgs_steps,
@@ -118,7 +118,7 @@ def profile_threshold(
         logger.debug(
             "Candidate search  sampled=%d  unique=%d  accepted=%d/%d  "
             "rule=%s (init=%s)",
-            N, n_after, len(accepted_a), max_insert, rule, insert_init,
+            N, a_t.shape[0], len(accepted_a), max_insert, rule, insert_init,
         )
         if discarded_outside:
             logger.debug(
@@ -126,7 +126,7 @@ def profile_threshold(
                 "search radius",
                 discarded_outside,
             )
-        if not accepted_a and n_after == 0:
+        if not accepted_a and a_t.shape[0] == 0:
             logger.debug(
                 "Candidate search retained no distinct candidate after geometric filters"
             )
@@ -165,7 +165,7 @@ def finite_step(
     """Accept atoms with a profitable finite step (Delta J(c*) < 0); return c* too."""
     d_dim = problem.input_dim
 
-    a_t, b_t, n_after, _discarded_outside = _generate_candidates(
+    a_t, b_t, _ = _generate_candidates(
         problem, residual, sample_sphere=sample_sphere, N=N,
         merge_tol=merge_tol,
         existing_atoms=existing_atoms, lbfgs_lr=lbfgs_lr, lbfgs_steps=lbfgs_steps,
@@ -207,7 +207,7 @@ def finite_step(
         logger.debug(
             "Candidate search  sampled=%d  unique=%d  accepted=%d/%d  "
             "rule=adding atom reduces objective (q=%.3f)",
-            N, n_after, len(accepted_a), max_insert, problem.penalty_exponent,
+            N, a_t.shape[0], len(accepted_a), max_insert, problem.penalty_exponent,
         )
 
     if len(accepted_a) == 0:
@@ -236,7 +236,7 @@ def _generate_candidates(
     lbfgs_lr: float = 1e-2,
     lbfgs_steps: int = 200,
     radius: Optional[float] = None,
-) -> Tuple[torch.Tensor, torch.Tensor, int, int]:
+) -> Tuple[torch.Tensor, torch.Tensor, int]:
     """Return distinct locally refined maximizers of the score |P(omega)| / w_p(omega).
 
     Homogeneous activations are searched on ``S^d``.  For nonhomogeneous
@@ -244,45 +244,67 @@ def _generate_candidates(
     of ``omega=(a,b)`` are then optimized jointly without a constraint.  When
     optimized nonhomogeneous points outside the sampling radius are discarded
     rather than projected back.  Homogeneous activations retain the normalized
-    sphere search used by Algorithm 2.
+    sphere search used by Algorithm 2. Also return how many refined candidates
+    were discarded outside the radius.
     """
-    use_sphere = problem.use_sphere
+    r_max = float(radius) if radius is not None else math.exp(FIXED_LOG_CLAMP)
+    normalized_residual = _normalize_residual(residual)
+    a_t, b_t = _sample_starts(problem, sample_sphere, N, r_max)
+    a_t, b_t, discarded_outside = _refine_and_deduplicate(
+        problem, normalized_residual, a_t, b_t,
+        r_max=r_max, merge_tol=merge_tol, steps=lbfgs_steps, lr=lbfgs_lr,
+    )
+    a_t, b_t = _reject_support_repeats(problem, a_t, b_t, existing_atoms)
+    return a_t, b_t, discarded_outside
 
-    # Normalize residual for the L-BFGS direction search (MATLAB find_max:385).
+
+def _normalize_residual(
+    residual: tuple[torch.Tensor, torch.Tensor, torch.Tensor],
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Normalize the residual for the L-BFGS search (MATLAB find_max:385)."""
     X, res_v, res_dv = residual
     res_norm = torch.sqrt(res_v.pow(2).sum() + res_dv.pow(2).sum()).clamp_min(1e-30)
-    normalized_residual = X, res_v / res_norm, res_dv / res_norm
+    return X, res_v / res_norm, res_dv / res_norm
 
-    # Homogeneous models use the sampled directions directly;
-    # nonhomogeneous models give each direction a log-uniform radius (ADR 0006).
+
+def _sample_starts(
+    problem: SparseModel,
+    sample_sphere: Callable[[int], Tuple[torch.Tensor, torch.Tensor]],
+    N: int,
+    r_max: float,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """Sample N search starts.
+
+    Homogeneous models use the sampled directions directly; nonhomogeneous
+    models give each direction a log-uniform radius (ADR 0006).
+    """
     a_t, b_t = sample_sphere(N)
-    existing_unit = None
-    r_max = float(radius) if radius is not None else math.exp(FIXED_LOG_CLAMP)
-    if not use_sphere:
+    if not problem.use_sphere:
         lo, hi = math.log(math.exp(-3.0)), math.log(max(r_max, math.exp(-3.0) * 1.001))
         u = torch.rand(a_t.shape[0], dtype=torch.float64)
         r = torch.exp(lo + (hi - lo) * u)
         a_t = a_t * r.unsqueeze(1)
         b_t = b_t * r
-    # Existing atoms are used only to reject numerical repeats after refinement;
-    # they are not added to the optimization starts.
-    if use_sphere and existing_atoms is not None:
-        W_exist, b_exist = existing_atoms
-        if W_exist.shape[0] > 0:
-            U_exist = torch.cat([W_exist, b_exist.reshape(-1, 1)], dim=1)
-            U_exist = U_exist / U_exist.norm(dim=1, keepdim=True).clamp_min(1e-12)
-            existing_unit = U_exist
+    return a_t, b_t
 
-    # A nonhomogeneous search uses one joint solve from each random start, then
-    # filters and deduplicates once.  Algorithm 2 retains its repeated sphere
-    # refinement after merges.
-    n_after = a_t.shape[0]
+
+def _refine_and_deduplicate(
+    problem: SparseModel,
+    normalized_residual: tuple[torch.Tensor, torch.Tensor, torch.Tensor],
+    a_t: torch.Tensor, b_t: torch.Tensor, *,
+    r_max: float, merge_tol: float, steps: int, lr: float,
+) -> Tuple[torch.Tensor, torch.Tensor, int]:
+    """Refine the starts and remove duplicates; also count those discarded outside r_max.
+
+    A nonhomogeneous search uses one joint solve from each random start, then
+    filters and deduplicates once.  Algorithm 2 retains its repeated sphere
+    refinement after merges.
+    """
+    use_sphere = problem.use_sphere
     discarded_outside = 0
     refinement_rounds = 5 if use_sphere else 1
     for _ in range(refinement_rounds):
-        a_t, b_t = _maximize_score(
-            problem, normalized_residual, a_t, b_t, steps=lbfgs_steps, lr=lbfgs_lr,
-        )
+        a_t, b_t = _maximize_score(problem, normalized_residual, a_t, b_t, steps=steps, lr=lr)
         if not use_sphere:
             U = torch.cat([a_t, b_t.reshape(-1, 1)], dim=1)
             inside = torch.linalg.vector_norm(U, dim=1) <= r_max
@@ -290,28 +312,9 @@ def _generate_candidates(
             a_t, b_t = a_t[inside], b_t[inside]
         n_before = a_t.shape[0]
         a_t, b_t = _remove_duplicates(a_t, b_t, use_sphere=use_sphere, merge_tol=merge_tol)
-        n_after = a_t.shape[0]
-        if n_before == n_after:
+        if a_t.shape[0] == n_before:
             break
-
-    # The fractional-power one-atom increment assumes a distinct new location.
-    # Reject only numerical repetitions of the current support: nearby sphere
-    # points are distinct atoms and must remain admissible.  In particular, do
-    # not reuse the much wider candidate-to-candidate deduplication tolerance.
-    # The k=1 ReLU--L1 baseline retains its established candidate behavior.
-    if use_sphere and problem.penalty_exponent < 1.0 and existing_unit is not None and a_t.shape[0] > 0:
-        U = torch.cat([a_t, b_t.reshape(-1, 1)], dim=1)
-        U = U / U.norm(dim=1, keepdim=True).clamp_min(1e-12)
-        distinct = torch.all(
-            # 1e-8 is a numerical-repeat gap only, deliberately far tighter than
-            # merge_tol, the candidate-to-candidate deduplication (ADR 0013).
-            U @ existing_unit.T <= 1.0 - 1e-8,
-            dim=1,
-        )
-        a_t, b_t = a_t[distinct], b_t[distinct]
-        n_after = a_t.shape[0]
-
-    return a_t, b_t, n_after, discarded_outside
+    return a_t, b_t, discarded_outside
 
 
 def _maximize_score(
@@ -379,3 +382,34 @@ def _remove_duplicates(
                 if keep[j] and duplicate[i, j]:
                     keep[j] = False
     return a_cands[keep], b_cands[keep]
+
+
+def _reject_support_repeats(
+    problem: SparseModel,
+    a_t: torch.Tensor, b_t: torch.Tensor,
+    existing_atoms: Optional[Tuple[torch.Tensor, torch.Tensor]],
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """Drop candidates that numerically repeat an atom of the current support.
+
+    The fractional-power one-atom increment assumes a distinct new location.
+    Reject only numerical repetitions of the current support: nearby sphere
+    points are distinct atoms and must remain admissible.  In particular, do
+    not reuse the much wider candidate-to-candidate deduplication tolerance.
+    The k=1 ReLU--L1 baseline retains its established candidate behavior.
+    Existing atoms are used only for this check; they are not search starts.
+    """
+    has_support = existing_atoms is not None and existing_atoms[0].shape[0] > 0
+    if problem.use_sphere and problem.penalty_exponent < 1.0 and has_support and a_t.shape[0] > 0:
+        W_exist, b_exist = existing_atoms
+        U_exist = torch.cat([W_exist, b_exist.reshape(-1, 1)], dim=1)
+        existing_unit = U_exist / U_exist.norm(dim=1, keepdim=True).clamp_min(1e-12)
+        U = torch.cat([a_t, b_t.reshape(-1, 1)], dim=1)
+        U = U / U.norm(dim=1, keepdim=True).clamp_min(1e-12)
+        distinct = torch.all(
+            # 1e-8 is a numerical-repeat gap only, deliberately far tighter than
+            # merge_tol, the candidate-to-candidate deduplication (ADR 0013).
+            U @ existing_unit.T <= 1.0 - 1e-8,
+            dim=1,
+        )
+        a_t, b_t = a_t[distinct], b_t[distinct]
+    return a_t, b_t

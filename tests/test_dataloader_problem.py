@@ -81,7 +81,7 @@ def test_candidate_profile_combines_signed_batches_before_acceptance(monkeypatch
     torch.testing.assert_close(grad_a, a.new_tensor([1 / 3]))
     torch.testing.assert_close(grad_b, b.new_tensor(0.))
     monkeypatch.setattr(insertion, "_generate_candidates", lambda *args, **kwargs: (
-        a.detach().reshape(1, 1), b.detach().reshape(1), 1, 0,
+        a.detach().reshape(1, 1), b.detach().reshape(1), 0,
     ))
     W, bias, coefficient = insertion.profile_threshold(
         problem, penalty, residuals, sample_sphere=lambda _: (a, b), N=1,

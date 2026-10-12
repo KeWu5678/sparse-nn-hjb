@@ -72,7 +72,7 @@ def _generate(
         "activation": "relu" if use_sphere else "tanh", "power": power, "moment_order": 2.0,
     }, 1)
     validate_model_config(config)
-    a, b, n, discarded_outside = insertion._generate_candidates(
+    a, b, discarded_outside = insertion._generate_candidates(
         SparseModel(config),
         (X, residual_v, residual_dv),
         sample_sphere=_starts(starts),
@@ -81,7 +81,7 @@ def _generate(
         existing_atoms=existing_atoms,
         radius=radius,
     )
-    return a, b, n, discarded_outside, fake
+    return a, b, a.shape[0], discarded_outside, fake
 
 
 @pytest.mark.parametrize(
