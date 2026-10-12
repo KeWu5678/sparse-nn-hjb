@@ -6,7 +6,7 @@ import pytest
 import torch
 from ssn_test_problem import penalty_for
 
-from src.config import resolve_model, validate_training
+from src.config import resolve_model, validate_model_config
 from src.data import ValueSampleNormalizer, make_dataloader
 from src.eval import metrics as evaluate
 from src.eval import relative_errors
@@ -186,7 +186,7 @@ def test_sphere_penalty_and_reporting_do_not_depend_on_historical_moment_order(p
     expected_penalty = .1 * c.abs().pow(2 / (power + 1)).sum()
     for order in (None, 2., 4.):
         config = resolve_model({"power": power, "alpha": .1, "moment_order": order}, 2)
-        validate_training(config)
+        validate_model_config(config)
         problem = SparseModel(config)
         problem.set_atoms(inner_weight, inner_bias, c)
         assert problem.moment_order is None

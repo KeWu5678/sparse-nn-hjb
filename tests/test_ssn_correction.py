@@ -4,8 +4,6 @@ import pytest
 import torch
 from ssn_test_problem import closure_for, synthetic_correction
 
-from src.config.schema import TrainingConfig
-from src.PDAP import PDAP
 from src.PDAP.ssn_refine import ssn_refine_outerweights
 from src.SSN import SSN
 
@@ -129,11 +127,3 @@ def test_complete_trust_region_correction_continues_after_a_rejected_trial():
     assert optimizer.last_step_success and diagnostics["correction_accepted"]
     assert coefficient.item() == pytest.approx(.78)
     assert optimizer.state[coefficient]["sigma"] == pytest.approx(.16)
-
-
-@pytest.mark.parametrize("iterations", [-1, 1.5, True])
-def test_pdap_rejects_an_invalid_iteration_budget(iterations):
-    penalty, _, _ = synthetic_correction(lambda u: u.sum(), torch.eye(1, dtype=torch.float64), alpha=0.)
-
-    with pytest.raises(ValueError, match="fit_outer_iterations must be a nonnegative integer"):
-        PDAP(TrainingConfig(fit_outer_iterations=iterations), penalty)

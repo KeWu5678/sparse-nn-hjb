@@ -214,7 +214,7 @@ def resolve_model(config, input_dim: int) -> dict:
     returned runtime mapping contains the activation callable and its geometry;
     raw named configuration remains suitable for run records. Prediction accepts
     any callable and positive finite power, including historical settings.
-    Training setup must additionally call validate_training before construction.
+    Training setup must additionally call validate_model_config before construction.
     """
     config = config if isinstance(config, ModelConfig) else ModelConfig(**config)
     if config.kind != "signed":
@@ -251,7 +251,7 @@ def resolve_model(config, input_dim: int) -> dict:
     }
 
 
-def validate_training(config) -> None:
+def validate_model_config(config) -> None:
     """Validate resolved model settings before constructing a training problem.
 
     The insertion rule in this mapping must also be the one supplied to PDAP.
@@ -285,11 +285,32 @@ def validate_training(config) -> None:
             )
         # An undeclared growth bound permits numerical training, but cannot
         # certify H1 admissibility or supply a theorem search radius.
+    if insertion not in ("profile", "finite_step"):
+        raise ValueError(f"insertion must be 'profile' or 'finite_step', got {insertion!r}")
     if insertion == "finite_step":
         if not use_sphere:
             raise ValueError("finite_step insertion is Algorithm 2 and requires a sphere activation")
         if gamma != 0.0:
             raise ValueError("finite_step insertion minimizes the power penalty and requires gamma == 0")
+
+
+def validate_optimizer_config(training: TrainingConfig) -> None:
+    """Validate the training settings before constructing PDAP.
+
+    Each paper-conformance axis is checked here rather than at use, so a typo
+    fails at setup instead of midway through a sweep.
+    """
+    for name, value, allowed in (
+        ("training.insert_init", training.insert_init, ("warm_start", "guaranteed")),
+        ("training.insert_mode", training.insert_mode, ("batch", "sequential")),
+        ("training.loop_order", training.loop_order, ("correction_first", "insertion_first")),
+        ("training.radial_cap", training.radial_cap, ("fixed", "theorem")),
+    ):
+        if value not in allowed:
+            raise ValueError(f"{name} must be one of {allowed}, got {value!r}")
+    iterations = training.fit_outer_iterations
+    if not isinstance(iterations, int) or isinstance(iterations, bool) or iterations < 0:
+        raise ValueError("training.fit_outer_iterations must be a nonnegative integer")
 
 
 __all__ = [
@@ -300,5 +321,6 @@ __all__ = [
     "EnvConfig",
     "ExperimentConfig",
     "resolve_model",
-    "validate_training",
+    "validate_model_config",
+    "validate_optimizer_config",
 ]

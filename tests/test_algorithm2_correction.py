@@ -6,7 +6,7 @@ import pytest
 import torch
 from ssn_test_problem import closure_for, penalty_for, synthetic_correction
 
-from src.config import resolve_model, validate_training
+from src.config import resolve_model, validate_model_config
 from src.config.schema import TrainingConfig
 from src.data import make_dataloader
 from src.models import FractionalPenalty, SparseModel
@@ -46,12 +46,12 @@ def test_fractional_ssn_chooses_the_scale_from_its_starting_coefficients() -> No
 @pytest.mark.parametrize("power", [2.0, 3.0])
 def test_fractional_problem_rejects_a_log_penalty(power: float) -> None:
     with pytest.raises(ValueError, match="power penalty requires gamma == 0"):
-        validate_training(resolve_model({"alpha": 1.0, "gamma": 1.0, "power": power}, 1))
+        validate_model_config(resolve_model({"alpha": 1.0, "gamma": 1.0, "power": power}, 1))
 
 
 def test_fractional_correction_reports_an_all_zero_warm_start() -> None:
     config = resolve_model({"alpha": 1.0, "gamma": 0.0, "power": 2.0}, 1)
-    validate_training(config)
+    validate_model_config(config)
     problem = SparseModel(config)
     problem.set_atoms(
         torch.tensor([[1.0]], dtype=torch.float64),

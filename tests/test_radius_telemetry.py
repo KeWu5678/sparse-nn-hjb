@@ -7,7 +7,7 @@ import pytest
 import torch
 from ssn_test_problem import penalty_for
 
-from src.config import resolve_model, validate_training
+from src.config import resolve_model, validate_model_config
 from src.config.schema import ExperimentConfig, ModelConfig, TrainingConfig
 from src.data import make_dataloader
 from src.eval import metrics
@@ -27,7 +27,7 @@ def test_nonzero_residual_records_computed_and_capped_theorem_radius(loop_order,
                                 lbfgs_steps=2, fit_outer_iterations=1),
     )
     model_config = resolve_model(cfg.model, input_dim=2)
-    validate_training(model_config)
+    validate_model_config(model_config)
     model = SparseModel(model_config)
     samples = (torch.tensor([[0., 0.], [3., 4.]], dtype=torch.float64),
                torch.ones(2, 1, dtype=torch.float64),
@@ -61,7 +61,7 @@ def test_zero_measure_fit_records_the_actual_search_radius(
         training=TrainingConfig(num_insertion=2, radial_cap=cap, lbfgs_steps=2),
     )
     model_config = resolve_model(cfg.model, input_dim=2)
-    validate_training(model_config)
+    validate_model_config(model_config)
     model = SparseModel(model_config)
     samples = (torch.zeros(3, 2, dtype=torch.float64),
                torch.zeros(3, 1, dtype=torch.float64),
@@ -108,7 +108,7 @@ def test_zero_iteration_fit_does_not_reuse_a_previous_search(activation, power, 
                                 lbfgs_steps=2),
     )
     model_config = resolve_model(cfg.model, input_dim=2)
-    validate_training(model_config)
+    validate_model_config(model_config)
     model = SparseModel(model_config)
     samples = (torch.zeros(3, 2, dtype=torch.float64),
                torch.zeros(3, 1, dtype=torch.float64),

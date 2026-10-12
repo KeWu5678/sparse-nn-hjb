@@ -9,7 +9,7 @@ import pytest
 import torch
 from ssn_test_problem import penalty_for
 
-from src.config import resolve_model, validate_training
+from src.config import resolve_model, validate_model_config, validate_optimizer_config
 from src.config.activations import ACTIVATIONS, GROWTH, get_growth
 from src.config.schema import EnvConfig, ExperimentConfig, ModelConfig, TrainingConfig
 from src.data import make_dataloader, split_value_samples
@@ -59,7 +59,7 @@ def _fit(cfg: ExperimentConfig, iterations: int = 4, seed: int = 0):
     np.random.seed(seed)
     data = _data()
     model_config = resolve_model(cfg.model, input_dim=2)
-    validate_training(model_config)
+    validate_model_config(model_config)
     model = SparseModel(model_config)
     train, valid = split_value_samples(data, cfg.data.train_fraction)
     cfg.training.num_insertion = 20
@@ -237,7 +237,7 @@ def test_search_radius_never_exceeds_the_fixed_clamp() -> None:
         cfg = _cfg(moment_order=p, radial_cap="theorem")
         data = tuple(torch.as_tensor(_data()[key]) for key in ("x", "v", "dv"))
         model_config = resolve_model(cfg.model, 2)
-        validate_training(model_config)
+        validate_model_config(model_config)
         problem = SparseModel(model_config)
         trainer = PDAP(cfg.training, penalty_for(model_config, problem))
         radius = trainer._search_radius(problem, (data[0], -data[1], -data[2]))
@@ -294,7 +294,7 @@ def test_insertion_reuses_the_residual_for_the_theorem_radius() -> None:
     torch.manual_seed(0)
     np.random.seed(0)
     model_config = resolve_model(cfg.model, input_dim=2)
-    validate_training(model_config)
+    validate_model_config(model_config)
     model = SparseModel(model_config)
     original_predict = model.forward
     prediction_calls = 0
@@ -352,13 +352,12 @@ def test_insertion_reuses_the_residual_for_the_theorem_radius() -> None:
             dict(insertion="finite_step", activation="softplus", power=1.0, gamma=0.0),
             "sphere activation",
         ),
+        (dict(insertion="nonsense"), "insertion must be 'profile' or 'finite_step'"),
         (dict(insert_mode="nonsense"), "training.insert_mode must be one of"),
     ],
 )
 def test_incoherent_configurations_are_rejected(over: dict, message: str) -> None:
     with pytest.raises(ValueError, match=message):
         cfg = _cfg(**over)
-        model_config = resolve_model(cfg.model, 2)
-        validate_training(model_config)
-        PDAP(cfg.training, penalty_for(model_config, SparseModel(model_config)),
-             insertion=model_config["insertion"])
+        validate_model_config(resolve_model(cfg.model, 2))
+        validate_optimizer_config(cfg.training)

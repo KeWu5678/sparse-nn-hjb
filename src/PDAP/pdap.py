@@ -31,24 +31,12 @@ class PDAP:
     ) -> None:
         """Read the settings for one outer step; run_training owns its repetition.
 
-        penalty is shared by insertion, correction and evaluation.
+        penalty is shared by insertion, correction and evaluation. Training setup
+        validates training with validate_optimizer_config and the insertion rule
+        with validate_model_config before construction.
         """
         self.penalty = penalty
-        if insertion not in ("profile", "finite_step"):
-            raise ValueError(f"insertion must be 'profile' or 'finite_step', got {insertion!r}")
         self.insertion_kind = insertion
-
-        # Paper-conformance axes.  Each is validated here rather than at use, so a
-        # typo fails at construction instead of midway through a sweep.
-        for field, value, allowed in (
-            ("training.insert_init", training.insert_init, ("warm_start", "guaranteed")),
-            ("training.insert_mode", training.insert_mode, ("batch", "sequential")),
-            ("training.loop_order", training.loop_order, ("correction_first", "insertion_first")),
-            ("training.radial_cap", training.radial_cap, ("fixed", "theorem")),
-        ):
-            if value not in allowed:
-                raise ValueError(f"{field} must be one of {allowed}, got {value!r}")
-
         self.insert_init = training.insert_init
         self.insert_mode = training.insert_mode
         self.correction_guard = bool(training.correction_guard)
@@ -67,10 +55,7 @@ class PDAP:
             sigmamax=training.sigmamax,
         )
         # outer-loop + insertion settings
-        iterations = training.fit_outer_iterations
-        if not isinstance(iterations, int) or isinstance(iterations, bool) or iterations < 0:
-            raise ValueError("training.fit_outer_iterations must be a nonnegative integer")
-        self.fit_outer_iterations = iterations
+        self.fit_outer_iterations = training.fit_outer_iterations
         self.ins_merge_tol = training.ins_merge_tol
         self.lbfgs_lr = training.lbfgs_lr
         self.lbfgs_steps = training.lbfgs_steps

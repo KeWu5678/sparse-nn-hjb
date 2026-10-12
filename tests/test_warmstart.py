@@ -4,7 +4,7 @@ import pytest
 import torch
 from ssn_test_problem import penalty_for
 
-from src.config import resolve_model, validate_training
+from src.config import resolve_model, validate_model_config
 from src.models import SparseModel
 from src.PDAP.warmstart import warm_start
 
@@ -27,7 +27,7 @@ def test_single_atom_warm_start_has_known_minimizer(
     config = resolve_model({
         "power": power, "loss_weights": (1.0, 0.0), "alpha": alpha, "gamma": gamma,
     }, 1)
-    validate_training(config)
+    validate_model_config(config)
     problem = SparseModel(config)
     result = warm_start(
         W_new=torch.ones_like(X),
@@ -57,7 +57,7 @@ def test_log_warm_start_preserves_matlab_acceptance_guards(
 ) -> None:
     X = torch.tensor([[feature]], dtype=torch.float64)
     config = resolve_model({"loss_weights": (1.0, 0.0), "alpha": alpha, "gamma": 1.0}, 1)
-    validate_training(config)
+    validate_model_config(config)
 
     problem = SparseModel(config)
     result = warm_start(

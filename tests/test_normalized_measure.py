@@ -7,7 +7,7 @@ import math
 import pytest
 import torch
 
-from src.config import resolve_model, validate_training
+from src.config import resolve_model, validate_model_config
 from src.config.schema import ExperimentConfig, ModelConfig
 from src.eval import amplitude_mass_radius
 from src.models import SparseModel
@@ -64,7 +64,7 @@ def test_moment_weight_is_differentiable_in_scale() -> None:
 def test_moment_weight_requires_a_positive_order(order) -> None:
     config = resolve_model({"activation": "softplus", "power": 1.0, "moment_order": order}, 2)
     with pytest.raises(ValueError, match="moment_order"):
-        validate_training(config)
+        validate_model_config(config)
 
 
 def test_amplitude_mass_radius_is_weighted_parameter_quantile() -> None:
@@ -98,7 +98,7 @@ def test_sphere_profile_model_is_not_moment_normalized() -> None:
 
 def test_algorithm1_rejects_nonunit_activation_power() -> None:
     with pytest.raises(ValueError, match="Algorithm 1.*power == 1"):
-        validate_training(resolve_model({"activation": "softplus", "power": 2.0}, 2))
+        validate_model_config(resolve_model({"activation": "softplus", "power": 2.0}, 2))
 
 
 def test_model_schema_has_no_additive_objective_axis() -> None:

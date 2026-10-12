@@ -4,7 +4,7 @@ import pytest
 import torch
 from ssn_test_problem import penalty_for
 
-from src.config import get_activation, resolve_model, validate_training
+from src.config import get_activation, resolve_model, validate_model_config
 from src.config.schema import ExperimentConfig
 from src.models import SparseModel
 from src.PDAP import PDAP
@@ -53,8 +53,8 @@ def test_problem_predicts_values_and_input_gradients():
 def test_registered_callable_preserves_named_prediction_and_training(activation):
     named_config = resolve_model({"activation": activation, "moment_order": 2.}, 2)
     direct_config = resolve_model({"activation": get_activation(activation), "moment_order": 2.}, 2)
-    validate_training(named_config)
-    validate_training(direct_config)
+    validate_model_config(named_config)
+    validate_model_config(direct_config)
     named, direct = SparseModel(named_config), SparseModel(direct_config)
     atoms = _atoms()
     x = torch.tensor([[-1., 2.], [3., -4.]], dtype=torch.float64)
@@ -174,6 +174,6 @@ def test_prediction_only_settings_remain_usable_without_training_validation(spec
         torch.testing.assert_close(gradient, x.new_tensor([[8., 0.]]))
     before = {name: tensor.clone() for name, tensor in problem.state_dict().items()}
     with pytest.raises(ValueError, match=message):
-        validate_training(config)
+        validate_model_config(config)
     for name, tensor in problem.state_dict().items():
         torch.testing.assert_close(tensor, before[name], rtol=0, atol=0)

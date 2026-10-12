@@ -42,7 +42,7 @@ from omegaconf import DictConfig, ListConfig, OmegaConf
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from src.config import resolve_model, validate_training
+from src.config import resolve_model, validate_model_config, validate_optimizer_config
 from src.config.schema import ExperimentConfig
 from src.data import DATA_DIR, load_value_samples, make_dataloaders, normalize_value_samples
 from src.eval import distance_binned_error, region_split_errors
@@ -222,6 +222,7 @@ def main(cfg: DictConfig) -> None:
 def _run_experiment(cfg: DictConfig, hydra_cfg, run_dir: Path, run_id: str) -> Path:
     """Execute one configured experiment and persist its successful Run Record."""
     set_seed(cfg.env.seed)
+    validate_optimizer_config(cfg.training)
 
     # Create the run record before model construction/training so elapsed_s covers
     # the actual run, not only JSON serialization.
@@ -249,7 +250,7 @@ def _run_experiment(cfg: DictConfig, hydra_cfg, run_dir: Path, run_id: str) -> P
     input_dim = data["x"].shape[1]
     logger.info("data_loaded", path=cfg.data.path, input_dim=input_dim)
     model_config = resolve_model(cfg.model, input_dim)
-    validate_training(model_config)
+    validate_model_config(model_config)
     train_loader, valid_loader = make_dataloaders(
         data, cfg.data.train_fraction, seed=cfg.env.seed,
     )

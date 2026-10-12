@@ -6,7 +6,7 @@ import pytest
 import torch
 from ssn_test_problem import penalty_for
 
-from src.config import resolve_model, validate_training
+from src.config import resolve_model, validate_model_config
 from src.models import SparseModel
 from src.PDAP import insertion
 
@@ -25,7 +25,7 @@ def _insert(monkeypatch, config, profile, curvature=1.0):
 def test_q_half_insertion_minimizes_the_actual_objective_increment(monkeypatch) -> None:
     """For P=4.25, A=alpha=1, the exact nonzero minimizer is c=-4."""
     config = resolve_model({"alpha": 1.0, "power": 3.0, "insertion": "finite_step"}, 1)
-    validate_training(config)
+    validate_model_config(config)
     result = _insert(monkeypatch, config, 4.25)
 
     assert result.shape == (1,)
@@ -37,7 +37,7 @@ def test_q_half_insertion_minimizes_the_actual_objective_increment(monkeypatch) 
 
 def test_q_two_thirds_insertion_minimizes_the_actual_objective_increment(monkeypatch) -> None:
     config = resolve_model({"alpha": 1.5, "power": 2.0, "insertion": "finite_step"}, 1)
-    validate_training(config)
+    validate_model_config(config)
     result = _insert(monkeypatch, config, 8.5)
 
     assert result.shape == (1,)
@@ -53,7 +53,7 @@ def test_q_two_thirds_insertion_minimizes_the_actual_objective_increment(monkeyp
 
 def test_q_one_insertion_keeps_the_soft_threshold_rule(monkeypatch) -> None:
     config = resolve_model({"alpha": 1.0, "loss_weights": (2., 1.), "insertion": "finite_step"}, 1)
-    validate_training(config)
+    validate_model_config(config)
     result = _insert(monkeypatch, config, -3.0, curvature=2.0)
 
     assert result.shape == (1,)
@@ -71,7 +71,7 @@ def test_fractional_insertion_rejects_a_global_proximal_tie(
     monkeypatch, profile: float, alpha: float, q: float
 ) -> None:
     config = resolve_model({"alpha": alpha, "power": 2.0 / q - 1.0, "insertion": "finite_step"}, 1)
-    validate_training(config)
+    validate_model_config(config)
     assert _insert(monkeypatch, config, profile).shape == (0,)
 
 
@@ -83,7 +83,7 @@ def test_insertion_preserves_the_power_prox_and_exact_tiny_penalty(monkeypatch, 
     config = resolve_model({
         "alpha": alpha, "power": power, "loss_weights": (1e20, 1.), "insertion": "finite_step",
     }, 1)
-    validate_training(config)
+    validate_model_config(config)
     result = _insert(monkeypatch, config, profile, curvature=1e20)
     assert result.shape == (1,)
     c = result[0]

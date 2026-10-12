@@ -7,7 +7,7 @@ exactly as originally tested.
 
 import torch
 
-from src.config import resolve_model, validate_training
+from src.config import resolve_model, validate_model_config
 from src.config.schema import TrainingConfig
 from src.models import SparseModel, make_penalty
 from src.PDAP import PDAP
@@ -21,7 +21,7 @@ def penalty_for(config, problem):
 
 def synthetic_correction(fitting, hess_obj, **specifications):
     config = resolve_model(specifications, hess_obj.shape[0])
-    validate_training(config)
+    validate_model_config(config)
     penalty = penalty_for(config, SparseModel(config))
     return penalty, fitting, hess_obj
 

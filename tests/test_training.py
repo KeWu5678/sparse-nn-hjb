@@ -7,7 +7,7 @@ import pytest
 import torch
 
 import src.training as training
-from src.config import resolve_model, validate_training
+from src.config import resolve_model, validate_model_config
 from src.config.schema import TrainingConfig
 from src.data import make_dataloader
 from src.eval import metrics
@@ -19,7 +19,7 @@ def _case(monkeypatch, *, order="insertion_first", accepted=(True,)):
     from src.models import SparseModel, make_penalty
 
     config = resolve_model({"alpha": 0.0}, 1)
-    validate_training(config)
+    validate_model_config(config)
     problem = SparseModel(config)
     x = torch.tensor([[0.25], [0.75]], dtype=torch.float64)
     loader = make_dataloader((x, x.clone(), torch.ones_like(x)))

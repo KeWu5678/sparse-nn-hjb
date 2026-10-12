@@ -139,8 +139,10 @@ moving a function body did not transfer responsibility for configuration.
 
 The implementation uses `resolve_model(raw_config, input_dim)` to produce an
 ordinary runtime mapping, keeping the original Hydra settings unchanged for
-serialization. Training setup calls `validate_training(runtime)` with the same
-insertion selection used by PDAP, then constructs `SparseModel(runtime)`.
+serialization. Training setup calls `validate_model_config(runtime)` with the same
+insertion selection used by PDAP, then constructs `SparseModel(runtime)`. It also
+calls `validate_optimizer_config` on the training settings, so PDAP reads them
+without checking.
 Prediction setup resolves its settings without imposing training restrictions,
 preserving callable activations and historical powers. `Proximal` has no
 coordinate masks: their only production user, the semiconcave model, was

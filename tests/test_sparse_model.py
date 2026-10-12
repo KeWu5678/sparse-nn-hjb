@@ -4,7 +4,7 @@ import pytest
 import torch
 from ssn_test_problem import coefficient_problem, correction_optimizer, penalty_for
 
-from src.config import resolve_model, validate_training
+from src.config import resolve_model, validate_model_config
 from src.config.activations import ACTIVATIONS
 from src.data import make_dataloader
 from src.eval import metrics
@@ -24,7 +24,7 @@ def _problem(activation="relu", power=1.0, **specifications):
     config = resolve_model({
         "activation": activation, "power": power, "moment_order": 2.0, **specifications,
     }, 2)
-    validate_training(config)
+    validate_model_config(config)
     problem = SparseModel(config)
     problem.set_atoms(
         torch.tensor([[0.5, -0.3], [0.1, 0.7]], dtype=torch.float64),
@@ -80,7 +80,7 @@ def test_sparsity_functional_remains_unweighted(alpha):
 @pytest.mark.parametrize("power", [1.5, 4.0, 1.0 + 5e-13, 2.0 + 5e-13, 3.0 - 5e-13])
 def test_training_config_rejects_unsupported_powers(power):
     with pytest.raises(ValueError, match="supports activation powers 1, 2, 3"):
-        validate_training(resolve_model({"power": power}, 2))
+        validate_model_config(resolve_model({"power": power}, 2))
 
 
 @pytest.mark.parametrize(
@@ -161,7 +161,7 @@ def test_one_problem_handles_empty_and_replaced_supports():
     data = _samples()
     loader = make_dataloader(data)
     config = resolve_model({"activation": "softplus", "alpha": 0.01, "moment_order": 2.0}, 2)
-    validate_training(config)
+    validate_model_config(config)
     problem = SparseModel(config)
     penalty = penalty_for(config, problem)
     prediction = problem(data[0])

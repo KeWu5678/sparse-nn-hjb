@@ -10,7 +10,7 @@ import torch
 from ssn_test_problem import penalty_for
 
 import src.PDAP.insertion as insertion
-from src.config import resolve_model, validate_training
+from src.config import resolve_model, validate_model_config
 from src.models import SparseModel
 
 
@@ -71,7 +71,7 @@ def _generate(
     config = resolve_model({
         "activation": "relu" if use_sphere else "tanh", "power": power, "moment_order": 2.0,
     }, 1)
-    validate_training(config)
+    validate_model_config(config)
     a, b, n, discarded_outside = insertion._generate_candidates(
         SparseModel(config),
         (X, residual_v, residual_dv),
@@ -116,7 +116,7 @@ def test_algorithm1_distinguishes_radius_search_failure_from_threshold_stop(
     config = resolve_model({
         "activation": "tanh", "power": 1.0, "alpha": 1.0, "moment_order": 2.0,
     }, 1)
-    validate_training(config)
+    validate_model_config(config)
     problem = SparseModel(config)
     penalty = penalty_for(config, problem)
 
@@ -159,7 +159,7 @@ def test_sphere_search_reports_when_only_existing_support_is_returned(
         torch.tensor([0.0], dtype=torch.float64),
     )
     config = resolve_model({"activation": "relu", "power": 2.0, "alpha": 1.0}, 1)
-    validate_training(config)
+    validate_model_config(config)
     problem = SparseModel(config)
     penalty = penalty_for(config, problem)
 
