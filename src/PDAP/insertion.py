@@ -40,155 +40,6 @@ __all__ = [
 ]
 
 
-def _generate_candidates(
-    problem: SparseModel,
-    residual: tuple[torch.Tensor, torch.Tensor, torch.Tensor], *,
-    sample_sphere: Callable[[int], Tuple[torch.Tensor, torch.Tensor]],
-    N: int,
-    merge_tol: float,
-    existing_atoms: Optional[Tuple[torch.Tensor, torch.Tensor]],
-    lbfgs_lr: float = 1e-2,
-    lbfgs_steps: int = 200,
-    radius: Optional[float] = None,
-) -> Tuple[torch.Tensor, torch.Tensor, int, int]:
-    """Return distinct locally refined maximizers of the score |P(omega)| / w_p(omega).
-
-    Homogeneous activations are searched on ``S^d``.  For nonhomogeneous
-    activations, initial points are sampled inside ``radius`` and all components
-    of ``omega=(a,b)`` are then optimized jointly without a constraint.  When
-    optimized nonhomogeneous points outside the sampling radius are discarded
-    rather than projected back.  Homogeneous activations retain the normalized
-    sphere search used by Algorithm 2.
-    """
-    use_sphere = problem.use_sphere
-    d_dim = problem.input_dim
-
-    # Normalize residual for the L-BFGS direction search (MATLAB find_max:385).
-    X, res_v, res_dv = residual
-    res_norm = torch.sqrt(res_v.pow(2).sum() + res_dv.pow(2).sum()).clamp_min(1e-30)
-    normalized_residual = X, res_v / res_norm, res_dv / res_norm
-
-    def maximize_batch(
-        a_batch: torch.Tensor, b_batch: torch.Tensor,
-        steps: int = 200, lr: float = 1e-2, eps: float = 1e-12,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Locally maximize the score |P(omega)| / w_p(omega) from each starting point.
-
-        For a positively homogeneous activation the parameter is gauge-fixed to
-        the sphere, so the profile is maximized over directions and the iterate
-        is renormalized after every step.  For a nonhomogeneous activation the
-        radial variable is a genuine shape parameter and is optimized *jointly*
-        with the direction: maximizing over directions at |omega| = 1 and then
-        over the radius along the winning direction is a strictly weaker search,
-        because the profile does not factor into radial and directional parts,
-        so the best direction at unit radius need not be the direction of a
-        joint maximizer.
-
-        The nonhomogeneous solve is unconstrained.  Its caller may subsequently
-        discard a final point outside the radius used to sample its start.
-        """
-        results_a, results_b = [], []
-        for a0, b0 in zip(a_batch, b_batch):
-            w = torch.cat([a0.reshape(-1), b0.reshape(-1)]).detach().clone().requires_grad_(True)
-            opt = torch.optim.LBFGS([w], lr=lr, max_iter=steps, line_search_fn="strong_wolfe")
-
-            def closure():
-                opt.zero_grad()
-                w_s = w / w.norm().clamp_min(eps) if use_sphere else w
-                features = problem.kernel(X, w_s[:d_dim].reshape(1, -1), w_s[d_dim].reshape(1))
-                profile = problem.jac_obj(*features, normalized_residual)[0]
-                obj = profile.abs() / problem.moment_weight_of_atoms(w_s[:d_dim], w_s[d_dim])
-                (-obj).backward()
-                return -obj
-
-            opt.step(closure)
-            w_s = (w / w.norm().clamp_min(eps)).detach() if use_sphere else w.detach()
-            results_a.append(w_s[:d_dim])
-            results_b.append(w_s[d_dim:d_dim + 1])
-        return torch.stack(results_a), torch.stack(results_b).reshape(-1)
-
-    def merge(
-        a_cands: torch.Tensor, b_cands: torch.Tensor
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """
-        Merge the duplicated (close) atoms.
-        """
-        n = a_cands.shape[0]
-        if n <= 1:
-            return a_cands, b_cands
-        U = torch.cat([a_cands, b_cands.reshape(-1, 1)], dim=1)
-        if use_sphere:
-            unit = U / U.norm(dim=1, keepdim=True).clamp_min(1e-12)
-            duplicate = unit @ unit.T > 1.0 - merge_tol
-        else:
-            duplicate = torch.cdist(U, U) <= merge_tol
-        keep = torch.ones(n, dtype=torch.bool, device=U.device)
-        for i in range(n):
-            if keep[i]:
-                for j in range(i + 1, n):
-                    if keep[j] and duplicate[i, j]:
-                        keep[j] = False
-        return a_cands[keep], b_cands[keep]
-
-    # Homogeneous models use the sampled directions directly;
-    # nonhomogeneous models give each direction a log-uniform radius (ADR 0006).
-    a_t, b_t = sample_sphere(N)
-    existing_unit = None
-    r_max = float(radius) if radius is not None else math.exp(FIXED_LOG_CLAMP)
-    if not use_sphere:
-        lo, hi = math.log(math.exp(-3.0)), math.log(max(r_max, math.exp(-3.0) * 1.001))
-        u = torch.rand(a_t.shape[0], dtype=torch.float64)
-        r = torch.exp(lo + (hi - lo) * u)
-        a_t = a_t * r.unsqueeze(1)
-        b_t = b_t * r
-    # Existing atoms are used only to reject numerical repeats after refinement;
-    # they are not added to the optimization starts.
-    if use_sphere and existing_atoms is not None:
-        W_exist, b_exist = existing_atoms
-        if W_exist.shape[0] > 0:
-            U_exist = torch.cat([W_exist, b_exist.reshape(-1, 1)], dim=1)
-            U_exist = U_exist / U_exist.norm(dim=1, keepdim=True).clamp_min(1e-12)
-            existing_unit = U_exist
-
-    # A nonhomogeneous search uses one joint solve from each random start, then
-    # filters and deduplicates once.  Algorithm 2 retains its repeated sphere
-    # refinement after merges.
-    n_after = a_t.shape[0]
-    discarded_outside = 0
-    refinement_rounds = 5 if use_sphere else 1
-    for _ in range(refinement_rounds):
-        a_t, b_t = maximize_batch(a_t, b_t, steps=lbfgs_steps, lr=lbfgs_lr)
-        if not use_sphere:
-            U = torch.cat([a_t, b_t.reshape(-1, 1)], dim=1)
-            inside = torch.linalg.vector_norm(U, dim=1) <= r_max
-            discarded_outside += int((~inside).sum().item())
-            a_t, b_t = a_t[inside], b_t[inside]
-        n_before = a_t.shape[0]
-        a_t, b_t = merge(a_t, b_t)
-        n_after = a_t.shape[0]
-        if n_before == n_after:
-            break
-
-    # The fractional-power one-atom increment assumes a distinct new location.
-    # Reject only numerical repetitions of the current support: nearby sphere
-    # points are distinct atoms and must remain admissible.  In particular, do
-    # not reuse the much wider candidate-to-candidate deduplication tolerance.
-    # The k=1 ReLU--L1 baseline retains its established candidate behavior.
-    if use_sphere and problem.penalty_exponent < 1.0 and existing_unit is not None and a_t.shape[0] > 0:
-        U = torch.cat([a_t, b_t.reshape(-1, 1)], dim=1)
-        U = U / U.norm(dim=1, keepdim=True).clamp_min(1e-12)
-        distinct = torch.all(
-            # 1e-8 is a numerical-repeat gap only, deliberately far tighter than
-            # merge_tol, the candidate-to-candidate deduplication (ADR 0013).
-            U @ existing_unit.T <= 1.0 - 1e-8,
-            dim=1,
-        )
-        a_t, b_t = a_t[distinct], b_t[distinct]
-        n_after = a_t.shape[0]
-
-    return a_t, b_t, n_after, discarded_outside
-
-
 # ---------------------------------------------------------------------------- #
 # Strategy 1: profile-threshold acceptance
 # ---------------------------------------------------------------------------- #
@@ -370,3 +221,161 @@ def finite_step(
         torch.stack(accepted_b, dim=0).detach().cpu().numpy(),
         np.array(accepted_c, dtype=np.float64),
     )
+
+
+# ---------------------------------------------------------------------------- #
+# Candidate search shared by both strategies
+# ---------------------------------------------------------------------------- #
+def _generate_candidates(
+    problem: SparseModel,
+    residual: tuple[torch.Tensor, torch.Tensor, torch.Tensor], *,
+    sample_sphere: Callable[[int], Tuple[torch.Tensor, torch.Tensor]],
+    N: int,
+    merge_tol: float,
+    existing_atoms: Optional[Tuple[torch.Tensor, torch.Tensor]],
+    lbfgs_lr: float = 1e-2,
+    lbfgs_steps: int = 200,
+    radius: Optional[float] = None,
+) -> Tuple[torch.Tensor, torch.Tensor, int, int]:
+    """Return distinct locally refined maximizers of the score |P(omega)| / w_p(omega).
+
+    Homogeneous activations are searched on ``S^d``.  For nonhomogeneous
+    activations, initial points are sampled inside ``radius`` and all components
+    of ``omega=(a,b)`` are then optimized jointly without a constraint.  When
+    optimized nonhomogeneous points outside the sampling radius are discarded
+    rather than projected back.  Homogeneous activations retain the normalized
+    sphere search used by Algorithm 2.
+    """
+    use_sphere = problem.use_sphere
+
+    # Normalize residual for the L-BFGS direction search (MATLAB find_max:385).
+    X, res_v, res_dv = residual
+    res_norm = torch.sqrt(res_v.pow(2).sum() + res_dv.pow(2).sum()).clamp_min(1e-30)
+    normalized_residual = X, res_v / res_norm, res_dv / res_norm
+
+    # Homogeneous models use the sampled directions directly;
+    # nonhomogeneous models give each direction a log-uniform radius (ADR 0006).
+    a_t, b_t = sample_sphere(N)
+    existing_unit = None
+    r_max = float(radius) if radius is not None else math.exp(FIXED_LOG_CLAMP)
+    if not use_sphere:
+        lo, hi = math.log(math.exp(-3.0)), math.log(max(r_max, math.exp(-3.0) * 1.001))
+        u = torch.rand(a_t.shape[0], dtype=torch.float64)
+        r = torch.exp(lo + (hi - lo) * u)
+        a_t = a_t * r.unsqueeze(1)
+        b_t = b_t * r
+    # Existing atoms are used only to reject numerical repeats after refinement;
+    # they are not added to the optimization starts.
+    if use_sphere and existing_atoms is not None:
+        W_exist, b_exist = existing_atoms
+        if W_exist.shape[0] > 0:
+            U_exist = torch.cat([W_exist, b_exist.reshape(-1, 1)], dim=1)
+            U_exist = U_exist / U_exist.norm(dim=1, keepdim=True).clamp_min(1e-12)
+            existing_unit = U_exist
+
+    # A nonhomogeneous search uses one joint solve from each random start, then
+    # filters and deduplicates once.  Algorithm 2 retains its repeated sphere
+    # refinement after merges.
+    n_after = a_t.shape[0]
+    discarded_outside = 0
+    refinement_rounds = 5 if use_sphere else 1
+    for _ in range(refinement_rounds):
+        a_t, b_t = _maximize_score(
+            problem, normalized_residual, a_t, b_t, steps=lbfgs_steps, lr=lbfgs_lr,
+        )
+        if not use_sphere:
+            U = torch.cat([a_t, b_t.reshape(-1, 1)], dim=1)
+            inside = torch.linalg.vector_norm(U, dim=1) <= r_max
+            discarded_outside += int((~inside).sum().item())
+            a_t, b_t = a_t[inside], b_t[inside]
+        n_before = a_t.shape[0]
+        a_t, b_t = _remove_duplicates(a_t, b_t, use_sphere=use_sphere, merge_tol=merge_tol)
+        n_after = a_t.shape[0]
+        if n_before == n_after:
+            break
+
+    # The fractional-power one-atom increment assumes a distinct new location.
+    # Reject only numerical repetitions of the current support: nearby sphere
+    # points are distinct atoms and must remain admissible.  In particular, do
+    # not reuse the much wider candidate-to-candidate deduplication tolerance.
+    # The k=1 ReLU--L1 baseline retains its established candidate behavior.
+    if use_sphere and problem.penalty_exponent < 1.0 and existing_unit is not None and a_t.shape[0] > 0:
+        U = torch.cat([a_t, b_t.reshape(-1, 1)], dim=1)
+        U = U / U.norm(dim=1, keepdim=True).clamp_min(1e-12)
+        distinct = torch.all(
+            # 1e-8 is a numerical-repeat gap only, deliberately far tighter than
+            # merge_tol, the candidate-to-candidate deduplication (ADR 0013).
+            U @ existing_unit.T <= 1.0 - 1e-8,
+            dim=1,
+        )
+        a_t, b_t = a_t[distinct], b_t[distinct]
+        n_after = a_t.shape[0]
+
+    return a_t, b_t, n_after, discarded_outside
+
+
+def _maximize_score(
+    problem: SparseModel,
+    normalized_residual: tuple[torch.Tensor, torch.Tensor, torch.Tensor],
+    a_batch: torch.Tensor, b_batch: torch.Tensor, *,
+    steps: int, lr: float, eps: float = 1e-12,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """Locally maximize the score |P(omega)| / w_p(omega) from each starting point.
+
+    For a positively homogeneous activation the parameter is gauge-fixed to
+    the sphere, so the profile is maximized over directions and the iterate
+    is renormalized after every step.  For a nonhomogeneous activation the
+    radial variable is a genuine shape parameter and is optimized *jointly*
+    with the direction: maximizing over directions at |omega| = 1 and then
+    over the radius along the winning direction is a strictly weaker search,
+    because the profile does not factor into radial and directional parts,
+    so the best direction at unit radius need not be the direction of a
+    joint maximizer.
+
+    The nonhomogeneous solve is unconstrained.  Its caller may subsequently
+    discard a final point outside the radius used to sample its start.
+    """
+    use_sphere = problem.use_sphere
+    d_dim = problem.input_dim
+    X = normalized_residual[0]
+    results_a, results_b = [], []
+    for a0, b0 in zip(a_batch, b_batch):
+        w = torch.cat([a0.reshape(-1), b0.reshape(-1)]).detach().clone().requires_grad_(True)
+        opt = torch.optim.LBFGS([w], lr=lr, max_iter=steps, line_search_fn="strong_wolfe")
+
+        def closure():
+            opt.zero_grad()
+            w_s = w / w.norm().clamp_min(eps) if use_sphere else w
+            features = problem.kernel(X, w_s[:d_dim].reshape(1, -1), w_s[d_dim].reshape(1))
+            profile = problem.jac_obj(*features, normalized_residual)[0]
+            obj = profile.abs() / problem.moment_weight_of_atoms(w_s[:d_dim], w_s[d_dim])
+            (-obj).backward()
+            return -obj
+
+        opt.step(closure)
+        w_s = (w / w.norm().clamp_min(eps)).detach() if use_sphere else w.detach()
+        results_a.append(w_s[:d_dim])
+        results_b.append(w_s[d_dim:d_dim + 1])
+    return torch.stack(results_a), torch.stack(results_b).reshape(-1)
+
+
+def _remove_duplicates(
+    a_cands: torch.Tensor, b_cands: torch.Tensor, *, use_sphere: bool, merge_tol: float,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """Keep each candidate unless it duplicates an earlier kept candidate."""
+    n = a_cands.shape[0]
+    if n <= 1:
+        return a_cands, b_cands
+    U = torch.cat([a_cands, b_cands.reshape(-1, 1)], dim=1)
+    if use_sphere:
+        unit = U / U.norm(dim=1, keepdim=True).clamp_min(1e-12)
+        duplicate = unit @ unit.T > 1.0 - merge_tol
+    else:
+        duplicate = torch.cdist(U, U) <= merge_tol
+    keep = torch.ones(n, dtype=torch.bool, device=U.device)
+    for i in range(n):
+        if keep[i]:
+            for j in range(i + 1, n):
+                if keep[j] and duplicate[i, j]:
+                    keep[j] = False
+    return a_cands[keep], b_cands[keep]
