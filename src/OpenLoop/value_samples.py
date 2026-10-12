@@ -20,14 +20,16 @@ class ValueSamples:
         x = np.asarray(self.x, dtype=np.float64)
         v = np.asarray(self.v, dtype=np.float64).reshape(-1)
         dv = np.asarray(self.dv, dtype=np.float64)
-        if x.size == 0:
+        # Preserve explicit empty (0, d) arrays. Legacy two-state solvers also
+        # pass empty lists, for which the historical two-column default remains.
+        if x.size == 0 and x.ndim == 1:
             x = np.empty((0, 2), dtype=np.float64)
-        if dv.size == 0:
-            dv = np.empty((0, 2), dtype=np.float64)
-        if x.ndim != 2 or x.shape[1] != 2:
-            raise ValueError("x must have shape (n, 2)")
+        if dv.size == 0 and dv.ndim == 1 and x.ndim == 2:
+            dv = np.empty((0, x.shape[1]), dtype=np.float64)
+        if x.ndim != 2 or x.shape[1] < 1:
+            raise ValueError("x must have shape (n, d) with d >= 1")
         if dv.shape != x.shape:
-            raise ValueError("dv must have shape (n, 2)")
+            raise ValueError("dv must have the same shape (n, d) as x")
         if v.shape != (x.shape[0],):
             raise ValueError("v must have shape (n,)")
         object.__setattr__(self, "x", x)
