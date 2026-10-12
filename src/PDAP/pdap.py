@@ -184,22 +184,20 @@ class PDAP:
         existing = (problem.inner_weight.detach(), problem.inner_bias.detach()) if problem.n_neurons else None
 
         d = int(problem.input_dim)
-        common: dict[str, Any] = dict(
+        radius = self._search_radius(problem, residual)
+        search_settings: dict[str, Any] = dict(
             sample_sphere=lambda N: self._sphere(d, N), N=num_insertion,
             max_insert=max_insert, merge_tol=self.ins_merge_tol,
-            existing_atoms=existing, verbose=verbose,
+            existing_atoms=existing, radius=radius, verbose=verbose,
             lbfgs_lr=self.lbfgs_lr, lbfgs_steps=self.lbfgs_steps,
         )
-        radius = self._search_radius(problem, residual)
         if self.insertion_kind == "profile":
             W, b, c = profile_threshold(
                 problem, self.penalty, residual, two_sided=True, insert_init=self.insert_init,
-                radius=radius, **common,
+                **search_settings,
             )
         else:
-            W, b, c = finite_step(
-                problem, self.penalty, residual, radius=radius, **common,
-            )
+            W, b, c = finite_step(problem, self.penalty, residual, **search_settings)
         if c is None and W.shape[0] > 0:
             c = warm_start(
                 torch.as_tensor(W, dtype=torch.float64),
