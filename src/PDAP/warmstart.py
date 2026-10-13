@@ -2,8 +2,8 @@
 
 One 1-D proximal step (MATLAB PDAPmultisemidiscrete.m:104-147): pick the new
 candidate whose descent profile against the current residual is largest, take the
-nonconvex prox step along that combined direction, and return initial outer
-weights for all new atoms.
+nonconvex prox step along that combined direction, and set initial outer
+weights for all new atoms in place.
 """
 
 from __future__ import annotations
@@ -11,7 +11,6 @@ from __future__ import annotations
 import logging
 
 import torch
-from torch.nn import functional as F
 
 from ..models import Penalty, SparseModel
 
@@ -19,48 +18,32 @@ logger = logging.getLogger(__name__)
 
 
 @torch.no_grad()
-def warm_start(W_new: torch.Tensor, b_new: torch.Tensor, residual,
-               problem: SparseModel, penalty: Penalty, *, verbose: bool = False) -> torch.Tensor:
-    """Select the largest-profile direction and evaluate its proximal step."""
-    n_new = W_new.shape[0]
+def warm_start(problem: SparseModel, penalty: Penalty, X: torch.Tensor, target, n_new: int, *,
+               verbose: bool = False) -> None:
+    """Set the zero outer weights of the last n_new atoms by a proximal step along the largest-profile direction."""
     if n_new == 0:
-        return torch.zeros(0, dtype=torch.float64)
-    S_val, S_grad = _warm_start_kernel(problem, residual[0], W_new, b_new)
-    scale = problem.moment_weight_of_atoms(W_new, b_new)
-    S_val, S_grad = S_val / scale, S_grad / scale
-    profiles = problem.jac_obj(S_val, S_grad, residual)
+        return
+    new = slice(problem.n_neurons - n_new, None)
+    Vp, dVp = problem(X)
+    residual = X, Vp - target[0], dVp - target[1]
+    scale = problem.moment_weight_of_atoms()[new]
+    jac = problem.jac_obj(residual)
+    profiles = jac[new] / scale
     abs_profiles = profiles.abs()
     best = int(abs_profiles.argmax().item())
     eps_sqrt = float(torch.finfo(torch.float64).eps) ** 0.5
     safe = abs_profiles.clamp_min(1e-30)
     base = eps_sqrt * profiles / safe
     base[best] = profiles[best] / safe[best]
-    direction = -base
-    direction_features = (S_val @ direction).reshape(-1, 1), (S_grad @ direction).reshape(-1, 1)
-    slope = float(problem.jac_obj(*direction_features, residual)[0])
-    curvature = float(problem.hess_obj(*direction_features)[0, 0])
+    # The MATLAB vhat: zero on the existing atoms.
+    direction = torch.zeros_like(jac)
+    direction[new] = -base / scale
+    slope = float(jac @ direction)
+    curvature = float(direction @ problem.hess_obj(residual[0]) @ direction)
     tau = penalty.descent_step(slope, curvature)
-    out = (tau * direction) / scale
+    problem.c[new] = tau * direction[new]
     if verbose:
         logger.debug(
             "Warm start        initialized %d new output weights  max |weight|=%.2e",
-            n_new, float(out.abs().max().item()) if out.numel() else 0.0,
+            n_new, float(problem.c[new].abs().max().item()),
         )
-    return out.reshape(-1)
-
-
-def _warm_start_kernel(problem: SparseModel, X: torch.Tensor, W: torch.Tensor, b: torch.Tensor):
-    """Kernel of the new atoms with the historical sphere-comparator derivative.
-
-    On the sphere, the activation derivative in the input-gradient kernel is the
-    positive-preactivation indicator, including for leaky_relu and relu2; relu
-    is unaffected. Nonhomogeneous activations use the exact kernel.
-    """
-    value_kernel, gradient_kernel = problem.kernel(X, W, b)
-    if not problem.use_sphere:
-        return value_kernel, gradient_kernel
-    z = F.linear(X, W, b)
-    indicator = (z > 0).to(z.dtype)
-    power = problem.power
-    derivative = indicator if power == 1.0 else power * problem.activation(z) ** (power - 1) * indicator
-    return value_kernel, (derivative.unsqueeze(1) * W.T.unsqueeze(0)).reshape(X.shape[0] * X.shape[1], W.shape[0])

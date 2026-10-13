@@ -305,7 +305,6 @@ def _maximize_score(
     """
     use_sphere = problem.use_sphere
     input_dim = problem.input_dim
-    X = normalized_residual[0]
     results_a, results_b = [], []
     for a0, b0 in zip(a, b):
         omega = torch.cat([a0.reshape(-1), b0.reshape(-1)]).detach().clone().requires_grad_(True)
@@ -314,10 +313,9 @@ def _maximize_score(
         def closure():
             opt.zero_grad()
             omega_s = omega / omega.norm().clamp_min(eps) if use_sphere else omega
-            features = problem.kernel(
-                X, omega_s[:input_dim].reshape(1, -1), omega_s[input_dim].reshape(1),
-            )
-            profile = problem.jac_obj(*features, normalized_residual)[0]
+            profile = problem.jac_obj(
+                normalized_residual, omega_s[:input_dim].reshape(1, -1), omega_s[input_dim].reshape(1),
+            )[0]
             score = profile.abs() / problem.moment_weight_of_atoms(
                 omega_s[:input_dim], omega_s[input_dim],
             )
@@ -393,9 +391,8 @@ def _slope_and_curvature(
     a: torch.Tensor, b: torch.Tensor,
 ) -> Tuple[float, float]:
     """The fitting term's slope and curvature in a new atom's coefficient, at zero."""
-    features = problem.kernel(residual[0], a.reshape(1, -1), b.reshape(1))
-    slope = float(problem.jac_obj(*features, residual)[0])
-    curvature = float(problem.hess_obj(*features)[0, 0])
+    slope = float(problem.jac_obj(residual, a.reshape(1, -1), b.reshape(1))[0])
+    curvature = float(problem.hess_obj(residual[0], a.reshape(1, -1), b.reshape(1))[0, 0])
     return slope, curvature
 
 

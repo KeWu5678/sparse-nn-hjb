@@ -78,7 +78,7 @@ def test_gradient_only_loss_backpropagates_to_coefficients_and_input_graph():
     x = 2 * base
 
     value, gradient = problem(x)
-    loss = problem.obj((value, gradient), (torch.zeros_like(value), torch.zeros_like(gradient)))
+    loss = problem.obj(x, (torch.zeros_like(value), torch.zeros_like(gradient)))
     dc, dx = torch.autograd.grad(loss, (problem.c, base))
 
     torch.testing.assert_close(value, x.new_tensor([[6.75]]))

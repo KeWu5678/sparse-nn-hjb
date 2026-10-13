@@ -40,7 +40,7 @@ def metrics(
         data = full_batch(loader)
         prediction = problem(data[0])
         target = data[1:]
-        fitting = problem.obj(prediction, target)
+        fitting = problem.obj(data[0], target)
         n = data[0].shape[0]
         values[f"{split}_loss"] = float(fitting) + alpha_phi
         values[f"data_loss_{split}"] = float(fitting)

@@ -40,7 +40,7 @@ def test_prepared_objective_matches_worked_value_gradient_and_hessian(batch_size
     c = problem.c.detach()
 
     # Residuals are (1.5, 1.5, .5), and the target gradients are exact.
-    assert float(problem.obj(problem(data[0]), data[1:])) == pytest.approx(19 / 24)
+    assert float(problem.obj(data[0], data[1:])) == pytest.approx(19 / 24)
     torch.testing.assert_close(u, c)
     assert float(loss(c)) == pytest.approx(19 / 24 + .3)
     torch.testing.assert_close(torch.func.grad(loss)(c), c.new_tensor([1.35, 1.35]))
@@ -73,8 +73,7 @@ def test_candidate_profile_combines_signed_batches_before_acceptance(monkeypatch
     residuals = X, -V, -dV  # The current network is empty.
     a, b = x.new_tensor([1.], requires_grad=True), x.new_tensor(.25, requires_grad=True)
 
-    features = problem.kernel(X, a.reshape(1, -1), b.reshape(1))
-    profile = problem.jac_obj(*features, residuals)[0]
+    profile = problem.jac_obj(residuals, a.reshape(1, -1), b.reshape(1))[0]
     # The signed value contributions are 1.25, -6.75, 6.5; derivative residuals vanish.
     assert float(profile.detach()) == pytest.approx(1 / 3)
     grad_a, grad_b = torch.autograd.grad(profile, (a, b))
@@ -132,34 +131,35 @@ def test_chunking_preserves_correction_candidate_and_warmstart_calculations(acti
     full_residual, chunked_residual = residuals
     a = x.new_tensor([.2, -.3], requires_grad=True)
     bias = x.new_tensor(.1, requires_grad=True)
-    features = problem.kernel(full_residual[0], a.reshape(1, -1), bias.reshape(1))
-    reference_score = problem.jac_obj(*features, full_residual)[0].abs() / problem.moment_weight_of_atoms(a, bias)
-    features = problem.kernel(chunked_residual[0], a.reshape(1, -1), bias.reshape(1))
-    score = problem.jac_obj(*features, chunked_residual)[0].abs() / problem.moment_weight_of_atoms(a, bias)
+    reference_score = problem.jac_obj(full_residual, a.reshape(1, -1), bias.reshape(1))[0].abs() / (
+        problem.moment_weight_of_atoms(a, bias)
+    )
+    score = problem.jac_obj(chunked_residual, a.reshape(1, -1), bias.reshape(1))[0].abs() / (
+        problem.moment_weight_of_atoms(a, bias)
+    )
     torch.testing.assert_close(score, reference_score)
     for got, expected in zip(torch.autograd.grad(score, (a, bias)), torch.autograd.grad(reference_score, (a, bias))):
         torch.testing.assert_close(got, expected)
-    torch.testing.assert_close(
-        warm_start(W, b, chunked_residual, problem, penalty),
-        warm_start(W, b, full_residual, problem, penalty),
-    )
     trainer = PDAP(TrainingConfig(radial_cap="theorem"), penalty)
-    assert trainer._search_radius(problem, chunked_residual) == pytest.approx(
-        trainer._search_radius(problem, full_residual),
-    )
+    radii = [trainer._search_radius(problem, X, (V, dV)) for X, V, dV in map(full_batch, (chunked, full))]
+    assert radii[0] == pytest.approx(radii[1])
+    warm_starts = []
+    for loader in (chunked, full):
+        X, V, dV = full_batch(loader)
+        problem.set_atoms(W, b, torch.zeros_like(c))
+        warm_start(problem, penalty, X, (V, dV), 2)
+        warm_starts.append(problem.c.detach().clone())
+    torch.testing.assert_close(*warm_starts)
 
 
 @pytest.mark.parametrize("activation", ["relu", "softplus"])
-def test_prepared_objective_survives_later_data_and_support_changes(activation):
+def test_prepared_objective_survives_later_data_changes(activation):
     data, problem, penalty = _linear_case(alpha=.1, activation=activation)
     loader = make_dataloader(data)
     loss, hess_obj, u = coefficient_problem(problem, penalty, loader)
     expected_loss, expected_hessian = loss(u).clone(), hess_obj.clone()
     expected_coefficients = u.clone()
     data[1].add_(10)
-    problem.set_atoms(data[0].new_tensor([[2., -1.]]), u.new_tensor([.1]), u.new_tensor([.5]))
-    _, later_hessian, _ = coefficient_problem(problem, penalty, loader)
-    assert later_hessian.shape == (1, 1)
     torch.testing.assert_close(loss(u), expected_loss, rtol=0, atol=0)
     torch.testing.assert_close(hess_obj, expected_hessian, rtol=0, atol=0)
     torch.testing.assert_close(u, expected_coefficients, rtol=0, atol=0)

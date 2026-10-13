@@ -240,7 +240,7 @@ def test_search_radius_never_exceeds_the_fixed_clamp() -> None:
         validate_model_config(model_config)
         problem = SparseModel(model_config)
         trainer = PDAP(cfg.training, penalty_for(model_config, problem))
-        radius = trainer._search_radius(problem, (data[0], -data[1], -data[2]))
+        radius = trainer._search_radius(problem, data[0], data[1:])
         assert radius is not None and radius <= math.exp(5.0) + 1e-9
 
 
@@ -277,7 +277,7 @@ def test_theorem_radius_binds_only_at_large_moment_order() -> None:
     assert tight < math.exp(5.0)
 
 
-def test_insertion_reuses_the_residual_for_the_theorem_radius() -> None:
+def test_insertion_evaluates_the_network_once_per_stage() -> None:
     cfg = _cfg(
         alpha=1e-4,
         moment_order=2.01,
@@ -306,17 +306,12 @@ def test_insertion_reuses_the_residual_for_the_theorem_radius() -> None:
 
     model.forward = counted_predict
     cfg.training.num_of_initial_pts = cfg.training.max_insert = 1
-    run_training(
-        PDAP(cfg.training, penalty_for(model_config, model), insertion=model_config["insertion"]),
-        model,
-        make_dataloader(data),
-        num_iterations=1,
-        verbose=False,
+    PDAP(cfg.training, penalty_for(model_config, model), insertion=model_config["insertion"]).insert(
+        model, make_dataloader(data),
     )
 
     assert model.n_neurons == 1  # Exercise the warm-start branch with an accepted atom.
-    # Insertion, radius selection, and warm-start share one residual; history then
-    # evaluates the recorded train and validation splits once each.
+    # Candidate search, the theorem radius and the warm start each evaluate the network once.
     assert prediction_calls == 3
 
 

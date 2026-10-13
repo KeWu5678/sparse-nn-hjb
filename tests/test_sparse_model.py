@@ -10,7 +10,6 @@ from src.data import make_dataloader
 from src.eval import metrics
 from src.models import LogPenalty, SparseModel
 from src.models.penalty import _phi
-from src.PDAP.warmstart import _warm_start_kernel
 
 
 def _samples():
@@ -34,39 +33,35 @@ def _problem(activation="relu", power=1.0, **specifications):
     return problem, penalty_for(config, problem)
 
 
-def test_obj_is_the_weighted_h1_quadratic():
-    problem = SparseModel(resolve_model({"loss_weights": (.4, 1.3)}, 2))
-    value = torch.tensor([[2.], [3.]], dtype=torch.float64, requires_grad=True)
-    gradient = value.new_tensor([[1., 2.], [2., 1.]], requires_grad=True)
-    target = torch.ones_like(value), torch.zeros_like(gradient)
+def test_obj_is_the_weighted_h1_quadratic_of_the_network():
+    problem, _ = _problem(loss_weights=(.4, 1.3))
+    X, V, dV = _samples()
+    Vp, dVp = problem(X)
+    expected = (.4 * (Vp - V).square().sum() + 1.3 * (dVp - dV).square().sum()) / (2 * len(X))
 
-    obj = problem.obj((value, gradient), target)
-
-    torch.testing.assert_close(obj, value.new_tensor(3.75))
-    dvalue, dgradient = torch.autograd.grad(obj, (value, gradient))
-    torch.testing.assert_close(dvalue, value.new_tensor([[.2], [.4]]))
-    torch.testing.assert_close(dgradient, value.new_tensor([[.65, 1.3], [1.3, .65]]))
+    torch.testing.assert_close(problem.obj(X, (V, dV)), expected)
+    c = X.new_tensor([.3, -.1])
+    trial = problem.obj(X, (V, dV), c)
+    problem.set_atoms(problem.inner_weight, problem.inner_bias, c)
+    torch.testing.assert_close(trial, problem.obj(X, (V, dV)))
 
 
 def test_coefficient_gradient_and_full_hessian_match_the_scalar_objective():
-    problem = SparseModel(resolve_model({"loss_weights": (.4, 1.3)}, 2))
-    Kv = torch.tensor([[1., 2.], [3., 4.]], dtype=torch.float64)
-    Kg = Kv.new_tensor([[1., 0.], [0., 2.], [-1., 2.], [2., 3.]])
-    u = Kv.new_tensor([.2, -.3])
-    target = Kv.new_tensor([[.5], [1.]]), Kv.new_tensor([[1., -.5], [0., 2.]])
+    problem, _ = _problem("softplus", loss_weights=(.4, 1.3))
+    X, V, dV = _samples()
+    c = problem.c.detach().clone()
 
-    def fitting(u):
-        return problem.obj(((Kv @ u).reshape(2, 1), (Kg @ u).reshape(2, 2)), target)
+    def fitting(c):
+        return problem.obj(X, (V, dV), c)
 
-    residual = Kv.new_zeros((2, 2)), (Kv @ u).reshape(2, 1) - target[0], (Kg @ u).reshape(2, 2) - target[1]
-    jac = problem.jac_obj(Kv, Kg, residual)
-    hess = problem.hess_obj(Kv, Kg)
+    Vp, dVp = problem(X)
+    jac = problem.jac_obj((X, Vp - V, dVp - dV))
+    hess = problem.hess_obj(X)
 
-    torch.testing.assert_close(jac, torch.func.grad(fitting)(u))
-    torch.testing.assert_close(hess, torch.func.hessian(fitting)(u))
-    torch.testing.assert_close(hess, Kv.new_tensor([[5.9, 5.4], [5.4, 15.05]]))
-    direction = Kv.new_tensor([1., -2.])
-    delta = fitting(u + direction) - fitting(u)
+    torch.testing.assert_close(jac, torch.func.grad(fitting)(c))
+    torch.testing.assert_close(hess, torch.func.hessian(fitting)(c))
+    direction = c.new_tensor([1., -2.])
+    delta = fitting(c + direction) - fitting(c)
     torch.testing.assert_close(delta, jac @ direction + .5 * direction @ hess @ direction)
 
 
@@ -121,18 +116,15 @@ def test_samples_define_the_objective_and_its_derivatives(activation, power, gam
     before = {name: tensor.clone() for name, tensor in problem.state_dict().items()}
     loss, hess_obj, u = coefficient_problem(problem, penalty, loader)
     moment_weight = problem.moment_weight_of_atoms()
-    value_jacobian, gradient_jacobian = problem.kernel(data[0])
 
     def fitting(u):
-        c = u / moment_weight
-        prediction = value_jacobian @ c, gradient_jacobian @ c
-        return problem.obj(prediction, (data[1].reshape(-1), data[2].reshape(-1)))
+        return problem.obj(data[0], data[1:], u / moment_weight)
 
     Vp, dVp = problem(data[0])
     expected_obj = (0.4 * (Vp - data[1]).square().sum() + 1.3 * (dVp - data[2]).square().sum()) / (
         2 * len(data[0])
     )
-    torch.testing.assert_close(problem.obj((Vp, dVp), data[1:]), expected_obj)
+    torch.testing.assert_close(problem.obj(data[0], data[1:]), expected_obj)
     torch.testing.assert_close(fitting(u), expected_obj)
     torch.testing.assert_close(hess_obj, torch.func.hessian(fitting)(u))
     if power == 1.0:
@@ -171,8 +163,7 @@ def test_one_problem_handles_empty_and_replaced_supports():
     initial_loss = metrics(problem, penalty, loader)["train_loss"]
     a = torch.tensor([0.2, -0.3], dtype=torch.float64, requires_grad=True)
     b = a.new_tensor(0.1, requires_grad=True)
-    Kv, Kg = problem.kernel(data[0], a.reshape(1, -1), b.reshape(1))
-    score = problem.jac_obj(Kv, Kg, residual)[0].abs() / problem.moment_weight_of_atoms(a, b)
+    score = problem.jac_obj(residual, a.reshape(1, -1), b.reshape(1))[0].abs() / problem.moment_weight_of_atoms(a, b)
     assert all(torch.isfinite(g).all() for g in torch.autograd.grad(score, (a, b)))
 
     for width in (0, 2, 1, 3):
@@ -194,8 +185,7 @@ def test_candidate_objective_gradient_retains_inner_weight_derivatives(activatio
     residual = X, prediction[0] - V, prediction[1] - dV
     omega = X.new_tensor([.7, -.2, .4], requires_grad=True)
     def candidate_gradient(omega):
-        Kv, Kg = problem.kernel(X, omega[:2].reshape(1, -1), omega[2:].reshape(1))
-        return problem.jac_obj(Kv, Kg, residual)[0]
+        return problem.jac_obj(residual, omega[:2].reshape(1, -1), omega[2:].reshape(1))[0]
 
     slope = candidate_gradient(omega)
     derivative = torch.autograd.grad(slope, omega)[0]
@@ -221,15 +211,3 @@ def test_candidate_objective_gradient_retains_inner_weight_derivatives(activatio
             candidate_gradient(plus) - candidate_gradient(minus)
         ) / (2 * step))
     torch.testing.assert_close(derivative, torch.stack(finite_differences), rtol=1e-6, atol=1e-9)
-
-
-@pytest.mark.parametrize("activation,actual", [("leaky_relu", [.01, 1.]), ("relu2", [0., 4.])])
-def test_warmstart_preserves_the_historical_sphere_derivative_convention(activation, actual):
-    problem = SparseModel(resolve_model({"activation": activation}, 1))
-    X = torch.tensor([[-1.], [2.]], dtype=torch.float64)
-    W, b = X.new_ones((1, 1)), X.new_zeros(1)
-    values, gradients = problem.kernel(X, W, b)
-    legacy_values, legacy_gradients = _warm_start_kernel(problem, X, W, b)
-    torch.testing.assert_close(values, legacy_values, rtol=0, atol=0)
-    torch.testing.assert_close(gradients[:, 0], X.new_tensor(actual), rtol=0, atol=0)
-    torch.testing.assert_close(legacy_gradients[:, 0], X.new_tensor([0., 1.]), rtol=0, atol=0)

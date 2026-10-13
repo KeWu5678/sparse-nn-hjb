@@ -38,27 +38,30 @@ problem state. The user rejected the `PreparedObjective` carrier class and
 subsequently requested that preparation occur directly inside
 `PDAP.train_ssn_outerweights`, renamed from `_correct` and then
 `correct_outer_weights`. That method assembles
-the samples, computes fixed features, normalization and the fitting Hessian,
+the samples, computes normalization and the fitting Hessian,
 and defines the complete coefficient-loss callable locally. There is no
 `SparseModel.prepare_coefficients` method or preparation-return tuple.
 SSN receives the loss callable and fitting Hessian, evaluating the callable
-directly at current and trial coefficients. Features, targets and fitting
+directly at current and trial coefficients. Targets and fitting
 Hessian are reused while SSN changes outer coefficients. These calculations
 provide no network backup. The
 normalization tensor contains ones for sphere atoms; otherwise its values depend
 on the neurons even when the configured moment order stays fixed.
-`SparseModel.obj(prediction, target)` is the canonical scalar H1 fitting
-objective. The local coefficient-loss callable evaluates it from the fixed
-features and targets, then adds `Proximal.penalty(u)` itself; there is no
+`SparseModel.obj(x, target, c=None)` is the canonical scalar H1 fitting
+objective of the network at x; c substitutes trial outer weights without
+writing them to the model. The local coefficient-loss callable evaluates it at
+c = u/w_p with the fixed targets, then adds `Proximal.penalty(u)` itself; there is no
 `SparseModel.loss` method. The closure references the same problem during its
 correction; there is no second network or persistent sample cache.
-`jac_obj` and `hess_obj` provide the coefficient gradient and full Hessian of
-that objective, including cross terms. PDAP uses those derivatives for individual
+`jac_obj(residual, atoms)` and `hess_obj(x, atoms)` provide the gradient and
+full Hessian of that objective, including cross terms, in the outer weights of
+the current or supplied atoms; the residual is held fixed. PDAP uses those derivatives for individual
 neuron or combined-direction slopes and curvatures. The former `profile` and
 `directional_obj` methods and `_fidelity_pairing` helper are removed, without a
 renamed helper. The short objective, gradient and Hessian contractions represent
-distinct mathematical operations. The existing warm-start sphere derivative
-convention remains a separately documented historical numerical choice.
+distinct mathematical operations. The warm start inserts its atoms with zero
+weight and evaluates them in place with the exact kernel; the historical sphere
+derivative convention is retired (2026-10-13).
 
 PDAP owns candidate search/ranking, insertion acceptance, the warm-start
 procedure and initial-coefficient selection, support insertion/pruning,

@@ -72,13 +72,7 @@ class PDAP:
         W, b, c = self._insert(
             problem, train_loader, self.num_of_initial_pts, self.max_insert, verbose,
         )
-        count = int(W.shape[0])
-        if count:
-            problem.set_atoms(
-                torch.as_tensor(W, dtype=torch.float64),
-                torch.as_tensor(b, dtype=torch.float64),
-                torch.as_tensor(c, dtype=torch.float64).reshape(-1),
-            )
+        count = self._add_atoms(problem, train_loader, W, b, c, replace=True, verbose=verbose)
         diagnostics = self._search_diagnostics(count)
         diagnostics["stop_reason"] = "no_candidate" if count == 0 else None
         return diagnostics
@@ -87,19 +81,10 @@ class PDAP:
         self, problem: SparseModel, train_loader: DataLoader, *, verbose: bool = False,
     ) -> dict:
         """Extend the current support with accepted, initialized candidates."""
-        W_np, b_np, c_new = self._insert(
+        W, b, c = self._insert(
             problem, train_loader, self.num_of_initial_pts, self.max_insert, verbose,
         )
-        W_new = torch.as_tensor(W_np, dtype=torch.float64)
-        b_new = torch.as_tensor(b_np, dtype=torch.float64)
-        if W_new.shape[0]:
-            c_new = torch.as_tensor(c_new, dtype=torch.float64).reshape(-1)
-            if problem.n_neurons > 0:
-                W_new = torch.cat([problem.inner_weight.detach(), W_new], dim=0)
-                b_new = torch.cat([problem.inner_bias.detach(), b_new], dim=0)
-                c_new = torch.cat([problem.c.detach(), c_new], dim=0)
-            problem.set_atoms(W_new, b_new, c_new)
-        return self._search_diagnostics(int(W_np.shape[0]))
+        return self._search_diagnostics(self._add_atoms(problem, train_loader, W, b, c, verbose=verbose))
 
     def train_ssn_outerweights_and_prune(
         self, problem: SparseModel, train_loader: DataLoader, *, verbose: bool = False,
@@ -140,21 +125,19 @@ class PDAP:
         SSN adds the penalty to this fitting term.
         """
         X, V, dV = full_batch(train_loader)
-        value_jacobian, gradient_jacobian = problem.kernel(X)
         moment_weight = problem.moment_weight_of_atoms()
-        value_jacobian = value_jacobian / moment_weight
-        gradient_jacobian = gradient_jacobian / moment_weight
-        V, dV = (target.detach().reshape(-1).clone() for target in (V, dV))
+        target = V.detach().clone(), dV.detach().clone()
 
         def fitting(u: torch.Tensor) -> torch.Tensor:
-            return problem.obj((value_jacobian @ u, gradient_jacobian @ u), (V, dV))
+            return problem.obj(X, target, u / moment_weight)
 
-        return fitting, problem.hess_obj(value_jacobian, gradient_jacobian), moment_weight
+        hess_obj = problem.hess_obj(X) / torch.outer(moment_weight, moment_weight)
+        return fitting, hess_obj, moment_weight
 
     def _insert(
         self, problem, train_loader, num_of_initial_pts: int, max_insert: int, verbose: bool
     ):
-        """Return accepted atoms and their initialized outer weights."""
+        """Return accepted atoms and their outer weights, or None for weights to warm-start."""
         # Sequential insertion admits the highest-ranked candidate returned by the
         # multistart search, one atom per outer iteration. The theorem's rate bound
         # additionally requires that this candidate be an exact global maximizer; a
@@ -168,7 +151,7 @@ class PDAP:
         existing_atoms = (problem.inner_weight.detach(), problem.inner_bias.detach()) if problem.n_neurons else None
 
         d = int(problem.input_dim)
-        radius = self._search_radius(problem, residual)
+        radius = self._search_radius(problem, X, (V, dV))
         search_settings: dict[str, Any] = dict(
             sample_sphere=lambda num_of_initial_pts: self._sphere(d, num_of_initial_pts),
             num_of_initial_pts=num_of_initial_pts,
@@ -183,13 +166,25 @@ class PDAP:
             )
         else:
             W, b, c = finite_step(problem, self.penalty, residual, **search_settings)
-        if c is None and W.shape[0] > 0:
-            c = warm_start(
-                torch.as_tensor(W, dtype=torch.float64),
-                torch.as_tensor(b, dtype=torch.float64),
-                residual, problem, self.penalty, verbose=verbose,
-            )
         return W, b, c
+
+    def _add_atoms(self, problem, train_loader, W, b, c, *, replace: bool = False, verbose: bool = False) -> int:
+        """Append or, if replace, substitute the atoms, warm-starting weights given as None; return their count."""
+        count = int(W.shape[0])
+        if count:
+            W, b = torch.as_tensor(W, dtype=torch.float64), torch.as_tensor(b, dtype=torch.float64)
+            c_new = torch.zeros(count, dtype=torch.float64) if c is None else torch.as_tensor(
+                c, dtype=torch.float64,
+            ).reshape(-1)
+            if not replace and problem.n_neurons > 0:
+                W = torch.cat([problem.inner_weight.detach(), W], dim=0)
+                b = torch.cat([problem.inner_bias.detach(), b], dim=0)
+                c_new = torch.cat([problem.c.detach(), c_new], dim=0)
+            problem.set_atoms(W, b, c_new)
+            if c is None:
+                X, V, dV = full_batch(train_loader)
+                warm_start(problem, self.penalty, X, (V, dV), count, verbose=verbose)
+        return count
 
     def _prune(self, problem, amp_tol: float) -> int:
         """Drop atoms with ``|c_n| <= amp_tol``; return how many were removed."""
@@ -225,17 +220,15 @@ class PDAP:
         v = v / v.norm(dim=1, keepdim=True).clamp_min(1e-12)
         return v[:, :d].contiguous(), v[:, d].contiguous()
 
-    def _search_radius(self, problem, residual):
+    def _search_radius(self, problem, X, target):
         """Bound candidate search using the theorem, numerical cap and fallback."""
         cap = math.exp(FIXED_LOG_CLAMP)
         if self.radial_cap != "theorem" or problem.use_sphere:
             self._last_search_radius = 1.0 if problem.use_sphere else cap
             self._last_theorem_applied = -1.0
             return None
-        X, res_v, res_dv = residual
         assert problem.moment_order is not None  # Nonhomogeneous training was validated before search.
-        zeros = torch.zeros_like(res_v), torch.zeros_like(res_dv)
-        residual_norm = float(torch.sqrt(2 * problem.obj((res_v, res_dv), zeros)))
+        residual_norm = float(torch.sqrt(2 * problem.obj(X, target).detach()))
         radius = certificate_radius(
             get_growth(problem.activation_name) if problem.activation_name is not None else None,
             extent=sample_extent(X), residual_norm=residual_norm,

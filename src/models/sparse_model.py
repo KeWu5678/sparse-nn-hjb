@@ -124,28 +124,37 @@ class SparseModel(nn.Module):
         squared_norm = (inner_weight * inner_weight).sum(dim=-1) + inner_bias * inner_bias
         return 1.0 + squared_norm.clamp_min(0.0).pow(self._moment_order / 2.0)
 
-    def obj(self, prediction: tuple[Tensor, Tensor], target: tuple[Tensor, Tensor]) -> Tensor:
-        """Weighted empirical H1 quadratic, excluding the sparsity penalty.
+    def obj(self, x: Tensor, target: tuple[Tensor, Tensor], c: Tensor | None = None) -> Tensor:
+        """Weighted empirical H1 quadratic of the network at x, excluding the sparsity penalty.
+
+        c replaces the outer weights, so trial coefficients need not be written to the model.
         """
+        prediction = self(x) if c is None else torch.func.functional_call(self, {"c": c}, (x,))
         rv, rg = ((value - reference).reshape(-1) for value, reference in zip(prediction, target))
         n = rv.numel()
         w1, w2 = self._loss_weights
         return 0.5 * ((w1 / n) * rv.dot(rv) + (w2 / n) * rg.dot(rg))
 
-    def jac_obj(self, Kv: Tensor, Kg: Tensor, residual) -> Tensor:
-        """Coefficient gradient of obj from value/input-gradient Jacobians.
+    def jac_obj(
+        self, residual, inner_weight: Tensor | None = None, inner_bias: Tensor | None = None,
+    ) -> Tensor:
+        """Gradient of obj in the outer weights of the current or supplied atoms.
 
-        Kv is (N,n), Kg is (N*d,n); residual contains (X, value error,
-        input-gradient error). Residuals are fixed during candidate search;
-        supplied Jacobians retain their gradients with respect to the neurons.
+        residual is (x, value error, input-gradient error) and is held fixed. A
+        supplied atom's entry is the slope at weight zero and stays
+        differentiable with respect to the atom during candidate search.
         """
+        Kv, Kg = self.kernel(residual[0], inner_weight, inner_bias)
         rv, rg = (r.detach().reshape(-1, 1) for r in residual[1:])
         n = Kv.shape[0]
         w1, w2 = self._loss_weights
         return w1 * ((Kv * rv).sum(0) / n) + w2 * ((Kg * rg).sum(0) / n)
 
-    def hess_obj(self, Kv: Tensor, Kg: Tensor) -> Tensor:
-        """Full coefficient Hessian of obj, including cross terms between neurons."""
+    def hess_obj(
+        self, x: Tensor, inner_weight: Tensor | None = None, inner_bias: Tensor | None = None,
+    ) -> Tensor:
+        """Full Hessian of obj in the outer weights of the current or supplied atoms."""
+        Kv, Kg = self.kernel(x, inner_weight, inner_bias)
         n = Kv.shape[0]
         w1, w2 = self._loss_weights
         return (w1 / n) * (Kv.T @ Kv) + (w2 / n) * (Kg.T @ Kg)
