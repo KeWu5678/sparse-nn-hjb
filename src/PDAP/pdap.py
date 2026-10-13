@@ -108,7 +108,6 @@ class PDAP:
     def train_ssn_outerweights(self) -> dict:
         """Prepare a correction, run SSN, and apply its accepted coefficients."""
         fitting, hess_obj, moment_weight = self.fit_obj_with_outerweights()
-        # The normalized coefficients u = w_p*c; the physical ones are c = u/w_p.
         u = torch.nn.Parameter(self.network.c.detach() * moment_weight)
         optimizer = SSN([u], self.penalty, hess_obj, **self.solver)
 

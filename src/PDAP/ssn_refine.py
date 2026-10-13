@@ -16,15 +16,8 @@ def ssn_refine_outerweights(
     optimizer: SSN, coefficients: torch.nn.Parameter, closure: Callable[[], torch.Tensor], *,
     iterations: int, correction_guard: bool,
 ) -> dict:
-    """Run the SSN iteration budget, discarding a correction that increases the objective.
+    """Run the SSN iteration budget, discarding a correction that increases the objective."""
 
-    This is the correction step of Algorithms 1 and 2: if the correction increases
-    J, the post-insertion coefficients are kept. A nonfinite result is always
-    discarded; correction_guard=False preserves the historical unguarded
-    comparison. An exception restores the post-insertion coefficients and
-    propagates. No convergence claim is made after the fixed budget. The
-    optimizer evaluates the starting objective with the closure.
-    """
     start = coefficients.detach().clone()
     initial_loss = optimizer.objective(closure)
     if not torch.isfinite(start).all() or not torch.isfinite(initial_loss):

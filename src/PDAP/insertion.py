@@ -1,21 +1,6 @@
 """Insertion strategies for the PDAP outer loop.
-
-An insertion strategy proposes new atoms (inner weights/biases) to add to the
-current support, given the data and the current residual.  Both strategies use
-multistart L-BFGS on the profile P(omega), but their parameter domains and
-acceptance tests differ:
-
-  * ``profile_threshold`` — for a nonhomogeneous dictionary, sample inside the
-    theorem/numerical radius, jointly refine ``omega=(a,b)``, discard final
-    points outside that radius, remove Euclidean near-duplicates, and apply the
-    configured profile threshold.  There is no direction-then-radius code path.
-  * ``finite_step`` — accept candidates with a profitable finite step, i.e. where
-    min_c Delta J(c; omega) < 0; returns the
-    optimal outer weight c* alongside each atom.  Used for the q<1 penalty.
-
-The strategies are pure functions: the caller supplies the precomputed residual
-(so the "zero network" first iteration is just residual = -target), the shared
-network and its penalty.
+profile_threshold: for a nonhomogeneous dictionary.
+finite_step: for fractional penalty families: accept candidates with a profitable finite step.
 """
 
 from __future__ import annotations
