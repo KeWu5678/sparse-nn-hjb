@@ -121,7 +121,6 @@ class PDAP:
     ) -> dict:
         """Apply the accepted SSN correction, then remove negligible atoms."""
         diagnostics = self.train_ssn_outerweights(problem, train_loader, verbose=verbose)
-        diagnostics["corrections"] = 1
         diagnostics["pruned"] = self._prune(problem, self.prune_amp_tol)
         return diagnostics
 

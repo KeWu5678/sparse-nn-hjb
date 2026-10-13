@@ -25,7 +25,6 @@ logger = structlog.get_logger(__name__)
 
 _COUNTERS = {
     "searches": "total_insertion_searches",
-    "corrections": "total_coefficient_corrections",
     "ssn_iterations": "total_ssn_iterations",
     "ssn_failed_steps": "total_ssn_failed_steps",
     "inserted": "total_inserted_neurons",
@@ -57,8 +56,8 @@ def run_training(
     history = History(reporting_normalizer=reporting_normalizer)
     history.run_metrics = dict.fromkeys(_COUNTERS.values(), 0)
     history.run_metrics.update(
-        total_accepted_corrections=0, solver_seconds=0.0, evaluation_seconds=0.0,
-        stop_reason="iteration_budget",
+        total_ssn_refinements=0, total_accepted_ssn_refinements=0,
+        solver_seconds=0.0, evaluation_seconds=0.0, stop_reason="iteration_budget",
     )
     diagnostics = {}
     if pdap.loop_order == "correction_first":
@@ -118,7 +117,9 @@ def _measure(
     diagnostics["solver_seconds"] = perf_counter() - started
     for name, total in _COUNTERS.items():
         history.run_metrics[total] += diagnostics.get(name, 0)
-    history.run_metrics["total_accepted_corrections"] += int(diagnostics.get("correction_accepted") is True)
+    if "ssn_refinement_accepted" in diagnostics:
+        history.run_metrics["total_ssn_refinements"] += 1
+        history.run_metrics["total_accepted_ssn_refinements"] += int(diagnostics["ssn_refinement_accepted"])
     history.run_metrics["solver_seconds"] += diagnostics["solver_seconds"]
     return diagnostics
 

@@ -51,7 +51,7 @@ def ssn_refine_outerweights(
         "ssn_iterations": iterations,
         "ssn_failed_steps": failed_steps,
         "ssn_last_step_success": optimizer.last_step_success,
-        "correction_accepted": accepted,
+        "ssn_refinement_accepted": accepted,
     }
 
 

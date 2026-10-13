@@ -48,13 +48,13 @@ def test_step_completes_optimization_without_quality_evaluation(monkeypatch):
     diagnostics = pdap.step(problem, loader)
 
     assert problem.n_neurons == 1
-    assert diagnostics["inserted"] == diagnostics["corrections"] == 1
+    assert diagnostics["inserted"] == 1
     assert diagnostics["pruned"] == 0
     assert diagnostics["stop_reason"] is None
     assert diagnostics["ssn_iterations"] == diagnostics["ssn_failed_steps"] == 0
     # A zero-budget SSN correction accepts its initial coefficients; this differs
     # from a search that never invokes correction at all.
-    assert diagnostics["correction_accepted"] is True
+    assert diagnostics["ssn_refinement_accepted"] is True
     assert metrics(problem, pdap.penalty, loader)["train_loss"] == 0.0
 
 
@@ -93,8 +93,8 @@ def test_ssn_trial_failure_and_final_acceptance_reach_history_and_run_totals(mon
     diagnostics = history.diagnostics[0]
     assert trials == diagnostics["ssn_iterations"] == history.run_metrics["total_ssn_iterations"] == 4
     assert diagnostics["ssn_failed_steps"] == history.run_metrics["total_ssn_failed_steps"] == 1
-    assert diagnostics["ssn_last_step_success"] is diagnostics["correction_accepted"] is True
-    assert history.run_metrics["total_accepted_corrections"] == 1
+    assert diagnostics["ssn_last_step_success"] is diagnostics["ssn_refinement_accepted"] is True
+    assert history.run_metrics["total_accepted_ssn_refinements"] == 1
     assert history.model_states[0]["c"].item() == pytest.approx(.78)
 
 
@@ -114,8 +114,8 @@ def test_each_record_scores_its_checkpoint_and_totals_include_trailing_work(
     assert history.best_iteration == 0
     assert history.run_metrics["total_insertion_searches"] == searches
     assert history.run_metrics["total_inserted_neurons"] == searches
-    assert history.run_metrics["total_coefficient_corrections"] == 2
-    assert history.run_metrics["total_accepted_corrections"] == 2
+    assert history.run_metrics["total_ssn_refinements"] == 2
+    assert history.run_metrics["total_accepted_ssn_refinements"] == 2
     assert history.run_metrics["stop_reason"] == "iteration_budget"
     assert history.summary_metrics()["iterations"] == 2
     for i in range(2):
@@ -133,7 +133,7 @@ def test_terminal_search_is_counted_without_a_duplicate_checkpoint(monkeypatch):
 
     assert len(history.train_loss) == len(history.diagnostics) == 1
     assert history.run_metrics["total_insertion_searches"] == 2
-    assert history.run_metrics["total_coefficient_corrections"] == 1
+    assert history.run_metrics["total_ssn_refinements"] == 1
     assert history.run_metrics["total_ssn_iterations"] == 0
     assert history.run_metrics["solver_seconds"] == 9.0
     assert history.run_metrics["evaluation_seconds"] == 3.0
@@ -151,9 +151,9 @@ def test_empty_terminal_model_is_observed_without_inventing_correction_work(monk
     assert len(history.train_loss) == 1
     assert history.err_h1_train == [1.0]
     assert history.run_metrics["total_insertion_searches"] == 1
-    assert history.run_metrics["total_coefficient_corrections"] == 0
-    assert history.run_metrics["total_accepted_corrections"] == 0
-    assert history.diagnostics[0].get("correction_accepted") is None
+    assert history.run_metrics["total_ssn_refinements"] == 0
+    assert history.run_metrics["total_accepted_ssn_refinements"] == 0
+    assert history.diagnostics[0].get("ssn_refinement_accepted") is None
     assert history.run_metrics["stop_reason"] == "no_candidate"
 
 
@@ -170,7 +170,7 @@ def test_failed_legacy_initialization_keeps_existing_model_and_reports_its_size(
     assert history.model_states[0]["inner_weight"].item() == 2.0
     assert history.train_loss[0] == metrics(problem, pdap.penalty, loader)["train_loss"]
     assert history.run_metrics["total_insertion_searches"] == 1
-    assert history.run_metrics["total_coefficient_corrections"] == 0
+    assert history.run_metrics["total_ssn_refinements"] == 0
     assert history.summary_metrics()["stop_reason"] == "no_candidate"
 
 
@@ -187,7 +187,7 @@ def test_zero_budget_records_existing_or_legacy_initialized_state(monkeypatch, o
     assert len(history.train_loss) == 1
     assert history.train_loss[0] == metrics(problem, pdap.penalty, loader)["train_loss"]
     assert history.run_metrics["total_insertion_searches"] == searches
-    assert history.run_metrics["total_coefficient_corrections"] == 0
+    assert history.run_metrics["total_ssn_refinements"] == 0
     assert history.run_metrics["stop_reason"] == "iteration_budget"
     assert history.search_radius == ([10.0] if searches else [None])
     assert history.model_states[0]["inner_weight"].item() == (1.0 if searches else 2.0)
@@ -196,7 +196,7 @@ def test_zero_budget_records_existing_or_legacy_initialized_state(monkeypatch, o
 def test_history_stores_supplied_values_without_prediction_and_copies_diagnostics(monkeypatch):
     problem, loader, pdap = _case(monkeypatch)
     values = metrics(problem, pdap.penalty, loader)
-    diagnostics = {"search_radius": 2.0, "correction_accepted": False}
+    diagnostics = {"search_radius": 2.0, "ssn_refinement_accepted": False}
 
     def unexpected_prediction(*args, **kwargs):
         pytest.fail("History.record must consume already evaluated metrics")
