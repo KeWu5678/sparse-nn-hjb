@@ -111,20 +111,26 @@ class SSN(Optimizer):
         closure = torch.enable_grad()(closure)
         start = parameters_to_vector(self._params).detach().clone()
         try:
-            return self._iteration(closure, start)
+            loss, self.last_step_success = self._iteration(closure, start)
         except Exception:
             vector_to_parameters(start, self._params)
             self.last_step_success = False
             raise
+        return loss
 
-    def _iteration(self, closure: Callable[[], Tensor], u: Tensor) -> Tensor:
-        """Build and globalize one normal-map Newton step from the coefficients u."""
-        self.last_step_success = True
+    def _iteration(self, closure: Callable[[], Tensor], u: Tensor) -> tuple[Tensor, bool]:
+        """Build and globalize one normal-map Newton step from the coefficients u.
+
+        Return the objective it keeps and whether the step succeeded; a stationary
+        point succeeds without a trial.
+        """
         loss = self.objective(closure)
         q, normal_q = self._normal_map_at(u)
-        if self._stationary(normal_q):
-            return loss
-        return self._ssn_single_step(closure, u, self._newton_system(u, q, normal_q), loss)
+        success = True
+        if not self._stationary(normal_q):
+            system = self._newton_system(u, q, normal_q)
+            loss, success = self._ssn_single_step(closure, u, system, loss)
+        return loss, success
 
     def objective(self, closure: Callable[[], Tensor]) -> Tensor:
         """The objective f + alpha*Phi at the parameters; the closure evaluates the fitting term f."""
@@ -192,10 +198,11 @@ class SSN(Optimizer):
 
     def _ssn_single_step(
         self, closure: Callable[[], Tensor], u: Tensor, system: NewtonSystem, loss: Tensor,
-    ) -> Tensor:
+    ) -> tuple[Tensor, bool]:
         """Run a strategy, store its state, and keep an accepted trial or undo a rejected one.
 
         A strategy returns the last trial it evaluated, which the parameters still hold.
+        Return the objective kept and whether the trial was accepted.
         """
         group = self.param_groups[0]
 
@@ -217,9 +224,8 @@ class SSN(Optimizer):
             )
             q_trial, loss_trial, accepted = trial
 
-        self.last_step_success = accepted
         if accepted:
             loss = loss_trial
         else:
             vector_to_parameters(u, self._params)
-        return loss
+        return loss, accepted
