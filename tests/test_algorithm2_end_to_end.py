@@ -5,9 +5,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import torch
-from ssn_test_problem import penalty_for
 
-from src.config import resolve_model, validate_model_config
+from src.config import make_penalty, resolve_model, validate_model_config
 from src.config.schema import EnvConfig, ExperimentConfig, ModelConfig, TrainingConfig
 from src.data import make_dataloaders
 from src.models import SparseModel
@@ -50,7 +49,7 @@ def test_algorithm2_fits_an_exact_relu_power_atom(power: float) -> None:
     train_loader, valid_loader = make_dataloaders(data, cfg.data.train_fraction)
 
     history = run_training(
-        PDAP(cfg.training, penalty_for(model_config, model), insertion=model_config["insertion"]),
+        PDAP(cfg.training, make_penalty(model_config), insertion=model_config["insertion"]),
         model,
         train_loader,
         valid_loader,

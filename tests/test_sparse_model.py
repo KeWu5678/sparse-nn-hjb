@@ -2,9 +2,9 @@
 
 import pytest
 import torch
-from ssn_test_problem import coefficient_problem, correction_optimizer, penalty_for
+from ssn_test_problem import coefficient_problem, correction_optimizer
 
-from src.config import resolve_model, validate_model_config
+from src.config import make_penalty, resolve_model, validate_model_config
 from src.config.activations import ACTIVATIONS
 from src.data import make_dataloader
 from src.eval import metrics
@@ -30,7 +30,7 @@ def _problem(activation="relu", power=1.0, **specifications):
         torch.tensor([0.2, 0.3], dtype=torch.float64),
         torch.tensor([-0.6, 0.8], dtype=torch.float64),
     )
-    return problem, penalty_for(config, problem)
+    return problem, make_penalty(config)
 
 
 def test_obj_is_the_weighted_h1_quadratic_of_the_network():
@@ -92,7 +92,7 @@ def test_validated_power_selects_the_proximal_map_and_derivative(
     config = resolve_model({"power": power, "alpha": alpha}, 2)
     problem = SparseModel(config)
     assert problem.penalty_exponent == exponent
-    penalty = penalty_for(config, problem)
+    penalty = make_penalty(config)
     q = torch.tensor([-value, value], dtype=torch.float64)
     prox = penalty.prox(q, alpha)
     jac = penalty.jac_prox(q, alpha, prox_image=prox)
@@ -155,7 +155,7 @@ def test_one_problem_handles_empty_and_replaced_supports():
     config = resolve_model({"activation": "softplus", "alpha": 0.01, "moment_order": 2.0}, 2)
     validate_model_config(config)
     problem = SparseModel(config)
-    penalty = penalty_for(config, problem)
+    penalty = make_penalty(config)
     prediction = problem(data[0])
     residual = data[0], *(p - t for p, t in zip(prediction, data[1:]))
     torch.testing.assert_close(residual[1], -data[1])

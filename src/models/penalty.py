@@ -13,15 +13,6 @@ import torch
 from torch import Tensor
 
 
-def make_penalty(alpha: float, gamma: float, penalty_exponent: float) -> Penalty:
-    """The configured family: the log penalty at q = 1, else the fractional penalty."""
-    if penalty_exponent == 1.0:
-        return LogPenalty(alpha, gamma)
-    if gamma != 0.0:
-        raise ValueError(f"the fractional penalty requires gamma == 0; got gamma={gamma}")
-    return FractionalPenalty(alpha, penalty_exponent)
-
-
 class Penalty(ABC):
     """The penalty term and its proximal maps.
     """

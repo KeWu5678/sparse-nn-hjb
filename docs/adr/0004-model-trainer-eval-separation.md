@@ -392,3 +392,13 @@ family, `obj_augmented = obj` and the prox handles the complete penalty.
 The mathematical radius is returned before applying a numerical cap; PDAP owns
 the existing `exp(5)` search limit and fallback. Numerical regression fixtures
 are retained unchanged by this ownership refactor.
+
+## Follow-up 2026-10-13: penalty construction in config
+
+`make_penalty(config)` moves from `src/models/penalty.py` to `src/config/schema.py`
+and builds the penalty family from a validated model configuration.
+`resolve_model` computes the penalty exponent q = 2/(power+1) once, and
+`SparseModel` reads it from the resolved configuration. `validate_model_config`
+is the only check that γ = 0 when q ≠ 1; the penalty classes do not validate.
+Selection stays value-driven, as decided in "Penalty selection stays
+config-driven".

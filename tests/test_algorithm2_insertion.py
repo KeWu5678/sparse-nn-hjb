@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import pytest
 import torch
-from ssn_test_problem import penalty_for
 
-from src.config import resolve_model, validate_model_config
+from src.config import make_penalty, resolve_model, validate_model_config
 from src.models import SparseModel
 from src.PDAP import insertion
 
@@ -18,7 +17,7 @@ def _insert(monkeypatch, config, profile, curvature=1.0):
     monkeypatch.setattr(insertion, "_generate_candidates", lambda *args, **kwargs: (W, b, 0))
     residual = W, W.new_tensor([[profile / curvature]]), torch.zeros_like(W)
     return insertion.finite_step(
-        problem, penalty_for(config, problem), residual, sample_sphere=lambda n: (W, b),
+        problem, make_penalty(config), residual, sample_sphere=lambda n: (W, b),
         num_of_initial_pts=1, verbose=False,
     )[2]
 

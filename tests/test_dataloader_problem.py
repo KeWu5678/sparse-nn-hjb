@@ -2,7 +2,7 @@
 
 import pytest
 import torch
-from ssn_test_problem import coefficient_problem, penalty_for
+from ssn_test_problem import coefficient_problem
 from torch.utils.data import (
     BatchSampler,
     DataLoader,
@@ -11,7 +11,7 @@ from torch.utils.data import (
     TensorDataset,
 )
 
-from src.config import resolve_model, validate_model_config
+from src.config import make_penalty, resolve_model, validate_model_config
 from src.config.schema import TrainingConfig
 from src.data import full_batch, make_dataloader
 from src.eval import metrics
@@ -28,7 +28,7 @@ def _linear_case(**specifications):
     validate_model_config(config)
     problem = SparseModel(config)
     problem.set_atoms(torch.eye(2, dtype=x.dtype), x.new_full((2,), .5), x.new_tensor([1., 2.]))
-    return data, problem, penalty_for(config, problem)
+    return data, problem, make_penalty(config)
 
 
 @pytest.mark.parametrize("batch_size", [None, 1, 2])
@@ -68,7 +68,7 @@ def test_candidate_profile_combines_signed_batches_before_acceptance(monkeypatch
     config = resolve_model({"alpha": .05}, 1)
     validate_model_config(config)
     problem = SparseModel(config)
-    penalty = penalty_for(config, problem)
+    penalty = make_penalty(config)
     X, V, dV = full_batch(make_dataloader(data, batch_size=batch_size))
     residuals = X, -V, -dV  # The current network is empty.
     a, b = x.new_tensor([1.], requires_grad=True), x.new_tensor(.25, requires_grad=True)
@@ -93,7 +93,7 @@ def test_candidate_profile_combines_signed_batches_before_acceptance(monkeypatch
     validate_model_config(config)
     problem = SparseModel(config)
     W, _, _ = insertion.profile_threshold(
-        problem, penalty_for(config, problem), residuals, sample_sphere=lambda _: (a, b),
+        problem, make_penalty(config), residuals, sample_sphere=lambda _: (a, b),
         num_of_initial_pts=1, insert_init="guaranteed", verbose=False,
     )
     assert len(W) == 0
@@ -111,7 +111,7 @@ def test_chunking_preserves_correction_candidate_and_warmstart_calculations(acti
     }, 2)
     validate_model_config(config)
     problem = SparseModel(config)
-    penalty = penalty_for(config, problem)
+    penalty = make_penalty(config)
     problem.set_atoms(W, b, c)
     full, chunked = make_dataloader(data), make_dataloader(data, batch_size=2)
     reference_loss, reference_hessian, reference_u = coefficient_problem(problem, penalty, full)
@@ -176,7 +176,7 @@ def test_pdap_records_one_full_data_result_per_outer_iteration(batch_size):
     loader = make_dataloader(data, batch_size=batch_size)
     training = TrainingConfig(fit_outer_iterations=2, lbfgs_steps=5, num_of_initial_pts=4)
     history = run_training(
-        PDAP(training, penalty_for(config, problem), insertion=config["insertion"]),
+        PDAP(training, make_penalty(config), insertion=config["insertion"]),
         problem, loader, num_iterations=2, verbose=False,
     )
     assert len(history.train_loss) == 2
@@ -202,7 +202,7 @@ def test_logging_accepts_a_finite_loader_without_a_sample_count(verbose):
     loader = DataLoader(Samples(), batch_size=2, generator=torch.Generator().manual_seed(0))
     history = run_training(
         PDAP(
-            TrainingConfig(num_of_initial_pts=1), penalty_for(config, problem),
+            TrainingConfig(num_of_initial_pts=1), make_penalty(config),
             insertion=config["insertion"],
         ),
         problem, loader, num_iterations=0, verbose=verbose,

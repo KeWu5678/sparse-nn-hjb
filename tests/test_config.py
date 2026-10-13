@@ -13,13 +13,14 @@ from omegaconf import OmegaConf
 from src.config import (
     get_activation,
     get_use_sphere,
+    make_penalty,
     resolve_model,
     validate_model_config,
     validate_optimizer_config,
 )
 from src.config.schema import ExperimentConfig, ModelConfig, TrainingConfig
 from src.data import DATA_DIR, load_value_samples
-from src.models import SparseModel, make_penalty
+from src.models import SparseModel
 from src.PDAP import PDAP
 from src.SSN import SSN
 
@@ -141,7 +142,7 @@ def test_config_builds_trainer_and_model() -> None:
     validate_model_config(model_config)
     validate_optimizer_config(cfg.training)
     problem = SparseModel(model_config)
-    penalty = make_penalty(model_config["alpha"], model_config["gamma"], problem.penalty_exponent)
+    penalty = make_penalty(model_config)
     pdap = PDAP(cfg.training, penalty, insertion=model_config["insertion"])
     assert model_config["activation"] is torch.relu
     assert OmegaConf.to_container(cfg.model, resolve=True) == raw_model

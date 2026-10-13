@@ -7,10 +7,9 @@ import math
 
 import pytest
 import torch
-from ssn_test_problem import penalty_for
 
 import src.PDAP.insertion as insertion
-from src.config import resolve_model, validate_model_config
+from src.config import make_penalty, resolve_model, validate_model_config
 from src.models import SparseModel
 
 
@@ -117,7 +116,7 @@ def test_algorithm1_distinguishes_radius_search_failure_from_threshold_stop(
     }, 1)
     validate_model_config(config)
     problem = SparseModel(config)
-    penalty = penalty_for(config, problem)
+    penalty = make_penalty(config)
 
     _fake_lbfgs(monkeypatch, [[2.0, 0.0]])
     with caplog.at_level(logging.DEBUG):
@@ -160,7 +159,7 @@ def test_sphere_search_reports_when_only_existing_support_is_returned(
     config = resolve_model({"activation": "relu", "power": 2.0, "alpha": 1.0}, 1)
     validate_model_config(config)
     problem = SparseModel(config)
-    penalty = penalty_for(config, problem)
+    penalty = make_penalty(config)
 
     with caplog.at_level(logging.DEBUG):
         insertion.profile_threshold(

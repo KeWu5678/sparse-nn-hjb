@@ -42,13 +42,13 @@ from omegaconf import DictConfig, ListConfig, OmegaConf
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from src.config import resolve_model, validate_model_config, validate_optimizer_config
+from src.config import make_penalty, resolve_model, validate_model_config, validate_optimizer_config
 from src.config.schema import ExperimentConfig
 from src.data import DATA_DIR, load_value_samples, make_dataloaders, normalize_value_samples
 from src.eval import distance_binned_error, region_split_errors
 from src.experiment_logging import ExperimentRun
 from src.logging import configure_logging
-from src.models import SparseModel, make_penalty
+from src.models import SparseModel
 from src.PDAP import PDAP
 from src.training import run_training
 
@@ -255,7 +255,7 @@ def _run_experiment(cfg: DictConfig, hydra_cfg, run_dir: Path, run_id: str) -> P
         data, cfg.data.train_fraction, seed=cfg.env.seed,
     )
     problem = SparseModel(model_config)
-    penalty = make_penalty(model_config["alpha"], model_config["gamma"], problem.penalty_exponent)
+    penalty = make_penalty(model_config)
     trainer = PDAP(cfg.training, penalty, insertion=model_config["insertion"])
     history = run_training(
         trainer, problem, train_loader, valid_loader,

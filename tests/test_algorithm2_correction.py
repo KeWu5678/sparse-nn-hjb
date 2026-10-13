@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 import torch
-from ssn_test_problem import closure_for, penalty_for, synthetic_correction
+from ssn_test_problem import closure_for, synthetic_correction
 
-from src.config import resolve_model, validate_model_config
+from src.config import make_penalty, resolve_model, validate_model_config
 from src.config.schema import TrainingConfig
 from src.data import make_dataloader
 from src.models import FractionalPenalty, SparseModel
@@ -68,7 +68,7 @@ def test_fractional_correction_reports_an_all_zero_warm_start() -> None:
     with pytest.raises(
         ValueError, match="warm-start proximal scaling requires a nonzero coefficient"
     ):
-        PDAP(TrainingConfig(fit_outer_iterations=1), penalty_for(config, problem)).train_ssn_outerweights(
+        PDAP(TrainingConfig(fit_outer_iterations=1), make_penalty(config)).train_ssn_outerweights(
             problem, make_dataloader(data),
         )
 

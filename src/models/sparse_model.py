@@ -18,6 +18,7 @@ class SparseModel(nn.Module):
         self._use_sphere = config["use_sphere"]
         self._moment_order = config["moment_order"]
         self._power = config["power"]
+        self._penalty_exponent = config["penalty_exponent"]
         self._loss_weights = config["loss_weights"]
         self.register_buffer("inner_weight", torch.empty((0, config["input_dim"]), dtype=torch.float64))
         self.register_buffer("inner_bias", torch.empty(0, dtype=torch.float64))
@@ -57,7 +58,7 @@ class SparseModel(nn.Module):
 
     @property
     def penalty_exponent(self) -> float:
-        return 2.0 / (self._power + 1.0)
+        return self._penalty_exponent
 
     @property
     def loss_weights(self) -> tuple[float, float]:

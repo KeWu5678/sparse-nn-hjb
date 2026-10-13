@@ -27,6 +27,7 @@ from typing import Optional, Tuple
 
 from torch import Tensor
 
+from ..models.penalty import FractionalPenalty, LogPenalty, Penalty
 from .activations import ACTIVATIONS, get_activation, get_growth, get_use_sphere
 
 
@@ -242,6 +243,7 @@ def resolve_model(config, input_dim: int) -> dict:
         "activation_name": activation_name,
         "use_sphere": use_sphere,
         "power": config.power,
+        "penalty_exponent": 2.0 / (config.power + 1.0),
         "alpha": config.alpha,
         "gamma": config.gamma,
         "loss_weights": tuple(config.loss_weights),
@@ -292,6 +294,13 @@ def validate_model_config(config) -> None:
             raise ValueError("finite_step insertion is Algorithm 2 and requires a sphere activation")
         if gamma != 0.0:
             raise ValueError("finite_step insertion minimizes the power penalty and requires gamma == 0")
+
+
+def make_penalty(config) -> Penalty:
+    """The penalty family of validated model settings: the log penalty at q = 1, else the fractional penalty."""
+    if config["penalty_exponent"] == 1.0:
+        return LogPenalty(config["alpha"], config["gamma"])
+    return FractionalPenalty(config["alpha"], config["penalty_exponent"])
 
 
 def validate_optimizer_config(training: TrainingConfig) -> None:

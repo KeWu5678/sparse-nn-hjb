@@ -4,9 +4,8 @@ import pickle
 import numpy as np
 import pytest
 import torch
-from ssn_test_problem import penalty_for
 
-from src.config import resolve_model, validate_model_config
+from src.config import make_penalty, resolve_model, validate_model_config
 from src.data import ValueSampleNormalizer, make_dataloader
 from src.eval import metrics as evaluate
 from src.eval import relative_errors
@@ -60,7 +59,7 @@ def test_restoring_a_zero_measure_snapshot_empties_an_initialized_model(legacy) 
     empty = SparseModel(config)
     samples = (x, *empty(x))
     history = History()
-    history.record(empty, evaluate(empty, penalty_for(config, empty), make_dataloader(samples)))
+    history.record(empty, evaluate(empty, make_penalty(config), make_dataloader(samples)))
     if legacy:
         history.model_states[0] = {}
 
@@ -120,7 +119,7 @@ def test_recorded_checkpoints_stay_independent_of_models_and_each_other():
     loader = make_dataloader((x, *problem(x)))
     history = History()
     for _ in range(2):
-        history.record(problem, evaluate(problem, penalty_for(config, problem), loader))
+        history.record(problem, evaluate(problem, make_penalty(config), loader))
         with torch.no_grad():
             for tensor in problem.state_dict().values():
                 tensor.add_(1.)
@@ -149,7 +148,7 @@ def test_history_summary_records_normalized_objective_decomposition(alpha) -> No
     config = resolve_model({"activation": "tanh", "alpha": alpha, "gamma": 0.0,
                             "loss_weights": (1.0, 1.0), "moment_order": 2.0}, 2)
     problem = SparseModel(config)
-    penalty = penalty_for(config, problem)
+    penalty = make_penalty(config)
     problem.set_atoms(W, b, c)
     samples = (x, *problem(x))
 
@@ -191,7 +190,7 @@ def test_sphere_penalty_and_reporting_do_not_depend_on_historical_moment_order(p
         assert problem.moment_order is None
         torch.testing.assert_close(problem.moment_weight_of_atoms(), torch.ones_like(c))
         history = History()
-        history.record(problem, evaluate(problem, penalty_for(config, problem), make_dataloader((x, *problem(x)))))
+        history.record(problem, evaluate(problem, make_penalty(config), make_dataloader((x, *problem(x)))))
         history = pickle.loads(pickle.dumps(history))
         summary = history.summary_metrics()
         assert summary["total_variation"] == 5.
@@ -208,7 +207,7 @@ def test_physical_reporting_does_not_change_objectives_snapshots_or_selection():
         "activation": "tanh", "alpha": 0.1, "gamma": 0.2, "moment_order": 2.0,
     }, 2)
     problem = SparseModel(config)
-    penalty = penalty_for(config, problem)
+    penalty = make_penalty(config)
     loader = make_dataloader(data)
     unchanged = History()
     # Old pickles predate the optional reporting transform.

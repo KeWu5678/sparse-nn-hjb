@@ -2,9 +2,8 @@
 
 import pytest
 import torch
-from ssn_test_problem import penalty_for
 
-from src.config import get_activation, resolve_model, validate_model_config
+from src.config import get_activation, make_penalty, resolve_model, validate_model_config
 from src.config.schema import ExperimentConfig
 from src.models import SparseModel
 from src.PDAP import PDAP
@@ -140,7 +139,7 @@ def test_setting_and_pruning_atoms_preserves_float64_coefficients():
     W, b, _ = _atoms(n=2)
     c = torch.tensor([1.123456789012345, -1.0000000001], dtype=torch.float64)
     problem.set_atoms(W, b, c)
-    trainer = PDAP(ExperimentConfig().training, penalty_for(config, problem))
+    trainer = PDAP(ExperimentConfig().training, make_penalty(config))
     assert trainer._prune(problem, amp_tol=1e-8) == 0
     for actual, expected in zip((problem.inner_weight, problem.inner_bias, problem.c.detach()), (W, b, c)):
         torch.testing.assert_close(actual, expected, rtol=0, atol=0)

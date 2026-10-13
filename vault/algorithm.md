@@ -152,9 +152,9 @@ warm-start selection; SparseModel and the Penalty supply their mathematical eval
     also supplies the penalty exponent q = 2/(power+1). `PDAP.train_ssn_outerweights`
     prepares the coefficient loss, Hessian and normalization for one correction.
     There is no objective-carrier class or persistent feature cache.
-  - `penalty.py` — `make_penalty(alpha, gamma, penalty_exponent)` selects
-    `LogPenalty(alpha, gamma)` (q = 1) or `FractionalPenalty(alpha, q)`. Their
-    base `Penalty` holds the penalty αΦ, its split into the nonsmooth term
+  - `penalty.py` — `LogPenalty(alpha, gamma)` (q = 1) and
+    `FractionalPenalty(alpha, q)`; `src.config.make_penalty(config)` selects
+    one from a validated model configuration. Their base `Penalty` holds the penalty αΦ, its split into the nonsmooth term
     α·Σ|u|^q and a smooth correction, and the vector and scalar proximal maps
     (taking the proximal constant λ). Shared by PDAP, SSN and evaluation. The
     scalar formulas sit below the classes, grouped by family.

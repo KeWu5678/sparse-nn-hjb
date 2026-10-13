@@ -2,9 +2,8 @@
 
 import pytest
 import torch
-from ssn_test_problem import penalty_for
 
-from src.config import resolve_model, validate_model_config
+from src.config import make_penalty, resolve_model, validate_model_config
 from src.models import SparseModel
 from src.PDAP.warmstart import warm_start
 
@@ -31,7 +30,7 @@ def test_single_atom_warm_start_has_known_minimizer(
     problem = SparseModel(config)
     problem.set_atoms(torch.ones_like(X), torch.zeros(1, dtype=torch.float64), torch.zeros(1, dtype=torch.float64))
     target = X.new_tensor([[sign * v]]), torch.zeros_like(X)
-    warm_start(problem, penalty_for(config, problem), X, target, 1)
+    warm_start(problem, make_penalty(config), X, target, 1)
 
     assert problem.c.item() == pytest.approx(sign * expected, rel=1e-13, abs=1e-13)
 
@@ -58,7 +57,7 @@ def test_log_warm_start_preserves_matlab_acceptance_guards(
     problem = SparseModel(config)
     problem.set_atoms(torch.ones_like(X), torch.zeros(1, dtype=torch.float64), torch.zeros(1, dtype=torch.float64))
     target = X.new_tensor([[v]]), torch.zeros_like(X)
-    warm_start(problem, penalty_for(config, problem), X, target, 1)
+    warm_start(problem, make_penalty(config), X, target, 1)
 
     assert problem.c.item() == pytest.approx(expected, rel=1e-13, abs=1e-13)
 
@@ -71,7 +70,7 @@ def test_sphere_warm_start_uses_the_exact_activation_derivative() -> None:
     validate_model_config(config)
     problem = SparseModel(config)
     problem.set_atoms(X.new_ones((1, 1)), X.new_zeros(1), X.new_zeros(1))
-    warm_start(problem, penalty_for(config, problem), X, (X.new_zeros((2, 1)), X.new_ones((2, 1))), 1)
+    warm_start(problem, make_penalty(config), X, (X.new_zeros((2, 1)), X.new_ones((2, 1))), 1)
 
     assert problem.c.item() == pytest.approx((0.505 - 0.005) / 0.50005, rel=1e-13)
 
@@ -82,6 +81,6 @@ def test_warm_start_sets_only_the_new_atoms() -> None:
     validate_model_config(config)
     problem = SparseModel(config)
     problem.set_atoms(X.new_tensor([[-1.], [1.]]), X.new_zeros(2), X.new_tensor([0.7, 0.0]))
-    warm_start(problem, penalty_for(config, problem), X, (X.new_tensor([[3.]]), X.new_zeros((1, 1))), 1)
+    warm_start(problem, make_penalty(config), X, (X.new_tensor([[3.]]), X.new_zeros((1, 1))), 1)
 
     torch.testing.assert_close(problem.c.detach(), X.new_tensor([0.7, 2.5]))

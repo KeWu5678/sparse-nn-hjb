@@ -5,9 +5,8 @@ import pickle
 
 import pytest
 import torch
-from ssn_test_problem import penalty_for
 
-from src.config import resolve_model, validate_model_config
+from src.config import make_penalty, resolve_model, validate_model_config
 from src.config.schema import ExperimentConfig, ModelConfig, TrainingConfig
 from src.data import make_dataloader
 from src.eval import metrics
@@ -37,7 +36,7 @@ def test_nonzero_residual_records_computed_and_capped_theorem_radius(loop_order,
                    math.exp(FIXED_LOG_CLAMP))
     assert expected > 1
     history = run_training(
-        PDAP(cfg.training, penalty_for(model_config, model), insertion=model_config["insertion"]),
+        PDAP(cfg.training, make_penalty(model_config), insertion=model_config["insertion"]),
         model, make_dataloader(samples),
         num_iterations=1, verbose=False,
     )
@@ -67,7 +66,7 @@ def test_zero_measure_fit_records_the_actual_search_radius(
                torch.zeros(3, 1, dtype=torch.float64),
                torch.zeros(3, 2, dtype=torch.float64))
     history = run_training(
-        PDAP(cfg.training, penalty_for(model_config, model), insertion=model_config["insertion"]),
+        PDAP(cfg.training, make_penalty(model_config), insertion=model_config["insertion"]),
         model, make_dataloader(samples),
         num_iterations=1, verbose=False,
     )
@@ -87,7 +86,7 @@ def test_old_history_summary_does_not_invent_missing_search_diagnostics():
                torch.ones(3, 2, dtype=torch.float64))
     history = History()
     history.record(
-        model, metrics(model, penalty_for(config, model), make_dataloader(samples)),
+        model, metrics(model, make_penalty(config), make_dataloader(samples)),
         {"search_radius": 1.0, "radius_theorem_applied": 1.0},
     )
     expected = history.summary_metrics()
@@ -113,7 +112,7 @@ def test_zero_iteration_fit_does_not_reuse_a_previous_search(activation, power, 
     samples = (torch.zeros(3, 2, dtype=torch.float64),
                torch.zeros(3, 1, dtype=torch.float64),
                torch.zeros(3, 2, dtype=torch.float64))
-    trainer = PDAP(cfg.training, penalty_for(model_config, model), insertion=model_config["insertion"])
+    trainer = PDAP(cfg.training, make_penalty(model_config), insertion=model_config["insertion"])
     loader = make_dataloader(samples)
     previous = run_training(
         trainer,

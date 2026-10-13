@@ -16,14 +16,15 @@ from src.SSN import SSN
 
 
 def _case(monkeypatch, *, order="insertion_first", accepted=(True,)):
-    from src.models import SparseModel, make_penalty
+    from src.config import make_penalty
+    from src.models import SparseModel
 
     config = resolve_model({"alpha": 0.0}, 1)
     validate_model_config(config)
     problem = SparseModel(config)
     x = torch.tensor([[0.25], [0.75]], dtype=torch.float64)
     loader = make_dataloader((x, x.clone(), torch.ones_like(x)))
-    penalty = make_penalty(config["alpha"], config["gamma"], problem.penalty_exponent)
+    penalty = make_penalty(config)
     pdap = PDAP(TrainingConfig(loop_order=order, fit_outer_iterations=0), penalty)
     searches = iter(accepted)
     search_number = count(1)

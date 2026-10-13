@@ -7,9 +7,8 @@ import math
 import numpy as np
 import pytest
 import torch
-from ssn_test_problem import penalty_for
 
-from src.config import resolve_model, validate_model_config, validate_optimizer_config
+from src.config import make_penalty, resolve_model, validate_model_config, validate_optimizer_config
 from src.config.activations import ACTIVATIONS, GROWTH, get_growth
 from src.config.schema import EnvConfig, ExperimentConfig, ModelConfig, TrainingConfig
 from src.data import make_dataloader, split_value_samples
@@ -64,7 +63,7 @@ def _fit(cfg: ExperimentConfig, iterations: int = 4, seed: int = 0):
     train, valid = split_value_samples(data, cfg.data.train_fraction)
     cfg.training.num_of_initial_pts = 20
     history = run_training(
-        PDAP(cfg.training, penalty_for(model_config, model), insertion=model_config["insertion"]),
+        PDAP(cfg.training, make_penalty(model_config), insertion=model_config["insertion"]),
         model,
         make_dataloader(train), make_dataloader(valid),
         num_iterations=iterations, verbose=False,
@@ -116,7 +115,7 @@ def test_normalized_objective_is_phi_of_the_scaled_coefficient() -> None:
     w_p = model.moment_weight_of_atoms().reshape(-1)
     expected_penalty = float(cfg.model.alpha * torch.sum(_phi(w_p * c.abs(), cfg.model.gamma)))
 
-    penalty = penalty_for(resolve_model(cfg.model, 2), model)
+    penalty = make_penalty(resolve_model(cfg.model, 2))
     assert metrics(model, penalty, make_dataloader(train))["train_loss"] == pytest.approx(fidelity + expected_penalty, rel=1e-12)
 
 
@@ -144,7 +143,7 @@ def test_guaranteed_insertion_delivers_the_promised_decrease() -> None:
                insert_init="guaranteed", loop_order="insertion_first")
     model, _, train = _fit(cfg, iterations=3)
     train_loader = make_dataloader(train)
-    trainer = PDAP(cfg.training, penalty_for(resolve_model(cfg.model, 2), model), insertion=cfg.model.insertion)
+    trainer = PDAP(cfg.training, make_penalty(resolve_model(cfg.model, 2)), insertion=cfg.model.insertion)
 
     before = metrics(model, trainer.penalty, train_loader)["train_loss"]
     with torch.no_grad():
@@ -239,7 +238,7 @@ def test_search_radius_never_exceeds_the_fixed_clamp() -> None:
         model_config = resolve_model(cfg.model, 2)
         validate_model_config(model_config)
         problem = SparseModel(model_config)
-        trainer = PDAP(cfg.training, penalty_for(model_config, problem))
+        trainer = PDAP(cfg.training, make_penalty(model_config))
         radius = trainer._search_radius(problem, data[0], data[1:])
         assert radius is not None and radius <= math.exp(5.0) + 1e-9
 
@@ -306,7 +305,7 @@ def test_insertion_evaluates_the_network_once_per_stage() -> None:
 
     model.forward = counted_predict
     cfg.training.num_of_initial_pts = cfg.training.max_insert = 1
-    PDAP(cfg.training, penalty_for(model_config, model), insertion=model_config["insertion"]).insert(
+    PDAP(cfg.training, make_penalty(model_config), insertion=model_config["insertion"]).insert(
         model, make_dataloader(data),
     )
 
