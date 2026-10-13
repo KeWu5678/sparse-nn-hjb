@@ -140,8 +140,7 @@ def test_chunking_preserves_correction_candidate_and_warmstart_calculations(acti
     torch.testing.assert_close(score, reference_score)
     for got, expected in zip(torch.autograd.grad(score, (a, bias)), torch.autograd.grad(reference_score, (a, bias))):
         torch.testing.assert_close(got, expected)
-    trainer = PDAP(TrainingConfig(radial_cap="theorem"), penalty)
-    radii = [trainer._search_radius(network, X, (V, dV)) for X, V, dV in map(full_batch, (chunked, full))]
+    radii = [PDAP(TrainingConfig(radial_cap="theorem"), penalty, network, loader)._search_radius() for loader in (chunked, full)]
     assert radii[0] == pytest.approx(radii[1])
     warm_starts = []
     for loader in (chunked, full):
@@ -176,8 +175,8 @@ def test_pdap_records_one_full_data_result_per_outer_iteration(batch_size):
     loader = make_dataloader(data, batch_size=batch_size)
     training = TrainingConfig(fit_outer_iterations=2, lbfgs_steps=5, num_of_initial_pts=4)
     history = run_training(
-        PDAP(training, make_penalty(config), insertion=config["insertion"]),
-        network, loader, num_iterations=2, verbose=False,
+        PDAP(training, make_penalty(config), network, loader, insertion=config["insertion"]),
+        num_iterations=2, verbose=False,
     )
     assert len(history.train_loss) == 2
     for iteration, loss in enumerate(history.train_loss):
@@ -202,10 +201,10 @@ def test_logging_accepts_a_finite_loader_without_a_sample_count(verbose):
     loader = DataLoader(Samples(), batch_size=2, generator=torch.Generator().manual_seed(0))
     history = run_training(
         PDAP(
-            TrainingConfig(num_of_initial_pts=1), make_penalty(config),
+            TrainingConfig(num_of_initial_pts=1), make_penalty(config), network, loader,
             insertion=config["insertion"],
         ),
-        network, loader, num_iterations=0, verbose=verbose,
+        num_iterations=0, verbose=verbose,
     )
     assert history.train_loss == [0.]
 
@@ -221,7 +220,7 @@ def test_native_batch_sampler_keeps_full_data_evaluation_and_no_drop_contract(dr
     rng = torch.get_rng_state().clone()
     if drop_last:
         with pytest.raises(ValueError, match="without dropping samples"):
-            PDAP(TrainingConfig(), penalty).train_ssn_outerweights(network, loader)
+            PDAP(TrainingConfig(), penalty, network, loader).train_ssn_outerweights()
     else:
         for actual, expected in zip(full_batch(loader), data):
             torch.testing.assert_close(actual, expected, rtol=0, atol=0)

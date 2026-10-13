@@ -68,9 +68,9 @@ def test_fractional_correction_reports_an_all_zero_warm_start() -> None:
     with pytest.raises(
         ValueError, match="warm-start proximal scaling requires a nonzero coefficient"
     ):
-        PDAP(TrainingConfig(fit_outer_iterations=1), make_penalty(config)).train_ssn_outerweights(
-            network, make_dataloader(data),
-        )
+        PDAP(
+            TrainingConfig(fit_outer_iterations=1), make_penalty(config), network, make_dataloader(data),
+        ).train_ssn_outerweights()
 
 
 def test_fractional_ssn_preserves_a_prox_consistent_warm_start() -> None:

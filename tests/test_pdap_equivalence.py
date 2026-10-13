@@ -81,9 +81,8 @@ def _run_summary(name: str) -> np.ndarray:
     network = SparseNetwork(model_config)
     train_loader, valid_loader = make_dataloaders(data, cfg.data.train_fraction)
     out = run_training(
-        PDAP(cfg.training, make_penalty(model_config), insertion=model_config["insertion"]),
-        network,
-        train_loader, valid_loader, num_iterations=3, verbose=False,
+        PDAP(cfg.training, make_penalty(model_config), network, train_loader, insertion=model_config["insertion"]),
+        valid_loader, num_iterations=3, verbose=False,
     )
     return np.array(
         [

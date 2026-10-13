@@ -34,8 +34,6 @@ _COUNTERS = {
 
 def run_training(
     pdap: PDAP,
-    network: SparseNetwork,
-    train_loader: DataLoader,
     valid_loader: DataLoader | None = None,
     *,
     num_iterations: int,
@@ -53,6 +51,7 @@ def run_training(
     where N is ``display_every``. Nonpositive N suppresses periodic progress;
     the terminal summary is still logged. All checkpoints are evaluated and saved.
     """
+    network, train_loader = pdap.network, pdap.train_loader
     history = History(reporting_normalizer=reporting_normalizer)
     history.run_metrics = dict.fromkeys(_COUNTERS.values(), 0)
     history.run_metrics.update(
@@ -63,14 +62,14 @@ def run_training(
     if pdap.loop_order == "correction_first":
         # Preserve the historical comparator exactly: initialize, then
         # correct -> prune -> measure -> insert, including the final insertion.
-        search = _measure(pdap.initialize, network, train_loader, history, verbose)
+        search = _measure(pdap.initialize, history, verbose)
         diagnostics = search
         if search["stop_reason"] is not None:
             history.run_metrics["stop_reason"] = search["stop_reason"]
         else:
             for _ in range(num_iterations):
                 correction = _measure(
-                    pdap.train_ssn_outerweights_and_prune, network, train_loader, history, verbose,
+                    pdap.train_ssn_outerweights_and_prune, history, verbose,
                 )
                 diagnostics = {**search, **correction}
                 diagnostics["solver_seconds"] = search["solver_seconds"] + correction["solver_seconds"]
@@ -78,10 +77,10 @@ def run_training(
                     network, pdap.penalty, train_loader, valid_loader, history, diagnostics,
                     verbose, display_every,
                 )
-                search = _measure(pdap.insert, network, train_loader, history, verbose)
+                search = _measure(pdap.insert, history, verbose)
     else:
         for _ in range(num_iterations):
-            diagnostics = _measure(pdap.step, network, train_loader, history, verbose)
+            diagnostics = _measure(pdap.step, history, verbose)
             if diagnostics["stop_reason"] is not None:
                 history.run_metrics["stop_reason"] = diagnostics["stop_reason"]
                 break
@@ -108,12 +107,11 @@ def run_training(
 
 
 def _measure(
-    operation: Callable[..., dict], network: SparseNetwork, loader: DataLoader,
-    history: History, verbose: bool,
+    operation: Callable[..., dict], history: History, verbose: bool,
 ) -> dict:
     """Time executed solver work and count it even when no checkpoint follows."""
     started = perf_counter()
-    diagnostics = operation(network, loader, verbose=verbose)
+    diagnostics = operation(verbose=verbose)
     diagnostics["solver_seconds"] = perf_counter() - started
     for name, total in _COUNTERS.items():
         history.run_metrics[total] += diagnostics.get(name, 0)

@@ -36,8 +36,10 @@ def test_nonzero_residual_records_computed_and_capped_theorem_radius(loop_order,
                    math.exp(FIXED_LOG_CLAMP))
     assert expected > 1
     history = run_training(
-        PDAP(cfg.training, make_penalty(model_config), insertion=model_config["insertion"]),
-        network, make_dataloader(samples),
+        PDAP(
+            cfg.training, make_penalty(model_config), network, make_dataloader(samples),
+            insertion=model_config["insertion"],
+        ),
         num_iterations=1, verbose=False,
     )
     assert history.search_radius == pytest.approx([expected])
@@ -66,8 +68,10 @@ def test_zero_measure_fit_records_the_actual_search_radius(
                torch.zeros(3, 1, dtype=torch.float64),
                torch.zeros(3, 2, dtype=torch.float64))
     history = run_training(
-        PDAP(cfg.training, make_penalty(model_config), insertion=model_config["insertion"]),
-        network, make_dataloader(samples),
+        PDAP(
+            cfg.training, make_penalty(model_config), network, make_dataloader(samples),
+            insertion=model_config["insertion"],
+        ),
         num_iterations=1, verbose=False,
     )
     assert history.final_neurons == 0
@@ -112,20 +116,14 @@ def test_zero_iteration_fit_does_not_reuse_a_previous_search(activation, power, 
     samples = (torch.zeros(3, 2, dtype=torch.float64),
                torch.zeros(3, 1, dtype=torch.float64),
                torch.zeros(3, 2, dtype=torch.float64))
-    trainer = PDAP(cfg.training, make_penalty(model_config), insertion=model_config["insertion"])
-    loader = make_dataloader(samples)
-    previous = run_training(
-        trainer,
-        network, loader,
-        num_iterations=1, verbose=False,
+    trainer = PDAP(
+        cfg.training, make_penalty(model_config), network, make_dataloader(samples),
+        insertion=model_config["insertion"],
     )
+    previous = run_training(trainer, num_iterations=1, verbose=False)
     assert previous.search_radius == [1.0]
 
-    history = run_training(
-        trainer,
-        network, loader,
-        num_iterations=0, verbose=False,
-    )
+    history = run_training(trainer, num_iterations=0, verbose=False)
     assert history.search_radius == [None]
     assert history.radius_theorem_applied == [None]
     assert "search_radius" not in history.summary_metrics()

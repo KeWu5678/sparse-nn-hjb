@@ -72,7 +72,9 @@ def _train_with_logging(output_dir, settings):
         x = torch.tensor([[0.25], [0.75]], dtype=torch.float64)
         loader = make_dataloader((x, x.clone(), torch.ones_like(x)))
         penalty = make_penalty(config)
-        pdap = PDAP(TrainingConfig(loop_order=settings.pop("order"), fit_outer_iterations=0), penalty)
+        pdap = PDAP(
+            TrainingConfig(loop_order=settings.pop("order"), fit_outer_iterations=0), penalty, network, loader,
+        )
         size = int(settings.pop("accepted"))
         pdap._insert = lambda *args, **kwargs: (
             x.new_ones((size, 1)), x.new_zeros(size), x.new_ones(size),
@@ -85,7 +87,7 @@ def _train_with_logging(output_dir, settings):
             return measure(*args, **kwargs)
         training.metrics = count_evaluation
         history = training.run_training(
-            pdap, network, loader, num_iterations=settings.pop("iterations"), **settings,
+            pdap, num_iterations=settings.pop("iterations"), **settings,
         )
         print(json.dumps({
             "evaluations": evaluations,

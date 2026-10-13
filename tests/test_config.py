@@ -143,7 +143,7 @@ def test_config_builds_trainer_and_model() -> None:
     validate_optimizer_config(cfg.training)
     network = SparseNetwork(model_config)
     penalty = make_penalty(model_config)
-    pdap = PDAP(cfg.training, penalty, insertion=model_config["insertion"])
+    pdap = PDAP(cfg.training, penalty, network, None, insertion=model_config["insertion"])
     assert model_config["activation"] is torch.relu
     assert OmegaConf.to_container(cfg.model, resolve=True) == raw_model
     assert cfg.model.activation == "relu"

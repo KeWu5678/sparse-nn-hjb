@@ -256,9 +256,9 @@ def _run_experiment(cfg: DictConfig, hydra_cfg, run_dir: Path, run_id: str) -> P
     )
     network = SparseNetwork(model_config)
     penalty = make_penalty(model_config)
-    trainer = PDAP(cfg.training, penalty, insertion=model_config["insertion"])
+    trainer = PDAP(cfg.training, penalty, network, train_loader, insertion=model_config["insertion"])
     history = run_training(
-        trainer, network, train_loader, valid_loader,
+        trainer, valid_loader,
         num_iterations=cfg.training.num_iterations,
         display_every=cfg.training.display_every,
         reporting_normalizer=normalizer,

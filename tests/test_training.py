@@ -25,7 +25,7 @@ def _case(monkeypatch, *, order="insertion_first", accepted=(True,)):
     x = torch.tensor([[0.25], [0.75]], dtype=torch.float64)
     loader = make_dataloader((x, x.clone(), torch.ones_like(x)))
     penalty = make_penalty(config)
-    pdap = PDAP(TrainingConfig(loop_order=order, fit_outer_iterations=0), penalty)
+    pdap = PDAP(TrainingConfig(loop_order=order, fit_outer_iterations=0), penalty, network, loader)
     searches = iter(accepted)
     search_number = count(1)
 
@@ -46,7 +46,7 @@ def test_step_completes_optimization_without_quality_evaluation(monkeypatch):
         pytest.fail("PDAP.step must not invoke quality evaluation")
 
     monkeypatch.setattr(training, "metrics", unexpected_evaluation)
-    diagnostics = pdap.step(network, loader)
+    diagnostics = pdap.step()
 
     assert network.n_neurons == 1
     assert diagnostics["inserted"] == 1
@@ -89,7 +89,7 @@ def test_ssn_trial_failure_and_final_acceptance_reach_history_and_run_totals(mon
         return optimizer
 
     monkeypatch.setattr("src.PDAP.pdap.SSN", scripted_correction)
-    history = training.run_training(pdap, network, loader, num_iterations=1, verbose=False)
+    history = training.run_training(pdap, num_iterations=1, verbose=False)
 
     diagnostics = history.diagnostics[0]
     assert trials == diagnostics["ssn_iterations"] == history.run_metrics["total_ssn_iterations"] == 4
@@ -107,7 +107,7 @@ def test_each_record_scores_its_checkpoint_and_totals_include_trailing_work(
     monkeypatch, order, searches, final_width,
 ):
     network, loader, pdap = _case(monkeypatch, order=order, accepted=(True,) * searches)
-    history = training.run_training(pdap, network, loader, num_iterations=2, verbose=False)
+    history = training.run_training(pdap, num_iterations=2, verbose=False)
 
     assert [state["c"].numel() for state in history.model_states] == [1, 2]
     assert history.final_neurons == network.n_neurons == final_width
@@ -130,7 +130,7 @@ def test_terminal_search_is_counted_without_a_duplicate_checkpoint(monkeypatch):
     times = iter((0.0, 2.0, 2.0, 5.0, 5.0, 12.0))
     monkeypatch.setattr(training, "perf_counter", lambda: next(times))
     monkeypatch.setattr(training, "_process_peak_rss_bytes", lambda: 4096)
-    history = training.run_training(pdap, network, loader, num_iterations=5, verbose=False)
+    history = training.run_training(pdap, num_iterations=5, verbose=False)
 
     assert len(history.train_loss) == len(history.diagnostics) == 1
     assert history.run_metrics["total_insertion_searches"] == 2
@@ -146,7 +146,7 @@ def test_terminal_search_is_counted_without_a_duplicate_checkpoint(monkeypatch):
 @pytest.mark.parametrize("order", ["insertion_first", "correction_first"])
 def test_empty_terminal_model_is_observed_without_inventing_correction_work(monkeypatch, order):
     network, loader, pdap = _case(monkeypatch, order=order, accepted=(False,))
-    history = training.run_training(pdap, network, loader, num_iterations=3, verbose=False)
+    history = training.run_training(pdap, num_iterations=3, verbose=False)
 
     assert history.final_neurons == 0
     assert len(history.train_loss) == 1
@@ -165,7 +165,7 @@ def test_failed_legacy_initialization_keeps_existing_model_and_reports_its_size(
         torch.tensor([0.], dtype=torch.float64),
         torch.tensor([0.5], dtype=torch.float64),
     )
-    history = training.run_training(pdap, network, loader, num_iterations=3, verbose=False)
+    history = training.run_training(pdap, num_iterations=3, verbose=False)
 
     assert history.final_neurons == history.best_neurons == network.n_neurons == 1
     assert history.model_states[0]["inner_weight"].item() == 2.0
@@ -183,7 +183,7 @@ def test_zero_budget_records_existing_or_legacy_initialized_state(monkeypatch, o
         torch.tensor([0.], dtype=torch.float64),
         torch.tensor([0.5], dtype=torch.float64),
     )
-    history = training.run_training(pdap, network, loader, num_iterations=0, verbose=False)
+    history = training.run_training(pdap, num_iterations=0, verbose=False)
 
     assert len(history.train_loss) == 1
     assert history.train_loss[0] == metrics(network, pdap.penalty, loader)["train_loss"]

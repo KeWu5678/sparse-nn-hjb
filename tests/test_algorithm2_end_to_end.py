@@ -49,9 +49,7 @@ def test_algorithm2_fits_an_exact_relu_power_atom(power: float) -> None:
     train_loader, valid_loader = make_dataloaders(data, cfg.data.train_fraction)
 
     history = run_training(
-        PDAP(cfg.training, make_penalty(model_config), insertion=model_config["insertion"]),
-        network,
-        train_loader,
+        PDAP(cfg.training, make_penalty(model_config), network, train_loader, insertion=model_config["insertion"]),
         valid_loader,
         num_iterations=2,
         verbose=False,

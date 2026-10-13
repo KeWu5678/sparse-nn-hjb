@@ -63,9 +63,11 @@ def _fit(cfg: ExperimentConfig, iterations: int = 4, seed: int = 0):
     train, valid = split_value_samples(data, cfg.data.train_fraction)
     cfg.training.num_of_initial_pts = 20
     history = run_training(
-        PDAP(cfg.training, make_penalty(model_config), insertion=model_config["insertion"]),
-        network,
-        make_dataloader(train), make_dataloader(valid),
+        PDAP(
+            cfg.training, make_penalty(model_config), network, make_dataloader(train),
+            insertion=model_config["insertion"],
+        ),
+        make_dataloader(valid),
         num_iterations=iterations, verbose=False,
     )
     return network, history, train
@@ -143,7 +145,10 @@ def test_guaranteed_insertion_delivers_the_promised_decrease() -> None:
                insert_init="guaranteed", loop_order="insertion_first")
     network, _, train = _fit(cfg, iterations=3)
     train_loader = make_dataloader(train)
-    trainer = PDAP(cfg.training, make_penalty(resolve_model(cfg.model, 2)), insertion=cfg.model.insertion)
+    trainer = PDAP(
+        cfg.training, make_penalty(resolve_model(cfg.model, 2)), network, train_loader,
+        insertion=cfg.model.insertion,
+    )
 
     before = metrics(network, trainer.penalty, train_loader)["train_loss"]
     with torch.no_grad():
@@ -238,8 +243,8 @@ def test_search_radius_never_exceeds_the_fixed_clamp() -> None:
         model_config = resolve_model(cfg.model, 2)
         validate_model_config(model_config)
         network = SparseNetwork(model_config)
-        trainer = PDAP(cfg.training, make_penalty(model_config))
-        radius = trainer._search_radius(network, data[0], data[1:])
+        trainer = PDAP(cfg.training, make_penalty(model_config), network, make_dataloader(data))
+        radius = trainer._search_radius()
         assert radius is not None and radius <= math.exp(5.0) + 1e-9
 
 
@@ -305,9 +310,10 @@ def test_insertion_evaluates_the_network_once_per_stage() -> None:
 
     network.forward = counted_predict
     cfg.training.num_of_initial_pts = cfg.training.max_insert = 1
-    PDAP(cfg.training, make_penalty(model_config), insertion=model_config["insertion"]).insert(
-        network, make_dataloader(data),
-    )
+    PDAP(
+        cfg.training, make_penalty(model_config), network, make_dataloader(data),
+        insertion=model_config["insertion"],
+    ).insert()
 
     assert network.n_neurons == 1  # Exercise the warm-start branch with an accepted atom.
     # Candidate search, the theorem radius and the warm start each evaluate the network once.
