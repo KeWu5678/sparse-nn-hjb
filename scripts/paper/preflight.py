@@ -110,6 +110,8 @@ def validate_runs(problem=None):
                 if key in found:
                     raise ValueError(f"duplicate experiment cell: {path}")
                 found.add(key)
+                if "num_insertion" in cfg["training"]:
+                    cfg["training"]["num_of_initial_pts"] = cfg["training"].pop("num_insertion")
                 expected_training = asdict(TrainingConfig()) | config.get("training", {})
                 for name, value in expected_training.items():
                     if cfg["training"][name] != value:
