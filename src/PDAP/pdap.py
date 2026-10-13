@@ -128,7 +128,7 @@ class PDAP:
         self, problem: SparseModel, train_loader: DataLoader, *, verbose: bool = False,
     ) -> dict:
         """Prepare a correction, run SSN, and apply its accepted coefficients."""
-        fitting, hess_obj, moment_weight = self.coefficient_fitting(problem, train_loader)
+        fitting, hess_obj, moment_weight = self.fit_obj_with_outerweights(problem, train_loader)
         # The normalized coefficients u = w_p*c; the physical ones are c = u/w_p.
         u = torch.nn.Parameter(problem.c.detach() * moment_weight)
         optimizer = SSN([u], self.penalty, hess_obj, **self.solver)
@@ -147,7 +147,7 @@ class PDAP:
             problem.c.copy_(u.detach() / moment_weight)
         return diagnostics
 
-    def coefficient_fitting(
+    def fit_obj_with_outerweights(
         self, problem: SparseModel, train_loader: DataLoader,
     ) -> tuple[Callable[[torch.Tensor], torch.Tensor], torch.Tensor, torch.Tensor]:
         """The fitting term of the normalized coefficients u = w_p*c, its Hessian, and w_p.

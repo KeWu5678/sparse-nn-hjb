@@ -47,5 +47,6 @@ def coefficient_problem(problem, penalty, loader):
 
     The objective is PDAP's coefficient fitting term plus the penalty SSN adds.
     """
-    fitting, hess_obj, moment_weight = PDAP(TrainingConfig(), penalty).coefficient_fitting(problem, loader)
+    pdap = PDAP(TrainingConfig(), penalty)
+    fitting, hess_obj, moment_weight = pdap.fit_obj_with_outerweights(problem, loader)
     return (lambda u: fitting(u) + penalty.value(u)), hess_obj, problem.c.detach() * moment_weight
