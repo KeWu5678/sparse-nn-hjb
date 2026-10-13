@@ -30,7 +30,7 @@ def _case(monkeypatch, *, order="insertion_first", accepted=(True,)):
     search_number = count(1)
 
     def candidates(*args, **kwargs):
-        pdap._last_search_radius = 10.0 * next(search_number)
+        pdap._cap_of_theorem_applied = float(next(search_number) % 2)
         size = int(next(searches))
         return x.new_ones((size, 1)), x.new_zeros(size), x.new_ones(size)
 
@@ -110,7 +110,7 @@ def test_each_record_scores_its_checkpoint_and_totals_include_trailing_work(
 
     assert [state["c"].numel() for state in history.model_states] == [1, 2]
     assert history.final_neurons == network.n_neurons == final_width
-    assert history.search_radius == [10.0, 20.0]
+    assert history.cap_of_theorem_applied == [1.0, 0.0]
     assert history.best_iteration == 0
     assert history.run_metrics["total_insertion_searches"] == searches
     assert history.run_metrics["total_inserted_neurons"] == searches
@@ -139,7 +139,7 @@ def test_terminal_search_is_counted_without_a_duplicate_checkpoint(monkeypatch):
     assert history.run_metrics["evaluation_seconds"] == 3.0
     assert history.run_metrics["process_peak_rss_bytes"] == 4096
     assert history.summary_metrics()["stop_reason"] == "no_candidate"
-    assert history.search_radius == [10.0]  # The accepted search, not the final failure.
+    assert history.cap_of_theorem_applied == [1.0]  # The accepted search, not the final failure.
 
 
 @pytest.mark.parametrize("order", ["insertion_first", "correction_first"])
@@ -189,14 +189,14 @@ def test_zero_budget_records_existing_or_legacy_initialized_state(monkeypatch, o
     assert history.run_metrics["total_insertion_searches"] == searches
     assert history.run_metrics["total_ssn_refinements"] == 0
     assert history.run_metrics["stop_reason"] == "iteration_budget"
-    assert history.search_radius == ([10.0] if searches else [None])
+    assert history.cap_of_theorem_applied == ([1.0] if searches else [None])
     assert history.model_states[0]["inner_weight"].item() == (1.0 if searches else 2.0)
 
 
 def test_history_stores_supplied_values_without_prediction_and_copies_diagnostics(monkeypatch):
     network, loader, pdap = _case(monkeypatch)
     values = metrics(network, pdap.penalty, loader)
-    diagnostics = {"search_radius": 2.0, "ssn_refinement_accepted": False}
+    diagnostics = {"cap_of_theorem_applied": 1.0, "ssn_refinement_accepted": False}
 
     def unexpected_prediction(*args, **kwargs):
         pytest.fail("History.record must consume already evaluated metrics")
@@ -204,12 +204,12 @@ def test_history_stores_supplied_values_without_prediction_and_copies_diagnostic
     monkeypatch.setattr(network, "forward", unexpected_prediction)
     history = History()
     history.record(network, values, diagnostics)
-    diagnostics["search_radius"] = 99.0
+    diagnostics["cap_of_theorem_applied"] = 0.0
     values["train_loss"] = 99.0
 
     assert history.train_loss[0] != 99.0
-    assert history.search_radius == [2.0]
-    assert history.diagnostics[0]["search_radius"] == 2.0
+    assert history.cap_of_theorem_applied == [1.0]
+    assert history.diagnostics[0]["cap_of_theorem_applied"] == 1.0
 
 
 @pytest.mark.parametrize("platform,expected", [("darwin", 12), ("linux", 12 * 1024)])

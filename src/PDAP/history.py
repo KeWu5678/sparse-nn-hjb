@@ -42,11 +42,11 @@ class History:
     total_variation: List[float] = field(default_factory=list)
     radius_r95: List[float] = field(default_factory=list)
     radius_max: List[float] = field(default_factory=list)
-    #: Cap of the search that produced the support being evaluated:
-    #: min(theorem radius, exp(5)), fallback exp(5), or 1 on the unit sphere.
-    #: None means no search. In correction-first order, this is the preceding
+    #: 1 if the theorem's radius exceeded exp(5) and the cap bounded the search,
+    #: 0 if the theorem's radius did. None means the theorem gave no radius or no
+    #: search ran. In correction-first order, this is the preceding
     #: insertion (initialization for row 0); the final insertion is unrecorded.
-    search_radius: List[float | None] = field(default_factory=list)
+    cap_of_theorem_applied: List[float | None] = field(default_factory=list)
     inner_weights: List[Dict[str, torch.Tensor]] = field(default_factory=list)
     outer_weights: List[torch.Tensor] = field(default_factory=list)
     model_states: List[Dict[str, torch.Tensor]] = field(default_factory=list)
@@ -74,8 +74,8 @@ class History:
             getattr(self, name).append(value)
         diagnostics = dict(diagnostics or {})
         self.diagnostics.append(diagnostics)
-        search_radius = diagnostics.get("search_radius")
-        self.search_radius.append(None if search_radius is None else float(search_radius))
+        cap_applied = diagnostics.get("cap_of_theorem_applied")
+        self.cap_of_theorem_applied.append(None if cap_applied is None else float(cap_applied))
         self.penalty_exponent = network.penalty_exponent
         self.loss_weights = network.loss_weights
         state = {name: tensor.detach().clone() for name, tensor in network.state_dict().items()}
@@ -168,8 +168,8 @@ class History:
                 metrics["phi_1"] = float(self.sparsity_functional[i])
                 metrics["alpha_phi_1"] = float(self.alpha_phi[i])
         # Old fit pickles have no search telemetry; do not invent provenance.
-        values = getattr(self, "search_radius", [])
+        values = getattr(self, "cap_of_theorem_applied", [])
         if len(values) > i and values[i] is not None:
-            metrics["search_radius"] = float(values[i])
+            metrics["cap_of_theorem_applied"] = float(values[i])
         metrics.update(getattr(self, "run_metrics", {}))
         return metrics
