@@ -13,13 +13,13 @@ class SparseNetwork(nn.Module):
 
     def __init__(self, config) -> None:
         super().__init__()
-        self._activation_name = config["activation_name"]
-        self._activation = config["activation"]
-        self._use_sphere = config["use_sphere"]
-        self._moment_order = config["moment_order"]
-        self._power = config["power"]
-        self._penalty_exponent = config["penalty_exponent"]
-        self._loss_weights = config["loss_weights"]
+        self.activation_name = config["activation_name"]
+        self.activation = config["activation"]
+        self.use_sphere = config["use_sphere"]
+        self.moment_order = config["moment_order"]
+        self.power = config["power"]
+        self.penalty_exponent = config["penalty_exponent"]
+        self.loss_weights = config["loss_weights"]
         self.register_buffer("inner_weight", torch.empty((0, config["input_dim"]), dtype=torch.float64))
         self.register_buffer("inner_bias", torch.empty(0, dtype=torch.float64))
         self.c = nn.Parameter(torch.empty(0, dtype=torch.float64))
@@ -29,40 +29,12 @@ class SparseNetwork(nn.Module):
         return self.inner_weight.shape[1]
 
     @property
-    def activation(self):
-        return self._activation
-
-    @property
-    def activation_name(self) -> str | None:
-        return self._activation_name
-
-    @property
-    def moment_order(self) -> float | None:
-        return self._moment_order
-
-    @property
     def n_neurons(self) -> int:
         return self.inner_weight.shape[0]
 
     @property
-    def use_sphere(self) -> bool:
-        return self._use_sphere
-
-    @property
     def normalized(self) -> bool:
-        return not self._use_sphere
-
-    @property
-    def power(self) -> float:
-        return self._power
-
-    @property
-    def penalty_exponent(self) -> float:
-        return self._penalty_exponent
-
-    @property
-    def loss_weights(self) -> tuple[float, float]:
-        return self._loss_weights
+        return not self.use_sphere
 
     def set_atoms(self, inner_weight: Tensor, inner_bias: Tensor, c: Tensor) -> None:
         """Replace support with independent copies of the supplied atom tensors.
@@ -111,7 +83,7 @@ class SparseNetwork(nn.Module):
 
         Being elementwise, its Jacobian is diagonal: a unit cotangent gives rho'(z).
         """
-        return self._activation(z) ** self._power
+        return self.activation(z) ** self.power
 
     def moment_weight_of_atoms(
         self, inner_weight: Tensor | None = None, inner_bias: Tensor | None = None,
@@ -123,7 +95,7 @@ class SparseNetwork(nn.Module):
         if not self.normalized:
             return torch.ones_like(inner_bias)
         squared_norm = (inner_weight * inner_weight).sum(dim=-1) + inner_bias * inner_bias
-        return 1.0 + squared_norm.clamp_min(0.0).pow(self._moment_order / 2.0)
+        return 1.0 + squared_norm.clamp_min(0.0).pow(self.moment_order / 2.0)
 
     def obj(self, x: Tensor, target: tuple[Tensor, Tensor], c: Tensor | None = None) -> Tensor:
         """Weighted empirical H1 quadratic of the network at x, excluding the sparsity penalty.
@@ -131,7 +103,7 @@ class SparseNetwork(nn.Module):
         prediction = self(x) if c is None else torch.func.functional_call(self, {"c": c}, (x,))
         rv, rg = ((value - reference).reshape(-1) for value, reference in zip(prediction, target))
         n = rv.numel()
-        w1, w2 = self._loss_weights
+        w1, w2 = self.loss_weights
         return 0.5 * ((w1 / n) * rv.dot(rv) + (w2 / n) * rg.dot(rg))
 
     def jac_obj(
@@ -146,7 +118,7 @@ class SparseNetwork(nn.Module):
         Kv, Kg = self.kernel(residual[0], inner_weight, inner_bias)
         rv, rg = (r.detach().reshape(-1, 1) for r in residual[1:])
         n = Kv.shape[0]
-        w1, w2 = self._loss_weights
+        w1, w2 = self.loss_weights
         return w1 * ((Kv * rv).sum(0) / n) + w2 * ((Kg * rg).sum(0) / n)
 
     def hess_obj(
@@ -155,5 +127,5 @@ class SparseNetwork(nn.Module):
         """Full Hessian of obj in the outer weights of the current or supplied atoms."""
         Kv, Kg = self.kernel(x, inner_weight, inner_bias)
         n = Kv.shape[0]
-        w1, w2 = self._loss_weights
+        w1, w2 = self.loss_weights
         return (w1 / n) * (Kv.T @ Kv) + (w2 / n) * (Kg.T @ Kg)
