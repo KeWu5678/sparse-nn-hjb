@@ -158,9 +158,8 @@ def test_guaranteed_insertion_delivers_the_promised_decrease() -> None:
     W_old, b_old, c_old = (network.inner_weight, network.inner_bias, network.c.detach())
     W_new, b_new, c_new = profile_threshold(
         network, trainer.penalty, (train[0], res_v, res_dv),
-        sample_sphere=lambda n: trainer._sphere(2, n), num_of_initial_pts=20,
+        initial_points=trainer._sphere(),
         max_insert=1, merge_tol=1e-2,
-        existing_atoms=(W_old, b_old),
         insert_init="guaranteed",
     )
     if W_new.shape[0] == 0:

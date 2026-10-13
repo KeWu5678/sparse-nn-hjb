@@ -140,7 +140,7 @@ def test_setting_and_pruning_atoms_preserves_float64_coefficients():
     c = torch.tensor([1.123456789012345, -1.0000000001], dtype=torch.float64)
     network.set_atoms(W, b, c)
     trainer = PDAP(ExperimentConfig().training, make_penalty(config), network, None)
-    assert trainer._prune(amp_tol=1e-8) == 0
+    assert trainer._prune() == 0
     for actual, expected in zip((network.inner_weight, network.inner_bias, network.c.detach()), (W, b, c)):
         torch.testing.assert_close(actual, expected, rtol=0, atol=0)
     assert all(parameter.dtype == torch.float64 for parameter in network.parameters())

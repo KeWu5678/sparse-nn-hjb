@@ -59,9 +59,7 @@ class PDAP:
 
     def initialize(self) -> dict:
         """Perform the historical correction-first initial support replacement."""
-        W, b, c = self._insert(
-            self.num_of_initial_pts, self.max_insert,
-        )
+        W, b, c = self._insert()
         count = self._add_atoms(W, b, c, replace=True)
         diagnostics = self._search_diagnostics(count)
         diagnostics["stop_reason"] = "no_candidate" if count == 0 else None
@@ -80,34 +78,24 @@ class PDAP:
 
     def insert(self) -> dict:
         """Extend the current support with accepted, initialized candidates."""
-        W, b, c = self._insert(
-            self.num_of_initial_pts, self.max_insert,
-        )
+        W, b, c = self._insert()
         return self._search_diagnostics(self._add_atoms(W, b, c))
 
-    def _insert(
-        self, num_of_initial_pts: int, max_insert: int
-    ):
+    def _insert(self):
         """Return accepted atoms and their outer weights, or None for weights to warm-start."""
         # Sequential insertion admits the highest-ranked candidate returned by the
         # multistart search, one atom per outer iteration. The theorem's rate bound
         # additionally requires that this candidate be an exact global maximizer; a
         # batch also introduces cross terms through its shared frozen residual.
-        if self.insert_mode == "sequential":
-            max_insert = 1
+        max_insert = 1 if self.insert_mode == "sequential" else self.max_insert
         X, V, dV = full_batch(self.train_loader)
         with torch.no_grad():
             Vp, dVp = self.network(X)
         residual = X.detach(), (Vp - V).detach(), (dVp - dV).detach()
-        existing_atoms = (self.network.inner_weight.detach(), self.network.inner_bias.detach()) if self.network.n_neurons else None
-
-        d = int(self.network.input_dim)
         radius = self._search_radius()
         search_settings: dict[str, Any] = dict(
-            sample_sphere=lambda num_of_initial_pts: self._sphere(d, num_of_initial_pts),
-            num_of_initial_pts=num_of_initial_pts,
-            max_insert=max_insert, merge_tol=self.ins_merge_tol,
-            existing_atoms=existing_atoms, radius=radius,
+            initial_points=self._sphere(),
+            max_insert=max_insert, merge_tol=self.ins_merge_tol, radius=radius,
             lbfgs_lr=self.lbfgs_lr, lbfgs_steps=self.lbfgs_steps,
         )
         if self.insertion_kind == "profile":
@@ -123,7 +111,7 @@ class PDAP:
     def train_ssn_outerweights_and_prune(self) -> dict:
         """Apply the accepted SSN correction, then remove negligible atoms."""
         diagnostics = self.train_ssn_outerweights()
-        diagnostics["pruned"] = self._prune(self.prune_amp_tol)
+        diagnostics["pruned"] = self._prune()
         return diagnostics
 
 
@@ -182,37 +170,19 @@ class PDAP:
                 warm_start(self.network, self.penalty, X, (V, dV), count)
         return count
 
-    def _prune(self, amp_tol: float) -> int:
-        """Drop atoms with ``|c_n| <= amp_tol``; return how many were removed."""
-        W, b, c, pruned = self.prune_small_weights(
-            self.network.inner_weight, self.network.inner_bias, self.network.c, amp_tol=amp_tol,
-        )
+    def _prune(self) -> int:
+        """Drop atoms with ``|c_n| <= prune_amp_tol``; return how many were removed."""
+        c = self.network.c.detach()
+        keep = c.abs() > self.prune_amp_tol
+        pruned = int((~keep).sum().item())
         if pruned:
-            self.network.set_atoms(W, b, c)
+            self.network.set_atoms(self.network.inner_weight[keep], self.network.inner_bias[keep], c[keep])
         return pruned
 
-    @staticmethod
-    def prune_small_weights(
-        weights: torch.Tensor, biases: torch.Tensor, outer_weights: torch.Tensor,
-        amp_tol: float = 1e-8,
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, int]:
-        """Defensive gate: drop atoms whose outer weight is negligible.
-        Returns ``(W (n,d), b (n,), c (n,), pruned)`` with ``pruned`` the number
-        of atoms dropped.
-        """
-        w = weights.detach()
-        b = biases.detach().reshape(-1)
-        ow = outer_weights.detach().reshape(-1)
-        n = w.shape[0]
-
-        keep = ow.abs() > amp_tol
-        w_out, b_out, ow_out = w[keep], b[keep], ow[keep]
-        pruned = n - int(keep.sum().item())
-        return w_out, b_out, ow_out, pruned
-
-    def _sphere(self, d: int, num_of_initial_pts: int) -> Tuple[torch.Tensor, torch.Tensor]:
+    def _sphere(self) -> Tuple[torch.Tensor, torch.Tensor]:
         """Sample num_of_initial_pts points uniformly on S^d in R^{d+1}."""
-        v = torch.randn(num_of_initial_pts, d + 1, dtype=torch.float64, device="cpu")
+        d = self.network.input_dim
+        v = torch.randn(self.num_of_initial_pts, d + 1, dtype=torch.float64, device="cpu")
         v = v / v.norm(dim=1, keepdim=True).clamp_min(1e-12)
         return v[:, :d].contiguous(), v[:, d].contiguous()
 

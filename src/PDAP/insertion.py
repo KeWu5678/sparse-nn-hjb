@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import logging
 import math
-from typing import Callable, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 import numpy as np
 import torch
@@ -47,10 +47,8 @@ def profile_threshold(
     network: SparseNetwork,
     penalty: Penalty,
     residual: tuple[torch.Tensor, torch.Tensor, torch.Tensor], *,
-    sample_sphere: Callable[[int], Tuple[torch.Tensor, torch.Tensor]],
-    num_of_initial_pts: int,
+    initial_points: Tuple[torch.Tensor, torch.Tensor],
     max_insert: int = 15, merge_tol: float = 1e-2,
-    existing_atoms: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
     lbfgs_lr: float = 1e-2, lbfgs_steps: int = 200,
     insert_init: str = "warm_start",
     radius: Optional[float] = None,
@@ -61,10 +59,8 @@ def profile_threshold(
     input_dim = network.input_dim
 
     a, b, discarded_outside = _generate_candidates(
-        network, residual, sample_sphere=sample_sphere, num_of_initial_pts=num_of_initial_pts,
-        merge_tol=merge_tol,
-        existing_atoms=existing_atoms, lbfgs_lr=lbfgs_lr, lbfgs_steps=lbfgs_steps,
-        radius=radius,
+        network, residual, initial_points=initial_points, merge_tol=merge_tol,
+        lbfgs_lr=lbfgs_lr, lbfgs_steps=lbfgs_steps, radius=radius,
     )
 
     guaranteed = insert_init == "guaranteed"
@@ -101,7 +97,7 @@ def profile_threshold(
     logger.debug(
         "Candidate search  sampled=%d  unique=%d  accepted=%d/%d  "
         "rule=%s (init=%s)",
-        num_of_initial_pts, a.shape[0], len(accepted_a), max_insert, rule, insert_init,
+        initial_points[0].shape[0], a.shape[0], len(accepted_a), max_insert, rule, insert_init,
     )
     if discarded_outside:
         logger.debug(
@@ -127,10 +123,8 @@ def finite_step(
     network: SparseNetwork,
     penalty: Penalty,
     residual: tuple[torch.Tensor, torch.Tensor, torch.Tensor], *,
-    sample_sphere: Callable[[int], Tuple[torch.Tensor, torch.Tensor]],
-    num_of_initial_pts: int,
+    initial_points: Tuple[torch.Tensor, torch.Tensor],
     max_insert: int = 15, merge_tol: float = 1e-2,
-    existing_atoms: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
     lbfgs_lr: float = 1e-2, lbfgs_steps: int = 200,
     radius: Optional[float] = None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -138,10 +132,8 @@ def finite_step(
     input_dim = network.input_dim
 
     a, b, _ = _generate_candidates(
-        network, residual, sample_sphere=sample_sphere, num_of_initial_pts=num_of_initial_pts,
-        merge_tol=merge_tol,
-        existing_atoms=existing_atoms, lbfgs_lr=lbfgs_lr, lbfgs_steps=lbfgs_steps,
-        radius=radius,
+        network, residual, initial_points=initial_points, merge_tol=merge_tol,
+        lbfgs_lr=lbfgs_lr, lbfgs_steps=lbfgs_steps, radius=radius,
     )
 
     accepted_a: List[torch.Tensor] = []
@@ -175,7 +167,7 @@ def finite_step(
     logger.debug(
         "Candidate search  sampled=%d  unique=%d  accepted=%d/%d  "
         "rule=adding atom reduces objective (q=%.3f)",
-        num_of_initial_pts, a.shape[0], len(accepted_a), max_insert, network.penalty_exponent,
+        initial_points[0].shape[0], a.shape[0], len(accepted_a), max_insert, network.penalty_exponent,
     )
 
     return *_as_arrays(accepted_a, accepted_b, input_dim), np.array(accepted_c, dtype=np.float64)
@@ -187,10 +179,8 @@ def finite_step(
 def _generate_candidates(
     network: SparseNetwork,
     residual: tuple[torch.Tensor, torch.Tensor, torch.Tensor], *,
-    sample_sphere: Callable[[int], Tuple[torch.Tensor, torch.Tensor]],
-    num_of_initial_pts: int,
+    initial_points: Tuple[torch.Tensor, torch.Tensor],
     merge_tol: float,
-    existing_atoms: Optional[Tuple[torch.Tensor, torch.Tensor]],
     lbfgs_lr: float = 1e-2,
     lbfgs_steps: int = 200,
     radius: Optional[float] = None,
@@ -207,12 +197,12 @@ def _generate_candidates(
     """
     search_radius = float(radius) if radius is not None else math.exp(FIXED_LOG_CLAMP)
     normalized_residual = _normalize_residual(residual)
-    a, b = _sample_initial_pts(network, sample_sphere, num_of_initial_pts, search_radius)
+    a, b = _sample_initial_pts(network, initial_points, search_radius)
     a, b, discarded_outside = _refine_and_deduplicate(
         network, normalized_residual, a, b,
         search_radius=search_radius, merge_tol=merge_tol, steps=lbfgs_steps, lr=lbfgs_lr,
     )
-    a, b = _reject_support_repeats(network, a, b, existing_atoms)
+    a, b = _reject_support_repeats(network, a, b)
     return a, b, discarded_outside
 
 
@@ -229,16 +219,15 @@ def _normalize_residual(
 
 def _sample_initial_pts(
     network: SparseNetwork,
-    sample_sphere: Callable[[int], Tuple[torch.Tensor, torch.Tensor]],
-    num_of_initial_pts: int,
+    initial_points: Tuple[torch.Tensor, torch.Tensor],
     search_radius: float,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
-    """Sample num_of_initial_pts initial points.
+    """Initial points from the sampled directions.
 
     Homogeneous models use the sampled directions directly; nonhomogeneous
     models give each direction a log-uniform radius (ADR 0006).
     """
-    a, b = sample_sphere(num_of_initial_pts)
+    a, b = initial_points
     if not network.use_sphere:
         log_r_min = math.log(math.exp(-3.0))
         log_r_max = math.log(max(search_radius, math.exp(-3.0) * 1.001))
@@ -350,7 +339,6 @@ def _remove_duplicates(
 def _reject_support_repeats(
     network: SparseNetwork,
     a: torch.Tensor, b: torch.Tensor,
-    existing_atoms: Optional[Tuple[torch.Tensor, torch.Tensor]],
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """Drop candidates that numerically repeat an atom of the current support.
 
@@ -361,10 +349,8 @@ def _reject_support_repeats(
     The k=1 ReLU--L1 baseline retains its established candidate behavior.
     Existing atoms are used only for this check; they are not initial points.
     """
-    has_support = existing_atoms is not None and existing_atoms[0].shape[0] > 0
-    if network.use_sphere and network.penalty_exponent < 1.0 and has_support and a.shape[0] > 0:
-        W_exist, b_exist = existing_atoms
-        support_omega = torch.cat([W_exist, b_exist.reshape(-1, 1)], dim=1)
+    if network.use_sphere and network.penalty_exponent < 1.0 and network.n_neurons > 0 and a.shape[0] > 0:
+        support_omega = torch.cat([network.inner_weight, network.inner_bias.reshape(-1, 1)], dim=1)
         support_unit = support_omega / support_omega.norm(dim=1, keepdim=True).clamp_min(1e-12)
         omega = torch.cat([a, b.reshape(-1, 1)], dim=1)
         unit = omega / omega.norm(dim=1, keepdim=True).clamp_min(1e-12)

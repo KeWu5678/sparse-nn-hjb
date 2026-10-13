@@ -83,7 +83,7 @@ def test_candidate_profile_combines_signed_batches_before_acceptance(monkeypatch
         a.detach().reshape(1, 1), b.detach().reshape(1), 0,
     ))
     W, bias, coefficient = insertion.profile_threshold(
-        network, penalty, residuals, sample_sphere=lambda _: (a, b), num_of_initial_pts=1,
+        network, penalty, residuals, initial_points=(a, b),
         insert_init="guaranteed",
     )
     torch.testing.assert_close(torch.as_tensor(W[0]), a)
@@ -93,8 +93,8 @@ def test_candidate_profile_combines_signed_batches_before_acceptance(monkeypatch
     validate_model_config(config)
     network = SparseNetwork(config)
     W, _, _ = insertion.profile_threshold(
-        network, make_penalty(config), residuals, sample_sphere=lambda _: (a, b),
-        num_of_initial_pts=1, insert_init="guaranteed",
+        network, make_penalty(config), residuals, initial_points=(a, b),
+        insert_init="guaranteed",
     )
     assert len(W) == 0
 

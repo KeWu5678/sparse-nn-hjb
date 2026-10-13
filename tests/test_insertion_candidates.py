@@ -22,12 +22,7 @@ def _inputs():
 
 def _starts(values):
     points = torch.as_tensor(values, dtype=torch.float64)
-
-    def sample_sphere(n):
-        assert n == points.shape[0]
-        return points[:, :1].clone(), points[:, 1].clone()
-
-    return sample_sphere
+    return points[:, :1].clone(), points[:, 1].clone()
 
 
 def _fake_lbfgs(monkeypatch, outputs):
@@ -71,13 +66,14 @@ def _generate(
         "activation": "relu" if use_sphere else "tanh", "power": power, "moment_order": 2.0,
     }, 1)
     validate_model_config(config)
+    network = SparseNetwork(config)
+    if existing_atoms is not None:
+        network.set_atoms(*existing_atoms, torch.ones_like(existing_atoms[1]))
     a, b, discarded_outside = insertion._generate_candidates(
-        SparseNetwork(config),
+        network,
         (X, residual_v, residual_dv),
-        sample_sphere=_starts(starts),
-        num_of_initial_pts=len(starts),
+        initial_points=_starts(starts),
         merge_tol=merge_tol,
-        existing_atoms=existing_atoms,
         radius=radius,
     )
     return a, b, a.shape[0], discarded_outside, fake
@@ -122,8 +118,7 @@ def test_algorithm1_distinguishes_radius_search_failure_from_threshold_stop(
     with caplog.at_level(logging.DEBUG):
         insertion.profile_threshold(
             network, penalty, (X, residual_v, residual_dv),
-            sample_sphere=_starts([[1.0, 0.0]]),
-            num_of_initial_pts=1,
+            initial_points=_starts([[1.0, 0.0]]),
             max_insert=1,
             radius=1.0,
         )
@@ -136,8 +131,7 @@ def test_algorithm1_distinguishes_radius_search_failure_from_threshold_stop(
     with caplog.at_level(logging.DEBUG):
         insertion.profile_threshold(
             network, penalty, (X, residual_v, residual_dv),
-            sample_sphere=_starts([[1.0, 0.0]]),
-            num_of_initial_pts=1,
+            initial_points=_starts([[1.0, 0.0]]),
             max_insert=1,
             radius=1.0,
         )
@@ -157,15 +151,14 @@ def test_sphere_search_reports_when_only_existing_support_is_returned(
     config = resolve_model({"activation": "relu", "power": 2.0, "alpha": 1.0}, 1)
     validate_model_config(config)
     network = SparseNetwork(config)
+    network.set_atoms(*existing, torch.ones_like(existing[1]))
     penalty = make_penalty(config)
 
     with caplog.at_level(logging.DEBUG):
         insertion.profile_threshold(
             network, penalty, (X, residual_v, residual_dv),
-            sample_sphere=_starts([[1.0, 0.0]]),
-            num_of_initial_pts=1,
+            initial_points=_starts([[1.0, 0.0]]),
             max_insert=1,
-            existing_atoms=existing,
         )
 
     assert "retained no distinct candidate after geometric filters" in caplog.text
