@@ -92,13 +92,21 @@ class SSN(Optimizer):
             )
         group["prox_scale"] = prox_scale
         group["tau"] = self._tau_from(prox_scale)
-        self.last_step_success = True
+        self._last_step_success = True
 
     def _tau_from(self, prox_scale: float | None) -> float:
         """The penalty's proximal step tau, after checking a supplied scale."""
         if prox_scale is not None and (not math.isfinite(prox_scale) or prox_scale <= 0.0):
             raise ValueError(f"prox_scale must be positive and finite, got {prox_scale}")
         return self.penalty.proximal_step(prox_scale)
+
+    @property
+    def last_step_success(self) -> bool:
+        """Whether the last step kept a trial or stopped at a stationary point.
+
+        True before the first step; False after a step that raised.
+        """
+        return self._last_step_success
 
     @torch.no_grad()
     def step(self, closure: Callable[[], Tensor]) -> Tensor:  # pyright: ignore[reportIncompatibleMethodOverride]
@@ -111,10 +119,10 @@ class SSN(Optimizer):
         closure = torch.enable_grad()(closure)
         start = parameters_to_vector(self._params).detach().clone()
         try:
-            loss, self.last_step_success = self._newton_iteration(closure, start)
+            loss, self._last_step_success = self._newton_iteration(closure, start)
         except Exception:
             vector_to_parameters(start, self._params)
-            self.last_step_success = False
+            self._last_step_success = False
             raise
         return loss
 
