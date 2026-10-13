@@ -2,16 +2,17 @@
 status: accepted
 ---
 
-# SparseModel owns the network and mathematics; PDAP and SSN own optimization
+# SparseNetwork owns the network and mathematics; PDAP and SSN own optimization
 
-## Current decision: one SparseModel built on PyTorch (updated 2026-10-09)
+## Current decision: one SparseNetwork built on PyTorch (updated 2026-10-13)
 
 Update 2026-10-09: `SparseProblem` is renamed `SparseModel`, and the `src/problems/`
-package is renamed `src/models/`. Sections below the current decision keep the
-names in use when they were written.
+package is renamed `src/models/`. Update 2026-10-13: `SparseModel` is renamed
+`SparseNetwork`, and arguments that hold it are named `network`. Sections below
+the current decision keep the names in use when they were written.
 
 The agreed refactor replaces the separate model/problem representation with
-one `SparseModel(torch.nn.Module)` that owns the current network and
+one `SparseNetwork(torch.nn.Module)` that owns the current network and
 problem-specific evaluations. `SignedModel`, `ShallowNetwork`, `PDAPModel`, and
 their factory are removed, and callers use the single module. The implementation uses
 buffers named `inner_weight` and `inner_bias`, and an `nn.Parameter` for outer
@@ -25,9 +26,7 @@ value and input-gradient kernel matrices of the current or supplied atoms
 `K(ω)`, which are the Jacobians of both outputs with respect to outer
 coefficients. Both compute input derivatives with `torch.func.vjp`, so they
 follow the caller's grad mode: ordinary gradient mode preserves
-differentiation through both outputs; reporting requests `no_grad`. The
-warm start's historical indicator derivative lives in the warm-start module,
-not in `kernel`. Loss weights belong to the objective, not the prediction outputs.
+differentiation through both outputs; reporting requests `no_grad`. Loss weights belong to the objective, not the prediction outputs.
 This replaces the separate value-only and value-and-gradient prediction methods.
 
 Data stays outside the module, supplied through standard Dataset/DataLoader
@@ -40,18 +39,18 @@ subsequently requested that preparation occur directly inside
 `correct_outer_weights`. That method assembles
 the samples, computes normalization and the fitting Hessian,
 and defines the complete coefficient-loss callable locally. There is no
-`SparseModel.prepare_coefficients` method or preparation-return tuple.
+`SparseNetwork.prepare_coefficients` method or preparation-return tuple.
 SSN receives the loss callable and fitting Hessian, evaluating the callable
 directly at current and trial coefficients. Targets and fitting
 Hessian are reused while SSN changes outer coefficients. These calculations
 provide no network backup. The
 normalization tensor contains ones for sphere atoms; otherwise its values depend
 on the neurons even when the configured moment order stays fixed.
-`SparseModel.obj(x, target, c=None)` is the canonical scalar H1 fitting
+`SparseNetwork.obj(x, target, c=None)` is the canonical scalar H1 fitting
 objective of the network at x; c substitutes trial outer weights without
 writing them to the model. The local coefficient-loss callable evaluates it at
 c = u/w_p with the fixed targets, then adds `Proximal.penalty(u)` itself; there is no
-`SparseModel.loss` method. The closure references the same problem during its
+`SparseNetwork.loss` method. The closure references the same network during its
 correction; there is no second network or persistent sample cache.
 `jac_obj(residual, atoms)` and `hess_obj(x, atoms)` provide the gradient and
 full Hessian of that objective, including cross terms, in the outer weights of
@@ -65,7 +64,7 @@ derivative convention is retired (2026-10-13).
 
 PDAP owns candidate search/ranking, insertion acceptance, the warm-start
 procedure and initial-coefficient selection, support insertion/pruning,
-correction scheduling and outer stopping. SparseModel evaluates supplied
+correction scheduling and outer stopping. SparseNetwork evaluates supplied
 candidates/directions: features and objective derivatives. Proximal evaluates
 penalty and proximal operations.
 PDAP owns its insertion-increment calculation and certificate radius, including
@@ -73,7 +72,7 @@ the theorem formula and numerical cap/fallback. Mathematical evaluation does not
 or acceptance decisions to the problem. The mixed insertion/warm-start methods
 have been removed; their procedures now live in PDAP's insertion and warm-start
 modules. The assistant's former proposal to move complete warm-start selection
-into SparseModel was withdrawn; it was not an agreed ownership change.
+into SparseNetwork was withdrawn; it was not an agreed ownership change.
 
 Proximal may evaluate a threshold or proximal minimizer, including branches
 defined by the mathematical operator. PDAP decides how to use those evaluations
@@ -87,7 +86,7 @@ derivative, the split into the fractional penalty α·Σ|u|^q that the prox
 handles and a smooth correction, and the vector and scalar proximal maps.
 Its maps take the proximal constant λ. It is built
 from the configured α and γ and the problem's penalty exponent q = 2/(k+1),
-the only penalty value `SparseModel` supplies. `SparseModel` keeps the
+the only penalty value `SparseNetwork` supplies. `SparseNetwork` keeps the
 network, kernel, moment weights and fitting objective. Training setup builds one
 instance; PDAP stores it, uses it for the coefficient-loss closure, the radius
 bound, insertion and the warm start, and passes it to each SSN. Evaluation
@@ -135,7 +134,7 @@ Historical explicit unguarded configurations remain comparators, with their
 setting passed to SSN. This and the exact iteration defaults are compatibility
 choices; an iteration budget does not establish convergence. Hydra stays at
 repository level. Configuration setup resolves and validates settings before
-constructing `SparseModel`; the constructor only reads those prepared values
+constructing `SparseNetwork`; the constructor only reads those prepared values
 and initializes network state. The earlier design that made the model call a
 configuration resolver or expose `validate_training` was explicitly rejected:
 moving a function body did not transfer responsibility for configuration.
@@ -143,7 +142,7 @@ moving a function body did not transfer responsibility for configuration.
 The implementation uses `resolve_model(raw_config, input_dim)` to produce an
 ordinary runtime mapping, keeping the original Hydra settings unchanged for
 serialization. Training setup calls `validate_model_config(runtime)` with the same
-insertion selection used by PDAP, then constructs `SparseModel(runtime)`. It also
+insertion selection used by PDAP, then constructs `SparseNetwork(runtime)`. It also
 calls `validate_optimizer_config` on the training settings, so PDAP reads them
 without checking.
 Prediction setup resolves its settings without imposing training restrictions,
@@ -398,7 +397,22 @@ are retained unchanged by this ownership refactor.
 `make_penalty(config)` moves from `src/models/penalty.py` to `src/config/schema.py`
 and builds the penalty family from a validated model configuration.
 `resolve_model` computes the penalty exponent q = 2/(power+1) once, and
-`SparseModel` reads it from the resolved configuration. `validate_model_config`
+`SparseNetwork` reads it from the resolved configuration. `validate_model_config`
 is the only check that γ = 0 when q ≠ 1; the penalty classes do not validate.
 Selection stays value-driven, as decided in "Penalty selection stays
 config-driven".
+
+## Follow-up 2026-10-13: PDAP holds its network and training data
+
+`PDAP(training, penalty, network, train_loader, *, insertion)` binds the network
+and the training loader for one fit. Its methods take neither, and
+`run_training(pdap, valid_loader, ...)` reads both from PDAP. PDAP stores the
+loader, not an assembled batch: each operation still assembles the full batch,
+so there is no persistent sample cache. `_insert`, `_prune` and `_sphere` read
+their settings from PDAP; insertion receives the sampled initial points and reads
+the existing support from the network.
+
+The `verbose` flags are removed. PDAP, insertion, the warm start and
+`ssn_refine_outerweights` always emit their debug messages, which the logging
+level filters. `run_training` always logs progress and its summary;
+`display_every <= 0` still disables periodic progress.
