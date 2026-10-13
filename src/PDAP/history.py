@@ -12,7 +12,7 @@ from typing import Any, Dict, List
 import torch
 
 from ..data import ValueSampleNormalizer
-from ..models import SparseModel
+from ..models import SparseNetwork
 
 
 @dataclass
@@ -66,7 +66,7 @@ class History:
     run_metrics: dict[str, Any] = field(default_factory=dict)
 
     def record(
-        self, problem: SparseModel, values: dict[str, float],
+        self, network: SparseNetwork, values: dict[str, float],
         diagnostics: dict[str, Any] | None = None,
     ) -> None:
         """Store supplied measurements and an independent checkpoint.
@@ -85,9 +85,9 @@ class History:
         theorem_applied = diagnostics.get("radius_theorem_applied")
         self.search_radius.append(None if search_radius is None else float(search_radius))
         self.radius_theorem_applied.append(None if theorem_applied is None else float(theorem_applied))
-        self.penalty_exponent = problem.penalty_exponent
-        self.loss_weights = problem.loss_weights
-        state = {name: tensor.detach().clone() for name, tensor in problem.state_dict().items()}
+        self.penalty_exponent = network.penalty_exponent
+        self.loss_weights = network.loss_weights
+        state = {name: tensor.detach().clone() for name, tensor in network.state_dict().items()}
         self.model_states.append(state)
         self.inner_weights.append({"weight": state["inner_weight"], "bias": state["inner_bias"]})
         self.outer_weights.append(state["c"].reshape(1, -1))
@@ -108,11 +108,11 @@ class History:
     def best_err_h1_train(self) -> float:
         return self.err_h1_train[self.best_iteration]
 
-    def restore_model(self, model, iteration: int | None = None):
-        """Restore ``model`` to one recorded iteration (the selected best by default).
+    def restore_network(self, network, iteration: int | None = None):
+        """Restore ``network`` to one recorded iteration (the selected best by default).
 
-        A zero-measure snapshot is restored as such: ``model`` is emptied rather
-        than left carrying whatever support it held before, so the restored model
+        A zero-measure snapshot is restored as such: ``network`` is emptied rather
+        than left carrying whatever support it held before, so the restored network
         always represents the recorded iteration.
         """
         i = self.best_iteration if iteration is None else int(iteration)
@@ -129,8 +129,8 @@ class History:
             state = {"inner_weight": self.inner_weights[i]["weight"],
                      "inner_bias": self.inner_weights[i]["bias"],
                      "c": self.outer_weights[i].reshape(-1)}
-        model.set_atoms(state["inner_weight"], state["inner_bias"], state["c"])
-        return model
+        network.set_atoms(state["inner_weight"], state["inner_bias"], state["c"])
+        return network
 
     def summary_metrics(self) -> dict[str, Any]:
         """Selected-checkpoint metrics plus independently counted run work."""

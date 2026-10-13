@@ -23,7 +23,7 @@ import torch
 from .config import resolve_model
 from .data import DATA_DIR, TensorSamples, ValueSampleNormalizer, load_value_samples
 from .eval import relative_errors
-from .models import SparseModel
+from .models import SparseNetwork
 
 
 def load_history(history: Any, run_index: int = 0) -> Any:
@@ -64,7 +64,7 @@ def history_atoms(
 def model_from_history(
     history: Any, activation: Any = "relu", power: float = 1.0,
     *, iteration: int | None = None, run_index: int = 0,
-) -> SparseModel:
+) -> SparseNetwork:
     """Compatibility reconstruction for callers holding a bare fit artifact.
 
     New reporting code should use load_run so configuration cannot be detached
@@ -73,10 +73,10 @@ def model_from_history(
     """
     w, b, c = history_atoms(history, iteration, run_index)
     config = resolve_model({"activation": activation, "power": power}, w.shape[1])
-    model = SparseModel(config)
-    model.set_atoms(torch.as_tensor(w), torch.as_tensor(b), torch.as_tensor(c).reshape(-1))
-    model.eval()
-    return model
+    network = SparseNetwork(config)
+    network.set_atoms(torch.as_tensor(w), torch.as_tensor(b), torch.as_tensor(c).reshape(-1))
+    network.eval()
+    return network
 
 
 def fit_history_path(record: dict[str, Any], record_path: str | Path) -> Path:
@@ -104,7 +104,7 @@ class SavedRun:
     record_path: Path
     record: dict[str, Any]
     history: Any
-    model: SparseModel
+    model: SparseNetwork
     normalizer: ValueSampleNormalizer | None
     iteration: int
     normalization_recovered: bool = False
@@ -154,14 +154,14 @@ def _restore_run(
     if model_cfg["kind"] != "signed":
         raise ValueError(f"unsupported saved model kind: {model_cfg['kind']!r}")
     history = load_history(artifact)
-    model = model_from_history(history, model_cfg["activation"], model_cfg["power"])
+    network = model_from_history(history, model_cfg["activation"], model_cfg["power"])
     transform = record.get("normalization")
     normalizer = None
     recovered = False
     if transform is not None:
         sx = np.asarray(transform["x_scale"], dtype=np.float64)
         sv = float(transform["v_scale"])
-        if (sx.shape != (model.input_dim,) or
+        if (sx.shape != (network.input_dim,) or
                 not np.all(np.isfinite(sx) & (sx > 0)) or not np.isfinite(sv) or sv <= 0):
             raise ValueError(f"invalid recorded normalization in {path}")
         if cfg["data"].get("normalize") is False:
@@ -170,7 +170,7 @@ def _restore_run(
     elif cfg["data"].get("normalize", True):
         if not recover_legacy_normalization or "normalization" in record:
             raise ValueError(f"normalized run has no recorded normalization: {path}")
-        normalizer = _recover_legacy_normalizer(record, model)
+        normalizer = _recover_legacy_normalizer(record, network)
         recovered = True
     if normalizer is not None and metric_coordinates == "training":
         warnings.warn(
@@ -179,7 +179,7 @@ def _restore_run(
             "Do not compare these metrics without rescoring.",
             UserWarning, stacklevel=2,
         )
-    return SavedRun(path, record, history, model, normalizer,
+    return SavedRun(path, record, history, network, normalizer,
                     int(_field(history, "best_iteration")), recovered)
 
 
@@ -200,19 +200,19 @@ def load_run_for_artifact(
 
 @torch.no_grad()
 def predict_model_physical(
-    model: SparseModel, x: Any, normalizer: ValueSampleNormalizer | None = None,
+    network: SparseNetwork, x: Any, normalizer: ValueSampleNormalizer | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Unclipped original-scale (V, dV), shapes (N,1) and (N,d).
 
     Compatibility seam for an already reconstructed model; reporting callers
     normally use predict_physical so the transform stays bound to its run.
     """
-    x = torch.as_tensor(x, dtype=torch.float64, device=model.inner_weight.device)
-    if x.ndim != 2 or x.shape[1] != model.input_dim:
+    x = torch.as_tensor(x, dtype=torch.float64, device=network.inner_weight.device)
+    if x.ndim != 2 or x.shape[1] != network.input_dim:
         raise ValueError("physical states must have shape (N, model input dimension)")
     if normalizer is not None:
         x = x / torch.as_tensor(normalizer.x_scale, dtype=x.dtype, device=x.device)
-    v, dv = model(x)
+    v, dv = network(x)
     if normalizer is not None:
         v, dv = normalizer.denormalize_tensors(v, dv)
     return v, dv
@@ -222,12 +222,12 @@ def predict_physical(
     run: SavedRun, x: Any, iteration: int | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Evaluate V and its physical gradient without changing the saved model."""
-    model = run.model
+    network = run.model
     if iteration is not None and iteration != run.iteration:
         cfg = run.record["config"]["model"]
-        model = model_from_history(run.history, cfg["activation"], cfg["power"],
+        network = model_from_history(run.history, cfg["activation"], cfg["power"],
                                    iteration=iteration)
-    return predict_model_physical(model, x, run.normalizer)
+    return predict_model_physical(network, x, run.normalizer)
 
 
 def validation_samples(run: SavedRun) -> TensorSamples:
@@ -252,7 +252,7 @@ def _validation_samples(record: dict[str, Any], samples=None) -> TensorSamples:
                                     for k in ("x", "v", "dv")))
 
 
-def _recover_legacy_normalizer(record: dict[str, Any], model) -> ValueSampleNormalizer:
+def _recover_legacy_normalizer(record: dict[str, Any], network) -> ValueSampleNormalizer:
     """Explicit adapter for records written before data transforms were saved."""
     if record.get("metric_coordinates", "training") != "training":
         raise ValueError("normalization recovery is only supported for legacy training-coordinate metrics")
@@ -260,7 +260,7 @@ def _recover_legacy_normalizer(record: dict[str, Any], model) -> ValueSampleNorm
     normalizer = ValueSampleNormalizer.fit(samples)
     x, v, dv = _validation_samples(record, samples)
     scale = torch.as_tensor(normalizer.x_scale, dtype=x.dtype)
-    prediction = predict_model_physical(model, x / scale)
+    prediction = predict_model_physical(network, x / scale)
     reproduced = relative_errors(*prediction, v / normalizer.v_scale,
                                  dv * (scale / normalizer.v_scale))
     stored = record["metrics"][-1]["values"]

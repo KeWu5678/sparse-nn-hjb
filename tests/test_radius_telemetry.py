@@ -10,7 +10,7 @@ from src.config import make_penalty, resolve_model, validate_model_config
 from src.config.schema import ExperimentConfig, ModelConfig, TrainingConfig
 from src.data import make_dataloader
 from src.eval import metrics
-from src.models import SparseModel
+from src.models import SparseNetwork
 from src.PDAP import PDAP
 from src.PDAP.history import History
 from src.PDAP.insertion import FIXED_LOG_CLAMP
@@ -27,7 +27,7 @@ def test_nonzero_residual_records_computed_and_capped_theorem_radius(loop_order,
     )
     model_config = resolve_model(cfg.model, input_dim=2)
     validate_model_config(model_config)
-    model = SparseModel(model_config)
+    network = SparseNetwork(model_config)
     samples = (torch.tensor([[0., 0.], [3., 4.]], dtype=torch.float64),
                torch.ones(2, 1, dtype=torch.float64),
                torch.ones(2, 2, dtype=torch.float64))
@@ -37,7 +37,7 @@ def test_nonzero_residual_records_computed_and_capped_theorem_radius(loop_order,
     assert expected > 1
     history = run_training(
         PDAP(cfg.training, make_penalty(model_config), insertion=model_config["insertion"]),
-        model, make_dataloader(samples),
+        network, make_dataloader(samples),
         num_iterations=1, verbose=False,
     )
     assert history.search_radius == pytest.approx([expected])
@@ -61,13 +61,13 @@ def test_zero_measure_fit_records_the_actual_search_radius(
     )
     model_config = resolve_model(cfg.model, input_dim=2)
     validate_model_config(model_config)
-    model = SparseModel(model_config)
+    network = SparseNetwork(model_config)
     samples = (torch.zeros(3, 2, dtype=torch.float64),
                torch.zeros(3, 1, dtype=torch.float64),
                torch.zeros(3, 2, dtype=torch.float64))
     history = run_training(
         PDAP(cfg.training, make_penalty(model_config), insertion=model_config["insertion"]),
-        model, make_dataloader(samples),
+        network, make_dataloader(samples),
         num_iterations=1, verbose=False,
     )
     assert history.final_neurons == 0
@@ -80,13 +80,13 @@ def test_zero_measure_fit_records_the_actual_search_radius(
 
 def test_old_history_summary_does_not_invent_missing_search_diagnostics():
     config = resolve_model({}, 2)
-    model = SparseModel(config)
+    network = SparseNetwork(config)
     samples = (torch.zeros(3, 2, dtype=torch.float64),
                torch.ones(3, 1, dtype=torch.float64),
                torch.ones(3, 2, dtype=torch.float64))
     history = History()
     history.record(
-        model, metrics(model, make_penalty(config), make_dataloader(samples)),
+        network, metrics(network, make_penalty(config), make_dataloader(samples)),
         {"search_radius": 1.0, "radius_theorem_applied": 1.0},
     )
     expected = history.summary_metrics()
@@ -108,7 +108,7 @@ def test_zero_iteration_fit_does_not_reuse_a_previous_search(activation, power, 
     )
     model_config = resolve_model(cfg.model, input_dim=2)
     validate_model_config(model_config)
-    model = SparseModel(model_config)
+    network = SparseNetwork(model_config)
     samples = (torch.zeros(3, 2, dtype=torch.float64),
                torch.zeros(3, 1, dtype=torch.float64),
                torch.zeros(3, 2, dtype=torch.float64))
@@ -116,14 +116,14 @@ def test_zero_iteration_fit_does_not_reuse_a_previous_search(activation, power, 
     loader = make_dataloader(samples)
     previous = run_training(
         trainer,
-        model, loader,
+        network, loader,
         num_iterations=1, verbose=False,
     )
     assert previous.search_radius == [1.0]
 
     history = run_training(
         trainer,
-        model, loader,
+        network, loader,
         num_iterations=0, verbose=False,
     )
     assert history.search_radius == [None]

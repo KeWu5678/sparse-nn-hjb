@@ -48,7 +48,7 @@ from src.data import DATA_DIR, load_value_samples, make_dataloaders, normalize_v
 from src.eval import distance_binned_error, region_split_errors
 from src.experiment_logging import ExperimentRun
 from src.logging import configure_logging
-from src.models import SparseModel
+from src.models import SparseNetwork
 from src.PDAP import PDAP
 from src.training import run_training
 
@@ -129,7 +129,7 @@ def set_seed(seed: int) -> None:
 
 
 @torch.no_grad()
-def region_split_metrics(cfg, model, data, normalizer) -> dict:
+def region_split_metrics(cfg, network, data, normalizer) -> dict:
     """Switching-tube vs rest errors on the region-eval pool + binned profile.
 
     The tube/rest split is scored on the **region-eval pool** — the dense
@@ -138,7 +138,7 @@ def region_split_metrics(cfg, model, data, normalizer) -> dict:
     The distance-binned profile diagnostic stays on the emitted dataset (the
     dataset-aligned distance cache).
 
-    The caller supplies the model restored from ``History`` at the same selected
+    The caller supplies the network restored from ``History`` at the same selected
     iteration used by the run's global validation metrics. Predictions and
     targets are scored in original V and gradient units, not training units.
     """
@@ -149,7 +149,7 @@ def region_split_metrics(cfg, model, data, normalizer) -> dict:
         v_pool = np.asarray(pool["v"], dtype=np.float64).reshape(-1, 1)
         dv_pool = np.asarray(pool["dv"], dtype=np.float64)
         distance_pool = np.asarray(pool["distance"], dtype=np.float64)
-    # Normalize model inputs only; evaluation compares original V and gradient
+    # Normalize network inputs only; evaluation compares original V and gradient
     # units. In particular, anisotropic input scaling changes H1/gradient ratios.
     if normalizer is not None:
         x_pool = x_pool / normalizer.x_scale
@@ -158,7 +158,7 @@ def region_split_metrics(cfg, model, data, normalizer) -> dict:
     v_pred_chunks, dv_pred_chunks = [], []
     for lo in range(0, len(x_pool), 100_000):
         xb = torch.as_tensor(x_pool[lo:lo + 100_000], dtype=torch.float64)
-        vb, dvb = model(xb)
+        vb, dvb = network(xb)
         if normalizer is not None:
             vb, dvb = normalizer.denormalize_tensors(vb, dvb)
         v_pred_chunks.append(vb)
@@ -183,7 +183,7 @@ def region_split_metrics(cfg, model, data, normalizer) -> dict:
         x = torch.as_tensor(data["x"], dtype=torch.float64)
         v = torch.as_tensor(data["v"], dtype=torch.float64)
         dv = torch.as_tensor(data["dv"], dtype=torch.float64)
-        v_pred_d, dv_pred_d = model(x)
+        v_pred_d, dv_pred_d = network(x)
         if normalizer is not None:
             v_pred_d, dv_pred_d = normalizer.denormalize_tensors(v_pred_d, dv_pred_d)
             v, dv = normalizer.denormalize_tensors(v, dv)
@@ -234,7 +234,7 @@ def _run_experiment(cfg: DictConfig, hydra_cfg, run_dir: Path, run_id: str) -> P
         hydra=hydra_metadata(hydra_cfg),
     )
 
-    # Data preprocessing is external to the problem. The trainer holds only
+    # Data preprocessing is external to the network. The trainer holds only
     # configuration and returns a History.
     with (DATA_DIR / cfg.data.path).open("rb") as source:
         data_sha256 = hashlib.file_digest(source, "sha256").hexdigest()
@@ -254,11 +254,11 @@ def _run_experiment(cfg: DictConfig, hydra_cfg, run_dir: Path, run_id: str) -> P
     train_loader, valid_loader = make_dataloaders(
         data, cfg.data.train_fraction, seed=cfg.env.seed,
     )
-    problem = SparseModel(model_config)
+    network = SparseNetwork(model_config)
     penalty = make_penalty(model_config)
     trainer = PDAP(cfg.training, penalty, insertion=model_config["insertion"])
     history = run_training(
-        trainer, problem, train_loader, valid_loader,
+        trainer, network, train_loader, valid_loader,
         num_iterations=cfg.training.num_iterations,
         display_every=cfg.training.display_every,
         reporting_normalizer=normalizer,
@@ -281,9 +281,9 @@ def _run_experiment(cfg: DictConfig, hydra_cfg, run_dir: Path, run_id: str) -> P
     # split by distance to the switching set, merged into the run record so the
     # analysis layer reads them like any other metric.
     if cfg.eval.kind == "region_split":
-        evaluation_model = SparseModel(model_config)
-        history.restore_model(evaluation_model)
-        region = region_split_metrics(cfg, evaluation_model, data, normalizer)
+        evaluation_network = SparseNetwork(model_config)
+        history.restore_network(evaluation_network)
+        region = region_split_metrics(cfg, evaluation_network, data, normalizer)
         metrics.update(region)
         logger.info(
             "region_summary",

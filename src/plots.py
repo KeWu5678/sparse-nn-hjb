@@ -608,7 +608,7 @@ def plot_model_value_surface(
 
     Reproduces the left panel of Fig. 2 in Han & Yang (arXiv:2312.17467): the value
     function as a surface, here the model's *learned* approximation (not the data
-    samples). Rebuilds a :class:`SparseModel` from a fit result's best-iteration
+    samples). Rebuilds a :class:`SparseNetwork` from a fit result's best-iteration
     atoms — ``history`` may be a ``History`` object, a path to its pickle, or a list
     of runs (``run_index`` selects one). ``activation`` (a name resolved via
     ``src.config.activations.get_activation``, or a callable) and ``power`` must

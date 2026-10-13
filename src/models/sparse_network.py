@@ -5,7 +5,7 @@ from torch import Tensor, nn
 from torch.nn import functional as F
 
 
-class SparseModel(nn.Module):
+class SparseNetwork(nn.Module):
     """Own the sparse network and its data fitting without owning samples."""
 
     inner_weight: Tensor

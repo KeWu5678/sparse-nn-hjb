@@ -1,6 +1,6 @@
 """Evaluation and reporting for a model and its external value samples.
 
-SparseModel supplies the fitting objective and Penalty the sparsity functional;
+SparseNetwork supplies the fitting objective and Penalty the sparsity functional;
 evaluation assembles their reported values, prediction errors and support diagnostics.
 """
 
@@ -13,17 +13,17 @@ import torch
 from .data import full_batch
 
 if TYPE_CHECKING:
-    from .models import Penalty, SparseModel
+    from .models import Penalty, SparseNetwork
 
 
 @torch.no_grad()
 def metrics(
-    problem: SparseModel, penalty: Penalty, train_loader, valid_loader=None,
+    network: SparseNetwork, penalty: Penalty, train_loader, valid_loader=None,
     reporting_normalizer=None,
 ) -> dict[str, float]:
     """Evaluate splits and support diagnostics using the persisted metric names."""
-    inner_weight, inner_bias, c = problem.inner_weight, problem.inner_bias, problem.c.detach()
-    u = c * problem.moment_weight_of_atoms()
+    inner_weight, inner_bias, c = network.inner_weight, network.inner_bias, network.c.detach()
+    u = c * network.moment_weight_of_atoms()
     phi = penalty.sparsity_functional(u) if c.numel() else c.new_zeros(())
     alpha_phi = float(penalty.alpha * phi)
     radius = torch.sqrt((inner_weight * inner_weight).sum(dim=-1) + inner_bias * inner_bias)
@@ -38,9 +38,9 @@ def metrics(
         valid_loader = train_loader
     for split, loader in (("train", train_loader), ("val", valid_loader)):
         data = full_batch(loader)
-        prediction = problem(data[0])
+        prediction = network(data[0])
         target = data[1:]
-        fitting = problem.obj(data[0], target)
+        fitting = network.obj(data[0], target)
         n = data[0].shape[0]
         values[f"{split}_loss"] = float(fitting) + alpha_phi
         values[f"data_loss_{split}"] = float(fitting)

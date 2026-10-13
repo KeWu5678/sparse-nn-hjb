@@ -243,20 +243,20 @@ def test_training_record_preserves_fitted_normalization(
     cfg.training.num_iterations = 0
     cfg.env.verbose = False
 
-    # A nonzero fixed model exposes the metric's units without performing an
+    # A nonzero fixed network exposes the metric's units without performing an
     # optimizer step. The zero network has relative error 1 in either convention.
-    problem_class = train.SparseModel
+    network_class = train.SparseNetwork
 
-    def initialized_problem(model_config):
-        model = problem_class(model_config)
-        model.set_atoms(
+    def initialized_network(model_config):
+        network = network_class(model_config)
+        network.set_atoms(
             torch.tensor([[0.5, -0.2]], dtype=torch.float64),
             torch.tensor([1.0], dtype=torch.float64),
             torch.tensor([0.7], dtype=torch.float64),
         )
-        return model
+        return network
 
-    monkeypatch.setattr(train, "SparseModel", initialized_problem)
+    monkeypatch.setattr(train, "SparseNetwork", initialized_network)
     with _isolated_logging(), structlog.contextvars.bound_contextvars(
         run_id="caller", experiment="outer", seed=-1,
     ):
@@ -284,12 +284,12 @@ def test_training_record_preserves_fitted_normalization(
     with next(run_dir.glob("result_*.pkl")).open("rb") as file:
         history = pickle.load(file)
     assert (history.reporting_normalizer is not None) is normalize
-    model = history.restore_model(problem_class(train.resolve_model(cfg.model, input_dim=2)))
+    network = history.restore_network(network_class(train.resolve_model(cfg.model, input_dim=2)))
     train.set_seed(cfg.env.seed)
     _, (x, v, dv) = split_value_samples(samples, cfg.data.train_fraction)
     if normalize:
         x = x / torch.as_tensor(saved["x_scale"], dtype=torch.float64)
-    vp, dvp = model(x)
+    vp, dvp = network(x)
     if normalize:
         vp, dvp = restored.denormalize_tensors(vp, dvp)
     expected = relative_errors(vp, dvp, v, dv)
@@ -313,8 +313,8 @@ def test_region_reporting_scores_original_value_units(tmp_path, normalize):
     cfg.eval.eval_pool = str(pool_path)
     cfg.eval.distance_cache = str(cache_path)
     cfg.eval.tube_radius = 0.2
-    model = train.SparseModel(train.resolve_model(cfg.model, input_dim=2))
-    model.set_atoms(
+    network = train.SparseNetwork(train.resolve_model(cfg.model, input_dim=2))
+    network.set_atoms(
         torch.tensor([[0.5, -0.2]], dtype=torch.float64),
         torch.tensor([1.0], dtype=torch.float64),
         torch.tensor([0.7], dtype=torch.float64),
@@ -322,9 +322,9 @@ def test_region_reporting_scores_original_value_units(tmp_path, normalize):
     normalizer = ValueSampleNormalizer.fit(samples) if normalize else None
     data = normalizer.normalize(samples) if normalizer is not None else samples
 
-    got = train.region_split_metrics(cfg, model, data, normalizer)
+    got = train.region_split_metrics(cfg, network, data, normalizer)
 
-    vp, dvp = model(torch.as_tensor(data["x"], dtype=torch.float64))
+    vp, dvp = network(torch.as_tensor(data["x"], dtype=torch.float64))
     if normalizer is not None:
         # Independent chain-rule calculation, not the reporting implementation.
         vp = vp * normalizer.v_scale
@@ -414,7 +414,7 @@ def test_invalid_model_config_fails_before_model_solver_or_loader_setup(
     def premature_setup(*args, **kwargs):
         pytest.fail("invalid model configuration reached model, solver or sample-loader setup")
 
-    for name in ("SparseModel", "PDAP", "make_dataloaders"):
+    for name in ("SparseNetwork", "PDAP", "make_dataloaders"):
         monkeypatch.setattr(train, name, premature_setup)
     with _isolated_logging(), pytest.raises(ValueError, match=message):
         train.main.__wrapped__(cfg)

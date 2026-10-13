@@ -63,12 +63,12 @@ def _train_with_logging(output_dir, settings):
         from src.logging import configure_logging
         from src.PDAP import PDAP
         from src.config import make_penalty
-        from src.models import SparseModel
+        from src.models import SparseNetwork
 
         output_dir, settings = Path(sys.argv[1]), json.loads(sys.argv[2])
         configure_logging(log_file=output_dir / "training.jsonl")
         config = resolve_model({"alpha": 0.0}, 1)
-        problem = SparseModel(config)
+        network = SparseNetwork(config)
         x = torch.tensor([[0.25], [0.75]], dtype=torch.float64)
         loader = make_dataloader((x, x.clone(), torch.ones_like(x)))
         penalty = make_penalty(config)
@@ -85,7 +85,7 @@ def _train_with_logging(output_dir, settings):
             return measure(*args, **kwargs)
         training.metrics = count_evaluation
         history = training.run_training(
-            pdap, problem, loader, num_iterations=settings.pop("iterations"), **settings,
+            pdap, network, loader, num_iterations=settings.pop("iterations"), **settings,
         )
         print(json.dumps({
             "evaluations": evaluations,

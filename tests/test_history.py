@@ -9,7 +9,7 @@ from src.config import make_penalty, resolve_model, validate_model_config
 from src.data import ValueSampleNormalizer, make_dataloader
 from src.eval import metrics as evaluate
 from src.eval import relative_errors
-from src.models import SparseModel
+from src.models import SparseNetwork
 from src.PDAP.history import History
 
 
@@ -45,25 +45,25 @@ def test_history_summary_metrics_uses_best_iteration() -> None:
 
 
 @pytest.mark.parametrize("legacy", [False, True])
-def test_restoring_a_zero_measure_snapshot_empties_an_initialized_model(legacy) -> None:
-    """A model that already carries atoms must not keep them across the restore.
+def test_restoring_a_zero_measure_snapshot_empties_an_initialized_network(legacy) -> None:
+    """A network that already carries atoms must not keep them across the restore.
 
     This is the terminal zero-measure run of ``PDAP.fit``: under strong
-    regularization the initial insertion accepts no atom, and the recorded model
+    regularization the initial insertion accepts no atom, and the recorded network
     has empty support. Historical zero-measure snapshots had an empty state_dict;
     current snapshots explicitly register empty inner_weight, inner_bias, and c tensors.
     """
     x = torch.tensor([[0.2, -0.3], [0.5, 0.7]], dtype=torch.float64)
 
     config = resolve_model({"activation": "tanh", "moment_order": 2.0}, 2)
-    empty = SparseModel(config)
+    empty = SparseNetwork(config)
     samples = (x, *empty(x))
     history = History()
     history.record(empty, evaluate(empty, make_penalty(config), make_dataloader(samples)))
     if legacy:
         history.model_states[0] = {}
 
-    restored = SparseModel(resolve_model({"activation": "tanh"}, 2))
+    restored = SparseNetwork(resolve_model({"activation": "tanh"}, 2))
     restored.set_atoms(
         torch.tensor([[1.0, 0.0], [0.0, 2.0]], dtype=torch.float64),
         torch.tensor([0.1, -0.2], dtype=torch.float64),
@@ -71,7 +71,7 @@ def test_restoring_a_zero_measure_snapshot_empties_an_initialized_model(legacy) 
     )
     assert restored.n_neurons == 2
 
-    history.restore_model(restored)
+    history.restore_network(restored)
 
     assert restored.n_neurons == 0
     value, gradient = restored(x)
@@ -98,12 +98,12 @@ def test_restoring_recorded_state_preserves_predictions(state_keys):
         model_states=[state],
     )
 
-    problem = history.restore_model(SparseModel(resolve_model({}, 2)))
-    value, gradient = problem(inner_weight.new_tensor([[1., 1.]]))
+    network = history.restore_network(SparseNetwork(resolve_model({}, 2)))
+    value, gradient = network(inner_weight.new_tensor([[1., 1.]]))
 
     torch.testing.assert_close(value, inner_weight.new_tensor([[10.5]]))
     torch.testing.assert_close(gradient, inner_weight.new_tensor([[3., 6.]]))
-    assert set(problem.state_dict()) == {"inner_weight", "inner_bias", "c"}
+    assert set(network.state_dict()) == {"inner_weight", "inner_bias", "c"}
 
 
 def test_recorded_checkpoints_stay_independent_of_models_and_each_other():
@@ -113,20 +113,20 @@ def test_recorded_checkpoints_stay_independent_of_models_and_each_other():
         "c": torch.tensor([3.], dtype=torch.float64),
     }
     config = resolve_model({}, 2)
-    problem = SparseModel(config)
-    problem.set_atoms(atoms["inner_weight"], atoms["inner_bias"], atoms["c"])
+    network = SparseNetwork(config)
+    network.set_atoms(atoms["inner_weight"], atoms["inner_bias"], atoms["c"])
     x = torch.tensor([[1., 1.]], dtype=torch.float64)
-    loader = make_dataloader((x, *problem(x)))
+    loader = make_dataloader((x, *network(x)))
     history = History()
     for _ in range(2):
-        history.record(problem, evaluate(problem, make_penalty(config), loader))
+        history.record(network, evaluate(network, make_penalty(config), loader))
         with torch.no_grad():
-            for tensor in problem.state_dict().values():
+            for tensor in network.state_dict().values():
                 tensor.add_(1.)
 
     history = pickle.loads(pickle.dumps(history))
     for i, state in enumerate(history.model_states):
-        restored = history.restore_model(SparseModel(resolve_model({}, 2)), iteration=i)
+        restored = history.restore_network(SparseNetwork(resolve_model({}, 2)), iteration=i)
         with torch.no_grad():
             for name, tensor in restored.state_dict().items():
                 torch.testing.assert_close(tensor, atoms[name] + i, rtol=0, atol=0)
@@ -147,13 +147,13 @@ def test_history_summary_records_normalized_objective_decomposition(alpha) -> No
 
     config = resolve_model({"activation": "tanh", "alpha": alpha, "gamma": 0.0,
                             "loss_weights": (1.0, 1.0), "moment_order": 2.0}, 2)
-    problem = SparseModel(config)
+    network = SparseNetwork(config)
     penalty = make_penalty(config)
-    problem.set_atoms(W, b, c)
-    samples = (x, *problem(x))
+    network.set_atoms(W, b, c)
+    samples = (x, *network(x))
 
     history = History()
-    history.record(problem, evaluate(problem, penalty, make_dataloader(samples)))
+    history.record(network, evaluate(network, penalty, make_dataloader(samples)))
     metrics = history.summary_metrics()
 
     # The full moment is 50*(1+1) + 45*(1+4) + 5*(1+25) = 455.
@@ -185,12 +185,12 @@ def test_sphere_penalty_and_reporting_do_not_depend_on_historical_moment_order(p
     for order in (None, 2., 4.):
         config = resolve_model({"power": power, "alpha": .1, "moment_order": order}, 2)
         validate_model_config(config)
-        problem = SparseModel(config)
-        problem.set_atoms(inner_weight, inner_bias, c)
-        assert problem.moment_order is None
-        torch.testing.assert_close(problem.moment_weight_of_atoms(), torch.ones_like(c))
+        network = SparseNetwork(config)
+        network.set_atoms(inner_weight, inner_bias, c)
+        assert network.moment_order is None
+        torch.testing.assert_close(network.moment_weight_of_atoms(), torch.ones_like(c))
         history = History()
-        history.record(problem, evaluate(problem, make_penalty(config), make_dataloader((x, *problem(x)))))
+        history.record(network, evaluate(network, make_penalty(config), make_dataloader((x, *network(x)))))
         history = pickle.loads(pickle.dumps(history))
         summary = history.summary_metrics()
         assert summary["total_variation"] == 5.
@@ -206,7 +206,7 @@ def test_physical_reporting_does_not_change_objectives_snapshots_or_selection():
     config = resolve_model({
         "activation": "tanh", "alpha": 0.1, "gamma": 0.2, "moment_order": 2.0,
     }, 2)
-    problem = SparseModel(config)
+    network = SparseNetwork(config)
     penalty = make_penalty(config)
     loader = make_dataloader(data)
     unchanged = History()
@@ -215,15 +215,15 @@ def test_physical_reporting_does_not_change_objectives_snapshots_or_selection():
     unchanged = pickle.loads(pickle.dumps(unchanged))
     physical = History(reporting_normalizer=normalizer)
     for coefficient in (1.0, 2.0):
-        problem.set_atoms(
+        network.set_atoms(
             torch.tensor([[1.0, 0.5]], dtype=torch.float64),
             torch.tensor([0.1], dtype=torch.float64),
             torch.tensor([coefficient], dtype=torch.float64),
         )
-        unchanged.record(problem, evaluate(problem, penalty, loader))
-        physical.record(problem, evaluate(problem, penalty, loader, reporting_normalizer=normalizer))
+        unchanged.record(network, evaluate(network, penalty, loader))
+        physical.record(network, evaluate(network, penalty, loader, reporting_normalizer=normalizer))
         expected = relative_errors(
-            *normalizer.denormalize_tensors(*problem(x)),
+            *normalizer.denormalize_tensors(*network(x)),
             *normalizer.denormalize_tensors(v, dv),
         )
         assert (physical.err_l2_val[-1], physical.err_grad_val[-1], physical.err_h1_val[-1]) == expected

@@ -20,7 +20,7 @@ from src.config import (
 )
 from src.config.schema import ExperimentConfig, ModelConfig, TrainingConfig
 from src.data import DATA_DIR, load_value_samples
-from src.models import SparseModel
+from src.models import SparseNetwork
 from src.PDAP import PDAP
 from src.SSN import SSN
 
@@ -69,7 +69,7 @@ def test_model_groups() -> None:
     assert fs.model.insertion == "finite_step"
     model_config = resolve_model(alg1.model, 2)
     validate_model_config(model_config)
-    assert SparseModel(model_config).normalized
+    assert SparseNetwork(model_config).normalized
     assert "objective" not in alg1.model
     assert "moment_beta" not in alg1.model
 
@@ -133,7 +133,7 @@ def test_experiments_sweep_both_datasets() -> None:
 
 
 def test_config_builds_trainer_and_model() -> None:
-    """The trainer and sole network/problem read their respective configuration."""
+    """The trainer and sole network read their respective configuration."""
     with initialize(version_base=None, config_path="../conf"):
         cfg = compose(config_name="config", overrides=["model.gamma=0.5", "env.verbose=false"])
 
@@ -141,7 +141,7 @@ def test_config_builds_trainer_and_model() -> None:
     model_config = resolve_model(cfg.model, 2)
     validate_model_config(model_config)
     validate_optimizer_config(cfg.training)
-    problem = SparseModel(model_config)
+    network = SparseNetwork(model_config)
     penalty = make_penalty(model_config)
     pdap = PDAP(cfg.training, penalty, insertion=model_config["insertion"])
     assert model_config["activation"] is torch.relu
@@ -159,19 +159,19 @@ def test_config_builds_trainer_and_model() -> None:
     assert pdap.fit_outer_iterations == 20
     assert pdap.ins_merge_tol == 1e-2
 
-    assert isinstance(problem, torch.nn.Module)
-    problem.set_atoms(
+    assert isinstance(network, torch.nn.Module)
+    network.set_atoms(
         torch.tensor([[1., 0.]], dtype=torch.float64),
         torch.tensor([0.], dtype=torch.float64),
         torch.tensor([2.], dtype=torch.float64),
     )
     x = torch.tensor([[-1., 3.], [2., 3.]], dtype=torch.float64)
-    value, _ = problem(x)
+    value, _ = network(x)
     torch.testing.assert_close(value, x.new_tensor([[0.], [4.]]))
-    assert problem.input_dim == 2
+    assert network.input_dim == 2
 
 
-def test_construct_problem_from_loaded_dataset() -> None:
+def test_construct_network_from_loaded_dataset() -> None:
     """Loading the configured dataset and building the model gives input_dim=2."""
     with initialize(version_base=None, config_path="../conf"):
         cfg = compose(config_name="config", overrides=["env.verbose=false"])
@@ -180,7 +180,7 @@ def test_construct_problem_from_loaded_dataset() -> None:
     data = load_value_samples(cfg.data.path)
     model_config = resolve_model(cfg.model, input_dim=data["x"].shape[1])
     validate_model_config(model_config)
-    model = SparseModel(model_config)
+    model = SparseNetwork(model_config)
     assert model.input_dim == 2
 
 
@@ -245,8 +245,8 @@ def test_use_sphere_derives_from_activation() -> None:
         smooth = compose(config_name="config",
                          overrides=["model.activation=matern52", "model.moment_order=2.0", "env.verbose=false"])
     # default activation is relu (homogeneous -> sphere); matern52 is not
-    assert SparseModel(resolve_model(default.model, 2)).use_sphere is True
-    assert SparseModel(resolve_model(smooth.model, 2)).use_sphere is False
+    assert SparseNetwork(resolve_model(default.model, 2)).use_sphere is True
+    assert SparseNetwork(resolve_model(smooth.model, 2)).use_sphere is False
 
 
 @pytest.mark.parametrize("order", [None, 0., -1., float("nan"), float("inf"), -float("inf")])
@@ -265,15 +265,15 @@ def test_training_order_exceeds_the_declared_h1_growth_bound(activation, bound):
         validate_model_config(resolve_model(ModelConfig(activation=activation, moment_order=bound), 2))
     config = resolve_model(ModelConfig(activation=activation, moment_order=bound + .01), 2)
     validate_model_config(config)
-    problem = SparseModel(config)
-    assert problem.moment_order == bound + .01
+    network = SparseNetwork(config)
+    assert network.moment_order == bound + .01
 
 
 def test_activation_without_growth_metadata_keeps_explicit_numerical_training():
     config = ModelConfig(activation="snake_b0_25", moment_order=.5)
     resolved = resolve_model(config, 2)
     validate_model_config(resolved)
-    assert SparseModel(resolved).moment_order == .5
+    assert SparseNetwork(resolved).moment_order == .5
     config.moment_order = None
     with pytest.raises(ValueError, match="explicit moment_order"):
         validate_model_config(resolve_model(config, 2))
@@ -294,4 +294,4 @@ def test_log_penalty_preset_supports_both_formulations(activation, order):
     assert cfg.model.moment_order == 2.01
     model_config = resolve_model(cfg.model, 2)
     validate_model_config(model_config)
-    assert SparseModel(model_config).moment_order == order
+    assert SparseNetwork(model_config).moment_order == order

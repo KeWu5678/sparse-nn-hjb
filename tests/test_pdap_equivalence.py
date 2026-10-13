@@ -32,7 +32,7 @@ import torch
 from src.config import make_penalty, resolve_model, validate_model_config
 from src.config.schema import EnvConfig, ExperimentConfig, ModelConfig, TrainingConfig
 from src.data import make_dataloaders
-from src.models import SparseModel
+from src.models import SparseNetwork
 from src.PDAP import PDAP
 from src.training import run_training
 
@@ -78,11 +78,11 @@ def _run_summary(name: str) -> np.ndarray:
     data = _make_data()
     model_config = resolve_model(cfg.model, input_dim=data["x"].shape[1])
     validate_model_config(model_config)
-    model = SparseModel(model_config)
+    network = SparseNetwork(model_config)
     train_loader, valid_loader = make_dataloaders(data, cfg.data.train_fraction)
     out = run_training(
         PDAP(cfg.training, make_penalty(model_config), insertion=model_config["insertion"]),
-        model,
+        network,
         train_loader, valid_loader, num_iterations=3, verbose=False,
     )
     return np.array(

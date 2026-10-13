@@ -8,7 +8,7 @@ from src.config import make_penalty, resolve_model, validate_model_config
 from src.config.activations import ACTIVATIONS
 from src.data import make_dataloader
 from src.eval import metrics
-from src.models import LogPenalty, SparseModel
+from src.models import LogPenalty, SparseNetwork
 from src.models.penalty import _phi
 
 
@@ -19,44 +19,44 @@ def _samples():
     return X, V, dV
 
 
-def _problem(activation="relu", power=1.0, **specifications):
+def _network(activation="relu", power=1.0, **specifications):
     config = resolve_model({
         "activation": activation, "power": power, "moment_order": 2.0, **specifications,
     }, 2)
     validate_model_config(config)
-    problem = SparseModel(config)
-    problem.set_atoms(
+    network = SparseNetwork(config)
+    network.set_atoms(
         torch.tensor([[0.5, -0.3], [0.1, 0.7]], dtype=torch.float64),
         torch.tensor([0.2, 0.3], dtype=torch.float64),
         torch.tensor([-0.6, 0.8], dtype=torch.float64),
     )
-    return problem, make_penalty(config)
+    return network, make_penalty(config)
 
 
 def test_obj_is_the_weighted_h1_quadratic_of_the_network():
-    problem, _ = _problem(loss_weights=(.4, 1.3))
+    network, _ = _network(loss_weights=(.4, 1.3))
     X, V, dV = _samples()
-    Vp, dVp = problem(X)
+    Vp, dVp = network(X)
     expected = (.4 * (Vp - V).square().sum() + 1.3 * (dVp - dV).square().sum()) / (2 * len(X))
 
-    torch.testing.assert_close(problem.obj(X, (V, dV)), expected)
+    torch.testing.assert_close(network.obj(X, (V, dV)), expected)
     c = X.new_tensor([.3, -.1])
-    trial = problem.obj(X, (V, dV), c)
-    problem.set_atoms(problem.inner_weight, problem.inner_bias, c)
-    torch.testing.assert_close(trial, problem.obj(X, (V, dV)))
+    trial = network.obj(X, (V, dV), c)
+    network.set_atoms(network.inner_weight, network.inner_bias, c)
+    torch.testing.assert_close(trial, network.obj(X, (V, dV)))
 
 
 def test_coefficient_gradient_and_full_hessian_match_the_scalar_objective():
-    problem, _ = _problem("softplus", loss_weights=(.4, 1.3))
+    network, _ = _network("softplus", loss_weights=(.4, 1.3))
     X, V, dV = _samples()
-    c = problem.c.detach().clone()
+    c = network.c.detach().clone()
 
     def fitting(c):
-        return problem.obj(X, (V, dV), c)
+        return network.obj(X, (V, dV), c)
 
-    Vp, dVp = problem(X)
-    jac = problem.jac_obj((X, Vp - V, dVp - dV))
-    hess = problem.hess_obj(X)
+    Vp, dVp = network(X)
+    jac = network.jac_obj((X, Vp - V, dVp - dV))
+    hess = network.hess_obj(X)
 
     torch.testing.assert_close(jac, torch.func.grad(fitting)(c))
     torch.testing.assert_close(hess, torch.func.hessian(fitting)(c))
@@ -90,8 +90,8 @@ def test_validated_power_selects_the_proximal_map_and_derivative(
     power, exponent, alpha, value, expected, derivative,
 ):
     config = resolve_model({"power": power, "alpha": alpha}, 2)
-    problem = SparseModel(config)
-    assert problem.penalty_exponent == exponent
+    network = SparseNetwork(config)
+    assert network.penalty_exponent == exponent
     penalty = make_penalty(config)
     q = torch.tensor([-value, value], dtype=torch.float64)
     prox = penalty.prox(q, alpha)
@@ -112,19 +112,19 @@ def test_validated_power_selects_the_proximal_map_and_derivative(
 def test_samples_define_the_objective_and_its_derivatives(activation, power, gamma):
     data = _samples()
     loader = make_dataloader(data)
-    problem, penalty = _problem(activation, power, alpha=0.1, gamma=gamma, loss_weights=(0.4, 1.3))
-    before = {name: tensor.clone() for name, tensor in problem.state_dict().items()}
-    loss, hess_obj, u = coefficient_problem(problem, penalty, loader)
-    moment_weight = problem.moment_weight_of_atoms()
+    network, penalty = _network(activation, power, alpha=0.1, gamma=gamma, loss_weights=(0.4, 1.3))
+    before = {name: tensor.clone() for name, tensor in network.state_dict().items()}
+    loss, hess_obj, u = coefficient_problem(network, penalty, loader)
+    moment_weight = network.moment_weight_of_atoms()
 
     def fitting(u):
-        return problem.obj(data[0], data[1:], u / moment_weight)
+        return network.obj(data[0], data[1:], u / moment_weight)
 
-    Vp, dVp = problem(data[0])
+    Vp, dVp = network(data[0])
     expected_obj = (0.4 * (Vp - data[1]).square().sum() + 1.3 * (dVp - data[2]).square().sum()) / (
         2 * len(data[0])
     )
-    torch.testing.assert_close(problem.obj(data[0], data[1:]), expected_obj)
+    torch.testing.assert_close(network.obj(data[0], data[1:]), expected_obj)
     torch.testing.assert_close(fitting(u), expected_obj)
     torch.testing.assert_close(hess_obj, torch.func.hessian(fitting)(u))
     if power == 1.0:
@@ -132,7 +132,7 @@ def test_samples_define_the_objective_and_its_derivatives(activation, power, gam
     else:
         correction = lambda u: u.new_zeros(())
     obj_augmented = lambda u: fitting(u) + correction(u)
-    assert float(loss(u)) == pytest.approx(metrics(problem, penalty, loader)["train_loss"], rel=1e-12)
+    assert float(loss(u)) == pytest.approx(metrics(network, penalty, loader)["train_loss"], rel=1e-12)
 
     optimizer = correction_optimizer(penalty, hess_obj, u)
     torch.testing.assert_close(
@@ -145,47 +145,47 @@ def test_samples_define_the_objective_and_its_derivatives(activation, power, gam
         torch.testing.assert_close(loss(u), obj_augmented(u) + 0.1 * u.abs().sum())
     else:
         torch.testing.assert_close(obj_augmented(u), fitting(u), rtol=0, atol=0)
-    for name, tensor in problem.state_dict().items():
+    for name, tensor in network.state_dict().items():
         torch.testing.assert_close(tensor, before[name], rtol=0, atol=0)
 
 
-def test_one_problem_handles_empty_and_replaced_supports():
+def test_one_network_handles_empty_and_replaced_supports():
     data = _samples()
     loader = make_dataloader(data)
     config = resolve_model({"activation": "softplus", "alpha": 0.01, "moment_order": 2.0}, 2)
     validate_model_config(config)
-    problem = SparseModel(config)
+    network = SparseNetwork(config)
     penalty = make_penalty(config)
-    prediction = problem(data[0])
+    prediction = network(data[0])
     residual = data[0], *(p - t for p, t in zip(prediction, data[1:]))
     torch.testing.assert_close(residual[1], -data[1])
     torch.testing.assert_close(residual[2], -data[2])
-    initial_loss = metrics(problem, penalty, loader)["train_loss"]
+    initial_loss = metrics(network, penalty, loader)["train_loss"]
     a = torch.tensor([0.2, -0.3], dtype=torch.float64, requires_grad=True)
     b = a.new_tensor(0.1, requires_grad=True)
-    score = problem.jac_obj(residual, a.reshape(1, -1), b.reshape(1))[0].abs() / problem.moment_weight_of_atoms(a, b)
+    score = network.jac_obj(residual, a.reshape(1, -1), b.reshape(1))[0].abs() / network.moment_weight_of_atoms(a, b)
     assert all(torch.isfinite(g).all() for g in torch.autograd.grad(score, (a, b)))
 
     for width in (0, 2, 1, 3):
         W = torch.arange(1, 2 * width + 1, dtype=torch.float64).reshape(width, 2) / 5
-        problem.set_atoms(W, torch.zeros(width, dtype=W.dtype), torch.ones(width, dtype=W.dtype))
-        loss, hess_obj, u = coefficient_problem(problem, penalty, loader)
+        network.set_atoms(W, torch.zeros(width, dtype=W.dtype), torch.ones(width, dtype=W.dtype))
+        loss, hess_obj, u = coefficient_problem(network, penalty, loader)
         assert hess_obj.shape == (width, width)
-        assert float(loss(u)) == pytest.approx(metrics(problem, penalty, loader)["train_loss"], rel=1e-12)
+        assert float(loss(u)) == pytest.approx(metrics(network, penalty, loader)["train_loss"], rel=1e-12)
 
-    problem.set_atoms(W[:0], W.new_zeros(0), W.new_zeros(0))
-    assert metrics(problem, penalty, loader)["train_loss"] == pytest.approx(initial_loss)
+    network.set_atoms(W[:0], W.new_zeros(0), W.new_zeros(0))
+    assert metrics(network, penalty, loader)["train_loss"] == pytest.approx(initial_loss)
 
 
 @pytest.mark.parametrize("activation,power", [("relu", 1.), ("relu", 2.), ("relu", 3.), ("softplus", 1.)])
 def test_candidate_objective_gradient_retains_inner_weight_derivatives(activation, power):
-    problem, _ = _problem(activation, power, loss_weights=(.4, 1.3))
+    network, _ = _network(activation, power, loss_weights=(.4, 1.3))
     X, V, dV = _samples()
-    prediction = problem(X)
+    prediction = network(X)
     residual = X, prediction[0] - V, prediction[1] - dV
     omega = X.new_tensor([.7, -.2, .4], requires_grad=True)
     def candidate_gradient(omega):
-        return problem.jac_obj(residual, omega[:2].reshape(1, -1), omega[2:].reshape(1))[0]
+        return network.jac_obj(residual, omega[:2].reshape(1, -1), omega[2:].reshape(1))[0]
 
     slope = candidate_gradient(omega)
     derivative = torch.autograd.grad(slope, omega)[0]

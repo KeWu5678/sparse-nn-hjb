@@ -61,7 +61,7 @@ class ModelConfig:
     # Algorithm 1 evaluates the penalty on the normalized measure
     # mu_p = w_p*mu, with w_p(omega) = 1 + |omega|^p.  For a signed profile model
     # with a nonhomogeneous activation this is the only supported objective;
-    # SparseModel applies it automatically.  Algorithm 2 is sphere-normalized and does not use
+    # SparseNetwork applies it automatically.  Algorithm 2 is sphere-normalized and does not use
     # this parameter.
     moment_order: Optional[float] = None  # Explicit for nonhomogeneous models; unused on the sphere.
 
@@ -254,7 +254,7 @@ def resolve_model(config, input_dim: int) -> dict:
 
 
 def validate_model_config(config) -> None:
-    """Validate resolved model settings before constructing a training problem.
+    """Validate resolved model settings before constructing a network.
 
     The insertion rule in this mapping must also be the one supplied to PDAP.
     Prediction-only reconstruction does not call this training configuration gate.

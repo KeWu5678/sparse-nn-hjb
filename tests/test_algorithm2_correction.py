@@ -9,7 +9,7 @@ from ssn_test_problem import closure_for, synthetic_correction
 from src.config import make_penalty, resolve_model, validate_model_config
 from src.config.schema import TrainingConfig
 from src.data import make_dataloader
-from src.models import FractionalPenalty, SparseModel
+from src.models import FractionalPenalty, SparseNetwork
 from src.PDAP import PDAP
 from src.SSN import SSN
 
@@ -44,7 +44,7 @@ def test_fractional_ssn_chooses_the_scale_from_its_starting_coefficients() -> No
 
 
 @pytest.mark.parametrize("power", [2.0, 3.0])
-def test_fractional_problem_rejects_a_log_penalty(power: float) -> None:
+def test_fractional_network_rejects_a_log_penalty(power: float) -> None:
     with pytest.raises(ValueError, match="power penalty requires gamma == 0"):
         validate_model_config(resolve_model({"alpha": 1.0, "gamma": 1.0, "power": power}, 1))
 
@@ -52,8 +52,8 @@ def test_fractional_problem_rejects_a_log_penalty(power: float) -> None:
 def test_fractional_correction_reports_an_all_zero_warm_start() -> None:
     config = resolve_model({"alpha": 1.0, "gamma": 0.0, "power": 2.0}, 1)
     validate_model_config(config)
-    problem = SparseModel(config)
-    problem.set_atoms(
+    network = SparseNetwork(config)
+    network.set_atoms(
         torch.tensor([[1.0]], dtype=torch.float64),
         torch.tensor([0.0], dtype=torch.float64),
         torch.tensor([0.0], dtype=torch.float64),
@@ -69,7 +69,7 @@ def test_fractional_correction_reports_an_all_zero_warm_start() -> None:
         ValueError, match="warm-start proximal scaling requires a nonzero coefficient"
     ):
         PDAP(TrainingConfig(fit_outer_iterations=1), make_penalty(config)).train_ssn_outerweights(
-            problem, make_dataloader(data),
+            network, make_dataloader(data),
         )
 
 

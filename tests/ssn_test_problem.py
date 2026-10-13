@@ -1,6 +1,6 @@
 """Synthetic objectives for solver isolation, including indefinite quadratics.
 
-Production problems are built from samples. These tests supply fitting directly
+Production networks are built from samples. These tests supply fitting directly
 so that negative curvature, additive constants, and historical losses remain
 exactly as originally tested.
 """
@@ -36,11 +36,11 @@ def closure_for(optimizer, coefficient, fitting):
     return closure
 
 
-def coefficient_problem(problem, penalty, loader):
+def coefficient_problem(network, penalty, loader):
     """The objective SSN minimizes, its fitting Hessian and the starting coefficients, without a solve.
 
     The objective is PDAP's coefficient fitting term plus the penalty SSN adds.
     """
     pdap = PDAP(TrainingConfig(), penalty)
-    fitting, hess_obj, moment_weight = pdap.fit_obj_with_outerweights(problem, loader)
-    return (lambda u: fitting(u) + penalty.value(u)), hess_obj, problem.c.detach() * moment_weight
+    fitting, hess_obj, moment_weight = pdap.fit_obj_with_outerweights(network, loader)
+    return (lambda u: fitting(u) + penalty.value(u)), hess_obj, network.c.detach() * moment_weight

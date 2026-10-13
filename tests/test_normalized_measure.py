@@ -1,4 +1,4 @@
-"""Tests for Algorithm 1's normalized-measure primitives and model identity."""
+"""Tests for Algorithm 1's normalized-measure primitives and network identity."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ import torch
 from src.config import resolve_model, validate_model_config
 from src.config.schema import ExperimentConfig, ModelConfig
 from src.eval import amplitude_mass_radius
-from src.models import SparseModel
+from src.models import SparseNetwork
 
 
 def _cfg(**model_kwargs) -> ExperimentConfig:
@@ -18,9 +18,9 @@ def _cfg(**model_kwargs) -> ExperimentConfig:
 
 
 def moment_weight(W: torch.Tensor, b: torch.Tensor, p: float) -> torch.Tensor:
-    """Moment weights of the supplied atoms under a model of moment order p."""
-    model = SparseModel(resolve_model({"activation": "softplus", "power": 1.0, "moment_order": p}, 2))
-    return model.moment_weight_of_atoms(W, b)
+    """Moment weights of the supplied atoms under a network of moment order p."""
+    network = SparseNetwork(resolve_model({"activation": "softplus", "power": 1.0, "moment_order": p}, 2))
+    return network.moment_weight_of_atoms(W, b)
 
 
 def test_moment_weight_p2_is_one_plus_squared_norm() -> None:
@@ -85,13 +85,13 @@ def test_amplitude_mass_radius_is_zero_without_amplitude_mass() -> None:
 
 
 def test_nonhomogeneous_signed_profile_is_normalized_automatically() -> None:
-    problem = SparseModel(resolve_model({"activation": "softplus", "power": 1.0}, 2))
+    network = SparseNetwork(resolve_model({"activation": "softplus", "power": 1.0}, 2))
 
-    assert problem.normalized
+    assert network.normalized
 
 
 def test_sphere_profile_model_is_not_moment_normalized() -> None:
-    sphere = SparseModel(resolve_model({"activation": "relu", "power": 1.0}, 2))
+    sphere = SparseNetwork(resolve_model({"activation": "relu", "power": 1.0}, 2))
 
     assert not sphere.normalized
 

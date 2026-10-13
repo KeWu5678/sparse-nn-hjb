@@ -10,7 +10,7 @@ import torch
 
 import src.PDAP.insertion as insertion
 from src.config import make_penalty, resolve_model, validate_model_config
-from src.models import SparseModel
+from src.models import SparseNetwork
 
 
 def _inputs():
@@ -72,7 +72,7 @@ def _generate(
     }, 1)
     validate_model_config(config)
     a, b, discarded_outside = insertion._generate_candidates(
-        SparseModel(config),
+        SparseNetwork(config),
         (X, residual_v, residual_dv),
         sample_sphere=_starts(starts),
         num_of_initial_pts=len(starts),
@@ -115,13 +115,13 @@ def test_algorithm1_distinguishes_radius_search_failure_from_threshold_stop(
         "activation": "tanh", "power": 1.0, "alpha": 1.0, "moment_order": 2.0,
     }, 1)
     validate_model_config(config)
-    problem = SparseModel(config)
+    network = SparseNetwork(config)
     penalty = make_penalty(config)
 
     _fake_lbfgs(monkeypatch, [[2.0, 0.0]])
     with caplog.at_level(logging.DEBUG):
         insertion.profile_threshold(
-            problem, penalty, (X, residual_v, residual_dv),
+            network, penalty, (X, residual_v, residual_dv),
             sample_sphere=_starts([[1.0, 0.0]]),
             num_of_initial_pts=1,
             max_insert=1,
@@ -136,7 +136,7 @@ def test_algorithm1_distinguishes_radius_search_failure_from_threshold_stop(
     _fake_lbfgs(monkeypatch, [[0.0, 0.0]])
     with caplog.at_level(logging.DEBUG):
         insertion.profile_threshold(
-            problem, penalty, (X, residual_v, residual_dv),
+            network, penalty, (X, residual_v, residual_dv),
             sample_sphere=_starts([[1.0, 0.0]]),
             num_of_initial_pts=1,
             max_insert=1,
@@ -158,12 +158,12 @@ def test_sphere_search_reports_when_only_existing_support_is_returned(
     )
     config = resolve_model({"activation": "relu", "power": 2.0, "alpha": 1.0}, 1)
     validate_model_config(config)
-    problem = SparseModel(config)
+    network = SparseNetwork(config)
     penalty = make_penalty(config)
 
     with caplog.at_level(logging.DEBUG):
         insertion.profile_threshold(
-            problem, penalty, (X, residual_v, residual_dv),
+            network, penalty, (X, residual_v, residual_dv),
             sample_sphere=_starts([[1.0, 0.0]]),
             num_of_initial_pts=1,
             max_insert=1,
@@ -223,9 +223,9 @@ def test_algorithm1_optimizes_each_random_start_once(monkeypatch):
     assert len(fake.instances) == 2
 
 
-def test_nonhomogeneous_search_gets_normalization_from_the_problem():
-    problem = SparseModel(resolve_model({"activation": "tanh"}, 1))
-    assert problem.normalized
+def test_nonhomogeneous_search_gets_normalization_from_the_network():
+    network = SparseNetwork(resolve_model({"activation": "tanh"}, 1))
+    assert network.normalized
     with pytest.raises(TypeError, match="normalized"):
         resolve_model({"activation": "tanh", "normalized": False}, 1)
 

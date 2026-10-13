@@ -12,22 +12,22 @@ import logging
 
 import torch
 
-from ..models import Penalty, SparseModel
+from ..models import Penalty, SparseNetwork
 
 logger = logging.getLogger(__name__)
 
 
 @torch.no_grad()
-def warm_start(problem: SparseModel, penalty: Penalty, X: torch.Tensor, target, n_new: int, *,
+def warm_start(network: SparseNetwork, penalty: Penalty, X: torch.Tensor, target, n_new: int, *,
                verbose: bool = False) -> None:
     """Set the zero outer weights of the last n_new atoms by a proximal step along the largest-profile direction."""
     if n_new == 0:
         return
-    new = slice(problem.n_neurons - n_new, None)
-    Vp, dVp = problem(X)
+    new = slice(network.n_neurons - n_new, None)
+    Vp, dVp = network(X)
     residual = X, Vp - target[0], dVp - target[1]
-    scale = problem.moment_weight_of_atoms()[new]
-    jac = problem.jac_obj(residual)
+    scale = network.moment_weight_of_atoms()[new]
+    jac = network.jac_obj(residual)
     profiles = jac[new] / scale
     abs_profiles = profiles.abs()
     best = int(abs_profiles.argmax().item())
@@ -38,11 +38,11 @@ def warm_start(problem: SparseModel, penalty: Penalty, X: torch.Tensor, target, 
     direction = torch.zeros_like(jac)
     direction[new] = -base / scale
     slope = float(jac @ direction)
-    curvature = float(direction @ problem.hess_obj(residual[0]) @ direction)
+    curvature = float(direction @ network.hess_obj(residual[0]) @ direction)
     tau = penalty.descent_step(slope, curvature)
-    problem.c[new] = tau * direction[new]
+    network.c[new] = tau * direction[new]
     if verbose:
         logger.debug(
             "Warm start        initialized %d new output weights  max |weight|=%.2e",
-            n_new, float(problem.c[new].abs().max().item()),
+            n_new, float(network.c[new].abs().max().item()),
         )
