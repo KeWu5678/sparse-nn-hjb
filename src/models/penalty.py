@@ -1,13 +1,7 @@
 """The coefficient penalty and the proximal maps built on it.
 
-For t >= 0, the log family has the fixed half-mixture used by the MATLAB
-2D/stereo references: phi(t) = t/2 + log(1+2*gamma*t)/(4*gamma).
-At gamma=0, phi(t)=t. The fractional family is t^q, with gamma=0 and the
-exact exponent q in {2/3, 1/2} implied by a validated activation power.
-The fractional maps use closed-form stationary roots together with the global
-objective-switching threshold; at an exact tie they return zero.
-
-Read top to bottom: the penalty families, then the scalar mathematics they use.
+log penalty: phi(t) = t/2 + log(1+2*gamma*t)/(4*gamma). At gamma=0, phi(t)=t.
+fractional penalty: t^q, with q in {2/3, 1/2} implied by a validated activation power.
 """
 
 from __future__ import annotations
@@ -29,11 +23,7 @@ def make_penalty(alpha: float, gamma: float, penalty_exponent: float) -> Penalty
 
 
 class Penalty(ABC):
-    """The penalty term alpha*Phi of the objective and its proximal maps.
-
-    alpha*Phi is the nonsmooth term alpha*sum|u|^q, which the proximal maps
-    handle exactly, plus a smooth correction that is zero unless a family adds
-    one. Proximal maps take the proximal constant lambda_.
+    """The penalty term and its proximal maps.
     """
 
     def __init__(self, alpha: float, penalty_exponent: float) -> None:
@@ -284,20 +274,7 @@ def _compute_prox_derivative_q_one(v, lambda_):
 
 
 def _phi_prox(v: float, lambda_: float, gamma: float) -> float:
-    """MATLAB's closed-form nonnegative step for ``lambda * phi(t)``.
-
-    The objective is J(t) = (t-v)^2/2 + lambda*phi(t), t >= 0.
-    At gamma=0 the step is nonnegative soft thresholding. Otherwise, with
-    gamma_bar = 2*gamma, stationarity gives
-        t^2 - a*t + (lambda-v)/gamma_bar = 0,
-        a = v - lambda/2 - 1/gamma_bar.
-    Delta is its discriminant; the larger root is clipped to t >= 0, as in
-    MATLAB setup_problem_NN_2d.m (theta=1/2).
-
-    For lambda, gamma >= 0, this is a global minimizer when lambda*gamma < 1
-    or v >= lambda. PDAP's warm-start acceptance guard ensures the latter.
-    Outside these regimes the root need not be globally optimal; no extra
-    objective comparison or rejection is performed, matching the reference.
+    """MATLAB's closed-form
     """
     if gamma == 0:
         return max(v - lambda_, 0.0)
