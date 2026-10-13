@@ -91,10 +91,10 @@ class SSN(Optimizer):
                 parameters_to_vector(self._params).detach(), ALGORITHM2_PROX_RHO,
             )
         group["prox_scale"] = prox_scale
-        group["tau"] = self._tau(prox_scale)
+        group["tau"] = self._tau_from(prox_scale)
         self.last_step_success = True
 
-    def _tau(self, prox_scale: float | None) -> float:
+    def _tau_from(self, prox_scale: float | None) -> float:
         """The penalty's proximal step tau, after checking a supplied scale."""
         if prox_scale is not None and (not math.isfinite(prox_scale) or prox_scale <= 0.0):
             raise ValueError(f"prox_scale must be positive and finite, got {prox_scale}")
@@ -163,11 +163,16 @@ class SSN(Optimizer):
         """
         active = torch.abs(u) > 0
         grad = torch.where(active, -self.penalty.jac_nonsmooth_term(u), jac_obj_augmented)
-        return u - self.param_groups[0]["tau"] * grad
+        return u - self._tau * grad
+
+    @property
+    def _tau(self) -> float:
+        """The proximal step tau, fixed at construction; the proximal constant is alpha*tau."""
+        return self.param_groups[0]["tau"]
 
     def normal_map(self, q: Tensor, u: Tensor, jac_obj_augmented: Tensor) -> Tensor:
         """Evaluate G(q), using u = P(q) and the smooth gradient at u."""
-        return (q - u) / self.param_groups[0]["tau"] + jac_obj_augmented
+        return (q - u) / self._tau + jac_obj_augmented
 
     def _stationary(self, normal_q: Tensor) -> bool:
         """Whether ||G(q)||_inf is at or below tolerance_grad; zero disables the test."""
@@ -182,13 +187,13 @@ class SSN(Optimizer):
         return NewtonSystem(q, normal_q, self.jac_normal(u, jac_prox), jac_prox)
 
     def _prox_constant(self) -> float:
-        return self.penalty.alpha * self.param_groups[0]["tau"]
+        return self.penalty.alpha * self._tau
 
     def jac_normal(self, u: Tensor, jac_prox: Tensor) -> Tensor:
         """Selected G'(q), using u = P(q) and jac_prox = P'(q)."""
         I = torch.eye(u.numel(), device=u.device, dtype=u.dtype)
         return (
-            (I - jac_prox) / self.param_groups[0]["tau"]
+            (I - jac_prox) / self._tau
             + self.hess_obj_augmented(u) @ jac_prox
         )
 
