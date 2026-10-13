@@ -25,12 +25,6 @@ class PDAP:
         self, training: TrainingConfig, penalty: Penalty, network: SparseNetwork,
         train_loader: DataLoader, *, insertion: str = "profile",
     ) -> None:
-        """Read the settings for one outer step; run_training owns its repetition.
-
-        penalty is shared by insertion, correction and evaluation. Training setup
-        validates training with validate_optimizer_config and the insertion rule
-        with validate_model_config before construction.
-        """
         self.penalty = penalty
         self.network = network
         self.train_loader = train_loader
