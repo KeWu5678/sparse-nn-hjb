@@ -76,10 +76,7 @@ class PDAP:
 
     def _insert(self):
         """Return accepted atoms and their outer weights, or None for weights to warm-start."""
-        # Sequential insertion admits the highest-ranked candidate returned by the
-        # multistart search, one atom per outer iteration. The theorem's rate bound
-        # additionally requires that this candidate be an exact global maximizer; a
-        # batch also introduces cross terms through its shared frozen residual.
+
         max_insert = 1 if self.insert_mode == "sequential" else self.max_insert
         X, V, dV = full_batch(self.train_loader)
         with torch.no_grad():
