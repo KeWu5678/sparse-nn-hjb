@@ -297,14 +297,15 @@ def validate_model_config(config) -> None:
 def validate_optimizer_config(training: TrainingConfig) -> None:
     """Validate the training settings before constructing PDAP.
 
-    Each paper-conformance axis is checked here rather than at use, so a typo
-    fails at setup instead of midway through a sweep.
+    Each setting with a fixed set of values is checked here rather than at use,
+    so a typo fails at setup instead of midway through a sweep.
     """
     for name, value, allowed in (
         ("training.insert_init", training.insert_init, ("warm_start", "guaranteed")),
         ("training.insert_mode", training.insert_mode, ("batch", "sequential")),
         ("training.loop_order", training.loop_order, ("correction_first", "insertion_first")),
         ("training.radial_cap", training.radial_cap, ("fixed", "theorem")),
+        ("training.method", training.method, ("levenberg_marquardt", "steihaug_cg")),
     ):
         if value not in allowed:
             raise ValueError(f"{name} must be one of {allowed}, got {value!r}")

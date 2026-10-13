@@ -36,7 +36,7 @@ def _cfg(**over) -> ExperimentConfig:
         "moment_order", "loss_weights",
     }
     train_keys = {
-        "insert_init", "insert_mode", "correction_guard", "loop_order", "radial_cap",
+        "insert_init", "insert_mode", "correction_guard", "loop_order", "radial_cap", "method",
     }
     model = dict(kind="signed", insertion="profile", activation="softplus", power=1.0,
                  alpha=1e-4, gamma=1.0, moment_order=2.0)
@@ -354,6 +354,7 @@ def test_insertion_reuses_the_residual_for_the_theorem_radius() -> None:
         ),
         (dict(insertion="nonsense"), "insertion must be 'profile' or 'finite_step'"),
         (dict(insert_mode="nonsense"), "training.insert_mode must be one of"),
+        (dict(method="nonsense"), "training.method must be one of"),
     ],
 )
 def test_incoherent_configurations_are_rejected(over: dict, message: str) -> None:
