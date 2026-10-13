@@ -1,9 +1,4 @@
 """PDAP support updates and complete outer steps.
-
-SparseModel owns the network and its fitting; Penalty owns the penalty term
-and its proximal maps. PDAP owns candidate search, insertion, coefficient
-correction, pruning and the no-candidate stopping rule.
-The external training loop owns repetition, measurement and history.
 """
 
 from __future__ import annotations
@@ -42,10 +37,6 @@ class PDAP:
         self.correction_guard = bool(training.correction_guard)
         self.loop_order = training.loop_order
         self.radial_cap = training.radial_cap
-        # The cap the last insertion search used, and whether the theorem
-        # supplied it. Recorded per iteration so a `radial_cap=theorem` run
-        # whose hypothesis p > s1 fails stays distinguishable from `fixed`:
-        # both search inside exp(5), so the metrics are otherwise identical.
         self._last_search_radius: float | None = None
         self._last_theorem_applied: float | None = None
 
@@ -67,12 +58,6 @@ class PDAP:
         self, problem: SparseModel, train_loader: DataLoader, *, verbose: bool = False,
     ) -> dict:
         """Insert, correct and prune one complete step of the paper algorithms.
-
-        Mutate the supplied network and return execution facts. No admissible
-        insertion leaves it unchanged and reports ``stop_reason="no_candidate"``;
-        this is the search stopping rule, not a convergence certificate.
-        The historical correction-first schedule uses the explicit operations
-        below so its measurement can still precede the trailing insertion.
         """
         diagnostics = self.insert(problem, train_loader, verbose=verbose)
         diagnostics["stop_reason"] = "no_candidate" if diagnostics["inserted"] == 0 else None
@@ -221,12 +206,6 @@ class PDAP:
         amp_tol: float = 1e-8,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, int]:
         """Defensive gate: drop atoms whose outer weight is negligible.
-
-        An atom with ``|c| <= amp_tol`` is effectively the zero measure (the
-        regularizer ``alpha * ||mu||_M`` charges per ``|c|``), so it is removed.
-        No clustering/merging is performed; redundant near-duplicate atoms are
-        harmless and handled by the next solver iteration.
-
         Returns ``(W (n,d), b (n,), c (n,), pruned)`` with ``pruned`` the number
         of atoms dropped.
         """

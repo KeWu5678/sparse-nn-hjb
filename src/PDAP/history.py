@@ -38,7 +38,6 @@ class History:
     gradient_loss_train: List[float] = field(default_factory=list)
     gradient_loss_val: List[float] = field(default_factory=list)
     sparsity_functional: List[float] = field(default_factory=list)
-    psi_p: List[float | None] = field(default_factory=list)
     alpha_phi: List[float] = field(default_factory=list)
     total_variation: List[float] = field(default_factory=list)
     radius_r95: List[float] = field(default_factory=list)
@@ -67,7 +66,7 @@ class History:
     run_metrics: dict[str, Any] = field(default_factory=dict)
 
     def record(
-        self, problem: SparseModel, values: dict[str, float | None],
+        self, problem: SparseModel, values: dict[str, float],
         diagnostics: dict[str, Any] | None = None,
     ) -> None:
         """Store supplied measurements and an independent checkpoint.
@@ -153,7 +152,6 @@ class History:
         }
         if getattr(self, "data_loss_train", []):
             w1, w2 = getattr(self, "loss_weights", (1.0, 1.0))
-            psi_p = self.psi_p[i]
             metrics.update(
                 {
                     "objective_train": float(self.train_loss[i]),
@@ -169,7 +167,6 @@ class History:
                     "data_gradient_term_train": float(w2 * self.gradient_loss_train[i]),
                     "data_gradient_term_val": float(w2 * self.gradient_loss_val[i]),
                     "sparsity_functional": float(self.sparsity_functional[i]),
-                    "psi_p": None if psi_p is None else float(psi_p),
                     "alpha_phi": float(self.alpha_phi[i]),
                     "total_variation": float(self.total_variation[i]),
                     "radius_r95": float(self.radius_r95[i]),

@@ -20,18 +20,15 @@ if TYPE_CHECKING:
 def metrics(
     problem: SparseModel, penalty: Penalty, train_loader, valid_loader=None,
     reporting_normalizer=None,
-) -> dict[str, float | None]:
+) -> dict[str, float]:
     """Evaluate splits and support diagnostics using the persisted metric names."""
     inner_weight, inner_bias, c = problem.inner_weight, problem.inner_bias, problem.c.detach()
     u = c * problem.moment_weight_of_atoms()
     phi = penalty.sparsity_functional(u) if c.numel() else c.new_zeros(())
-    # psi_p = sum w_p|c| = ||u||_1. The sphere formulation has no moment diagnostic.
-    psi = float(u.abs().sum()) if problem.moment_order is not None else None
     alpha_phi = float(penalty.alpha * phi)
     radius = torch.sqrt((inner_weight * inner_weight).sum(dim=-1) + inner_bias * inner_bias)
     values = {
         "sparsity_functional": float(phi),
-        "psi_p": psi,
         "alpha_phi": alpha_phi,
         "total_variation": float(c.reshape(-1).abs().sum()),
         "radius_r95": float(amplitude_mass_radius(radius, c)),

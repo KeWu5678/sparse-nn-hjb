@@ -28,28 +28,16 @@ class NewtonSystem(NamedTuple):
 
 class SSN(Optimizer):
     """Semismooth Newton optimizer on the normal map of a proximal splitting.
-
-    ``penalty`` owns the penalty and its proximal maps. SSN owns the normal map
-    built on them, the parameters, and globalization state.
-    Each ``step(closure)`` runs one globalized Newton iteration. The closure follows
-    the ``torch.optim`` contract: it clears the gradients, evaluates the fitting
-    term f at the current parameters, calls ``backward()`` and returns f. SSN adds
-    the penalty itself, as AdamW adds its weight decay, and minimizes
-    f + alpha*Phi. The caller owns the iteration budget and the acceptance of the
-    finished correction.
-
     Args:
         params: parameters to optimize (outer weights only).
         penalty: the penalty term and its proximal maps, evaluated at a supplied flat vector.
         hess_obj: Hessian of the fitting term only, excluding the penalty.
         max_ls_iter: maximum damping retries after the initial trial.
-        tolerance_ls: accept a finite damped trial whose objective is at most
-            loss + (tolerance_ls - 1)*|loss|, the current objective loss.
-        method: "levenberg_marquardt" (legacy damped-Newton name) or "steihaug_cg".
+        tolerance_ls: accept whe objective is at most loss + (tolerance_ls - 1)*|loss|
+        method: "levenberg_marquardt" (line-search) or "steihaug_cg".
         sigmamax: maximum trust-region radius.
-        tolerance_grad: skip the step's Newton work when ||G(q)||_inf is at or
-            below the tolerance. Zero disables this check.
-        prox_scale: optional override of the scale chosen from the warm start.
+        tolerance_grad: skip the step when ||G(q)||_inf <= tol_grad. Zero disables this check.
+        prox_scale: optional override of the proximal parameter chosen from the warm start.
 
     q is the proximal preimage, normal_q = G(q), and jac_normal is its selected
     Jacobian. The Newton equation is jac_normal @ dq = -normal_q. tau is the

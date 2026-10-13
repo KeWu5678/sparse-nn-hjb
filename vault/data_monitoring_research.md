@@ -134,6 +134,55 @@ with periodic output disabled. Compared with the working snapshot before this
 increment, production code added 21 net lines; the numerical operations and
 recording order were preserved.
 
+## Follow-up 2026-10-13: logging contract and primary references
+
+The recorded choice was **structlog integrated with Python logging**; Loguru
+was considered as an alternative. The implementation in [src/logging.py](../src/logging.py)
+uses `ProcessorFormatter` with `JSONRenderer` for the file and `ConsoleRenderer`
+for stderr. [The runner](../scripts/train.py) initializes these handlers for each
+job and binds `run_id`, `experiment`, and `seed` around the run. This confirms
+structured logging was an accepted goal; it does not establish that Hydra is
+incapable of providing it.
+
+Hydra 1.3 configures ordinary Python logging and its default output is plain
+text. Its documentation explicitly supports opting out with `none` and replacing
+the job logging configuration with a custom `dictConfig` configuration. Therefore,
+`hydra/job_logging: none` delegates application handler setup to our Python entry
+point; it does not itself create structured output. A custom Hydra configuration
+using a JSON formatter is also possible. Our setup replaces root handlers, so
+re-enabling Hydra's default would create an extra job log file before the shared
+setup replaces those handlers.
+([Hydra logging](https://hydra.cc/docs/1.3/tutorials/basic/running_your_app/logging/),
+[customization](https://hydra.cc/docs/1.3/configure_hydra/logging/),
+[current config](../conf/config.yaml))
+
+Primary guidance and its application to this repository:
+
+- structlog documents `ProcessorFormatter` for formatting both standard logging
+  and structlog events, including different renderers for different destinations.
+  This directly supports our shared formatting approach.
+  ([Standard library integration](https://www.structlog.org/en/stable/standard-library.html#rendering-using-structlog-based-formatters-within-logging))
+- structlog recommends structured output for aggregation and readable output
+  during development. Its deployment guidance favors stdout with external
+  collection. Keeping per-run JSONL files for this local batch workflow is our
+  recommendation; a future container deployment could instead emit JSON to
+  stdout. The current console emits readable text, so collecting it alone would
+  not collect the JSON representation.
+  ([Logging best practices](https://www.structlog.org/en/stable/logging-best-practices.html))
+- Execution context can carry shared identifiers into each event. Our scoped
+  run context follows that pattern.
+  ([Context variables](https://www.structlog.org/en/stable/contextvars.html))
+- Python supports multiple handlers and formats, but its ordinary file handlers
+  do not coordinate writes across processes. Keep separate files for concurrent
+  sweep jobs; a shared `env.log_file` would need a different writing arrangement.
+  ([Logging cookbook](https://docs.python.org/3.14/howto/logging-cookbook.html#logging-to-a-single-file-from-multiple-processes))
+
+Assessment: retain the existing setup for this repository. These sources support
+its design principles; they do not prescribe this exact configuration as a
+universal best practice. The older deployment discussion below is historical;
+the implemented state is described above. Backend-specific findings are in the
+dated follow-up at the end of this note.
+
 ## Observed baseline
 
 | Component | Project requirement | Lock and installed version |
@@ -410,3 +459,59 @@ integration has been tested.
 This investigation changed no implementation, tests, dependencies, ADRs, or
 handoff. The structlog dependency choice is accepted; implementation details
 remain under discussion. Earlier framework comparisons are research history.
+
+## 2026-10-13 — Prometheus and Loki/Alloy backend verification
+
+**Source facts (official documentation):**
+
+- **Collection:** Alloy `loki.source.file` tails newline-terminated entries,
+  discovers files, and persists read offsets. `loki.process` extracts JSON
+  fields and timestamps before forwarding to `loki.write`; extraction and
+  indexed-label promotion are separate. File collection adds the full path as
+  a `filename` label.
+  ([Files](https://grafana.com/docs/alloy/latest/reference/components/loki/loki.source.file/),
+  [Processing](https://grafana.com/docs/alloy/latest/reference/components/loki/loki.process/))
+- **Search:** LogQL parses JSON at query time, enabling searches without
+  indexing `run_id`. Illustrative query, assuming these labels/fields:
+  `{service_name="sparse-nn-hjb"} | json | __error__="" | run_id="example-run"`.
+  ([JSON queries](https://grafana.com/docs/loki/latest/query/log_queries/))
+- **Cardinality:** Loki recommends stable origin labels; distinct combinations
+  create streams. Prometheus similarly creates series per label combination
+  and discourages unbounded values. Loki structured metadata supports searching
+  unindexed fields without JSON parsing; it requires schema ≥13, TSDB, and
+  `allow_structured_metadata: true`.
+  ([Loki labels](https://grafana.com/docs/loki/latest/get-started/labels/cardinality/),
+  [Prometheus labels](https://prometheus.io/docs/practices/naming/#labels),
+  [Metadata](https://grafana.com/docs/loki/latest/get-started/labels/structured-metadata/))
+- **Metrics:** Prometheus scrapes exposed numerical metrics; JSONL alone does
+  not expose them. Loki can derive rates/aggregations through LogQL. Explicit
+  Alloy `stage.metrics` configuration can alternatively expose derived metrics
+  at Alloy's `/metrics` endpoint.
+  ([Prometheus](https://prometheus.io/docs/introduction/overview/),
+  [LogQL metrics](https://grafana.com/docs/loki/latest/query/metric_queries/),
+  [Alloy metrics](https://grafana.com/docs/alloy/latest/reference/components/loki/loki.process/#stagemetrics))
+- **Batch jobs:** Prometheus recommends last-success/completion times and
+  durations; jobs lasting several minutes can also be scraped while running.
+  Its narrower Pushgateway guidance limits the usual appropriate case to
+  service-level batch outcomes independent of particular machines/instances.
+  Machine maintenance jobs fit Node Exporter's textfile collector. Pushed
+  series require explicit deletion, and gateway health does not establish job
+  health. Pushgateway explicitly excludes event-store use and automatic TTL.
+  ([Batch instrumentation](https://prometheus.io/docs/practices/instrumentation/#batch-jobs),
+  [Pushgateway guidance](https://prometheus.io/docs/practices/pushing/),
+  [Project README](https://github.com/prometheus/pushgateway#readme))
+
+**Our recommendation:** retain local JSONL now; consider Alloy → Loki → Grafana
+for future diagnostic search. Use bounded `service_name`/`environment` labels;
+keep `run_id` and iteration in JSON or optional structured metadata. Audit/remove
+per-run `filename` labels too. Reserve Prometheus for operational monitoring;
+consider Pushgateway only for a defined recurring service outcome with cleanup
+ownership, never as the default for per-experiment curves. Preserve
+[ADR 0002](../docs/adr/0002-mlflow-as-run-record-backend.md): local Run Records and
+artifacts are authoritative; History curves stay local; MLflow receives
+completed-run summaries.
+
+**Caveats:** documentation research only; no deployment or query execution.
+Recheck `latest` documentation against selected versions. Promtail reached EOL
+on 2026-03-02; choose Alloy for new collection.
+([Promtail status](https://grafana.com/docs/loki/latest/send-data/promtail/))

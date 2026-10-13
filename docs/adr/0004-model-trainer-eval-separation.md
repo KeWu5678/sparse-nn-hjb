@@ -164,8 +164,7 @@ configuration against the activation's declared H1 growth (`p > s1`). An
 activation's growth constrains the choice without uniquely determining it.
 Registered activations without growth metadata retain explicit-order numerical
 training and the existing radius fallback; no theoretical bound is invented.
-Prediction alone needs no moment order. Evaluation reports `psi_p=None` for
-sphere models while retaining their total variation.
+Prediction alone needs no moment order.
 
 The user subsequently requested separation of metrics from mathematics.
 Evaluation owns split iteration, reporting denormalization, support diagnostics

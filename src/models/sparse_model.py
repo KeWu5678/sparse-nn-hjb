@@ -6,15 +6,7 @@ from torch.nn import functional as F
 
 
 class SparseModel(nn.Module):
-    """Own the sparse network and its data fitting without owning samples.
-
-    obj evaluates data fitting from predictions and targets; Proximal owns the
-    penalty term, and callers form the objective obj + Proximal.penalty. The
-    problem supplies the penalty exponent q = 2/(power+1) its activation implies.
-    Optimizers own parameter mutation, differentiation of the objective, and iterations.
-    Construction consumes an already resolved configuration. Training setup must
-    validate its penalty, geometry and insertion before constructing the problem.
-    """
+    """Own the sparse network and its data fitting without owning samples."""
 
     inner_weight: Tensor
     inner_bias: Tensor
@@ -73,10 +65,6 @@ class SparseModel(nn.Module):
 
     def set_atoms(self, inner_weight: Tensor, inner_bias: Tensor, c: Tensor) -> None:
         """Replace support with independent copies of the supplied atom tensors.
-
-        Inputs must be detached tensors shaped (n, input_dim), (n,), and (n,),
-        respectively, already matching the module's dtype and device.
-        Replacing support replaces c's Parameter, so subsequent corrections use the new c.
         """
         self.inner_weight = inner_weight.clone()
         self.inner_bias = inner_bias.clone()
@@ -128,9 +116,6 @@ class SparseModel(nn.Module):
         self, inner_weight: Tensor | None = None, inner_bias: Tensor | None = None,
     ) -> Tensor:
         """Moment weights w_p(omega) = 1 + |omega|^p of the current or supplied atoms.
-
-        Return one weight per atom, or ones on the sphere; the atoms are not
-        modified. The weights remain differentiable during candidate search.
         """
         inner_weight = self.inner_weight if inner_weight is None else inner_weight
         inner_bias = self.inner_bias if inner_bias is None else inner_bias
@@ -141,9 +126,6 @@ class SparseModel(nn.Module):
 
     def obj(self, prediction: tuple[Tensor, Tensor], target: tuple[Tensor, Tensor]) -> Tensor:
         """Weighted empirical H1 quadratic, excluding the sparsity penalty.
-
-        The value channel has one entry per sample. Both channels remain
-        differentiable; the gradient channel is flattened sample-major.
         """
         rv, rg = ((value - reference).reshape(-1) for value, reference in zip(prediction, target))
         n = rv.numel()

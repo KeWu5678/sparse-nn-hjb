@@ -159,7 +159,6 @@ def test_history_summary_records_normalized_objective_decomposition(alpha) -> No
 
     # The full moment is 50*(1+1) + 45*(1+4) + 5*(1+25) = 455.
     assert math.isclose(metrics["phi_1"], 455.0, rel_tol=1e-12)
-    assert math.isclose(metrics["psi_p"], 455.0, rel_tol=1e-12)
     assert math.isclose(metrics["alpha_phi_1"], alpha * 455.0, rel_tol=1e-12)
     assert math.isclose(metrics["radius_r95"], 2.0, rel_tol=1e-12)
     assert math.isclose(metrics["radius_max"], 5.0, rel_tol=1e-12)
@@ -195,12 +194,8 @@ def test_sphere_penalty_and_reporting_do_not_depend_on_historical_moment_order(p
         history.record(problem, evaluate(problem, penalty_for(config, problem), make_dataloader((x, *problem(x)))))
         history = pickle.loads(pickle.dumps(history))
         summary = history.summary_metrics()
-        assert history.psi_p == [None] and summary["psi_p"] is None
         assert summary["total_variation"] == 5.
         assert summary["objective_train"] == pytest.approx(float(expected_penalty), rel=1e-12)
-        # Existing archives keep their recorded numeric diagnostic unchanged.
-        history.psi_p[0] = 10.
-        assert pickle.loads(pickle.dumps(history)).summary_metrics()["psi_p"] == 10.
 
 
 def test_physical_reporting_does_not_change_objectives_snapshots_or_selection():
@@ -239,7 +234,7 @@ def test_physical_reporting_does_not_change_objectives_snapshots_or_selection():
     for name in (
         "train_loss", "val_loss", "data_loss_train", "data_loss_val",
         "value_loss_train", "value_loss_val", "gradient_loss_train", "gradient_loss_val",
-        "sparsity_functional", "psi_p", "alpha_phi", "total_variation", "radius_r95", "radius_max",
+        "sparsity_functional", "alpha_phi", "total_variation", "radius_r95", "radius_max",
         "best_iteration", "best_train_loss", "best_neurons",
     ):
         assert getattr(physical, name) == getattr(unchanged, name)

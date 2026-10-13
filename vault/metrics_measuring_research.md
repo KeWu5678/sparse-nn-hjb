@@ -284,7 +284,7 @@ The following follows directly from [src/eval.py:60](../src/eval.py) and
 3. Keep loss weights/training coordinates separate from reporting transforms.
    Current fitting loss uses training coordinates; relative errors can use physical
    coordinates. Preserve the unweighted reported H1 convention, metric names,
-   empty-region NaNs, and absent sphere moment diagnostic (`psi_p=None`).
+   and empty-region NaNs.
 4. Region sums need region counts and their specified global reference sums;
    distance-bin edges must be common to the complete evaluation, not recomputed
    independently per batch. Support radii and total variation are observations
