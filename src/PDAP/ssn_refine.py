@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 def ssn_refine_outerweights(
     optimizer: SSN, coefficients: torch.nn.Parameter, closure: Callable[[], torch.Tensor], *,
-    iterations: int, correction_guard: bool, verbose: bool = False,
+    iterations: int, correction_guard: bool,
 ) -> dict:
     """Run the SSN iteration budget, discarding a correction that increases the objective.
 
@@ -39,14 +39,13 @@ def ssn_refine_outerweights(
     if not accepted:
         _restore(coefficients, start)
         loss = initial_loss
-    if verbose:
-        group = optimizer.param_groups[0]
-        logger.debug(
-            "SSN correction  iterations=%d  objective=%.6e->%.6e  accepted=%s  "
-            "failed_steps=%d  prox_scale=%s  tau=%.6e",
-            iterations, float(initial_loss.detach()), float(loss.detach()),
-            str(accepted).lower(), failed_steps, group["prox_scale"], group["tau"],
-        )
+    group = optimizer.param_groups[0]
+    logger.debug(
+        "SSN correction  iterations=%d  objective=%.6e->%.6e  accepted=%s  "
+        "failed_steps=%d  prox_scale=%s  tau=%.6e",
+        iterations, float(initial_loss.detach()), float(loss.detach()),
+        str(accepted).lower(), failed_steps, group["prox_scale"], group["tau"],
+    )
     return {
         "ssn_iterations": iterations,
         "ssn_failed_steps": failed_steps,

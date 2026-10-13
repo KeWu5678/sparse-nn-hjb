@@ -18,7 +18,7 @@ def _insert(monkeypatch, config, profile, curvature=1.0):
     residual = W, W.new_tensor([[profile / curvature]]), torch.zeros_like(W)
     return insertion.finite_step(
         network, make_penalty(config), residual, sample_sphere=lambda n: (W, b),
-        num_of_initial_pts=1, verbose=False,
+        num_of_initial_pts=1,
     )[2]
 
 

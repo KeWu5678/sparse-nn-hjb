@@ -52,7 +52,6 @@ def test_algorithm2_fits_an_exact_relu_power_atom(power: float) -> None:
         PDAP(cfg.training, make_penalty(model_config), network, train_loader, insertion=model_config["insertion"]),
         valid_loader,
         num_iterations=2,
-        verbose=False,
     )
 
     assert history.final_neurons > 0

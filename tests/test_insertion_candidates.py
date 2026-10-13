@@ -126,7 +126,6 @@ def test_algorithm1_distinguishes_radius_search_failure_from_threshold_stop(
             num_of_initial_pts=1,
             max_insert=1,
             radius=1.0,
-            verbose=True,
         )
     assert "discarded 1 refined candidate(s) outside the search radius" in caplog.text
     assert "retained no distinct candidate after geometric filters" in caplog.text
@@ -141,7 +140,6 @@ def test_algorithm1_distinguishes_radius_search_failure_from_threshold_stop(
             num_of_initial_pts=1,
             max_insert=1,
             radius=1.0,
-            verbose=True,
         )
     assert "No retained candidate clears the insertion threshold" in caplog.text
     assert "discarded" not in caplog.text
@@ -168,7 +166,6 @@ def test_sphere_search_reports_when_only_existing_support_is_returned(
             num_of_initial_pts=1,
             max_insert=1,
             existing_atoms=existing,
-            verbose=True,
         )
 
     assert "retained no distinct candidate after geometric filters" in caplog.text

@@ -9,20 +9,19 @@ from textwrap import dedent
 import pytest
 
 
-@pytest.mark.parametrize("order,iterations,accepted,cadence,verbose,expected_progress", [
-    ("insertion_first", 4, True, None, True, [0, 2]),
-    ("correction_first", 4, True, 2, True, [0, 2]),
-    ("insertion_first", 4, True, 1, True, [0, 1, 2, 3]),
-    ("insertion_first", 4, True, 0, True, []),
-    ("insertion_first", 4, True, -1, True, []),
-    ("insertion_first", 4, True, 2, False, []),
-    ("insertion_first", 0, True, 2, True, [0]),
-    ("insertion_first", 4, False, 2, True, [0]),
+@pytest.mark.parametrize("order,iterations,accepted,cadence,expected_progress", [
+    ("insertion_first", 4, True, None, [0, 2]),
+    ("correction_first", 4, True, 2, [0, 2]),
+    ("insertion_first", 4, True, 1, [0, 1, 2, 3]),
+    ("insertion_first", 4, True, 0, []),
+    ("insertion_first", 4, True, -1, []),
+    ("insertion_first", 0, True, 2, [0]),
+    ("insertion_first", 4, False, 2, [0]),
 ])
 def test_progress_and_terminal_summary_preserve_all_checkpoints(
-    tmp_path, order, iterations, accepted, cadence, verbose, expected_progress,
+    tmp_path, order, iterations, accepted, cadence, expected_progress,
 ):
-    settings = dict(order=order, iterations=iterations, accepted=accepted, verbose=verbose)
+    settings = dict(order=order, iterations=iterations, accepted=accepted)
     if cadence is not None:
         settings["display_every"] = cadence
     result = _train_with_logging(tmp_path, settings)
@@ -37,13 +36,12 @@ def test_progress_and_terminal_summary_preserve_all_checkpoints(
         report["losses"][i] for i in expected_progress
     ]
     terminal = [record for record in records if record["event"] == "training_finished"]
-    assert len(terminal) == int(verbose)
-    if verbose:
-        assert records[-1] == terminal[0]
-        assert terminal[0]["checkpoints"] == checkpoints
-        assert terminal[0]["stop_reason"] == ("iteration_budget" if accepted else "no_candidate")
-        assert terminal[0]["best_iteration"] == report["best_iteration"]
-        assert terminal[0]["final_neurons"] == report["final_neurons"]
+    assert len(terminal) == 1
+    assert records[-1] == terminal[0]
+    assert terminal[0]["checkpoints"] == checkpoints
+    assert terminal[0]["stop_reason"] == ("iteration_budget" if accepted else "no_candidate")
+    assert terminal[0]["best_iteration"] == report["best_iteration"]
+    assert terminal[0]["final_neurons"] == report["final_neurons"]
     # SSN details are DEBUG; default INFO contains only outer progress and summary.
     assert len(records) == len(progress) + len(terminal)
     assert result.stderr.count("training_progress") == len(progress)

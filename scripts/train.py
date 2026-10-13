@@ -262,11 +262,6 @@ def _run_experiment(cfg: DictConfig, hydra_cfg, run_dir: Path, run_id: str) -> P
         num_iterations=cfg.training.num_iterations,
         display_every=cfg.training.display_every,
         reporting_normalizer=normalizer,
-        # Always emit progress to the logger so every run's log file is
-        # complete. `env.verbose` only controls whether they also stream to the
-        # console (configure_logging above) — which interleaves under parallel
-        # sweeps, so leave it off and read the per-run run.jsonl instead.
-        verbose=True,
     )
 
     metrics = history.summary_metrics()

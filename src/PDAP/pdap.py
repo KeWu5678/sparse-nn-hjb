@@ -57,42 +57,36 @@ class PDAP:
         self.max_insert = training.max_insert
         self.prune_amp_tol = training.prune_amp_tol
 
-    def initialize(
-        self, *, verbose: bool = False,
-    ) -> dict:
+    def initialize(self) -> dict:
         """Perform the historical correction-first initial support replacement."""
         W, b, c = self._insert(
-            self.num_of_initial_pts, self.max_insert, verbose,
+            self.num_of_initial_pts, self.max_insert,
         )
-        count = self._add_atoms(W, b, c, replace=True, verbose=verbose)
+        count = self._add_atoms(W, b, c, replace=True)
         diagnostics = self._search_diagnostics(count)
         diagnostics["stop_reason"] = "no_candidate" if count == 0 else None
         return diagnostics
 
 
-    def step(
-        self, *, verbose: bool = False,
-    ) -> dict:
+    def step(self) -> dict:
         """Insert, correct and prune one complete step of the paper algorithms.
         """
-        diagnostics = self.insert(verbose=verbose)
+        diagnostics = self.insert()
         diagnostics["stop_reason"] = "no_candidate" if diagnostics["inserted"] == 0 else None
         if diagnostics["stop_reason"] is None:
-            diagnostics.update(self.train_ssn_outerweights_and_prune(verbose=verbose))
+            diagnostics.update(self.train_ssn_outerweights_and_prune())
         return diagnostics
 
 
-    def insert(
-        self, *, verbose: bool = False,
-    ) -> dict:
+    def insert(self) -> dict:
         """Extend the current support with accepted, initialized candidates."""
         W, b, c = self._insert(
-            self.num_of_initial_pts, self.max_insert, verbose,
+            self.num_of_initial_pts, self.max_insert,
         )
-        return self._search_diagnostics(self._add_atoms(W, b, c, verbose=verbose))
+        return self._search_diagnostics(self._add_atoms(W, b, c))
 
     def _insert(
-        self, num_of_initial_pts: int, max_insert: int, verbose: bool
+        self, num_of_initial_pts: int, max_insert: int
     ):
         """Return accepted atoms and their outer weights, or None for weights to warm-start."""
         # Sequential insertion admits the highest-ranked candidate returned by the
@@ -113,7 +107,7 @@ class PDAP:
             sample_sphere=lambda num_of_initial_pts: self._sphere(d, num_of_initial_pts),
             num_of_initial_pts=num_of_initial_pts,
             max_insert=max_insert, merge_tol=self.ins_merge_tol,
-            existing_atoms=existing_atoms, radius=radius, verbose=verbose,
+            existing_atoms=existing_atoms, radius=radius,
             lbfgs_lr=self.lbfgs_lr, lbfgs_steps=self.lbfgs_steps,
         )
         if self.insertion_kind == "profile":
@@ -126,18 +120,14 @@ class PDAP:
         return W, b, c
 
 
-    def train_ssn_outerweights_and_prune(
-        self, *, verbose: bool = False,
-    ) -> dict:
+    def train_ssn_outerweights_and_prune(self) -> dict:
         """Apply the accepted SSN correction, then remove negligible atoms."""
-        diagnostics = self.train_ssn_outerweights(verbose=verbose)
+        diagnostics = self.train_ssn_outerweights()
         diagnostics["pruned"] = self._prune(self.prune_amp_tol)
         return diagnostics
 
 
-    def train_ssn_outerweights(
-        self, *, verbose: bool = False,
-    ) -> dict:
+    def train_ssn_outerweights(self) -> dict:
         """Prepare a correction, run SSN, and apply its accepted coefficients."""
         fitting, hess_obj, moment_weight = self.fit_obj_with_outerweights()
         # The normalized coefficients u = w_p*c; the physical ones are c = u/w_p.
@@ -152,7 +142,7 @@ class PDAP:
 
         diagnostics = ssn_refine_outerweights(
             optimizer, u, closure, iterations=self.fit_outer_iterations,
-            correction_guard=self.correction_guard, verbose=verbose,
+            correction_guard=self.correction_guard,
         )
         with torch.no_grad():
             self.network.c.copy_(u.detach() / moment_weight)
@@ -174,7 +164,7 @@ class PDAP:
         return fitting, hess_obj, moment_weight
 
 
-    def _add_atoms(self, W, b, c, *, replace: bool = False, verbose: bool = False) -> int:
+    def _add_atoms(self, W, b, c, *, replace: bool = False) -> int:
         """Append or, if replace, substitute the atoms, warm-starting weights given as None; return their count."""
         count = int(W.shape[0])
         if count:
@@ -189,7 +179,7 @@ class PDAP:
             self.network.set_atoms(W, b, c_new)
             if c is None:
                 X, V, dV = full_batch(self.train_loader)
-                warm_start(self.network, self.penalty, X, (V, dV), count, verbose=verbose)
+                warm_start(self.network, self.penalty, X, (V, dV), count)
         return count
 
     def _prune(self, amp_tol: float) -> int:

@@ -18,8 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 @torch.no_grad()
-def warm_start(network: SparseNetwork, penalty: Penalty, X: torch.Tensor, target, n_new: int, *,
-               verbose: bool = False) -> None:
+def warm_start(network: SparseNetwork, penalty: Penalty, X: torch.Tensor, target, n_new: int) -> None:
     """Set the zero outer weights of the last n_new atoms by a proximal step along the largest-profile direction."""
     if n_new == 0:
         return
@@ -41,8 +40,7 @@ def warm_start(network: SparseNetwork, penalty: Penalty, X: torch.Tensor, target
     curvature = float(direction @ network.hess_obj(residual[0]) @ direction)
     tau = penalty.descent_step(slope, curvature)
     network.c[new] = tau * direction[new]
-    if verbose:
-        logger.debug(
-            "Warm start        initialized %d new output weights  max |weight|=%.2e",
-            n_new, float(network.c[new].abs().max().item()),
-        )
+    logger.debug(
+        "Warm start        initialized %d new output weights  max |weight|=%.2e",
+        n_new, float(network.c[new].abs().max().item()),
+    )

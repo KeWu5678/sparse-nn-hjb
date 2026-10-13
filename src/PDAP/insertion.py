@@ -51,7 +51,6 @@ def profile_threshold(
     num_of_initial_pts: int,
     max_insert: int = 15, merge_tol: float = 1e-2,
     existing_atoms: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
-    verbose: bool = True,
     lbfgs_lr: float = 1e-2, lbfgs_steps: int = 200,
     insert_init: str = "warm_start",
     radius: Optional[float] = None,
@@ -95,28 +94,27 @@ def profile_threshold(
     if guaranteed:
         accepted_c = [accepted_c[i] for i in best]
 
-    if verbose:
-        rule = (
-            "|P|/w_p above alpha*L_phi" if network.normalized
-            else "|P| above alpha"
-        )
+    rule = (
+        "|P|/w_p above alpha*L_phi" if network.normalized
+        else "|P| above alpha"
+    )
+    logger.debug(
+        "Candidate search  sampled=%d  unique=%d  accepted=%d/%d  "
+        "rule=%s (init=%s)",
+        num_of_initial_pts, a.shape[0], len(accepted_a), max_insert, rule, insert_init,
+    )
+    if discarded_outside:
         logger.debug(
-            "Candidate search  sampled=%d  unique=%d  accepted=%d/%d  "
-            "rule=%s (init=%s)",
-            num_of_initial_pts, a.shape[0], len(accepted_a), max_insert, rule, insert_init,
+            "Candidate search discarded %d refined candidate(s) outside the "
+            "search radius",
+            discarded_outside,
         )
-        if discarded_outside:
-            logger.debug(
-                "Candidate search discarded %d refined candidate(s) outside the "
-                "search radius",
-                discarded_outside,
-            )
-        if not accepted_a and a.shape[0] == 0:
-            logger.debug(
-                "Candidate search retained no distinct candidate after geometric filters"
-            )
-        elif not accepted_a:
-            logger.debug("No retained candidate clears the insertion threshold")
+    if not accepted_a and a.shape[0] == 0:
+        logger.debug(
+            "Candidate search retained no distinct candidate after geometric filters"
+        )
+    elif not accepted_a:
+        logger.debug("No retained candidate clears the insertion threshold")
 
     c = np.array(accepted_c, dtype=np.float64) if guaranteed else None
     return *_as_arrays(accepted_a, accepted_b, input_dim), c
@@ -133,7 +131,6 @@ def finite_step(
     num_of_initial_pts: int,
     max_insert: int = 15, merge_tol: float = 1e-2,
     existing_atoms: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
-    verbose: bool = True,
     lbfgs_lr: float = 1e-2, lbfgs_steps: int = 200,
     radius: Optional[float] = None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -175,12 +172,11 @@ def finite_step(
     accepted_b = [accepted_b[i] for i in best]
     accepted_c = [accepted_c[i] for i in best]
 
-    if verbose:
-        logger.debug(
-            "Candidate search  sampled=%d  unique=%d  accepted=%d/%d  "
-            "rule=adding atom reduces objective (q=%.3f)",
-            num_of_initial_pts, a.shape[0], len(accepted_a), max_insert, network.penalty_exponent,
-        )
+    logger.debug(
+        "Candidate search  sampled=%d  unique=%d  accepted=%d/%d  "
+        "rule=adding atom reduces objective (q=%.3f)",
+        num_of_initial_pts, a.shape[0], len(accepted_a), max_insert, network.penalty_exponent,
+    )
 
     return *_as_arrays(accepted_a, accepted_b, input_dim), np.array(accepted_c, dtype=np.float64)
 

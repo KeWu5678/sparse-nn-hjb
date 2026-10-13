@@ -68,7 +68,7 @@ def _fit(cfg: ExperimentConfig, iterations: int = 4, seed: int = 0):
             insertion=model_config["insertion"],
         ),
         make_dataloader(valid),
-        num_iterations=iterations, verbose=False,
+        num_iterations=iterations,
     )
     return network, history, train
 
@@ -160,7 +160,7 @@ def test_guaranteed_insertion_delivers_the_promised_decrease() -> None:
         network, trainer.penalty, (train[0], res_v, res_dv),
         sample_sphere=lambda n: trainer._sphere(2, n), num_of_initial_pts=20,
         max_insert=1, merge_tol=1e-2,
-        existing_atoms=(W_old, b_old), verbose=False,
+        existing_atoms=(W_old, b_old),
         insert_init="guaranteed",
     )
     if W_new.shape[0] == 0:

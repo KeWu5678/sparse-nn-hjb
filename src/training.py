@@ -38,7 +38,6 @@ def run_training(
     *,
     num_iterations: int,
     reporting_normalizer: ValueSampleNormalizer | None = None,
-    verbose: bool = True,
     display_every: int = 2,
 ) -> History:
     """Run an outer-iteration budget with separate measurement and recording.
@@ -47,7 +46,7 @@ def run_training(
     no-candidate stop result and records after correction/pruning. The selected
     checkpoint still minimizes the recorded training objective; no initial row
     is added to an ordinary run. Zero-budget/no-insertion runs record once.
-    With ``verbose=True``, progress is logged at checkpoint indices 0, N, 2N,
+    Progress is logged at checkpoint indices 0, N, 2N,
     where N is ``display_every``. Nonpositive N suppresses periodic progress;
     the terminal summary is still logged. All checkpoints are evaluated and saved.
     """
@@ -62,56 +61,55 @@ def run_training(
     if pdap.loop_order == "correction_first":
         # Preserve the historical comparator exactly: initialize, then
         # correct -> prune -> measure -> insert, including the final insertion.
-        search = _measure(pdap.initialize, history, verbose)
+        search = _measure(pdap.initialize, history)
         diagnostics = search
         if search["stop_reason"] is not None:
             history.run_metrics["stop_reason"] = search["stop_reason"]
         else:
             for _ in range(num_iterations):
                 correction = _measure(
-                    pdap.train_ssn_outerweights_and_prune, history, verbose,
+                    pdap.train_ssn_outerweights_and_prune, history,
                 )
                 diagnostics = {**search, **correction}
                 diagnostics["solver_seconds"] = search["solver_seconds"] + correction["solver_seconds"]
                 _record(
                     network, pdap.penalty, train_loader, valid_loader, history, diagnostics,
-                    verbose, display_every,
+                    display_every,
                 )
-                search = _measure(pdap.insert, history, verbose)
+                search = _measure(pdap.insert, history)
     else:
         for _ in range(num_iterations):
-            diagnostics = _measure(pdap.step, history, verbose)
+            diagnostics = _measure(pdap.step, history)
             if diagnostics["stop_reason"] is not None:
                 history.run_metrics["stop_reason"] = diagnostics["stop_reason"]
                 break
             _record(
                 network, pdap.penalty, train_loader, valid_loader, history, diagnostics,
-                verbose, display_every,
+                display_every,
             )
 
     if not history.train_loss:
         _record(
             network, pdap.penalty, train_loader, valid_loader, history, diagnostics,
-            verbose, display_every,
+            display_every,
         )
     history.final_neurons = network.n_neurons
     history.run_metrics["process_peak_rss_bytes"] = _process_peak_rss_bytes()
-    if verbose:
-        logger.info(
-            "training_finished", stop_reason=history.run_metrics["stop_reason"],
-            checkpoints=len(history.train_loss), best_iteration=history.best_iteration,
-            best_train_loss=history.best_train_loss, best_neurons=history.best_neurons,
-            final_neurons=history.final_neurons,
-        )
+    logger.info(
+        "training_finished", stop_reason=history.run_metrics["stop_reason"],
+        checkpoints=len(history.train_loss), best_iteration=history.best_iteration,
+        best_train_loss=history.best_train_loss, best_neurons=history.best_neurons,
+        final_neurons=history.final_neurons,
+    )
     return history
 
 
 def _measure(
-    operation: Callable[..., dict], history: History, verbose: bool,
+    operation: Callable[..., dict], history: History,
 ) -> dict:
     """Time executed solver work and count it even when no checkpoint follows."""
     started = perf_counter()
-    diagnostics = operation(verbose=verbose)
+    diagnostics = operation()
     diagnostics["solver_seconds"] = perf_counter() - started
     for name, total in _COUNTERS.items():
         history.run_metrics[total] += diagnostics.get(name, 0)
@@ -125,7 +123,7 @@ def _measure(
 def _record(
     network: SparseNetwork, penalty: Penalty, train_loader: DataLoader,
     valid_loader: DataLoader | None, history: History, diagnostics: dict,
-    verbose: bool, display_every: int,
+    display_every: int,
 ) -> None:
     """Evaluate the current state before capturing its checkpoint."""
     started = perf_counter()
@@ -137,7 +135,7 @@ def _record(
     history.run_metrics["evaluation_seconds"] += elapsed
     history.record(network, values, {**diagnostics, "evaluation_seconds": elapsed})
     checkpoint = len(history.train_loss) - 1
-    if verbose and display_every > 0 and checkpoint % display_every == 0:
+    if display_every > 0 and checkpoint % display_every == 0:
         logger.info(
             "training_progress", checkpoint=checkpoint, neurons=network.n_neurons,
             train_loss=values["train_loss"], val_loss=values["val_loss"],
