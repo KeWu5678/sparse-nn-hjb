@@ -111,14 +111,14 @@ class SSN(Optimizer):
         closure = torch.enable_grad()(closure)
         start = parameters_to_vector(self._params).detach().clone()
         try:
-            loss, self.last_step_success = self._iteration(closure, start)
+            loss, self.last_step_success = self._newton_iteration(closure, start)
         except Exception:
             vector_to_parameters(start, self._params)
             self.last_step_success = False
             raise
         return loss
 
-    def _iteration(self, closure: Callable[[], Tensor], u: Tensor) -> tuple[Tensor, bool]:
+    def _newton_iteration(self, closure: Callable[[], Tensor], u: Tensor) -> tuple[Tensor, bool]:
         """Build and globalize one normal-map Newton step from the coefficients u.
 
         Return the objective it keeps and whether the step succeeded; a stationary
@@ -129,7 +129,7 @@ class SSN(Optimizer):
         success = True
         if not self._stationary(normal_q):
             system = self._newton_system(u, q, normal_q)
-            loss, success = self._ssn_single_step(closure, u, system, loss)
+            loss, success = self._globalize(closure, u, system, loss)
         return loss, success
 
     def objective(self, closure: Callable[[], Tensor]) -> Tensor:
@@ -196,7 +196,7 @@ class SSN(Optimizer):
         """Hessian of the fitting term plus the diagonal Hessian of the correction."""
         return self.penalty.hess_correction(u) + self.hess_obj
 
-    def _ssn_single_step(
+    def _globalize(
         self, closure: Callable[[], Tensor], u: Tensor, system: NewtonSystem, loss: Tensor,
     ) -> tuple[Tensor, bool]:
         """Run a strategy, store its state, and keep an accepted trial or undo a rejected one.
