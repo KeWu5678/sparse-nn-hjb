@@ -54,17 +54,6 @@ class PDAP:
         self.max_insert = training.max_insert
         self.prune_amp_tol = training.prune_amp_tol
 
-    def step(
-        self, problem: SparseModel, train_loader: DataLoader, *, verbose: bool = False,
-    ) -> dict:
-        """Insert, correct and prune one complete step of the paper algorithms.
-        """
-        diagnostics = self.insert(problem, train_loader, verbose=verbose)
-        diagnostics["stop_reason"] = "no_candidate" if diagnostics["inserted"] == 0 else None
-        if diagnostics["stop_reason"] is None:
-            diagnostics.update(self.train_ssn_outerweights_and_prune(problem, train_loader, verbose=verbose))
-        return diagnostics
-
     def initialize(
         self, problem: SparseModel, train_loader: DataLoader, *, verbose: bool = False,
     ) -> dict:
@@ -77,6 +66,19 @@ class PDAP:
         diagnostics["stop_reason"] = "no_candidate" if count == 0 else None
         return diagnostics
 
+
+    def step(
+        self, problem: SparseModel, train_loader: DataLoader, *, verbose: bool = False,
+    ) -> dict:
+        """Insert, correct and prune one complete step of the paper algorithms.
+        """
+        diagnostics = self.insert(problem, train_loader, verbose=verbose)
+        diagnostics["stop_reason"] = "no_candidate" if diagnostics["inserted"] == 0 else None
+        if diagnostics["stop_reason"] is None:
+            diagnostics.update(self.train_ssn_outerweights_and_prune(problem, train_loader, verbose=verbose))
+        return diagnostics
+
+
     def insert(
         self, problem: SparseModel, train_loader: DataLoader, *, verbose: bool = False,
     ) -> dict:
@@ -86,6 +88,41 @@ class PDAP:
         )
         return self._search_diagnostics(self._add_atoms(problem, train_loader, W, b, c, verbose=verbose))
 
+    def _insert(
+        self, problem, train_loader, num_of_initial_pts: int, max_insert: int, verbose: bool
+    ):
+        """Return accepted atoms and their outer weights, or None for weights to warm-start."""
+        # Sequential insertion admits the highest-ranked candidate returned by the
+        # multistart search, one atom per outer iteration. The theorem's rate bound
+        # additionally requires that this candidate be an exact global maximizer; a
+        # batch also introduces cross terms through its shared frozen residual.
+        if self.insert_mode == "sequential":
+            max_insert = 1
+        X, V, dV = full_batch(train_loader)
+        with torch.no_grad():
+            Vp, dVp = problem(X)
+        residual = X.detach(), (Vp - V).detach(), (dVp - dV).detach()
+        existing_atoms = (problem.inner_weight.detach(), problem.inner_bias.detach()) if problem.n_neurons else None
+
+        d = int(problem.input_dim)
+        radius = self._search_radius(problem, X, (V, dV))
+        search_settings: dict[str, Any] = dict(
+            sample_sphere=lambda num_of_initial_pts: self._sphere(d, num_of_initial_pts),
+            num_of_initial_pts=num_of_initial_pts,
+            max_insert=max_insert, merge_tol=self.ins_merge_tol,
+            existing_atoms=existing_atoms, radius=radius, verbose=verbose,
+            lbfgs_lr=self.lbfgs_lr, lbfgs_steps=self.lbfgs_steps,
+        )
+        if self.insertion_kind == "profile":
+            W, b, c = profile_threshold(
+                problem, self.penalty, residual, insert_init=self.insert_init,
+                **search_settings,
+            )
+        else:
+            W, b, c = finite_step(problem, self.penalty, residual, **search_settings)
+        return W, b, c
+
+
     def train_ssn_outerweights_and_prune(
         self, problem: SparseModel, train_loader: DataLoader, *, verbose: bool = False,
     ) -> dict:
@@ -93,6 +130,7 @@ class PDAP:
         diagnostics = self.train_ssn_outerweights(problem, train_loader, verbose=verbose)
         diagnostics["pruned"] = self._prune(problem, self.prune_amp_tol)
         return diagnostics
+
 
     def train_ssn_outerweights(
         self, problem: SparseModel, train_loader: DataLoader, *, verbose: bool = False,
@@ -134,39 +172,6 @@ class PDAP:
         hess_obj = problem.hess_obj(X) / torch.outer(moment_weight, moment_weight)
         return fitting, hess_obj, moment_weight
 
-    def _insert(
-        self, problem, train_loader, num_of_initial_pts: int, max_insert: int, verbose: bool
-    ):
-        """Return accepted atoms and their outer weights, or None for weights to warm-start."""
-        # Sequential insertion admits the highest-ranked candidate returned by the
-        # multistart search, one atom per outer iteration. The theorem's rate bound
-        # additionally requires that this candidate be an exact global maximizer; a
-        # batch also introduces cross terms through its shared frozen residual.
-        if self.insert_mode == "sequential":
-            max_insert = 1
-        X, V, dV = full_batch(train_loader)
-        with torch.no_grad():
-            Vp, dVp = problem(X)
-        residual = X.detach(), (Vp - V).detach(), (dVp - dV).detach()
-        existing_atoms = (problem.inner_weight.detach(), problem.inner_bias.detach()) if problem.n_neurons else None
-
-        d = int(problem.input_dim)
-        radius = self._search_radius(problem, X, (V, dV))
-        search_settings: dict[str, Any] = dict(
-            sample_sphere=lambda num_of_initial_pts: self._sphere(d, num_of_initial_pts),
-            num_of_initial_pts=num_of_initial_pts,
-            max_insert=max_insert, merge_tol=self.ins_merge_tol,
-            existing_atoms=existing_atoms, radius=radius, verbose=verbose,
-            lbfgs_lr=self.lbfgs_lr, lbfgs_steps=self.lbfgs_steps,
-        )
-        if self.insertion_kind == "profile":
-            W, b, c = profile_threshold(
-                problem, self.penalty, residual, insert_init=self.insert_init,
-                **search_settings,
-            )
-        else:
-            W, b, c = finite_step(problem, self.penalty, residual, **search_settings)
-        return W, b, c
 
     def _add_atoms(self, problem, train_loader, W, b, c, *, replace: bool = False, verbose: bool = False) -> int:
         """Append or, if replace, substitute the atoms, warm-starting weights given as None; return their count."""
