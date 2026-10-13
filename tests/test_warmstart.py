@@ -64,8 +64,6 @@ def test_log_warm_start_preserves_matlab_acceptance_guards(
 
 
 def test_sphere_warm_start_uses_the_exact_activation_derivative() -> None:
-    # Gradient-only fit of leaky_relu at x = -1, 2: rho' = (.01, 1), so the
-    # slope is -(.01 + 1)/2 and the curvature (.01^2 + 1)/2.
     X = torch.tensor([[-1.], [2.]], dtype=torch.float64)
     config = resolve_model({
         "activation": "leaky_relu", "loss_weights": (0.0, 1.0), "alpha": 0.005, "gamma": 0.0,
@@ -84,7 +82,6 @@ def test_warm_start_sets_only_the_new_atoms() -> None:
     validate_model_config(config)
     problem = SparseModel(config)
     problem.set_atoms(X.new_tensor([[-1.], [1.]]), X.new_zeros(2), X.new_tensor([0.7, 0.0]))
-    # The existing atom is inactive at x = 1, so the network is zero there.
     warm_start(problem, penalty_for(config, problem), X, (X.new_tensor([[3.]]), X.new_zeros((1, 1))), 1)
 
     torch.testing.assert_close(problem.c.detach(), X.new_tensor([0.7, 2.5]))

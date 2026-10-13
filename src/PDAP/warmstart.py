@@ -35,7 +35,6 @@ def warm_start(problem: SparseModel, penalty: Penalty, X: torch.Tensor, target, 
     safe = abs_profiles.clamp_min(1e-30)
     base = eps_sqrt * profiles / safe
     base[best] = profiles[best] / safe[best]
-    # The MATLAB vhat: zero on the existing atoms.
     direction = torch.zeros_like(jac)
     direction[new] = -base / scale
     slope = float(jac @ direction)

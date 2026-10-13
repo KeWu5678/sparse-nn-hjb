@@ -126,8 +126,6 @@ class SparseModel(nn.Module):
 
     def obj(self, x: Tensor, target: tuple[Tensor, Tensor], c: Tensor | None = None) -> Tensor:
         """Weighted empirical H1 quadratic of the network at x, excluding the sparsity penalty.
-
-        c replaces the outer weights, so trial coefficients need not be written to the model.
         """
         prediction = self(x) if c is None else torch.func.functional_call(self, {"c": c}, (x,))
         rv, rg = ((value - reference).reshape(-1) for value, reference in zip(prediction, target))
