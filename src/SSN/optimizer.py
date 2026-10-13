@@ -1,7 +1,7 @@
 """Semismooth Newton iterations on the normal map of a proximal splitting."""
 
 import math
-from typing import Callable, Iterable
+from typing import Callable, Iterable, NamedTuple
 
 import torch
 from torch import Tensor
@@ -15,6 +15,15 @@ __all__ = ["SSN"]
 
 # Selected by the 24-cell VDP/pendulum pilot in experiments/algorithm2_rho_pilot.md.
 ALGORITHM2_PROX_RHO = 0.5
+
+
+class NewtonSystem(NamedTuple):
+    """The Newton equation jac_normal @ dq = -normal_q at the preimage q, and P'(q)."""
+
+    q: Tensor
+    normal_q: Tensor
+    jac_normal: Tensor
+    jac_prox: Tensor
 
 
 class SSN(Optimizer):
@@ -111,25 +120,23 @@ class SSN(Optimizer):
     def _iteration(self, closure: Callable[[], Tensor], u: Tensor) -> Tensor:
         """Build and globalize one normal-map Newton step from the coefficients u."""
         self.last_step_success = True
-        group = self.param_groups[0]
         loss = self.objective(closure)
-        jac_obj_augmented = self.jac_obj_augmented(u, self._gradient())
-        q = self.prox_preimage(u, jac_obj_augmented)
-        normal_q = self.normal_map(q, u, jac_obj_augmented)
-
-        tolerance_grad = group["tolerance_grad"]
-        if tolerance_grad > 0.0 and torch.norm(normal_q, p=float("inf")).item() <= tolerance_grad:
+        q, normal_q = self._normal_map_at(u)
+        if self._stationary(normal_q):
             return loss
-
-        jac_prox = self.penalty.jac_prox(q, self._prox_constant(), prox_image=u)
-        jac_normal = self.jac_normal(u, jac_prox)
-        return self._ssn_single_step(closure, u, q, normal_q, jac_normal, jac_prox, loss)
+        return self._ssn_single_step(closure, u, self._newton_system(u, q, normal_q), loss)
 
     def objective(self, closure: Callable[[], Tensor]) -> Tensor:
         """The objective f + alpha*Phi at the parameters; the closure evaluates the fitting term f."""
         fitting = closure()
         with torch.no_grad():
             return fitting + self.penalty.value(parameters_to_vector(self._params))
+
+    def _normal_map_at(self, u: Tensor) -> tuple[Tensor, Tensor]:
+        """The preimage q of the coefficients u = P(q) and the normal map G(q)."""
+        jac_obj_augmented = self.jac_obj_augmented(u, self._gradient())
+        q = self.prox_preimage(u, jac_obj_augmented)
+        return q, self.normal_map(q, u, jac_obj_augmented)
 
     def _gradient(self) -> Tensor:
         """The fitting term's gradient, left on the parameters by the closure's backward()."""
@@ -156,6 +163,18 @@ class SSN(Optimizer):
         """Evaluate G(q), using u = P(q) and the smooth gradient at u."""
         return (q - u) / self.param_groups[0]["tau"] + jac_obj_augmented
 
+    def _stationary(self, normal_q: Tensor) -> bool:
+        """Whether ||G(q)||_inf is at or below tolerance_grad; zero disables the test."""
+        tolerance_grad = self.param_groups[0]["tolerance_grad"]
+        return tolerance_grad > 0.0 and (
+            torch.norm(normal_q, p=float("inf")).item() <= tolerance_grad
+        )
+
+    def _newton_system(self, u: Tensor, q: Tensor, normal_q: Tensor) -> NewtonSystem:
+        """Complete the Newton system at q with the selected Jacobians P'(q) and G'(q)."""
+        jac_prox = self.penalty.jac_prox(q, self._prox_constant(), prox_image=u)
+        return NewtonSystem(q, normal_q, self.jac_normal(u, jac_prox), jac_prox)
+
     def _prox_constant(self) -> float:
         return self.penalty.alpha * self.param_groups[0]["tau"]
 
@@ -172,8 +191,7 @@ class SSN(Optimizer):
         return self.penalty.hess_correction(u) + self.hess_obj
 
     def _ssn_single_step(
-        self, closure: Callable[[], Tensor], u: Tensor, q: Tensor, normal_q: Tensor,
-        jac_normal: Tensor, jac_prox: Tensor, loss: Tensor,
+        self, closure: Callable[[], Tensor], u: Tensor, system: NewtonSystem, loss: Tensor,
     ) -> Tensor:
         """Run a strategy, store its state, and keep an accepted trial or undo a rejected one.
 
@@ -187,14 +205,14 @@ class SSN(Optimizer):
 
         if group["method"] == "levenberg_marquardt":
             q_trial, loss_trial, accepted = damped_newton_step(
-                q, normal_q, jac_normal, loss, evaluate_trial,
+                system.q, system.normal_q, system.jac_normal, loss, evaluate_trial,
                 max_ls_iter=group["max_ls_iter"], tolerance_ls=group["tolerance_ls"],
             )
         else:
             state = self.state[self._params[0]]
             sigma = state.setdefault("sigma", 0.01 * group["sigmamax"])
             trial, state["sigma"] = trust_region_step(
-                q, normal_q, jac_normal, jac_prox, loss, evaluate_trial,
+                system.q, system.normal_q, system.jac_normal, system.jac_prox, loss, evaluate_trial,
                 sigma=sigma, sigmamax=group["sigmamax"],
             )
             q_trial, loss_trial, accepted = trial
