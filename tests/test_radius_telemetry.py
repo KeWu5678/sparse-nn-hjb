@@ -43,18 +43,17 @@ def test_nonzero_residual_records_computed_and_capped_theorem_radius(loop_order,
         num_iterations=1,
     )
     assert history.search_radius == pytest.approx([expected])
-    assert history.radius_theorem_applied == [1.0]
     assert history.summary_metrics()["search_radius"] == pytest.approx(expected)
 
 
-@pytest.mark.parametrize("activation,power,insertion,cap,order,expected_radius,applied", [
-    ("softplus", 1.0, "profile", "theorem", 4.0, 1.0, 1.0),
-    ("snake_b0_25", 1.0, "profile", "theorem", 2.0, math.exp(FIXED_LOG_CLAMP), 0.0),
-    ("softplus", 1.0, "profile", "fixed", 4.0, math.exp(FIXED_LOG_CLAMP), -1.0),
-    ("relu", 2.0, "finite_step", "theorem", 4.0, 1.0, -1.0),
+@pytest.mark.parametrize("activation,power,insertion,cap,order,expected_radius", [
+    ("softplus", 1.0, "profile", "theorem", 4.0, 1.0),
+    ("snake_b0_25", 1.0, "profile", "theorem", 2.0, math.exp(FIXED_LOG_CLAMP)),
+    ("softplus", 1.0, "profile", "fixed", 4.0, math.exp(FIXED_LOG_CLAMP)),
+    ("relu", 2.0, "finite_step", "theorem", 4.0, 1.0),
 ])
 def test_zero_measure_fit_records_the_actual_search_radius(
-    activation, power, insertion, cap, order, expected_radius, applied,
+    activation, power, insertion, cap, order, expected_radius,
 ):
     cfg = ExperimentConfig(
         model=ModelConfig(activation=activation, power=power, insertion=insertion,
@@ -76,10 +75,7 @@ def test_zero_measure_fit_records_the_actual_search_radius(
     )
     assert history.final_neurons == 0
     assert history.search_radius == [expected_radius]
-    assert history.radius_theorem_applied == [applied]
-    metrics = history.summary_metrics()
-    assert metrics["search_radius"] == expected_radius
-    assert metrics["radius_theorem_applied"] == applied
+    assert history.summary_metrics()["search_radius"] == expected_radius
 
 
 def test_old_history_summary_does_not_invent_missing_search_diagnostics():
@@ -91,12 +87,11 @@ def test_old_history_summary_does_not_invent_missing_search_diagnostics():
     history = History()
     history.record(
         network, metrics(network, make_penalty(config), make_dataloader(samples)),
-        {"search_radius": 1.0, "radius_theorem_applied": 1.0},
+        {"search_radius": 1.0},
     )
     expected = history.summary_metrics()
-    for name in ("search_radius", "radius_theorem_applied"):
-        expected.pop(name)
-        delattr(history, name)
+    expected.pop("search_radius")
+    delattr(history, "search_radius")
     legacy = pickle.loads(pickle.dumps(history))
     assert legacy.summary_metrics() == expected
 
@@ -125,6 +120,4 @@ def test_zero_iteration_fit_does_not_reuse_a_previous_search(activation, power, 
 
     history = run_training(trainer, num_iterations=0)
     assert history.search_radius == [None]
-    assert history.radius_theorem_applied == [None]
     assert "search_radius" not in history.summary_metrics()
-    assert "radius_theorem_applied" not in history.summary_metrics()

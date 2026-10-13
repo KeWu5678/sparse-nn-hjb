@@ -35,7 +35,6 @@ class PDAP:
         self.loop_order = training.loop_order
         self.radial_cap = training.radial_cap
         self._last_search_radius: float | None = None
-        self._last_theorem_applied: float | None = None
 
         self.solver: dict[str, Any] = dict(
             method=training.method, max_ls_iter=training.max_ls_iter,
@@ -185,7 +184,6 @@ class PDAP:
         cap = math.exp(FIXED_LOG_CLAMP)
         if self.radial_cap != "theorem" or self.network.use_sphere:
             self._last_search_radius = 1.0 if self.network.use_sphere else cap
-            self._last_theorem_applied = -1.0
             return None
         assert self.network.moment_order is not None  # Nonhomogeneous training was validated before search.
         X, V, dV = full_batch(self.train_loader)
@@ -196,7 +194,6 @@ class PDAP:
             alpha=self.penalty.alpha, moment_order=self.network.moment_order,
         )
         self._last_search_radius = cap if radius is None else min(float(radius), cap)
-        self._last_theorem_applied = 0.0 if radius is None else 1.0
         return None if radius is None else self._last_search_radius
 
     def _search_diagnostics(self, inserted: int) -> dict:
@@ -204,5 +201,4 @@ class PDAP:
             "searches": 1,
             "inserted": inserted,
             "search_radius": self._last_search_radius,
-            "radius_theorem_applied": self._last_theorem_applied,
         }

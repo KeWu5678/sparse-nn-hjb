@@ -31,7 +31,6 @@ def _case(monkeypatch, *, order="insertion_first", accepted=(True,)):
 
     def candidates(*args, **kwargs):
         pdap._last_search_radius = 10.0 * next(search_number)
-        pdap._last_theorem_applied = 1.0
         size = int(next(searches))
         return x.new_ones((size, 1)), x.new_zeros(size), x.new_ones(size)
 

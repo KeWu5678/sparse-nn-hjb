@@ -47,10 +47,6 @@ class History:
     #: None means no search. In correction-first order, this is the preceding
     #: insertion (initialization for row 0); the final insertion is unrecorded.
     search_radius: List[float | None] = field(default_factory=list)
-    #: 1 = theorem radius available, 0 = requested but a required hypothesis
-    #: failed (fallback used), -1 = not requested (radial_cap=fixed, or a
-    #: sphere activation, where there is no radial search to bound).
-    radius_theorem_applied: List[float | None] = field(default_factory=list)
     inner_weights: List[Dict[str, torch.Tensor]] = field(default_factory=list)
     outer_weights: List[torch.Tensor] = field(default_factory=list)
     model_states: List[Dict[str, torch.Tensor]] = field(default_factory=list)
@@ -72,19 +68,14 @@ class History:
         """Store supplied measurements and an independent checkpoint.
 
         Search diagnostics describe the search that produced
-        the support being evaluated, in either loop order. They separate a
-        ``radial_cap=theorem`` run whose hypothesis failed from a
-        ``radial_cap=fixed`` run: both search
-        inside ``exp(5)``, and without these the records are identical.
+        the support being evaluated, in either loop order.
         """
         for name, value in values.items():
             getattr(self, name).append(value)
         diagnostics = dict(diagnostics or {})
         self.diagnostics.append(diagnostics)
         search_radius = diagnostics.get("search_radius")
-        theorem_applied = diagnostics.get("radius_theorem_applied")
         self.search_radius.append(None if search_radius is None else float(search_radius))
-        self.radius_theorem_applied.append(None if theorem_applied is None else float(theorem_applied))
         self.penalty_exponent = network.penalty_exponent
         self.loss_weights = network.loss_weights
         state = {name: tensor.detach().clone() for name, tensor in network.state_dict().items()}
@@ -177,9 +168,8 @@ class History:
                 metrics["phi_1"] = float(self.sparsity_functional[i])
                 metrics["alpha_phi_1"] = float(self.alpha_phi[i])
         # Old fit pickles have no search telemetry; do not invent provenance.
-        for name in ("search_radius", "radius_theorem_applied"):
-            values = getattr(self, name, [])
-            if len(values) > i and values[i] is not None:
-                metrics[name] = float(values[i])
+        values = getattr(self, "search_radius", [])
+        if len(values) > i and values[i] is not None:
+            metrics["search_radius"] = float(values[i])
         metrics.update(getattr(self, "run_metrics", {}))
         return metrics
