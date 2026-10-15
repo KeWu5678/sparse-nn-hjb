@@ -54,5 +54,5 @@ def test_algorithm2_fits_an_exact_relu_power_atom(power: float) -> None:
         num_iterations=2,
     )
 
-    assert history.final_neurons > 0
-    assert np.all(np.diff(np.asarray(history.train_loss)) <= 1e-12)
+    assert history.run["final_neurons"] > 0
+    assert np.all(np.diff(np.asarray([row["objective_train"] for row in history.rows])) <= 1e-12)

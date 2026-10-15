@@ -10,7 +10,7 @@ import src.training as training
 from src.config import resolve_model, validate_model_config
 from src.config.schema import TrainingConfig
 from src.data import make_dataloader
-from src.eval import metrics
+from src.eval import evaluate_checkpoint
 from src.PDAP import PDAP, History
 from src.SSN import SSN
 
@@ -44,7 +44,7 @@ def test_step_completes_optimization_without_quality_evaluation(monkeypatch):
     def unexpected_evaluation(*args, **kwargs):
         pytest.fail("PDAP.step must not invoke quality evaluation")
 
-    monkeypatch.setattr(training, "metrics", unexpected_evaluation)
+    monkeypatch.setattr(training, "evaluate_checkpoint", unexpected_evaluation)
     diagnostics = pdap.step()
 
     assert network.n_neurons == 1
@@ -55,7 +55,7 @@ def test_step_completes_optimization_without_quality_evaluation(monkeypatch):
     # A zero-budget SSN correction accepts its initial coefficients; this differs
     # from a search that never invokes correction at all.
     assert diagnostics["ssn_refinement_accepted"] is True
-    assert metrics(network, pdap.penalty, loader)["train_loss"] == 0.0
+    assert evaluate_checkpoint(network, pdap.penalty, loader)["objective_train"] == 0.0
 
 
 def test_ssn_trial_failure_and_final_acceptance_reach_history_and_run_totals(monkeypatch):
@@ -91,11 +91,11 @@ def test_ssn_trial_failure_and_final_acceptance_reach_history_and_run_totals(mon
     history = training.run_training(pdap, num_iterations=1)
 
     diagnostics = history.diagnostics[0]
-    assert trials == diagnostics["ssn_iterations"] == history.run_metrics["total_ssn_iterations"] == 4
-    assert diagnostics["ssn_failed_steps"] == history.run_metrics["total_ssn_failed_steps"] == 1
+    assert trials == diagnostics["ssn_iterations"] == history.run["total_ssn_iterations"] == 4
+    assert diagnostics["ssn_failed_steps"] == history.run["total_ssn_failed_steps"] == 1
     assert diagnostics["ssn_last_step_success"] is diagnostics["ssn_refinement_accepted"] is True
-    assert history.run_metrics["total_accepted_ssn_refinements"] == 1
-    assert history.model_states[0]["c"].item() == pytest.approx(.78)
+    assert history.run["total_accepted_ssn_refinements"] == 1
+    assert history.states[0]["c"].item() == pytest.approx(.78)
 
 
 @pytest.mark.parametrize("order,searches,final_width", [
@@ -108,19 +108,19 @@ def test_each_record_scores_its_checkpoint_and_totals_include_trailing_work(
     network, loader, pdap = _case(monkeypatch, order=order, accepted=(True,) * searches)
     history = training.run_training(pdap, num_iterations=2)
 
-    assert [state["c"].numel() for state in history.model_states] == [1, 2]
-    assert history.final_neurons == network.n_neurons == final_width
-    assert history.cap_of_theorem_applied == [1.0, 0.0]
+    assert [state["c"].numel() for state in history.states] == [1, 2]
+    assert history.run["final_neurons"] == network.n_neurons == final_width
+    assert [d.get("cap_of_theorem_applied") for d in history.diagnostics] == [1.0, 0.0]
     assert history.best_iteration == 0
-    assert history.run_metrics["total_insertion_searches"] == searches
-    assert history.run_metrics["total_inserted_neurons"] == searches
-    assert history.run_metrics["total_ssn_refinements"] == 2
-    assert history.run_metrics["total_accepted_ssn_refinements"] == 2
-    assert history.run_metrics["stop_reason"] == "iteration_budget"
-    assert history.summary_metrics()["iterations"] == 2
+    assert history.run["total_insertion_searches"] == searches
+    assert history.run["total_inserted_neurons"] == searches
+    assert history.run["total_ssn_refinements"] == 2
+    assert history.run["total_accepted_ssn_refinements"] == 2
+    assert history.stop_reason == "iteration_budget"
+    assert len(history.rows) == 2
     for i in range(2):
-        history.restore_network(network, i)
-        assert history.train_loss[i] == pytest.approx(metrics(network, pdap.penalty, loader)["train_loss"])
+        history.restore(network, i)
+        assert history.rows[i]["objective_train"] == pytest.approx(evaluate_checkpoint(network, pdap.penalty, loader)["objective_train"])
 
 
 def test_terminal_search_is_counted_without_a_duplicate_checkpoint(monkeypatch):
@@ -131,15 +131,15 @@ def test_terminal_search_is_counted_without_a_duplicate_checkpoint(monkeypatch):
     monkeypatch.setattr(training, "_process_peak_rss_bytes", lambda: 4096)
     history = training.run_training(pdap, num_iterations=5)
 
-    assert len(history.train_loss) == len(history.diagnostics) == 1
-    assert history.run_metrics["total_insertion_searches"] == 2
-    assert history.run_metrics["total_ssn_refinements"] == 1
-    assert history.run_metrics["total_ssn_iterations"] == 0
-    assert history.run_metrics["solver_seconds"] == 9.0
-    assert history.run_metrics["evaluation_seconds"] == 3.0
-    assert history.run_metrics["process_peak_rss_bytes"] == 4096
-    assert history.summary_metrics()["stop_reason"] == "no_candidate"
-    assert history.cap_of_theorem_applied == [1.0]  # The accepted search, not the final failure.
+    assert len(history.rows) == len(history.diagnostics) == 1
+    assert history.run["total_insertion_searches"] == 2
+    assert history.run["total_ssn_refinements"] == 1
+    assert history.run["total_ssn_iterations"] == 0
+    assert history.run["solver_seconds"] == 9.0
+    assert history.run["evaluation_seconds"] == 3.0
+    assert history.run["process_peak_rss_bytes"] == 4096
+    assert history.stop_reason == "no_candidate"
+    assert [d.get("cap_of_theorem_applied") for d in history.diagnostics] == [1.0]  # The accepted search, not the final failure.
 
 
 @pytest.mark.parametrize("order", ["insertion_first", "correction_first"])
@@ -147,14 +147,14 @@ def test_empty_terminal_model_is_observed_without_inventing_correction_work(monk
     network, loader, pdap = _case(monkeypatch, order=order, accepted=(False,))
     history = training.run_training(pdap, num_iterations=3)
 
-    assert history.final_neurons == 0
-    assert len(history.train_loss) == 1
-    assert history.err_h1_train == [1.0]
-    assert history.run_metrics["total_insertion_searches"] == 1
-    assert history.run_metrics["total_ssn_refinements"] == 0
-    assert history.run_metrics["total_accepted_ssn_refinements"] == 0
+    assert history.run["final_neurons"] == 0
+    assert len(history.rows) == 1
+    assert [row["rel_h1_train"] for row in history.rows] == [1.0]
+    assert history.run["total_insertion_searches"] == 1
+    assert history.run["total_ssn_refinements"] == 0
+    assert history.run["total_accepted_ssn_refinements"] == 0
     assert history.diagnostics[0].get("ssn_refinement_accepted") is None
-    assert history.run_metrics["stop_reason"] == "no_candidate"
+    assert history.stop_reason == "no_candidate"
 
 
 def test_failed_legacy_initialization_keeps_existing_model_and_reports_its_size(monkeypatch):
@@ -166,12 +166,12 @@ def test_failed_legacy_initialization_keeps_existing_model_and_reports_its_size(
     )
     history = training.run_training(pdap, num_iterations=3)
 
-    assert history.final_neurons == history.best_neurons == network.n_neurons == 1
-    assert history.model_states[0]["inner_weight"].item() == 2.0
-    assert history.train_loss[0] == metrics(network, pdap.penalty, loader)["train_loss"]
-    assert history.run_metrics["total_insertion_searches"] == 1
-    assert history.run_metrics["total_ssn_refinements"] == 0
-    assert history.summary_metrics()["stop_reason"] == "no_candidate"
+    assert history.run["final_neurons"] == history.rows[history.best_iteration]["neurons"] == network.n_neurons == 1
+    assert history.states[0]["inner_weight"].item() == 2.0
+    assert history.rows[0]["objective_train"] == evaluate_checkpoint(network, pdap.penalty, loader)["objective_train"]
+    assert history.run["total_insertion_searches"] == 1
+    assert history.run["total_ssn_refinements"] == 0
+    assert history.stop_reason == "no_candidate"
 
 
 @pytest.mark.parametrize("order,searches", [("insertion_first", 0), ("correction_first", 1)])
@@ -184,18 +184,18 @@ def test_zero_budget_records_existing_or_legacy_initialized_state(monkeypatch, o
     )
     history = training.run_training(pdap, num_iterations=0)
 
-    assert len(history.train_loss) == 1
-    assert history.train_loss[0] == metrics(network, pdap.penalty, loader)["train_loss"]
-    assert history.run_metrics["total_insertion_searches"] == searches
-    assert history.run_metrics["total_ssn_refinements"] == 0
-    assert history.run_metrics["stop_reason"] == "iteration_budget"
-    assert history.cap_of_theorem_applied == ([1.0] if searches else [None])
-    assert history.model_states[0]["inner_weight"].item() == (1.0 if searches else 2.0)
+    assert len(history.rows) == 1
+    assert history.rows[0]["objective_train"] == evaluate_checkpoint(network, pdap.penalty, loader)["objective_train"]
+    assert history.run["total_insertion_searches"] == searches
+    assert history.run["total_ssn_refinements"] == 0
+    assert history.stop_reason == "iteration_budget"
+    assert [d.get("cap_of_theorem_applied") for d in history.diagnostics] == ([1.0] if searches else [None])
+    assert history.states[0]["inner_weight"].item() == (1.0 if searches else 2.0)
 
 
 def test_history_stores_supplied_values_without_prediction_and_copies_diagnostics(monkeypatch):
     network, loader, pdap = _case(monkeypatch)
-    values = metrics(network, pdap.penalty, loader)
+    values = evaluate_checkpoint(network, pdap.penalty, loader)
     diagnostics = {"cap_of_theorem_applied": 1.0, "ssn_refinement_accepted": False}
 
     def unexpected_prediction(*args, **kwargs):
@@ -205,10 +205,10 @@ def test_history_stores_supplied_values_without_prediction_and_copies_diagnostic
     history = History()
     history.record(network, values, diagnostics)
     diagnostics["cap_of_theorem_applied"] = 0.0
-    values["train_loss"] = 99.0
+    values["objective_train"] = 99.0
 
-    assert history.train_loss[0] != 99.0
-    assert history.cap_of_theorem_applied == [1.0]
+    assert history.rows[0]["objective_train"] != 99.0
+    assert [d.get("cap_of_theorem_applied") for d in history.diagnostics] == [1.0]
     assert history.diagnostics[0]["cap_of_theorem_applied"] == 1.0
 
 

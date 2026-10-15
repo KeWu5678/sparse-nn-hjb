@@ -145,6 +145,12 @@ def load_value_samples(path: str | Path) -> ValueSamples:
     return _as_value_samples(raw)
 
 
+def load_arrays(path: str | Path, *keys: str) -> dict[str, np.ndarray]:
+    """Named float64 arrays of an ``.npz`` file under DATA_DIR."""
+    with np.load(DATA_DIR / path) as source:
+        return {key: np.asarray(source[key], dtype=np.float64) for key in keys}
+
+
 @dataclass(frozen=True)
 class ValueSampleNormalizer:
     """Reversible max-absolute scaling for value samples."""
@@ -179,6 +185,10 @@ class ValueSampleNormalizer:
 
     def to_dict(self) -> dict[str, Any]:
         return {"x_scale": self.x_scale.tolist(), "v_scale": self.v_scale}
+
+    @classmethod
+    def from_dict(cls, values: dict[str, Any]) -> "ValueSampleNormalizer":
+        return cls(np.asarray(values["x_scale"], dtype=np.float64), float(values["v_scale"]))
 
 
 def normalize_value_samples(samples: ValueSamples) -> tuple[ValueSamples, ValueSampleNormalizer]:

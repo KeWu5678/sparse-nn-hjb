@@ -10,6 +10,8 @@ Update 2026-10-09: `SparseProblem` is renamed `SparseModel`, and the `src/proble
 package is renamed `src/models/`. Update 2026-10-13: `SparseModel` is renamed
 `SparseNetwork`, and arguments that hold it are named `network`. Sections below
 the current decision keep the names in use when they were written.
+Update 2026-10-15: metric names, History's storage and the table module
+(`src/tables.py`, formerly `src/metric.py`) follow [ADR 0017](0017-metric-catalog.md).
 
 The agreed refactor replaces the separate model/problem representation with
 one `SparseNetwork(torch.nn.Module)` that owns the current network and

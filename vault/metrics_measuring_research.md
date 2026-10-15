@@ -1,5 +1,12 @@
 # Metrics and measuring: ownership and framework options
 
+> **Superseded (2026-10-15).** Metric names, History storage and the run
+> artifacts now follow [ADR 0017](../docs/adr/0017-metric-catalog.md) and
+> [ADR 0016](../docs/adr/0016-mlflow-is-the-system-of-record.md). The JSON run
+> records, `src/experiment_logging.py` and `src/problems/` described below no
+> longer exist. The ownership decisions (native PyTorch, full-split evaluation,
+> no metric framework) still hold.
+
 Investigated 2026-10-08. **Design accepted; implementation verified.** The user has
 confirmed prediction quality, solver diagnostics, and runtime costs are in scope,
 with an explicit constraint to keep the codebase small.

@@ -7,7 +7,7 @@ from ssn_test_problem import coefficient_problem, correction_optimizer
 from src.config import make_penalty, resolve_model, validate_model_config
 from src.config.activations import ACTIVATIONS
 from src.data import make_dataloader
-from src.eval import metrics
+from src.eval import evaluate_checkpoint
 from src.models import LogPenalty, SparseNetwork
 from src.models.penalty import _phi
 
@@ -132,7 +132,7 @@ def test_samples_define_the_objective_and_its_derivatives(activation, power, gam
     else:
         correction = lambda u: u.new_zeros(())
     obj_augmented = lambda u: fitting(u) + correction(u)
-    assert float(loss(u)) == pytest.approx(metrics(network, penalty, loader)["train_loss"], rel=1e-12)
+    assert float(loss(u)) == pytest.approx(evaluate_checkpoint(network, penalty, loader)["objective_train"], rel=1e-12)
 
     optimizer = correction_optimizer(penalty, hess_obj, u)
     torch.testing.assert_close(
@@ -160,7 +160,7 @@ def test_one_network_handles_empty_and_replaced_supports():
     residual = data[0], *(p - t for p, t in zip(prediction, data[1:]))
     torch.testing.assert_close(residual[1], -data[1])
     torch.testing.assert_close(residual[2], -data[2])
-    initial_loss = metrics(network, penalty, loader)["train_loss"]
+    initial_loss = evaluate_checkpoint(network, penalty, loader)["objective_train"]
     a = torch.tensor([0.2, -0.3], dtype=torch.float64, requires_grad=True)
     b = a.new_tensor(0.1, requires_grad=True)
     score = network.jac_obj(residual, a.reshape(1, -1), b.reshape(1))[0].abs() / network.moment_weight_of_atoms(a, b)
@@ -171,10 +171,10 @@ def test_one_network_handles_empty_and_replaced_supports():
         network.set_atoms(W, torch.zeros(width, dtype=W.dtype), torch.ones(width, dtype=W.dtype))
         loss, hess_obj, u = coefficient_problem(network, penalty, loader)
         assert hess_obj.shape == (width, width)
-        assert float(loss(u)) == pytest.approx(metrics(network, penalty, loader)["train_loss"], rel=1e-12)
+        assert float(loss(u)) == pytest.approx(evaluate_checkpoint(network, penalty, loader)["objective_train"], rel=1e-12)
 
     network.set_atoms(W[:0], W.new_zeros(0), W.new_zeros(0))
-    assert metrics(network, penalty, loader)["train_loss"] == pytest.approx(initial_loss)
+    assert evaluate_checkpoint(network, penalty, loader)["objective_train"] == pytest.approx(initial_loss)
 
 
 @pytest.mark.parametrize("activation,power", [("relu", 1.), ("relu", 2.), ("relu", 3.), ("softplus", 1.)])

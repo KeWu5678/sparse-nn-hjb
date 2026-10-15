@@ -12,7 +12,7 @@ from src.config import make_penalty, resolve_model, validate_model_config, valid
 from src.config.activations import ACTIVATIONS, GROWTH, get_growth
 from src.config.schema import EnvConfig, ExperimentConfig, ModelConfig, TrainingConfig
 from src.data import make_dataloader, split_value_samples
-from src.eval import metrics
+from src.eval import evaluate_checkpoint
 from src.models import SparseNetwork
 from src.models.penalty import _phi
 from src.PDAP import PDAP
@@ -118,7 +118,7 @@ def test_normalized_objective_is_phi_of_the_scaled_coefficient() -> None:
     expected_penalty = float(cfg.model.alpha * torch.sum(_phi(w_p * c.abs(), cfg.model.gamma)))
 
     penalty = make_penalty(resolve_model(cfg.model, 2))
-    assert metrics(network, penalty, make_dataloader(train))["train_loss"] == pytest.approx(fidelity + expected_penalty, rel=1e-12)
+    assert evaluate_checkpoint(network, penalty, make_dataloader(train))["objective_train"] == pytest.approx(fidelity + expected_penalty, rel=1e-12)
 
 
 def test_normalized_dictionary_reproduces_the_network() -> None:
@@ -150,7 +150,7 @@ def test_guaranteed_insertion_delivers_the_promised_decrease() -> None:
         insertion=cfg.model.insertion,
     )
 
-    before = metrics(network, trainer.penalty, train_loader)["train_loss"]
+    before = evaluate_checkpoint(network, trainer.penalty, train_loader)["objective_train"]
     with torch.no_grad():
         value, grad = network(train[0])
     res_v, res_dv = (value - train[1]).detach(), (grad - train[2]).detach()
@@ -194,7 +194,7 @@ def test_guaranteed_insertion_delivers_the_promised_decrease() -> None:
         torch.cat([b_old, bias.reshape(1)]),
         torch.cat([c_old, torch.as_tensor(c_new[:1], dtype=torch.float64)]),
     )
-    after = metrics(network, trainer.penalty, train_loader)["train_loss"]
+    after = evaluate_checkpoint(network, trainer.penalty, train_loader)["objective_train"]
     assert before - after >= delta ** 2 / (2 * a_p) - 1e-12
 
 
@@ -203,7 +203,7 @@ def test_correction_guard_keeps_the_objective_monotone() -> None:
                insert_init="guaranteed", correction_guard=True,
                loop_order="insertion_first")
     _, history, _ = _fit(cfg, iterations=6)
-    losses = np.asarray(history.train_loss)
+    losses = np.asarray([row["objective_train"] for row in history.rows])
     assert np.all(np.diff(losses) <= 1e-12), f"objective increased: {losses}"
 
 
@@ -218,8 +218,8 @@ def test_insertion_first_ends_on_a_corrected_network() -> None:
     """
     cfg = _cfg(loop_order="insertion_first")
     _, history, _ = _fit(cfg, iterations=4)
-    last_recorded = int(history.inner_weights[-1]["weight"].shape[0])
-    assert history.final_neurons == last_recorded
+    last_recorded = int(history.states[-1]["inner_weight"].shape[0])
+    assert history.run["final_neurons"] == last_recorded
 
 
 def test_sequential_adds_at_most_one_atom_per_iteration() -> None:
@@ -227,7 +227,7 @@ def test_sequential_adds_at_most_one_atom_per_iteration() -> None:
                insert_init="guaranteed", insert_mode="sequential",
                loop_order="insertion_first")
     _, history, _ = _fit(cfg, iterations=6)
-    widths = [int(w["weight"].shape[0]) for w in history.inner_weights]
+    widths = [int(s["inner_weight"].shape[0]) for s in history.states]
     assert all(step <= 1 for step in np.diff(widths)), widths
 
 

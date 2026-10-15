@@ -114,8 +114,7 @@ persisted metric values retain their existing representation.
 `training.display_every` now controls progress output at recorded checkpoint
 indices `0, N, 2N, ...`; its default is `2`. Values at or below zero suppress
 periodic progress, while `training_finished` still reports termination. Every
-checkpoint is still evaluated and saved. Direct `run_training(verbose=False)`
-retains its quiet behavior. SSN correction details now use `DEBUG`, alongside
+checkpoint is still evaluated and saved. SSN correction details now use `DEBUG`, alongside
 existing candidate and backtracking diagnostics.
 
 For Hydra runs, `training.display_every=10` reduces progress frequency;

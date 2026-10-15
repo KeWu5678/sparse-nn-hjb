@@ -1,7 +1,6 @@
 """Search diagnostics describe the executed search and remain optional in old fits."""
 
 import math
-import pickle
 
 import pytest
 import torch
@@ -9,10 +8,8 @@ import torch
 from src.config import make_penalty, resolve_model, validate_model_config
 from src.config.schema import ExperimentConfig, ModelConfig, TrainingConfig
 from src.data import make_dataloader
-from src.eval import metrics
 from src.models import SparseNetwork
 from src.PDAP import PDAP
-from src.PDAP.history import History
 from src.PDAP.insertion import FIXED_LOG_CLAMP
 from src.training import run_training
 
@@ -41,8 +38,8 @@ def test_nonzero_residual_records_whether_the_cap_bounded_the_theorem_radius(loo
         ),
         num_iterations=1,
     )
-    assert history.cap_of_theorem_applied == [expected]
-    assert history.summary_metrics()["cap_of_theorem_applied"] == expected
+    assert [d.get("cap_of_theorem_applied") for d in history.diagnostics] == [expected]
+    assert history.summary()["cap_of_theorem_applied"] == expected
 
 
 @pytest.mark.parametrize("activation,power,insertion,cap,order,expected", [
@@ -72,27 +69,9 @@ def test_zero_measure_fit_records_whether_the_cap_was_applied(
         ),
         num_iterations=1,
     )
-    assert history.final_neurons == 0
-    assert history.cap_of_theorem_applied == [expected]
-    assert history.summary_metrics().get("cap_of_theorem_applied") == expected
-
-
-def test_old_history_summary_does_not_invent_missing_search_diagnostics():
-    config = resolve_model({}, 2)
-    network = SparseNetwork(config)
-    samples = (torch.zeros(3, 2, dtype=torch.float64),
-               torch.ones(3, 1, dtype=torch.float64),
-               torch.ones(3, 2, dtype=torch.float64))
-    history = History()
-    history.record(
-        network, metrics(network, make_penalty(config), make_dataloader(samples)),
-        {"cap_of_theorem_applied": 0.0},
-    )
-    expected = history.summary_metrics()
-    expected.pop("cap_of_theorem_applied")
-    delattr(history, "cap_of_theorem_applied")
-    legacy = pickle.loads(pickle.dumps(history))
-    assert legacy.summary_metrics() == expected
+    assert history.run["final_neurons"] == 0
+    assert [d.get("cap_of_theorem_applied") for d in history.diagnostics] == [expected]
+    assert history.summary().get("cap_of_theorem_applied") == expected
 
 
 def test_zero_iteration_fit_does_not_reuse_a_previous_search():
@@ -112,8 +91,8 @@ def test_zero_iteration_fit_does_not_reuse_a_previous_search():
         insertion=model_config["insertion"],
     )
     previous = run_training(trainer, num_iterations=1)
-    assert previous.cap_of_theorem_applied == [0.0]
+    assert [d.get("cap_of_theorem_applied") for d in previous.diagnostics] == [0.0]
 
     history = run_training(trainer, num_iterations=0)
-    assert history.cap_of_theorem_applied == [None]
-    assert "cap_of_theorem_applied" not in history.summary_metrics()
+    assert [d.get("cap_of_theorem_applied") for d in history.diagnostics] == [None]
+    assert "cap_of_theorem_applied" not in history.summary()

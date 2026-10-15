@@ -159,7 +159,7 @@ class EvalConfig:
     """Post-fit evaluation: which metrics to compute on the fitted model.
 
     ``kind="global"`` (the default) reproduces today's behavior — only the
-    global ``summary_metrics``.  ``kind="region_split"`` additionally reports
+    global History summary.  ``kind="region_split"`` additionally reports
     errors split into the **switching tube** — the fixed-radius tubular
     neighborhood {distance to the ±2π-tiled switching curve ≤ ``tube_radius``}
     — and the **rest**, scored on the dense **region-eval pool** (``eval_pool``:
@@ -189,10 +189,6 @@ class EnvConfig:
     """
 
     seed: int = 42
-    # Abort at startup when MLflow is not reachable, instead of training for hours
-    # and discovering at run.finish() that publish_record_to_mlflow silently
-    # returned False because MLFLOW_TRACKING_URI was unset. Sweeps set it.
-    require_mlflow: bool = False
     verbose: bool = True  # Readable stderr; JSONL file output is always enabled.
     log_level: str = "INFO"  # Shared threshold for both outputs.
     log_file: Optional[str] = None  # Defaults to run.jsonl in Hydra's output directory.

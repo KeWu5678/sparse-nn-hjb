@@ -10,9 +10,10 @@ def select_stabilizing_fit(candidates, stabilizes):
 
     Test candidates in ascending H1 order, stopping at the first pass. If none
     pass, return the lowest-H1 fit and False as an explicitly failed comparator.
-    Each candidate is a mapping with ``global_h1`` and ``record_path`` keys.
+    Each candidate is a mapping with a ``global_h1`` key; equal errors keep the
+    candidates' given order.
     """
-    ordered = sorted(candidates, key=lambda row: (row["global_h1"], row["record_path"]))
+    ordered = sorted(candidates, key=lambda row: row["global_h1"])
     if not ordered or any(not np.isfinite(row["global_h1"]) for row in ordered):
         raise ValueError("expected candidates with finite global validation H1 errors")
     for candidate in ordered:

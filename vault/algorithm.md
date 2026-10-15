@@ -229,16 +229,16 @@ pdap = PDAP(cfg.training, make_penalty(model_config), network, train_loader,
 history = run_training(
     pdap, valid_loader,
     num_iterations=cfg.training.num_iterations,
-    reporting_normalizer=normalizer,
+    normalizer=normalizer,
 )
 ```
 
-The runner passes any reporting normalizer directly to evaluation. History
-receives the resulting scalar values and never initiates data loading or metric
-evaluation. Existing quality keys and best-checkpoint selection stay unchanged.
-`iterations` remains the historical checkpoint-row count; explicit execution
-counters describe searches and coefficient corrections, including a terminal
-failed search or the legacy final insertion. No-candidate termination and budget
+The runner passes any normalizer directly to evaluation. History receives one
+row of `src.metrics` checkpoint metrics per checkpoint and never initiates data
+loading or metric evaluation; the selected checkpoint is the first least
+training objective. Explicit execution counters describe searches and
+coefficient corrections, including a terminal failed search or the legacy final
+insertion. No-candidate termination and budget
 exhaustion are distinct from a mathematical convergence guarantee.
 
 Runtime fields distinguish wall time spent in solver operations from evaluation.

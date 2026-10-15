@@ -14,7 +14,7 @@ from torch.utils.data import (
 from src.config import make_penalty, resolve_model, validate_model_config
 from src.config.schema import TrainingConfig
 from src.data import full_batch, make_dataloader
-from src.eval import metrics
+from src.eval import evaluate_checkpoint
 from src.models import SparseNetwork
 from src.PDAP import PDAP, insertion
 from src.PDAP.warmstart import warm_start
@@ -53,12 +53,12 @@ def test_prepared_objective_matches_worked_value_gradient_and_hessian(batch_size
 def test_full_data_metrics_weight_samples_and_add_penalty_once(batch_size):
     data, network, penalty = _linear_case(alpha=.1)
     loader = make_dataloader(data, batch_size=batch_size)
-    values = metrics(network, penalty, loader)
+    values = evaluate_checkpoint(network, penalty, loader)
     for split in ("train", "val"):
-        assert values[f"{split}_loss"] == pytest.approx(19 / 24 + .3)
-        assert values[f"err_l2_{split}"] == pytest.approx((19 / 84) ** .5)
-        assert values[f"err_grad_{split}"] == 0.
-        assert values[f"err_h1_{split}"] == pytest.approx((19 / 144) ** .5)
+        assert values[f"objective_{split}"] == pytest.approx(19 / 24 + .3)
+        assert values[f"rel_l2_{split}"] == pytest.approx((19 / 84) ** .5)
+        assert values[f"rel_grad_{split}"] == 0.
+        assert values[f"rel_h1_{split}"] == pytest.approx((19 / 144) ** .5)
 
 
 @pytest.mark.parametrize("batch_size", [None, 1, 2])
@@ -121,7 +121,7 @@ def test_chunking_preserves_correction_candidate_and_warmstart_calculations(acti
     torch.testing.assert_close(hess_obj, reference_hessian)
     torch.testing.assert_close(u, reference_u)
     torch.testing.assert_close(torch.func.grad(loss)(u), torch.func.grad(reference_loss)(u))
-    assert metrics(network, penalty, chunked) == pytest.approx(metrics(network, penalty, full))
+    assert evaluate_checkpoint(network, penalty, chunked) == pytest.approx(evaluate_checkpoint(network, penalty, full))
 
     residuals = []
     for loader in (full, chunked):
@@ -178,9 +178,9 @@ def test_pdap_records_one_full_data_result_per_outer_iteration(batch_size):
         PDAP(training, make_penalty(config), network, loader, insertion=config["insertion"]),
         num_iterations=2,
     )
-    assert len(history.train_loss) == 2
-    for iteration, loss in enumerate(history.train_loss):
-        history.restore_network(network, iteration)
+    assert len(history.rows) == 2
+    for iteration, loss in enumerate([row["objective_train"] for row in history.rows]):
+        history.restore(network, iteration)
         with torch.no_grad():
             value, gradient = network(x)
         fitting = ((value - data[1]).square().sum() + (gradient - data[2]).square().sum()) / 10
@@ -205,7 +205,7 @@ def test_logging_accepts_a_finite_loader_without_a_sample_count():
         ),
         num_iterations=0,
     )
-    assert history.train_loss == [0.]
+    assert [row["objective_train"] for row in history.rows] == [0.]
 
 
 @pytest.mark.parametrize("drop_last", [False, True])
@@ -229,5 +229,5 @@ def test_native_batch_sampler_keeps_full_data_evaluation_and_no_drop_contract(dr
         )
         torch.testing.assert_close(loss(network.c), reference_loss(network.c))
         torch.testing.assert_close(hess_obj, reference_hessian)
-        assert metrics(network, penalty, loader) == pytest.approx(metrics(network, penalty, make_dataloader(data)))
+        assert evaluate_checkpoint(network, penalty, loader) == pytest.approx(evaluate_checkpoint(network, penalty, make_dataloader(data)))
     assert torch.equal(torch.get_rng_state(), rng)

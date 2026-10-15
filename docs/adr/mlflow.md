@@ -1,98 +1,87 @@
 # MLflow Pipeline
 
-Operational guide for experiment tracking (local container per ADR 0002/0014).
+Operational guide for experiment tracking (local container per ADR 0014).
 
-`ExperimentRun` always writes a local JSON Run Record in the Hydra output
-directory. MLflow is filled by **importing** those completed local records after
-a sweep, so training never depends on the dashboard being up. MLflow stores
-params, scalar metrics, status, Hydra metadata, and local artifact paths; it does
-not upload the `result_<run_id>.pkl` artifact in the current pipeline.
+MLflow is the system of record for training runs
+([ADR 0016](0016-mlflow-is-the-system-of-record.md)). Every training job records
+one MLflow run: config and Hydra choices as params; git commit, dataset hashes
+and Hydra job metadata as tags; selected-checkpoint metrics, by which runs are
+ranked, and the training curves `trace.<name>`; and `config.json`,
+`normalization.json` and `history.pt` as artifacts. Nothing else stores results,
+so a job refuses to start without a reachable tracking store.
 
-### Start The Dashboard
+### Start The Server
 
 ```bash
 docker compose -f deploy/docker/compose.yaml up -d
+export MLFLOW_TRACKING_URI=http://127.0.0.1:5000
 ```
 
 `restart: unless-stopped` keeps it running across reboots without a terminal, so
 this is normally a one-time command. The server listens on `127.0.0.1:5000`
-only. The SQLite backend and server-uploaded artifacts (`mlartifacts/`) both
-live under `deploy/docker/mlflow-data/` (gitignored).
+only. The SQLite backend and the artifacts (`mlartifacts/`) both live under
+`deploy/docker/mlflow-data/` (gitignored).
 
 ### Normal Workflow
-
-Run experiments normally. Local Run Records are written whether the dashboard
-exists or not:
 
 ```bash
 make sweep EXPERIMENT=log_penalty
 ```
 
-Then project the sweep into MLflow:
+The Makefile sets `MLFLOW_TRACKING_URI` to the local server. Runs appear in the
+UI as they finish; a job that raises is kept with status `FAILED`, and its
+traceback is in the job's `run.jsonl`.
 
-```bash
-export MLFLOW_TRACKING_URI=http://127.0.0.1:5000
-.venv/bin/python scripts/upload_run_records_to_mlflow.py \
-  rawdata/logs/multirun/vdp/log_penalty
-```
-
-The importer reads each Run Record JSON and, for older records, enriches it with
-adjacent `.hydra/overrides.yaml` metadata before uploading. Re-running the
-importer creates additional MLflow runs for the same JSON; deduplication is not
-implemented yet.
-
-Point it at a single record, or at a whole experiment tree, by changing the path
-argument.
-
-Project run IDs use:
+Run names use:
 
 ```text
 {experiment_name}_{data_choice}_{YYYYMMDD}_{4hex}
 ```
 
-### Optional Live Logging
+The `mlflow.source.git.commit` tag is the commit checked out when the job
+started; `git_dirty=true` means tracked files had uncommitted changes.
 
-Live logging is available but is not the default workflow. With the container
-up, set the tracking URI before training:
+### Reading Runs
 
-```bash
-export MLFLOW_TRACKING_URI=http://127.0.0.1:5000
-make sweep EXPERIMENT=log_penalty
+```python
+import mlflow
+from src.results import load_mlflow_run
+
+runs = mlflow.search_runs(experiment_names=["log_penalty"],
+                          filter_string="params.`model.activation` = 'relu'")
+saved = load_mlflow_run(runs.loc[0, "run_id"])
 ```
 
-At `run.finish()`, the script writes the local JSON Run Record, keeps it on
-disk, and publishes dashboard data to MLflow. If `MLFLOW_TRACKING_URI` is unset,
-the run is local-only.
+`search_runs` returns a DataFrame with `params.*`, `metrics.*` and `tags.*`
+columns. `load_mlflow_run` downloads the artifacts and restores the selected
+checkpoint with its recorded data transform.
 
-### Without A Container
+### Without The Server
 
-A foreground server is fine for a one-off look, and uses the same client
-contract:
-
-```bash
-uv run mlflow server --backend-store-uri sqlite:///mlflow.db --host 127.0.0.1 --port 5000
-```
-
-### Resetting
-
-Run Records can restore dashboard metadata, but not uploaded artifact bytes.
-Stop the server before resetting:
+A single, non-parallel run can write straight to the database:
 
 ```bash
-docker compose -f deploy/docker/compose.yaml down
+export MLFLOW_TRACKING_URI=sqlite:///deploy/docker/mlflow-data/mlflow.db
 ```
 
-Move the entire `deploy/docker/mlflow-data/` directory to a backup location
-outside the repository. Keep the database and `mlartifacts/` together so the
-original run-to-artifact associations can be restored. Then start a fresh store
-and re-import the Run Records:
+Parallel sweeps must go through the server, because SQLite accepts one writer
+at a time. Experiments created by the server store artifacts under the
+`mlflow-artifacts:` scheme, which only the server can resolve.
+
+### Backups
+
+`deploy/docker/mlflow-data/` is the only copy of every result. Back up the
+database and `mlartifacts/` together so runs keep their artifacts:
 
 ```bash
-docker compose -f deploy/docker/compose.yaml up -d
+sqlite3 deploy/docker/mlflow-data/mlflow.db ".backup 'mlflow-backup.db'"
 ```
+
+`.backup` is safe while the server runs. Copy `mlartifacts/` alongside it.
 
 ### History
 
-Earlier revisions of this guide described an EC2 deployment driven by
-`make mlflow-deploy` / `make mlflow-backfill` over an SSM tunnel. That target was
-retired by [ADR 0014](0014-retire-the-ec2-mlflow-target.md).
+Before ADR 0016, local JSON Run Records were the source of truth and
+`scripts/upload_run_records_to_mlflow.py` projected them into MLflow. Earlier
+still, an EC2 deployment driven by `make mlflow-deploy` / `make mlflow-backfill`
+was retired by [ADR 0014](0014-retire-the-ec2-mlflow-target.md).

@@ -86,10 +86,10 @@ def _run_summary(name: str) -> np.ndarray:
     )
     return np.array(
         [
-            float(out.final_neurons),
-            float(out.best_err_l2_train),
-            float(out.best_err_h1_train),
-            float(out.train_loss[-1]),
+            float(out.run["final_neurons"]),
+            float(out.rows[out.best_iteration]["rel_l2_train"]),
+            float(out.rows[out.best_iteration]["rel_h1_train"]),
+            float(out.rows[-1]["objective_train"]),
         ],
         dtype=np.float64,
     )

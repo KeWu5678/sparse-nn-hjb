@@ -32,7 +32,7 @@ def test_progress_and_terminal_summary_preserve_all_checkpoints(
 
     progress = [record for record in records if record["event"] == "training_progress"]
     assert [record["checkpoint"] for record in progress] == expected_progress
-    assert [record["train_loss"] for record in progress] == [
+    assert [record["objective_train"] for record in progress] == [
         report["losses"][i] for i in expected_progress
     ]
     terminal = [record for record in records if record["event"] == "training_finished"]
@@ -78,22 +78,22 @@ def _train_with_logging(output_dir, settings):
             x.new_ones((size, 1)), x.new_zeros(size), x.new_ones(size),
         )
         evaluations = 0
-        measure = training.metrics
+        measure = training.evaluate_checkpoint
         def count_evaluation(*args, **kwargs):
             global evaluations
             evaluations += 1
             return measure(*args, **kwargs)
-        training.metrics = count_evaluation
+        training.evaluate_checkpoint = count_evaluation
         history = training.run_training(
             pdap, num_iterations=settings.pop("iterations"), **settings,
         )
         print(json.dumps({
             "evaluations": evaluations,
-            "checkpoints": len(history.train_loss),
-            "snapshots": len(history.model_states),
-            "losses": history.train_loss,
+            "checkpoints": len(history.rows),
+            "snapshots": len(history.states),
+            "losses": [row["objective_train"] for row in history.rows],
             "best_iteration": history.best_iteration,
-            "final_neurons": history.final_neurons,
+            "final_neurons": history.run["final_neurons"],
         }))
     """
     return subprocess.run(
