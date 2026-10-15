@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from src.OpenLoop.value_samples import ValueSamples
 from src.OpenLoop.vdp import (
@@ -21,6 +22,46 @@ def test_vdp_problem_matches_reduced_gradient_equations() -> None:
     assert np.allclose(dynamics, [-0.25, -0.3875])
     assert np.allclose(adjoint, [-1.3, 0.6])
     assert np.allclose(residual, [-0.34])
+
+
+@pytest.mark.parametrize("profile", ["paper", "fast"])
+def test_vdp_evaluated_cost_matches_its_adjoint_and_control_gradient(profile) -> None:
+    problem = VdpOptimalControlProblem(T_final=1.0)
+    solver = VdpOpenLoopSolver(
+        problem,
+        VdpOpenLoopSolverConfig(
+            profile=profile, num_time_points=301, num_control_basis=1,
+            ivp_rtol=1e-10, ivp_atol=1e-12,
+        ),
+    )
+
+    def evaluate(initial, control):
+        if profile == "paper":
+            return solver._evaluate_time_grid_control(
+                initial, np.full(solver.time_grid.shape, control),
+            )
+        return solver._evaluate_legendre_control(initial, np.array([control]))
+
+    initial = np.array([1.0, 0.0])
+    result = evaluate(initial, 1.0)
+    # x=(1,0), u=1 is an exact stationary trajectory: J=T*(1+0.1).
+    # The historical half-state-cost bug would instead report J=0.6.
+    assert result.value == pytest.approx(1.1, abs=1e-10)
+    epsilon = 1e-5
+    state_derivative = np.array([
+        (evaluate(initial + epsilon * direction, 1.0).value
+         - evaluate(initial - epsilon * direction, 1.0).value) / (2 * epsilon)
+        for direction in np.eye(2)
+    ])
+    np.testing.assert_allclose(state_derivative, result.adjoint[:, 0], rtol=2e-5)
+    control_derivative = (
+        evaluate(initial, 1.0 + epsilon).value
+        - evaluate(initial, 1.0 - epsilon).value
+    ) / (2 * epsilon)
+    # Compare a constant-control perturbation with the integrated reduced gradient.
+    assert control_derivative == pytest.approx(
+        np.trapezoid(result.gradient, solver.time_grid), rel=2e-5,
+    )
 
 
 def test_paper_profile_solves_zero_initial_state() -> None:
@@ -89,6 +130,26 @@ def test_fast_profile_solves_zero_initial_state() -> None:
     assert np.allclose(result.gradient, [0.0, 0.0])
     assert result.reduced_gradient_norm == 0.0
     assert result.coefficient_gradient_norm == 0.0
+
+
+def test_pmp_value_gradient_matches_independent_initial_state_differences() -> None:
+    solver = VdpOpenLoopSolver(
+        VdpOptimalControlProblem(),
+        VdpOpenLoopSolverConfig(profile="pmp", num_time_points=151),
+    )
+    initial = np.array([3.0, 3.0])
+    result = solver.solve_sample(initial)
+    assert result.converged
+    assert result.collocation_residual <= solver.config.collocation_tol
+    assert result.value == pytest.approx(18.516597, abs=1e-6)
+    epsilon = 1e-4
+    differences = []
+    for direction in np.eye(2):
+        plus = solver.solve_sample(initial + epsilon * direction)
+        minus = solver.solve_sample(initial - epsilon * direction)
+        assert plus.converged and minus.converged
+        differences.append((plus.value - minus.value) / (2 * epsilon))
+    np.testing.assert_allclose(result.gradient, differences, rtol=1e-6, atol=1e-7)
 
 
 def test_vdp_grid_sampling_feeds_solver() -> None:

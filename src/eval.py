@@ -1,43 +1,96 @@
-"""Performance evaluation of a model's predictions against value samples.
+"""Evaluate a network against value samples under the names in ``src.metrics``.
 
-Pure functions of (prediction, target) tensors with no model state: a model
-produces ``(V, dV)`` via ``predict_tensors`` and the trainer scores them here.
-This is the single home for the data-fidelity numbers: the relative errors and
-the value/gradient loss split (the data term of the training objective).
-
-The regularizer is *not* here: the nonconvex penalty lives with the trainer
-(``src.PDAP.ssn_solve.nonconvex_penalty``), which adds it to ``data_loss`` to
-form the full objective.
+``evaluate_checkpoint`` measures each recorded checkpoint of a run;
+``region_metrics`` scores the selected checkpoint on the region-evaluation
+pool. SparseNetwork supplies the fitting objective and Penalty the sparsity
+functional. Losses use the training samples' coordinates; relative errors
+compare original V and gradient units.
 """
 
 from __future__ import annotations
 
-from typing import Dict, Tuple
+from typing import TYPE_CHECKING, Any, Dict, Mapping, Tuple
 
+import numpy as np
 import torch
 
+from .data import full_batch
+from .metrics import DISTANCE_BINS
 
-def data_loss_terms(
-    v_pred: torch.Tensor,
-    dv_pred: torch.Tensor,
-    v_true: torch.Tensor,
-    dv_true: torch.Tensor,
-    loss_weights: Tuple[float, float],
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """Return ``(data_loss, value_loss, grad_loss)`` for the data-fidelity term.
+if TYPE_CHECKING:
+    from .data import ValueSampleNormalizer
+    from .models import Penalty, SparseNetwork
 
-    MSE is normalized by the sample count ``M`` and halved, so that
-    ``data_loss`` is the empirical fidelity of the paper,
-    ``l^M = (1/2M) sum_m (|r(x^m)|^2 + |grad r(x^m)|^2)``, weighted by
-    ``loss_weights = (w1, w2)``.  Differentiable (plain torch ops), so it can sit
-    inside an SSN closure as well as serve evaluation.
+PREDICTION_CHUNK = 100_000
+
+
+@torch.no_grad()
+def evaluate_checkpoint(
+    network: SparseNetwork, penalty: Penalty, train_loader, valid_loader=None,
+    normalizer: ValueSampleNormalizer | None = None,
+) -> dict[str, float]:
+    """Checkpoint metrics of both splits and the support.
+
+    Without ``valid_loader`` the validation split is the training split.
+    ``normalizer`` converts predictions and targets back to original units
+    for the relative errors.
     """
-    m = v_true.shape[0]
-    value_loss = torch.sum((v_pred - v_true) ** 2) / (2 * m)
-    grad_loss = torch.sum((dv_pred - dv_true) ** 2) / (2 * m)
-    w1, w2 = loss_weights
-    data_loss = w1 * value_loss + w2 * grad_loss
-    return data_loss, value_loss, grad_loss
+    inner_weight, inner_bias, c = network.inner_weight, network.inner_bias, network.c.detach()
+    u = c * network.moment_weight_of_atoms()
+    phi = penalty.sparsity_functional(u) if c.numel() else c.new_zeros(())
+    alpha_phi = float(penalty.alpha * phi)
+    radius = torch.sqrt((inner_weight * inner_weight).sum(dim=-1) + inner_bias * inner_bias)
+    values: dict[str, float] = {
+        "neurons": network.n_neurons,
+        "sparsity_functional": float(phi),
+        "alpha_phi": alpha_phi,
+        "total_variation": float(c.reshape(-1).abs().sum()),
+        "radius_r95": float(amplitude_mass_radius(radius, c)),
+        "radius_max": float(radius.max()) if c.numel() else 0.0,
+    }
+    if valid_loader is None:
+        valid_loader = train_loader
+    for split, loader in (("train", train_loader), ("val", valid_loader)):
+        data = full_batch(loader)
+        prediction = network(data[0])
+        target = data[1:]
+        fitting = network.obj(data[0], target)
+        n = data[0].shape[0]
+        values[f"objective_{split}"] = float(fitting) + alpha_phi
+        values[f"data_loss_{split}"] = float(fitting)
+        values[f"value_loss_{split}"] = float(torch.sum((prediction[0] - target[0]) ** 2) / (2 * n))
+        values[f"gradient_loss_{split}"] = float(torch.sum((prediction[1] - target[1]) ** 2) / (2 * n))
+        if normalizer is not None:
+            prediction = normalizer.denormalize_tensors(*prediction)
+            target = normalizer.denormalize_tensors(*target)
+        for kind, error in relative_errors(*prediction, *target).items():
+            values[f"rel_{kind}_{split}"] = error
+    return values
+
+
+def amplitude_mass_radius(
+    radius: torch.Tensor, c: torch.Tensor, mass_fraction: float = 0.95,
+) -> torch.Tensor:
+    """Smallest atom radius ``|omega_j|`` containing ``mass_fraction`` of ``sum |c_j|``.
+
+    This is the R_0.95-type radius diagnostic for normalized Algorithm 1. Atoms
+    are sorted by radius and accumulated with weights ``|c_j|``. Empty supports
+    and supports with zero total variation have radius zero.
+    """
+    if not 0.0 < mass_fraction <= 1.0:
+        raise ValueError("mass_fraction must lie in (0, 1]")
+    if c.numel() == 0:
+        return c.new_zeros(())
+
+    amplitude = c.abs()
+    total = amplitude.sum()
+    if float(total) == 0.0:
+        return total
+
+    order = torch.argsort(radius)
+    cumulative = torch.cumsum(amplitude[order], dim=0)
+    index = torch.searchsorted(cumulative, mass_fraction * total).clamp_max(c.numel() - 1)
+    return radius[order][index]
 
 
 @torch.no_grad()
@@ -46,8 +99,8 @@ def relative_errors(
     dv_pred: torch.Tensor,
     v_true: torch.Tensor,
     dv_true: torch.Tensor,
-) -> Tuple[float, float, float]:
-    """Return relative ``(L2, gradient, H1)`` errors as plain floats.
+) -> dict[str, float]:
+    """Relative ``l2``, ``grad`` and ``h1`` errors as plain floats.
 
     Each is ``||pred - true|| / ||true||`` in the relevant norm; denominators are
     clamped to ``1e-30`` to stay finite on all-zero targets.
@@ -60,7 +113,62 @@ def relative_errors(
     err_l2 = torch.sqrt(v_diff / v_ref.clamp_min(1e-30))
     err_grad = torch.sqrt(dv_diff / dv_ref.clamp_min(1e-30))
     err_h1 = torch.sqrt((v_diff + dv_diff) / (v_ref + dv_ref).clamp_min(1e-30))
-    return float(err_l2.item()), float(err_grad.item()), float(err_h1.item())
+    return {"l2": float(err_l2.item()), "grad": float(err_grad.item()), "h1": float(err_h1.item())}
+
+
+@torch.no_grad()
+def physical_prediction(
+    network: SparseNetwork, x: Any, normalizer: ValueSampleNormalizer | None = None,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """Unclipped original-unit (V, ∇V), shapes (N,1) and (N,d), at physical states x.
+
+    States are scaled into the network's training coordinates and predictions
+    scaled back; inputs are evaluated in chunks of ``PREDICTION_CHUNK`` rows.
+    """
+    x = torch.as_tensor(x, dtype=torch.float64, device=network.inner_weight.device)
+    if x.ndim != 2 or x.shape[1] != network.input_dim:
+        raise ValueError("physical states must have shape (N, model input dimension)")
+    if normalizer is not None:
+        x = x / torch.as_tensor(normalizer.x_scale, dtype=x.dtype, device=x.device)
+    parts = [network(x[lo:lo + PREDICTION_CHUNK]) for lo in range(0, len(x), PREDICTION_CHUNK)]
+    v, dv = (torch.cat(chunks) for chunks in zip(*parts)) if parts else network(x)
+    if normalizer is not None:
+        v, dv = normalizer.denormalize_tensors(v, dv)
+    return v, dv
+
+
+@torch.no_grad()
+def region_metrics(
+    network: SparseNetwork, normalizer: ValueSampleNormalizer | None,
+    pool: Mapping[str, np.ndarray], *, tube_radius: float,
+    samples: Mapping[str, np.ndarray] | None = None, distance: np.ndarray | None = None,
+) -> Dict[str, float]:
+    """Switching-tube and rest errors on the pool, and the distance-binned profile.
+
+    ``pool`` holds the region-evaluation pool's physical ``x``, ``v``, ``dv``
+    and ``distance`` to the switching set; the tube is ``distance <= tube_radius``.
+    The pool excludes the training rows, so these errors are out of sample.
+    The profile is scored on the physical training dataset ``samples``, whose
+    row-aligned ``distance`` comes from the dataset's distance cache.
+    """
+    v_pred, dv_pred = physical_prediction(network, pool["x"], normalizer)
+    values = region_split_errors(
+        v_pred, dv_pred,
+        torch.as_tensor(pool["v"], dtype=torch.float64).reshape(-1, 1),
+        torch.as_tensor(pool["dv"], dtype=torch.float64),
+        torch.from_numpy(pool["distance"] <= tube_radius),
+    )
+    if distance is not None:
+        if samples is None or distance.shape[0] != samples["x"].shape[0]:
+            raise ValueError("the distance cache is not aligned to the dataset")
+        v_pred, dv_pred = physical_prediction(network, samples["x"], normalizer)
+        values.update(distance_binned_error(
+            v_pred, dv_pred,
+            torch.as_tensor(samples["v"], dtype=torch.float64).reshape(-1, 1),
+            torch.as_tensor(samples["dv"], dtype=torch.float64),
+            torch.as_tensor(distance, dtype=torch.float64),
+        ))
+    return values
 
 
 @torch.no_grad()
@@ -75,17 +183,15 @@ def region_split_errors(
 
     ``switching_mask`` is a length-``N`` boolean tensor over the same samples as
     the predictions: ``True`` = inside the switching tube, ``False`` = rest.
-    (Records written before the tube consolidation carry the same metrics under
-    the legacy ``near``/``far`` key prefixes.)
 
     Two families of per-region numbers are returned (see
     ``experiments/02_pendulum/region_split/README.md`` for the rationale):
 
-      * ``{switching,rest}_{l2,grad,h1}`` — region-local *relative* errors (each
-        region normalized by its own ‖true‖). Well posed when the switching
-        region carries large |V| (the two-sided pool); historically confounded
-        when the region held only small-|V| samples.
-      * ``{switching,rest}_l1_{value,grad,h1}`` — region **mean** per-sample
+      * ``rel_{l2,grad,h1}_{switching,rest}`` — region-local *relative* errors
+        (each region normalized by its own ‖true‖). Well posed when the
+        switching region carries large |V| (the two-sided pool); historically
+        confounded when the region held only small-|V| samples.
+      * ``l1_{value,grad,h1}_{switching,rest}`` — region **mean** per-sample
         absolute (L1) error, normalized by the **global mean** ‖true‖ over *all*
         samples. L1 is the norm of choice near discontinuities (L2 worst-case
         bounds do not generalize across a shock); using the per-sample *mean*
@@ -98,20 +204,17 @@ def region_split_errors(
     switching = switching_mask.to(torch.bool)
     rest = ~switching
     metrics: Dict[str, float] = {
-        "switching_count": float(int(switching.sum().item())),
-        "rest_count": float(int(rest.sum().item())),
+        "count_switching": float(int(switching.sum().item())),
+        "count_rest": float(int(rest.sum().item())),
     }
-    for tag, sel in (("switching", switching), ("rest", rest)):
+    for region, sel in (("switching", switching), ("rest", rest)):
         if not bool(sel.any()):
-            for suffix in ("l2", "grad", "h1", "l1_value", "l1_grad", "l1_h1"):
-                metrics[f"{tag}_{suffix}"] = float("nan")
+            metrics.update({f"rel_{kind}_{region}": float("nan") for kind in ("l2", "grad", "h1")})
+            metrics.update({f"l1_{kind}_{region}": float("nan") for kind in ("value", "grad", "h1")})
             continue
-        l2, grad, h1 = relative_errors(
-            v_pred[sel], dv_pred[sel], v_true[sel], dv_true[sel]
-        )
-        metrics[f"{tag}_l2"] = l2
-        metrics[f"{tag}_grad"] = grad
-        metrics[f"{tag}_h1"] = h1
+        errors = relative_errors(v_pred[sel], dv_pred[sel], v_true[sel], dv_true[sel])
+        for kind, error in errors.items():
+            metrics[f"rel_{kind}_{region}"] = error
 
     # Mean per-sample L1 (absolute), normalized by global mean ‖true‖ — count-fair
     # across regions and robust to V→0.
@@ -119,14 +222,14 @@ def region_split_errors(
     g_err = (dv_pred - dv_true).norm(dim=1)
     v_den = v_true.abs().mean().clamp_min(1e-30)
     g_den = dv_true.norm(dim=1).mean().clamp_min(1e-30)
-    for tag, sel in (("switching", switching), ("rest", rest)):
+    for region, sel in (("switching", switching), ("rest", rest)):
         if not bool(sel.any()):
             continue
         nv = v_err[sel].mean()
         ng = g_err[sel].mean()
-        metrics[f"{tag}_l1_value"] = float((nv / v_den).item())
-        metrics[f"{tag}_l1_grad"] = float((ng / g_den).item())
-        metrics[f"{tag}_l1_h1"] = float(((nv + ng) / (v_den + g_den)).item())
+        metrics[f"l1_value_{region}"] = float((nv / v_den).item())
+        metrics[f"l1_grad_{region}"] = float((ng / g_den).item())
+        metrics[f"l1_h1_{region}"] = float(((nv + ng) / (v_den + g_den)).item())
     return metrics
 
 
@@ -137,7 +240,7 @@ def distance_binned_error(
     v_true: torch.Tensor,
     dv_true: torch.Tensor,
     distance: torch.Tensor,
-    n_bins: int = 30,
+    n_bins: int = DISTANCE_BINS,
 ) -> Dict[str, float]:
     """Per-sample absolute H1 error in equal-width bins of distance-to-switching-set.
 

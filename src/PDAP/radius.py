@@ -1,4 +1,4 @@
-"""The theorem-derived radius used by Algorithm 1's candidate search.
+"""The theorem-derived radius used by PDAP's Algorithm 1 candidate search.
 
 The quantitative insertion theorem (paper/paper_0805.tex, Section 5) states that
 under the growth bound
@@ -41,9 +41,6 @@ import torch
 
 from ..config.activations import Growth
 
-# Numerical upper bound used for sampling and final candidate filtering.
-FIXED_LOG_CLAMP = 5.0
-
 
 def sample_extent(X: torch.Tensor) -> float:
     """``A_M = max{1, max_m sqrt(1 + |x^m|^2)}``, the data half of the constant."""
@@ -67,7 +64,7 @@ def certificate_radius(
     moment_order: float,
     l_phi: float = 1.0,
 ) -> Optional[float]:
-    """Return ``min(R(mu), exp(5))``, or ``None`` when the theorem does not apply.
+    """Return ``R(mu)``, or ``None`` when the theorem does not apply.
 
     ``None`` means that the caller uses the numerical fallback ``exp(5)``.  It is
     returned when the activation declares no growth data, when ``p <= s1`` (so
@@ -88,7 +85,7 @@ def certificate_radius(
     try:
         radius = max(1.0, base ** (1.0 / gap))
     except OverflowError:
-        return math.exp(FIXED_LOG_CLAMP)
+        return math.inf
     if not math.isfinite(radius):
-        return math.exp(FIXED_LOG_CLAMP)
-    return min(radius, math.exp(FIXED_LOG_CLAMP))
+        return math.inf
+    return radius

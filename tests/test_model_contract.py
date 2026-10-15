@@ -1,13 +1,11 @@
-"""The signed model satisfies the PDAPModel contract the trainer depends on."""
+"""SparseNetwork is the network, with exact atoms and native module behavior."""
 
 import pytest
 import torch
 
+from src.config import get_activation, make_penalty, resolve_model, validate_model_config
 from src.config.schema import ExperimentConfig
-from src.models import build_model
-from src.models.base import PDAPModel
-from src.models.net import ShallowNetwork
-from src.models.signed import SignedModel
+from src.models import SparseNetwork
 from src.PDAP import PDAP
 
 
@@ -19,53 +17,162 @@ def _atoms(n=4, d=2):
     return W, b, c
 
 
-def test_signed_model_is_pdap_model():
-    m = SignedModel(power=1.0, verbose=False)
-    m.input_dim = 2
-    m.set_atoms(*_atoms())
-    assert isinstance(m, PDAPModel)
+def test_exact_atom_assignment_preserves_rng_and_module_state():
+    atoms = _atoms()
+    rng = torch.random.get_rng_state().clone()
+    network = SparseNetwork(resolve_model({}, 2))
+    network.set_atoms(*atoms)
+
+    assert isinstance(network, torch.nn.Module)
+    assert set(dict(network.named_parameters())) == {"c"}
+    assert set(dict(network.named_buffers())) == {"inner_weight", "inner_bias"}
+    assert set(network.state_dict()) == {"inner_weight", "inner_bias", "c"}
+    assert network.n_neurons == 4
+    for actual, expected in zip((network.inner_weight, network.inner_bias, network.c.detach()), atoms):
+        torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+    network.set_atoms(*(atom[:2] for atom in atoms))
+    torch.testing.assert_close(torch.random.get_rng_state(), rng, rtol=0, atol=0)
+    atoms[0].zero_()
+    assert network.inner_weight.any()
 
 
-def test_signed_model_predicts_to_numpy():
-    x = torch.randn(6, 2, dtype=torch.float64).numpy()
-    model = SignedModel(power=1.0, verbose=False)
-    model.input_dim = 2
-    model.set_atoms(*_atoms())
+def test_network_predicts_values_and_input_gradients():
+    x = torch.randn(6, 2, dtype=torch.float64)
+    network = SparseNetwork(resolve_model({}, 2))
+    network.set_atoms(*_atoms())
 
-    value, gradient = model.predict(x)
+    value, gradient = network(x)
 
     assert value.shape == (6, 1)
     assert gradient.shape == (6, 2)
+    assert not x.requires_grad
 
 
-def test_network_initializes_in_float64():
-    model = ShallowNetwork([2, 4, 1], torch.relu)
-    assert all(parameter.dtype == torch.float64 for parameter in model.parameters())
-    assert model(torch.ones(3, 2, dtype=torch.float64)).dtype == torch.float64
+@pytest.mark.parametrize("activation", ["relu", "relu2", "softplus"])
+def test_registered_callable_preserves_named_prediction_and_training(activation):
+    named_config = resolve_model({"activation": activation, "moment_order": 2.}, 2)
+    direct_config = resolve_model({"activation": get_activation(activation), "moment_order": 2.}, 2)
+    validate_model_config(named_config)
+    validate_model_config(direct_config)
+    named, direct = SparseNetwork(named_config), SparseNetwork(direct_config)
+    atoms = _atoms()
+    x = torch.tensor([[-1., 2.], [3., -4.]], dtype=torch.float64)
+    for network in (named, direct):
+        network.set_atoms(*atoms)
+    assert direct.activation_name == named.activation_name == activation
+    assert direct.use_sphere == named.use_sphere
+    assert direct.moment_order == named.moment_order
+    for actual, expected in zip(direct(x), named(x)):
+        torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+
+
+def test_gradient_only_loss_backpropagates_to_coefficients_and_input_graph():
+    network = SparseNetwork(resolve_model({"power": 2., "loss_weights": (0., 1.)}, 2))
+    network.set_atoms(
+        torch.tensor([[2., -1.]], dtype=torch.float64),
+        torch.tensor([.5], dtype=torch.float64),
+        torch.tensor([3.], dtype=torch.float64),
+    )
+    base = torch.tensor([[.5, .5]], dtype=torch.float64, requires_grad=True)
+    x = 2 * base
+
+    value, gradient = network(x)
+    loss = network.obj(x, (torch.zeros_like(value), torch.zeros_like(gradient)))
+    dc, dx = torch.autograd.grad(loss, (network.c, base))
+
+    torch.testing.assert_close(value, x.new_tensor([[6.75]]))
+    torch.testing.assert_close(gradient, x.new_tensor([[18., -9.]]))
+    torch.testing.assert_close(loss, x.new_tensor(202.5))
+    torch.testing.assert_close(dc, x.new_tensor([135.]))
+    torch.testing.assert_close(dx, x.new_tensor([[1080., -540.]]))
+
+    with torch.no_grad():
+        reported_value, reported_gradient = network(x)
+    torch.testing.assert_close(reported_value, value)
+    torch.testing.assert_close(reported_gradient, gradient)
+    assert not reported_value.requires_grad and not reported_gradient.requires_grad
+
+
+def test_empty_support_predicts_and_prepares_zero_features():
+    network = SparseNetwork(resolve_model({}, 2))
+    x = torch.ones(3, 2, dtype=torch.float64, requires_grad=True)
+
+    value, gradient = network(x)
+    assert network.n_neurons == 0
+    assert network.inner_weight.shape == (0, 2)
+    assert network.inner_bias.shape == network.c.shape == (0,)
+    assert value.shape == (3, 1)
+    assert gradient.shape == x.shape
+    assert not value.any() and not gradient.any()
+    dc, dx = torch.autograd.grad(gradient.square().sum(), (network.c, x))
+    assert dc.shape == (0,)
+    torch.testing.assert_close(dx, gradient)
+    with torch.no_grad():
+        empty_value, empty_gradient = network(x)
+    torch.testing.assert_close(empty_value, value)
+    torch.testing.assert_close(empty_gradient, gradient)
+    assert not empty_value.requires_grad and not empty_gradient.requires_grad
+    Phi_v, Phi_g = network.kernel(x)
+    assert Phi_v.shape == (3, 0)
+    assert Phi_g.shape == (6, 0)
+
+
+def test_module_conversion_and_forward_gradients_follow_exact_atoms():
+    network = SparseNetwork(resolve_model({}, 2))
+    assert network.c.dtype == network.inner_weight.dtype == network.inner_bias.dtype == torch.float64
+    network.float()
+    network.set_atoms(torch.tensor([[2., -1.]]), torch.tensor([.5]), torch.tensor([3.]))
+    assert network.c.dtype == network.inner_weight.dtype == network.inner_bias.dtype == torch.float32
+    x = torch.tensor([[1., 1.], [-1., 1.]], requires_grad=True)
+
+    value, gradient = network(x)
+    torch.testing.assert_close(value, x.new_tensor([[4.5], [0.]]))
+    dc, dx = torch.autograd.grad(value.sum(), (network.c, x))
+    torch.testing.assert_close(dc, x.new_tensor([1.5]))
+    torch.testing.assert_close(dx, x.new_tensor([[6., -3.], [0., 0.]]))
+    torch.testing.assert_close(gradient, dx)
 
 
 def test_setting_and_pruning_atoms_preserves_float64_coefficients():
-    model = SignedModel(power=1.0, verbose=False)
+    config = resolve_model({}, 2)
+    network = SparseNetwork(config)
     W, b, _ = _atoms(n=2)
     c = torch.tensor([1.123456789012345, -1.0000000001], dtype=torch.float64)
-    model.set_atoms(W, b, c)
-    trainer = PDAP(ExperimentConfig())
-    assert trainer._prune(model, amp_tol=1e-8) == 0
-    for actual, expected in zip(model.get_atoms(), (W, b, c)):
+    network.set_atoms(W, b, c)
+    trainer = PDAP(ExperimentConfig().training, make_penalty(config), network, None)
+    assert trainer._prune() == 0
+    for actual, expected in zip((network.inner_weight, network.inner_bias, network.c.detach()), (W, b, c)):
         torch.testing.assert_close(actual, expected, rtol=0, atol=0)
-    assert all(parameter.dtype == torch.float64 for parameter in model.parameters())
+    assert all(parameter.dtype == torch.float64 for parameter in network.parameters())
 
 
-@pytest.mark.parametrize("field,value", [("activation", "softplus"), ("power", 2.0)])
-def test_fit_rejects_model_config_mismatch_before_mutating_state(field, value):
-    trainer = PDAP(ExperimentConfig())
-    model_cfg = ExperimentConfig()
-    setattr(model_cfg.model, field, value)
-    model = build_model(model_cfg, input_dim=2)
-    model.set_atoms(*_atoms())
-    before = {name: tensor.clone() for name, tensor in model.state_dict().items()}
-    # No data can be consumed before the mismatch is rejected.
-    with pytest.raises(ValueError, match=f"model {field}.*match"):
-        trainer.fit(model, None, None, num_iterations=1, num_insertion=2, verbose=False)
-    for name, tensor in model.state_dict().items():
+@pytest.mark.parametrize("specifications,message", [
+    ({"activation": torch.relu, "power": 4.}, "supports activation powers 1, 2, 3"),
+    ({"activation": "softplus"}, "explicit moment_order"),
+    ({"activation": "softplus", "moment_order": 1.}, "moment_order must exceed"),
+    ({"activation": lambda x: x.square()}, "requires a registered activation"),
+])
+def test_prediction_only_settings_remain_usable_without_training_validation(specifications, message):
+    config = resolve_model(specifications, 2)
+    network = SparseNetwork(config)
+    network.set_atoms(
+        torch.tensor([[1., 0.]], dtype=torch.float64),
+        torch.tensor([0.], dtype=torch.float64),
+        torch.tensor([2.], dtype=torch.float64),
+    )
+    x = torch.tensor([[2., 3.]], dtype=torch.float64)
+    value, gradient = network(x)
+    if specifications["activation"] == "softplus":
+        torch.testing.assert_close(value, 2 * torch.nn.functional.softplus(x[:, :1]))
+        torch.testing.assert_close(gradient, torch.cat((2 * torch.sigmoid(x[:, :1]), x.new_zeros((1, 1))), dim=1))
+    elif specifications["activation"] is torch.relu:
+        torch.testing.assert_close(value, x.new_tensor([[32.]]))
+        torch.testing.assert_close(gradient, x.new_tensor([[64., 0.]]))
+    else:
+        torch.testing.assert_close(value, x.new_tensor([[8.]]))
+        torch.testing.assert_close(gradient, x.new_tensor([[8., 0.]]))
+    before = {name: tensor.clone() for name, tensor in network.state_dict().items()}
+    with pytest.raises(ValueError, match=message):
+        validate_model_config(config)
+    for name, tensor in network.state_dict().items():
         torch.testing.assert_close(tensor, before[name], rtol=0, atol=0)

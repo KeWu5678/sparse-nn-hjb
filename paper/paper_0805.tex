@@ -3786,11 +3786,11 @@ We developed a measure-theoretic framework for sparse, gradient-augmented
 recovery of HJB value functions from PMP data. Its main contribution is a
 variational route from infinitely wide dictionaries to finite shallow
 networks for two activation classes that require different compactness
-arguments. For nonhomogeneous activations, simultaneous normalization of the
+arguments. For nonhomogeneous activations, normalization of the
 measure and dictionary controls escape on the unbounded parameter domain and,
 together with the concave penalty, yields existence, finite support,
-separation and width bounds, and a quantitative decay rate for the excess
-above the insertion threshold. For positively $k$-homogeneous activations,
+separation and width bounds, and a quantitative decay rate. 
+For positively $k$-homogeneous activations,
 radial optimization instead reduces the problem to the unit sphere and
 induces a fractional-power penalty; the resulting formulation likewise admits
 global minimizers and explicit finite-width conclusions. These results give a
@@ -3804,11 +3804,7 @@ On the pendulum problem, selecting first for numerical stabilization and
 then for global validation accuracy identifies passing combinations for
 softplus, $\tanh$, $\mathrm{ReLU}^{2}$, and the ReLU--$\ell^1$ baseline
 from both selection states at $T=40$. No tested Gaussian or
-$\mathrm{ReLU}^{3}$ combination passes from both states. The selected
-$\tanh$ controller has the lowest cost from the harder start among the
-nonconvex fits, while $\mathrm{ReLU}^{2}$ has the smallest approximation
-error. Residual running costs remain positive, so the finite-horizon
-criterion does not establish asymptotic stabilization.
+$\mathrm{ReLU}^{3}$ combination passes from both states. 
 Thus gradient-augmented fitting is
 a useful bridge from PMP data to feedback synthesis, while feedback
 performance must still be assessed directly when the value gradient is

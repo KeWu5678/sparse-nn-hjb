@@ -75,8 +75,8 @@ prox_scale = min(
 Algorithm 2 has `gamma=0` and uses `rho=0.5`, selected by the recorded 24-cell
 pilot in `experiments/algorithm2_rho_pilot.md`. The bound places every nonzero
 warm-start coefficient strictly above the global-prox output jump. The normal
-map uses `inverse_step = alpha / prox_scale`; the scale is not retuned during
-the inner SSN iterations.
+map uses the proximal step `tau = prox_scale / alpha`, so `G(q) = (q - u)/tau`
+plus the smooth gradient; the scale is not retuned during the inner SSN iterations.
 
 The global prox is discontinuous at its switching input. Consequently the
 semismooth Newton claim is local and conditional: proximal inputs must stay
@@ -86,7 +86,7 @@ that increases the post-insertion objective.
 
 ## Source and tests
 
-- `src/SSN/prox.py`: closed-form global prox and derivative.
+- `src/models/penalty.py`: closed-form global prox and derivative (`FractionalPenalty`, through `Penalty.prox` and `Penalty.jac_prox`).
 - `src/SSN/optimizer.py`: normal map and generalized Jacobian.
 - `src/PDAP/insertion.py`: actual one-atom increment and warm coefficient.
 - `src/PDAP/ssn_solve.py`: fixed warm-start scale and correction diagnostics.

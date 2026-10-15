@@ -275,8 +275,56 @@ class PendulumPmpSolver:
             restricted.append(cut)
             discarded += count
 
-        samples = self._trajectories_to_value_samples(tuple(restricted))
+        samples = ValueSamples.concatenate([
+            ValueSamples(tr.state, tr.value, tr.costate) for tr in restricted
+        ])
+        screened = self.screen_body_samples(samples, trajectories)
+        discarded += samples.size - screened.size
+        samples = ValueSamples.concatenate([
+            ValueSamples(
+                screened.x + np.array([2.0 * np.pi * copy_index, 0.0]),
+                screened.v, screened.dv,
+            )
+            for copy_index in range(-self.config.periodic_copies, self.config.periodic_copies + 1)
+        ])
         return samples, tuple(restricted), discarded
+
+    def screen_body_samples(
+        self, samples: ValueSamples, raw: tuple[PmpTrajectory, ...],
+        *, competitor_radius: float = 0.1, competitor_neighbors: int = 32,
+        margin: float = 0.3,
+    ) -> ValueSamples:
+        """Reject re-entrant or ambiguous body samples using local branch estimates.
+
+        Apply the same first-order comparisons as the switching-band harvest.
+        Interior points without an adjacent-branch neighbour remain eligible.
+        This is a numerical consistency screen, not an optimality certificate.
+        """
+        from scipy.spatial import cKDTree
+
+        if not raw or samples.size == 0:
+            return samples
+        raw_x = np.vstack([tr.state for tr in raw])
+        raw_v = np.concatenate([tr.value for tr in raw])
+        raw_dv = np.vstack([tr.costate for tr in raw])
+        tree = cKDTree(raw_x)
+        keep = np.ones(samples.size, dtype=bool)
+        for lo in range(0, samples.size, 10000):
+            hi = min(lo + 10000, samples.size)
+            for tile in (0, -1, 1):
+                query = samples.x[lo:hi] - np.array([tile * 2.0 * np.pi, 0.0])
+                distance, neighbor = tree.query(
+                    query, k=competitor_neighbors, distance_upper_bound=competitor_radius,
+                )
+                found = np.isfinite(distance)
+                safe = np.where(found, neighbor, 0)
+                estimate = raw_v[safe] + np.einsum(
+                    "cnd,cnd->cn", raw_dv[safe], query[:, None, :] - raw_x[safe],
+                )
+                lower = np.where(found, estimate, np.inf).min(axis=1)
+                threshold = lower + margin if tile == 0 else lower - margin
+                keep[lo:hi] &= samples.v[lo:hi] < threshold
+        return ValueSamples(samples.x[keep], samples.v[keep], samples.dv[keep])
 
     def build_collar_samples(
         self,
@@ -389,25 +437,6 @@ class PendulumPmpSolver:
             atol=self.config.atol,
             trajectory_id=trajectory_id,
         )
-
-    def _trajectories_to_value_samples(
-        self,
-        trajectories: tuple[PmpTrajectory, ...],
-    ) -> ValueSamples:
-        chunks: list[ValueSamples] = []
-        for trajectory in trajectories:
-            for copy_index in range(-self.config.periodic_copies, self.config.periodic_copies + 1):
-                states = trajectory.state.copy()
-                states[:, 0] += 2.0 * np.pi * copy_index
-                chunks.append(
-                    ValueSamples(
-                        x=states,
-                        v=trajectory.value.copy(),
-                        dv=trajectory.costate.copy(),
-                    )
-                )
-        return ValueSamples.concatenate(chunks)
-
 
 __all__ = [
     "PendulumPmpSolver",

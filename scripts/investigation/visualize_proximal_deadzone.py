@@ -16,13 +16,12 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from src.SSN.prox import power_prox
+from src.models.penalty import _compute_prox_q_half
 
 
 alpha = 1e-5
 gamma = 0.0
-activation_power = 3.0
-q = 2.0 / (activation_power + 1.0)
+q = 0.5  # This diagnostic evaluates the fixed half-power closed form.
 rho_prox = 0.5
 minimum_warm_weight = 0.1
 
@@ -39,7 +38,7 @@ turn_input = turn_output + mu * q * turn_output ** (q - 1.0)
 switch_output = (2.0 * mu * (1.0 - q)) ** (1.0 / (2.0 - q))
 switch_input = switch_output + mu * q * switch_output ** (q - 1.0)
 
-print(f"activation power: {activation_power:g}")
+print(f"activation power: {2.0 / q - 1.0:g}")
 print(f"penalty exponent: {q:g}")
 print(f"baseline proximal scale: {baseline_mu:.6e}")
 print(f"warm-start upper bound: {warm_mu_bound:.6e}")
@@ -88,10 +87,9 @@ ax.grid(alpha=0.25)
 # Evaluate the production closed form rather than duplicating its root solver.
 ax = axes[2]
 inputs = np.linspace(0.0, 4.0 * switch_input, 1200)
-prox_values = power_prox(
+prox_values = _compute_prox_q_half(
     torch.as_tensor(inputs, dtype=torch.float64),
     mu,
-    q=q,
 ).numpy()
 ax.plot(inputs, prox_values, lw=2.2, color="tab:green")
 ax.axvline(switch_input, color="tab:red", ls="--", lw=1.2)

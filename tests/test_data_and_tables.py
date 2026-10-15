@@ -5,7 +5,7 @@ import pytest
 import torch
 
 from src.data import ValueSampleNormalizer, load_value_samples, split_value_samples
-from src.metric import format_table
+from src.tables import format_table
 
 
 def test_load_value_samples_accepts_structured_npy(tmp_path):

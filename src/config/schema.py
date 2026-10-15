@@ -20,8 +20,15 @@ trained, not any specific control problem. The only problem-specific input is
 
 from __future__ import annotations
 
+import math
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Optional, Tuple
+
+from torch import Tensor
+
+from ..models.penalty import FractionalPenalty, LogPenalty, Penalty
+from .activations import ACTIVATIONS, get_activation, get_growth, get_use_sphere
 
 
 @dataclass
@@ -44,22 +51,19 @@ class ModelConfig:
     power: float = 1.0
     # (w1, w2) = (value loss weight, gradient loss weight); l2 = (1, 0), h1 = (1, 1)
     loss_weights: Tuple[float, float] = (1.0, 1.0)
-    # Regularization.  The penalty on the atom weights is  alpha * sum_i phi(|c_i|^q),
-    # with q = 2/(power+1) (power is the activation exponent set above).  The two
-    # penalties this project uses are selected by how you set power and gamma:
-    #   * power penalty   alpha * sum |c|^q   -- set gamma = 0 (phi becomes the
-    #     identity) and power > 1 (so q < 1 is genuinely non-convex).
-    #   * log penalty     alpha * sum phi(|c|) -- set power = 1 (so q = 1) and
-    #     gamma > 0; th interpolates L1 (th=1) <-> non-convex log (th=0).
+    # Regularization uses two separate scalar penalties:
+    #   * power penalty  alpha * sum |c|^q, q = 2/(power+1): power > 1, gamma = 0.
+    #   * log penalty    alpha * sum phi(|u|): power = 1, gamma >= 0, with the
+    #     Algorithm 1 coefficient u = w_p*c and a fixed half L1 / half log mixture.
+    # With a ReLU activation, power=1 and gamma=0 give the ReLU--L1 baseline.
     alpha: float = 1e-5
     gamma: float = 0.0   # 0 => log term off (power penalty); > 0 => log penalty
-    th: float = 0.5      # L1 (th=1) <-> non-convex log (th=0); only acts when gamma > 0
     # Algorithm 1 evaluates the penalty on the normalized measure
     # mu_p = w_p*mu, with w_p(omega) = 1 + |omega|^p.  For a signed profile model
-    # with a nonhomogeneous activation this is the only supported objective; PDAP
-    # applies it automatically.  Algorithm 2 is sphere-normalized and does not use
+    # with a nonhomogeneous activation this is the only supported objective;
+    # SparseNetwork applies it automatically.  Algorithm 2 is sphere-normalized and does not use
     # this parameter.
-    moment_order: float = 2.0   # p in the weight w_p(omega) = 1 + |omega|^p
+    moment_order: Optional[float] = None  # Explicit for nonhomogeneous models; unused on the sphere.
 
 
 @dataclass
@@ -68,7 +72,7 @@ class TrainingConfig:
 
     # outer PDAP loop
     num_iterations: int = 10      # T_out
-    num_insertion: int = 50       # N_trial, candidates sampled per iteration
+    num_of_initial_pts: int = 50  # N_trial, initial points of the multistart search per iteration
     max_insert: int = 15          # N_ins, cap on atoms inserted per iteration (batch mode)
     prune_amp_tol: float = 1e-8   # eps_prune: drop atoms with |c_n| <= this
     # --- paper-conformance axes (paper/paper_0805.tex, Section 5) --------------
@@ -120,7 +124,7 @@ class TrainingConfig:
     tolerance_grad: float = 0.0
     sigmamax: float = 10.0
     fit_outer_iterations: int = 20
-    display_every: int = 2
+    display_every: int = 2  # Log checkpoint indices 0, N, 2N; <=0 disables periodic progress.
     # insertion numeric constants (src/PDAP/insertion.py)
     # Candidate-to-candidate deduplication: Algorithm 1 uses absolute Euclidean
     # distance in omega=(a,b); sphere searches use cosine-similarity gap.  The
@@ -145,7 +149,7 @@ class DataConfig:
     ``scripts/train.py``), not the trainer.
     """
 
-    path: str = "VDP_beta_0.1_grid_30x30.npy"
+    path: str = "VDP_20260924_62305c7ac2534952a7c85d6c4656a491/VDP_pmp_grid_30x30_20260924.npz"
     train_fraction: float = 0.9
     normalize: bool = True
 
@@ -155,7 +159,7 @@ class EvalConfig:
     """Post-fit evaluation: which metrics to compute on the fitted model.
 
     ``kind="global"`` (the default) reproduces today's behavior — only the
-    global ``summary_metrics``.  ``kind="region_split"`` additionally reports
+    global History summary.  ``kind="region_split"`` additionally reports
     errors split into the **switching tube** — the fixed-radius tubular
     neighborhood {distance to the ±2π-tiled switching curve ≤ ``tube_radius``}
     — and the **rest**, scored on the dense **region-eval pool** (``eval_pool``:
@@ -185,13 +189,9 @@ class EnvConfig:
     """
 
     seed: int = 42
-    # Abort at startup when MLflow is not reachable, instead of training for hours
-    # and discovering at run.finish() that publish_record_to_mlflow silently
-    # returned False because MLFLOW_TRACKING_URI was unset. Sweeps set it.
-    require_mlflow: bool = False
-    verbose: bool = True
-    log_level: str = "INFO"
-    log_file: Optional[str] = None
+    verbose: bool = True  # Readable stderr; JSONL file output is always enabled.
+    log_level: str = "INFO"  # Shared threshold for both outputs.
+    log_file: Optional[str] = None  # Defaults to run.jsonl in Hydra's output directory.
 
 
 @dataclass
@@ -204,6 +204,121 @@ class ExperimentConfig:
     name: str = "run"
 
 
+def resolve_model(config, input_dim: int) -> dict:
+    """Prepare model configuration for construction without changing the raw input.
+
+    Hydra and ordinary mappings use the existing ModelConfig defaults. The
+    returned runtime mapping contains the activation callable and its geometry;
+    raw named configuration remains suitable for run records. Prediction accepts
+    any callable and positive finite power, including historical settings.
+    Training setup must additionally call validate_model_config before construction.
+    """
+    config = config if isinstance(config, ModelConfig) else ModelConfig(**config)
+    if config.kind != "signed":
+        raise ValueError(
+            f"the active implementation only supports kind='signed'; got {config.kind!r}"
+        )
+    activation: str | Callable[[Tensor], Tensor] = config.activation
+    if isinstance(activation, str):
+        activation_name = activation
+        activation = get_activation(activation_name)
+    elif callable(activation):
+        activation_name = next(
+            (name for name, (fn, _) in ACTIVATIONS.items() if fn is activation), None,
+        )
+    else:
+        raise TypeError("activation must be a registry name or callable")
+    use_sphere = get_use_sphere(activation_name) if activation_name is not None else False
+    if not math.isfinite(config.power) or config.power <= 0.0:
+        raise ValueError("power must be positive and finite")
+    if not isinstance(input_dim, int) or isinstance(input_dim, bool) or input_dim <= 0:
+        raise ValueError("input_dim must be a positive integer")
+    return {
+        "input_dim": input_dim,
+        "activation": activation,
+        "activation_name": activation_name,
+        "use_sphere": use_sphere,
+        "power": config.power,
+        "penalty_exponent": 2.0 / (config.power + 1.0),
+        "alpha": config.alpha,
+        "gamma": config.gamma,
+        "loss_weights": tuple(config.loss_weights),
+        # Old records and mixed sweeps may supply a numeric sphere placeholder.
+        "moment_order": None if use_sphere else config.moment_order,
+        "insertion": config.insertion,
+    }
+
+
+def validate_model_config(config) -> None:
+    """Validate resolved model settings before constructing a network.
+
+    The insertion rule in this mapping must also be the one supplied to PDAP.
+    Prediction-only reconstruction does not call this training configuration gate.
+    """
+    activation_name, power = config["activation_name"], config["power"]
+    gamma, use_sphere = config["gamma"], config["use_sphere"]
+    moment_order, insertion = config["moment_order"], config["insertion"]
+    if activation_name is None:
+        raise ValueError("coefficient correction requires a registered activation")
+    if power not in (1.0, 2.0, 3.0):
+        raise ValueError(
+            "the coefficient correction supports activation powers 1, 2, 3; "
+            f"got power={power}"
+        )
+    if not use_sphere and power != 1.0:
+        raise ValueError(
+            "nonhomogeneous signed profile insertion is Algorithm 1 and requires power == 1"
+        )
+    if power != 1.0 and gamma != 0.0:
+        raise ValueError(f"the power penalty requires gamma == 0; got power={power}, gamma={gamma}")
+    if not use_sphere:
+        if moment_order is None:
+            raise ValueError("nonhomogeneous training requires an explicit moment_order")
+        if not math.isfinite(moment_order) or moment_order <= 0.0:
+            raise ValueError("moment_order must be positive and finite")
+        growth = get_growth(activation_name)
+        if growth is not None and moment_order <= growth.s1:
+            raise ValueError(
+                f"moment_order must exceed {growth.s1:g} for activation {activation_name!r}"
+            )
+        # An undeclared growth bound permits numerical training, but cannot
+        # certify H1 admissibility or supply a theorem search radius.
+    if insertion not in ("profile", "finite_step"):
+        raise ValueError(f"insertion must be 'profile' or 'finite_step', got {insertion!r}")
+    if insertion == "finite_step":
+        if not use_sphere:
+            raise ValueError("finite_step insertion is Algorithm 2 and requires a sphere activation")
+        if gamma != 0.0:
+            raise ValueError("finite_step insertion minimizes the power penalty and requires gamma == 0")
+
+
+def make_penalty(config) -> Penalty:
+    """The penalty family of validated model settings: the log penalty at q = 1, else the fractional penalty."""
+    if config["penalty_exponent"] == 1.0:
+        return LogPenalty(config["alpha"], config["gamma"])
+    return FractionalPenalty(config["alpha"], config["penalty_exponent"])
+
+
+def validate_optimizer_config(training: TrainingConfig) -> None:
+    """Validate the training settings before constructing PDAP.
+
+    Each setting with a fixed set of values is checked here rather than at use,
+    so a typo fails at setup instead of midway through a sweep.
+    """
+    for name, value, allowed in (
+        ("training.insert_init", training.insert_init, ("warm_start", "guaranteed")),
+        ("training.insert_mode", training.insert_mode, ("batch", "sequential")),
+        ("training.loop_order", training.loop_order, ("correction_first", "insertion_first")),
+        ("training.radial_cap", training.radial_cap, ("fixed", "theorem")),
+        ("training.method", training.method, ("levenberg_marquardt", "steihaug_cg")),
+    ):
+        if value not in allowed:
+            raise ValueError(f"{name} must be one of {allowed}, got {value!r}")
+    iterations = training.fit_outer_iterations
+    if not isinstance(iterations, int) or isinstance(iterations, bool) or iterations < 0:
+        raise ValueError("training.fit_outer_iterations must be a nonnegative integer")
+
+
 __all__ = [
     "ModelConfig",
     "TrainingConfig",
@@ -211,4 +326,7 @@ __all__ = [
     "EvalConfig",
     "EnvConfig",
     "ExperimentConfig",
+    "resolve_model",
+    "validate_model_config",
+    "validate_optimizer_config",
 ]

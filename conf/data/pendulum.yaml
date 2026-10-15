@@ -6,4 +6,4 @@
 defaults:
   - /eval: region_split
 data:
-  path: Pendulum_20260703_ada466c6182948469a197282906c3b6c/Pendulum_pmp_value_samples_2000_20260703.npz
+  path: Pendulum_20260924_ebf42e75ab9748aa855f44aa2387b6df/Pendulum_pmp_value_samples_2000_20260924.npz

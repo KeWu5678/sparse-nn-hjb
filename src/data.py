@@ -1,4 +1,4 @@
-"""Value-sample loading and normalization.
+"""Value-sample loading, normalization, splitting, and batching.
 
 The shared training data contract is a mapping with ``x``, ``v``, and ``dv``:
 
@@ -16,10 +16,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import torch
+from torch.utils.data import DataLoader, TensorDataset
 
 #: Dataset root. Datasets are referenced by bare filename everywhere else; this
 #: is the one place that name becomes a path (see :func:`load_value_samples`).
@@ -27,6 +28,79 @@ DATA_DIR = Path(__file__).resolve().parents[1] / "rawdata" / "data"
 
 ValueSamples = dict[str, np.ndarray]
 TensorSamples = tuple[torch.Tensor, torch.Tensor, torch.Tensor]
+
+
+def full_batch(loader: DataLoader) -> TensorSamples:
+    """Assemble one complete loader pass for full-data mathematical evaluation.
+
+    This deliberately materializes the supplied samples. A single delivered
+    batch is reused directly; smaller batches are concatenated in delivery order.
+    """
+    if loader.batch_sampler is None or loader.drop_last or getattr(loader.batch_sampler, "drop_last", False):
+        raise ValueError("full-data evaluation requires batching without dropping samples")
+    batches = list(loader)
+    if not batches:
+        raise ValueError("full-data evaluation requires nonempty batches")
+    if len(batches) == 1:
+        x, v, dv = batches[0]
+    else:
+        x, v, dv = (torch.cat(fields) for fields in zip(*batches, strict=True))
+    return x, v, dv
+
+
+def make_dataloaders(
+    samples: ValueSamples,
+    train_fraction: float = 0.9,
+    *,
+    batch_size: int | None = None,
+    num_workers: int = 0,
+    seed: int = 0,
+) -> tuple[DataLoader, DataLoader]:
+    """Split prepared samples and construct independent train/validation loaders.
+
+    The split uses the existing global NumPy RNG. ``seed`` controls only each
+    loader's private PyTorch generator; normalization stays an explicit transform
+    before this function is called.
+    """
+    train, valid = split_value_samples(samples, train_fraction)
+    return (
+        make_dataloader(train, batch_size=batch_size, num_workers=num_workers, seed=seed),
+        make_dataloader(valid, batch_size=batch_size, num_workers=num_workers, seed=seed),
+    )
+
+
+def make_dataloader(
+    samples: TensorSamples,
+    *,
+    batch_size: int | None = None,
+    num_workers: int = 0,
+    seed: int = 0,
+) -> DataLoader:
+    """Deliver aligned value samples in stable order, retaining every sample.
+
+    By default the entire split is one batch. The dataset retains the supplied
+    tensors without transforming or copying them. A private generator prevents
+    iterator creation and worker seeding from consuming the optimizer's global
+    PyTorch random stream.
+    """
+    x, v, dv = samples
+    if x.ndim != 2:
+        raise ValueError(f"x must have shape (N, d), got {x.shape}")
+    if x.shape[0] == 0:
+        raise ValueError("value samples must be non-empty")
+    if v.shape != (x.shape[0], 1):
+        raise ValueError(f"v must have shape ({x.shape[0]}, 1), got {v.shape}")
+    if dv.shape != x.shape:
+        raise ValueError(f"dv must have shape {x.shape}, got {dv.shape}")
+    return DataLoader(
+        TensorDataset(*samples),
+        batch_size=x.shape[0] if batch_size is None else batch_size,
+        shuffle=False,
+        drop_last=False,
+        num_workers=num_workers,
+        pin_memory=False,
+        generator=torch.Generator().manual_seed(seed),
+    )
 
 
 def _as_value_samples(raw: Any) -> ValueSamples:
@@ -71,6 +145,12 @@ def load_value_samples(path: str | Path) -> ValueSamples:
     return _as_value_samples(raw)
 
 
+def load_arrays(path: str | Path, *keys: str) -> dict[str, np.ndarray]:
+    """Named float64 arrays of an ``.npz`` file under DATA_DIR."""
+    with np.load(DATA_DIR / path) as source:
+        return {key: np.asarray(source[key], dtype=np.float64) for key in keys}
+
+
 @dataclass(frozen=True)
 class ValueSampleNormalizer:
     """Reversible max-absolute scaling for value samples."""
@@ -106,6 +186,10 @@ class ValueSampleNormalizer:
     def to_dict(self) -> dict[str, Any]:
         return {"x_scale": self.x_scale.tolist(), "v_scale": self.v_scale}
 
+    @classmethod
+    def from_dict(cls, values: dict[str, Any]) -> "ValueSampleNormalizer":
+        return cls(np.asarray(values["x_scale"], dtype=np.float64), float(values["v_scale"]))
+
 
 def normalize_value_samples(samples: ValueSamples) -> tuple[ValueSamples, ValueSampleNormalizer]:
     """Fit a normalizer and return normalized value samples plus the transform."""
@@ -134,7 +218,7 @@ def split_value_samples(
             "both sides must be non-empty"
         )
     perm = np.random.permutation(n)
-    take = lambda idx: tuple(
+    take = lambda idx: cast(TensorSamples, tuple(
         torch.tensor(samples[k][idx], dtype=torch.float64) for k in ("x", "v", "dv")
-    )
+    ))
     return take(perm[:split]), take(perm[split:])

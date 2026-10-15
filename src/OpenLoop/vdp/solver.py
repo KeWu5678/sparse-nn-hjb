@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Callable
@@ -11,7 +11,7 @@ from uuid import uuid4
 
 import numpy as np
 from numpy.polynomial.legendre import legval, legvander
-from scipy.integrate import solve_ivp
+from scipy.integrate import solve_bvp, solve_ivp
 from scipy.optimize import minimize, root
 
 from src.OpenLoop.value_samples import ValueSamples
@@ -47,10 +47,14 @@ class VdpOpenLoopSolverConfig:
     line_search_max_iter: int = 50
     line_search_cost_tol: float = 1e-2
     store_trajectories: bool = False
+    collocation_tol: float = 1e-8
+    collocation_max_nodes: int = 20000
 
     def __post_init__(self) -> None:
-        if self.profile not in ("paper", "fast"):
-            raise ValueError("profile must be 'paper' or 'fast'")
+        if self.profile not in ("paper", "fast", "pmp"):
+            raise ValueError("profile must be 'paper', 'fast', or 'pmp'")
+        if self.collocation_tol <= 0.0 or self.collocation_max_nodes < 2:
+            raise ValueError("invalid PMP collocation tolerance or node limit")
         if self.time_step is not None and self.time_step <= 0.0:
             raise ValueError("time_step must be positive")
         if self.num_time_points is not None and self.num_time_points < 2:
@@ -81,6 +85,7 @@ class VdpSampleResult:
     state_trajectory: np.ndarray | None = None
     adjoint_trajectory: np.ndarray | None = None
     reduced_gradient: np.ndarray | None = None
+    collocation_residual: float | None = None
 
 
 @dataclass(frozen=True)
@@ -89,6 +94,7 @@ class VdpOpenLoopSolution:
     sample_results: tuple[VdpSampleResult, ...]
     failed_initial_states: np.ndarray
     config: VdpOpenLoopSolverConfig
+    problem: VdpOptimalControlProblem
 
     def save_dataset(
         self,
@@ -113,6 +119,8 @@ class VdpOpenLoopSolution:
         failed_path = run_dir / f"VDP_{self.config.profile}_failed_{shape_tag}_{date}.json"
 
         meta = {
+            "problem": asdict(self.problem),
+            "solver": asdict(self.config),
             "profile": self.config.profile,
             "retained_samples": self.value_samples.size,
             "requested_samples": len(self.sample_results),
@@ -204,15 +212,68 @@ class VdpOpenLoopSolver:
             sample_results=tuple(results),
             failed_initial_states=failed_states,
             config=self.config,
+            problem=self.problem,
         )
 
     def solve_sample(self, initial_state: np.ndarray) -> VdpSampleResult:
         initial = np.asarray(initial_state, dtype=np.float64)
         if initial.shape != (2,):
             raise ValueError("initial_state must have shape (2,)")
+        if self.config.profile == "pmp":
+            return self._solve_sample_pmp(initial)
         if self.config.profile == "paper":
             return self._solve_sample_paper(initial)
         return self._solve_sample_fast(initial)
+
+    def _solve_sample_pmp(self, initial_state: np.ndarray) -> VdpSampleResult:
+        """Solve the free-terminal PMP equations from two initial guesses.
+
+        Retain the least-cost converged stationary solution. This is a numerical
+        reference, not a certificate of global optimality.
+        """
+        def rhs(t, z):
+            control = -z[3] / (2.0 * self.problem.beta)
+            return np.vstack((
+                self.problem.dynamics(t, z[:2], control),
+                self.problem.adjoint_rhs(t, z[:2], z[2:]),
+            ))
+
+        def boundary(left, right):
+            return np.r_[left[:2] - initial_state, right[2:]]
+
+        nodes, weights = np.polynomial.legendre.leggauss(3)
+        best = None
+        for decay in (1.0, 0.0):
+            guess = np.vstack((
+                initial_state[:, None] * np.exp(-decay * self.time_grid),
+                np.zeros((2, len(self.time_grid))),
+            ))
+            solution = solve_bvp(
+                rhs, boundary, self.time_grid, guess,
+                tol=self.config.collocation_tol,
+                max_nodes=self.config.collocation_max_nodes,
+            )
+            if not solution.success:
+                continue
+            z = solution.sol(self.time_grid)
+            control = -z[3] / (2.0 * self.problem.beta)
+            evaluation = self._build_evaluation(z[:2], z[2:], control, None)
+            dt = np.diff(solution.x)
+            tq = solution.x[:-1, None] + 0.5 * dt[:, None] * (1.0 + nodes)
+            zq = solution.sol(tq.ravel())
+            uq = -zq[3] / (2.0 * self.problem.beta)
+            rates = self.problem.running_cost(zq[:2], uq).reshape(-1, len(nodes))
+            value = float(np.sum(0.5 * dt * (rates @ weights)))
+            evaluation = replace(evaluation, value=value)
+            result = replace(
+                self._success_result(initial_state, evaluation, solution.niter),
+                collocation_residual=float(np.max(solution.rms_residuals)),
+            )
+            if np.isfinite(value) and (best is None or value < best.value):
+                best = result
+        if best is None:
+            return self._failure_result(initial_state, "PMP collocation did not converge", 0)
+        return best
 
     def _solve_sample_paper(self, initial_state: np.ndarray) -> VdpSampleResult:
         control = np.zeros(self.time_grid.shape[0], dtype=np.float64)

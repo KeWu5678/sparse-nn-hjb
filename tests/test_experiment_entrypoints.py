@@ -1,14 +1,16 @@
 """Smoke the retained experiment interfaces without running fits or writing reports."""
 
 import importlib
-import json
 import os
 import runpy
 import subprocess
 import sys
+from dataclasses import asdict
 from pathlib import Path
 
 import pytest
+
+from src.config.schema import ModelConfig
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -16,7 +18,6 @@ ROOT = Path(__file__).resolve().parents[1]
 @pytest.mark.parametrize("relative", [
     "scripts/paper/vdp_full_scope.py",
     "scripts/paper/pendulum_full_scope.py",
-    "experiments/01_vdp/paper_log_penalty/p_study_figure.py",
 ])
 def test_batch_paper_exports_select_a_consistent_backend(relative):
     path = ROOT / relative
@@ -76,16 +77,15 @@ def test_paper_entrypoints_delegate_to_shared_implementation(monkeypatch, group,
         assert calls[1].homogeneous_alpha == 1e-4
 
 
-def test_p_study_loads_only_the_support_statistics_it_uses(tmp_path):
-    path = ROOT / "experiments/01_vdp/paper_log_penalty/p_study_figure.py"
-    if not path.exists():
+@pytest.mark.parametrize("activation", ["relu", "leaky_relu"])
+def test_preflight_matches_historical_sphere_orders_to_current_cells(activation):
+    if not (ROOT / "scripts/paper/preflight.py").exists():
         pytest.skip("paper-workspace entry points are local/ignored under ADR 0011")
-    record = {
-        "config": {"model": {"activation": "tanh", "moment_order": 2.01, "alpha": 1e-4}},
-        "metrics": [{"values": {"radius_max": 5.0, "radius_r95": 3.0, "best_neurons": 4}}],
-    }
-    (tmp_path / "run.json").write_text(json.dumps(record))
-    namespace = runpy.run_path(str(path))
-    assert namespace["load"](tmp_path) == {
-        ("tanh", 2.01, 1e-4): {"max_radius": 5.0, "r95": 3.0, "neurons": 4.0}
-    }
+    preflight = importlib.import_module("scripts.paper.preflight")
+    current = asdict(ModelConfig(activation=activation))
+    historical = current | {"moment_order": 2.01}
+    assert preflight.cell(current) == preflight.cell(historical)
+    assert current["moment_order"] is None and historical["moment_order"] == 2.01
+    first = current | {"activation": "softplus", "moment_order": 2.01}
+    second = first | {"moment_order": 3.}
+    assert preflight.cell(first) != preflight.cell(second)

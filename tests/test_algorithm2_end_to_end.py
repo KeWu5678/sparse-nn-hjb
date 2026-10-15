@@ -6,10 +6,12 @@ import numpy as np
 import pytest
 import torch
 
+from src.config import make_penalty, resolve_model, validate_model_config
 from src.config.schema import EnvConfig, ExperimentConfig, ModelConfig, TrainingConfig
-from src.data import split_value_samples
-from src.models import build_model
+from src.data import make_dataloaders
+from src.models import SparseNetwork
 from src.PDAP import PDAP
+from src.training import run_training
 
 
 @pytest.mark.parametrize("power", [1.0, 2.0, 3.0])
@@ -32,6 +34,7 @@ def test_algorithm2_fits_an_exact_relu_power_atom(power: float) -> None:
             gamma=0.0,
         ),
         training=TrainingConfig(
+            num_of_initial_pts=20, max_insert=1,
             insert_mode="sequential",
             loop_order="insertion_first",
             correction_guard=True,
@@ -40,18 +43,16 @@ def test_algorithm2_fits_an_exact_relu_power_atom(power: float) -> None:
         ),
         env=EnvConfig(verbose=False),
     )
-    model = build_model(cfg, input_dim=2)
-    train, valid = split_value_samples(data, cfg.data.train_fraction)
+    model_config = resolve_model(cfg.model, input_dim=2)
+    validate_model_config(model_config)
+    network = SparseNetwork(model_config)
+    train_loader, valid_loader = make_dataloaders(data, cfg.data.train_fraction)
 
-    history = PDAP(cfg).fit(
-        model,
-        train,
-        valid,
+    history = run_training(
+        PDAP(cfg.training, make_penalty(model_config), network, train_loader, insertion=model_config["insertion"]),
+        valid_loader,
         num_iterations=2,
-        num_insertion=20,
-        max_insert=1,
-        verbose=False,
     )
 
-    assert history.final_neurons > 0
-    assert np.all(np.diff(np.asarray(history.train_loss)) <= 1e-12)
+    assert history.run["final_neurons"] > 0
+    assert np.all(np.diff(np.asarray([row["objective_train"] for row in history.rows])) <= 1e-12)

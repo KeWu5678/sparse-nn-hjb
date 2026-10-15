@@ -1,333 +1,232 @@
-import logging
+"""Semismooth Newton iterations on the normal map of a proximal splitting."""
+
 import math
-from typing import Callable, Iterable, Optional
+from typing import Callable, Iterable, NamedTuple
 
 import torch
 from torch import Tensor
 from torch.nn.utils import parameters_to_vector, vector_to_parameters
 from torch.optim import Optimizer
 
-from .penalty import _nonconvex_correction, _nonconvex_correction_dd, _penalty_grad
-from .prox import power_prox, power_prox_derivative
-from .strategies import solve_levenberg_marquardt, solve_steihaug_cg
-
-logger = logging.getLogger(__name__)
+from ..models import Penalty
+from .strategies import damped_newton_step, trust_region_step
 
 __all__ = ["SSN"]
 
-# Globalization strategies, selected via the ``method`` argument.
-_STRATEGIES = {
-    "levenberg_marquardt": solve_levenberg_marquardt,
-    "steihaug_cg": solve_steihaug_cg,
-}
+# Selected by the 24-cell VDP/pendulum pilot in experiments/algorithm2_rho_pilot.md.
+ALGORITHM2_PROX_RHO = 0.5
+
+
+class NewtonSystem(NamedTuple):
+    """The Newton equation jac_normal @ dq = -normal_q at the preimage q, and P'(q)."""
+
+    q: Tensor
+    normal_q: Tensor
+    jac_normal: Tensor
+    jac_prox: Tensor
+
 
 class SSN(Optimizer):
-    """Semismooth Newton optimizer for non-convex regularized problems.
-
-    Solves   min_u  (1/2)||S u - ref||^2 + alpha * phi(|u|^q)   on the outer
-    weights, with a semismooth Newton reformulation.  Based on the MATLAB
-    NonConvexSparseNN reference. One class supports two globalization methods:
-
-      * Levenberg--Marquardt   -> ``method="levenberg_marquardt"``
-      * trust-region variant  -> ``method="steihaug_cg"``
-
-    Symbol table (kept verbatim from the paper / MATLAB for traceability):
-      q       scalar-map preimage (the SSN working variable)
-      Gq      residual G(q) of the reformulated optimality system
-      DG      generalized (semismooth) Jacobian of G
-      dq      Newton step,  solved from (DG + damping) dq = -Gq
-      theta   damping parameter of the Levenberg-Marquardt strategy
-      sigma   trust-region radius of the Steihaug-CG strategy
-      inverse_step  normal-map inverse step; the prox scale is alpha/inverse_step
-      alpha_vec  per-coordinate alpha (alpha on penalised coords, 0 on free)
-
+    """Semismooth Newton optimizer on the normal map of a proximal splitting.
     Args:
-        params:        parameters to optimize (outer weights only).
-        alpha, gamma:  regularization / non-convexity parameters.
-        th:            L1 (th=1) <-> non-convex (th=0) interpolation (default 0.5).
-        max_ls_iter:   max line-search iterations (levenberg_marquardt).
-        tolerance_ls:  accept step if loss_new <= tolerance_ls * loss.
-        power:         activation power; sets q = 2/(power+1).
-        method:        globalization strategy, ``"levenberg_marquardt"`` (damped
-                       Newton) or ``"steihaug_cg"`` (trust region).
-        sigmamax:      max trust-region radius (steihaug_cg).
-        tolerance_grad: early-exit tol on ||Gq||_inf; 0.0 disables it.
-        penalized_mask: bool mask of penalised coords (default: all True).
-        nonneg_mask:    bool mask of coords clamped >= 0 (default: all False).
-    Note:
-        ``data_hessian`` (the Gauss-Newton Hessian of the data term) must be set
-        by the caller on the instance before each ``step`` — an API wart inherited
-        from the original design: it really is a per-step input that would be
-        cleaner to pass through the closure.
+        params: parameters to optimize (outer weights only).
+        penalty: the penalty term and its proximal maps, evaluated at a supplied flat vector.
+        hess_obj: Hessian of the fitting term only, excluding the penalty.
+        max_ls_iter: maximum damping retries after the initial trial.
+        tolerance_ls: accept whe objective is at most loss + (tolerance_ls - 1)*|loss|
+        method: "levenberg_marquardt" (line-search) or "steihaug_cg".
+        sigmamax: maximum trust-region radius.
+        tolerance_grad: skip the step when ||G(q)||_inf <= tol_grad. Zero disables this check.
+        prox_scale: optional override of the proximal parameter chosen from the warm start.
+
+    q is the proximal preimage, normal_q = G(q), and jac_normal is its selected
+    Jacobian. The Newton equation is jac_normal @ dq = -normal_q. tau is the
+    proximal step: G(q) = (q - u)/tau + smooth gradient, with u = prox(q) for the
+    proximal constant alpha*tau. sigma is the persistent trust-region radius.
     """
 
     def __init__(
         self,
         params: Iterable[Tensor],
-        alpha: float,
-        gamma: float,
-        th: float = 0.5,
+        penalty: Penalty,
+        hess_obj: Tensor,
+        *,
         max_ls_iter: int = 500,
         tolerance_ls: float = 1.0 + 1e-8,
-        power: float = 1.0,
         method: str = "levenberg_marquardt",
         sigmamax: float = 10.0,
         tolerance_grad: float = 0.0,
-        penalized_mask: Optional[Tensor] = None,
-        nonneg_mask: Optional[Tensor] = None,
-        prox_scale: Optional[float] = None,
+        prox_scale: float | None = None,
     ) -> None:
-        if method not in _STRATEGIES:
-            raise ValueError(
-                f"unknown method {method!r}; expected one of {sorted(_STRATEGIES)}"
-            )
-        # State placement (LBFGS convention): tunable hyperparameters live in
-        # ``defaults``/``param_groups[0]``; problem structure (masks, alpha_vec,
-        # power/q, data_hessian) lives in instance attributes; transient
-        # cross-step state (trust-region ``sigma``) lives in ``self.state``.
+        """Use a proximal splitting whose configuration was validated by training setup."""
         defaults = {
-            "alpha": alpha,
-            "gamma": gamma,
-            "th": th,
             "max_ls_iter": max_ls_iter,
             "tolerance_ls": tolerance_ls,
             "method": method,
             "sigmamax": sigmamax,
-            # First-order optimality tolerance for early exit on ||Gq||_inf.
-            # 0.0 disables it (preserves the historical always-step behaviour the
-            # PDAP loops are tuned against); set >0 to enable early stopping.
             "tolerance_grad": tolerance_grad,
-            }
+            "prox_scale": prox_scale,
+        }
         super().__init__(params, defaults)
         if len(self.param_groups) > 1:
             raise ValueError("SSN doesn't support per-parameter options")
-
+        self.penalty = penalty
+        self.hess_obj = hess_obj
         self._params = self.param_groups[0]["params"]
-        self.q: float = 2.0 / (power + 1.0)  # power-transformed exponent
-        if self.q < 1.0 and prox_scale is None:
-            raise ValueError("prox_scale is required when q < 1")
+        group = self.param_groups[0]
+        if prox_scale is None:
+            prox_scale = penalty.prox_scale(
+                parameters_to_vector(self._params).detach(), ALGORITHM2_PROX_RHO,
+            )
+        group["prox_scale"] = prox_scale
+        group["tau"] = self._tau_from(prox_scale)
+        self._last_step_success = True
+
+    def _tau_from(self, prox_scale: float | None) -> float:
+        """The penalty's proximal step tau, after checking a supplied scale."""
         if prox_scale is not None and (not math.isfinite(prox_scale) or prox_scale <= 0.0):
             raise ValueError(f"prox_scale must be positive and finite, got {prox_scale}")
-        self.prox_scale = prox_scale
-        self.data_hessian: Optional[Tensor] = None
-        self.last_step_success: bool = True
+        return self.penalty.proximal_step(prox_scale)
 
-        # --- proximal structure (problem-fixed, not tunable) ---
-        # Defaults recover the signed network exactly: every coordinate is
-        # penalised with scalar ``alpha`` and there is no nonnegativity
-        # constraint. Optional masks retain the optimizer's generic mixed-
-        # coordinate capability.
-        flat = parameters_to_vector(self.param_groups[0]["params"])
-        P = flat.shape[0]
-        if penalized_mask is None:
-            self.penalized_mask = torch.ones(P, dtype=torch.bool, device=flat.device)
-        else:
-            self.penalized_mask = penalized_mask.to(dtype=torch.bool, device=flat.device)
-            if self.penalized_mask.shape[0] != P:
-                raise ValueError(
-                    f"penalized_mask length {self.penalized_mask.shape[0]} != param vector length {P}"
-                )
-        if nonneg_mask is None:
-            self.nonneg_mask = torch.zeros(P, dtype=torch.bool, device=flat.device)
-        else:
-            self.nonneg_mask = nonneg_mask.to(dtype=torch.bool, device=flat.device)
-            if self.nonneg_mask.shape[0] != P:
-                raise ValueError("nonneg_mask length must match param vector length")
-        # per-coordinate alpha: ``alpha`` on penalised coords, 0 on free coords.
-        self.alpha_vec: Tensor = torch.where(
-            self.penalized_mask, torch.full_like(flat, float(alpha)), torch.zeros_like(flat)
-        )
-    # ------------------------------------------------------------------ #
-    # Masked nonnegative proximal and its Jacobian.
-    # Defaults (penalised everywhere, no nonneg coords) reduce these to the
-    # plain signed soft-threshold prox and its diagonal Jacobian.
-    # ------------------------------------------------------------------ #
-    def _mu(self, inverse_step: float) -> Tensor:
-        """Per-coordinate proximal scale divided by the normal-map inverse step."""
-        return self.alpha_vec / inverse_step
+    @property
+    def last_step_success(self) -> bool:
+        """Whether the last step kept a trial or stopped at a stationary point.
 
-    def _prox(self, v: Tensor, inverse_step: float) -> Tensor:
-        out = power_prox(v, self._mu(inverse_step), q=self.q)
-        kill = self.nonneg_mask & (v < 0)
-        return torch.where(kill, torch.zeros_like(out), out)
-
-    def _dprox(self, v: Tensor, inverse_step: float, prox_result: Tensor) -> Tensor:
-        DP = power_prox_derivative(
-            v, self._mu(inverse_step), q=self.q, prox_result=prox_result
-        )
-        kill = self.nonneg_mask & (v < 0)
-        diag = torch.where(kill, torch.zeros_like(prox_result), torch.diagonal(DP))
-        return torch.diag(diag)
-
-    # ------------------------------------------------------------------ #
-    # Flat parameter <-> vector primitives and the trial-evaluation step,
-    # shared by both globalization strategies (cf. torch.optim.LBFGS).
-    # ------------------------------------------------------------------ #
-    def _clone_flat(self) -> Tensor:
-        """Snapshot the parameters as a flat vector (the line-search restore point)."""
-        return parameters_to_vector(self._params)
-
-    def _set_flat(self, vec: Tensor) -> None:
-        vector_to_parameters(vec, self._params)
-
-    def _trial(
-        self, closure: Callable[[], Tensor], qnew: Tensor, inverse_step: float
-    ) -> tuple[Tensor, Tensor]:
-        """prox(qnew) -> set params -> evaluate.  Returns (unew, loss_new)."""
-        unew = self._prox(qnew, inverse_step)
-        self._set_flat(unew)
-        return unew, closure()
-
-    def _initialize_q(
-        self,
-        alpha: float,
-        gamma: float,
-        inverse_step: float,
-        th: float,
-        params: Tensor,
-        loss: Tensor
-    ) -> Tensor:
+        True before the first step; False after a step that raised.
         """
-        Following MATLAB SSN.m (lines 47-53). Assumes the NOC is fulfilled
-        and back-calculates the proximal preimage q_var.
-        """
-        qq = self.q
-        grad_loss = torch.autograd.grad(
-            loss, self.param_groups[0]["params"], create_graph=False, retain_graph=True
-        )
-        grad_flat = torch.cat([g.view(-1) for g in grad_loss])
+        return self._last_step_success
 
-        abs_u = torch.abs(params)
-        sign_u = torch.sign(params)
-
-        # Subtract reg gradient from autograd (which includes it) to get data-only.
-        # alpha_vec is ``alpha`` on penalised coords and 0 on free coords, so the
-        # penalty terms vanish on free coords automatically.
-        reg_grad = _penalty_grad(abs_u, sign_u, self.alpha_vec, th, gamma, q=qq)
-        grad_data = grad_flat - reg_grad
-
-        # gf_u = grad_data + alpha * D_nonconvex
-        gf_u = grad_data + self.alpha_vec * _nonconvex_correction(abs_u, sign_u, th, gamma, q=qq)
-
-        # Override on nonzero *penalised* entries (NOC condition).  The L1
-        # subgradient there is alpha's.  For q=1 this is -alpha*sign(u);
-        # for q<1 it is -alpha*q*|u|^(q-1)*sign(u).
-        active = (abs_u > 0) & self.penalized_mask
-        if qq == 1.0:
-            gf_u = torch.where(active, -self.alpha_vec * sign_u, gf_u)
-        else:
-            s = abs_u.clamp(min=1e-30)
-            base = self.alpha_vec * qq * s ** (qq - 1)
-            gf_u = torch.where(active, -base * sign_u, gf_u)
-
-        q_var = params - (1.0 / inverse_step) * gf_u
-        # On free (unpenalised) coords the proximal is the identity, whose preimage
-        # is the parameter itself; this makes G reduce to a plain Newton step there.
-        q_var = torch.where(self.penalized_mask, q_var, params)
-        return q_var
-
-    def _initialize_G(
-        self,
-        alpha: float,
-        gamma: float,
-        inverse_step: float,
-        th: float,
-        q_var: Tensor,
-        params: Tensor,
-        loss: Tensor
-    ) -> Tensor:
-        """
-        Compute the gradient G(q) of the reformulated objective.
-        """
-        qq = self.q
-        abs_u = torch.abs(params)
-        sign_u = torch.sign(params)
-
-        D_nc = _nonconvex_correction(abs_u, sign_u, th, gamma, q=qq)
-
-        grad_loss = torch.autograd.grad(loss, self.param_groups[0]["params"], retain_graph=True)
-        grad_flat = torch.cat([g.view(-1) for g in grad_loss])
-
-        reg_grad = _penalty_grad(abs_u, sign_u, self.alpha_vec, th, gamma, q=qq)
-        grad_data = grad_flat - reg_grad
-
-        return inverse_step * (q_var - params) + self.alpha_vec * D_nc + grad_data
-
-    def _DG(
-        self,
-        alpha: float,
-        gamma: float,
-        inverse_step: float,
-        th: float,
-        q_var: Tensor,
-        params: Tensor
-    ) -> Tensor:
-        """
-        Compute the generalized Jacobian DG of the semismooth Newton system.
-        DG * dq = -G(q).
-        """
-        qq = self.q
-        DPc: Tensor = self._dprox(q_var, inverse_step, prox_result=params)
-        I: Tensor = torch.eye(params.shape[0], device=params.device, dtype=params.dtype)
-
-        corr_dd = _nonconvex_correction_dd(torch.abs(params), th, gamma, q=qq)
-
-        return (
-            inverse_step * (I - DPc)
-            + torch.diag(self.alpha_vec * corr_dd) @ DPc
-            + self.data_hessian @ DPc  # type: ignore[union-attr]
-        )
-
-    # data_hessian is set by callers before step():
-    # H = (1/N) * (w1 * S'S + w2 * S_grad'S_grad)   cf. paper eq.(3), ddF = 1/N
     @torch.no_grad()
-    def step(self, closure: Callable[[], Tensor]) -> Tensor:
-        """Perform one semismooth-Newton step.
+    def step(self, closure: Callable[[], Tensor]) -> Tensor:  # pyright: ignore[reportIncompatibleMethodOverride]
+        """Run one globalized Newton iteration and return the objective it keeps.
 
-        Builds the SSN system (preimage ``q``, residual ``Gq``, Jacobian ``DG``)
-        then hands it to the globalization strategy selected by ``method``
-        (``levenberg_marquardt`` damped Newton, or ``steihaug_cg`` trust region).
-
-        Args:
-            closure (callable): re-evaluates the model and returns the loss.
-        Returns:
-            Tensor: the loss after the step (or the original loss if it failed).
+        The closure is required, as for LBFGS. Each trial is evaluated by writing
+        it into the parameters; a rejected trial is undone. An exception restores
+        the parameters and propagates with its original cause.
         """
-        # Run the closure with grad enabled even though step() is no_grad, so the
-        # SSN-system builders can call autograd.grad on the loss (cf. LBFGS).
         closure = torch.enable_grad()(closure)
+        start = parameters_to_vector(self._params).detach().clone()
+        try:
+            loss, self._last_step_success = self._newton_iteration(closure, start)
+        except Exception:
+            vector_to_parameters(start, self._params)
+            self._last_step_success = False
+            raise
+        return loss
 
+    def _newton_iteration(self, closure: Callable[[], Tensor], u: Tensor) -> tuple[Tensor, bool]:
+        """Build and globalize one normal-map Newton step from the coefficients u.
+
+        Return the objective it keeps and whether the step succeeded; a stationary
+        point succeeds without a trial.
+        """
+        loss = self.objective(closure)
+        q, normal_q = self._normal_map_at(u)
+        success = True
+        if not self._stationary(normal_q):
+            system = self._newton_system(u, q, normal_q)
+            loss, success = self._globalize(closure, u, system, loss)
+        return loss, success
+
+    def objective(self, closure: Callable[[], Tensor]) -> Tensor:
+        """The objective f + alpha*Phi at the parameters; the closure evaluates the fitting term f."""
+        fitting = closure()
+        with torch.no_grad():
+            return fitting + self.penalty.value(parameters_to_vector(self._params))
+
+    def _normal_map_at(self, u: Tensor) -> tuple[Tensor, Tensor]:
+        """The preimage q of the coefficients u = P(q) and the normal map G(q)."""
+        jac_obj_augmented = self.jac_obj_augmented(u, self._gradient())
+        q = self.prox_preimage(u, jac_obj_augmented)
+        return q, self.normal_map(q, u, jac_obj_augmented)
+
+    def _gradient(self) -> Tensor:
+        """The fitting term's gradient, left on the parameters by the closure's backward()."""
+        gradients = [parameter.grad for parameter in self._params]
+        if any(gradient is None for gradient in gradients):
+            raise RuntimeError("the SSN closure must call backward()")
+        return parameters_to_vector(gradients)
+
+    def jac_obj_augmented(self, u: Tensor, jac_fitting: Tensor) -> Tensor:
+        """Gradient at u of the smooth part: the fitting term plus the penalty's smooth correction."""
+        return jac_fitting + self.penalty.jac_correction(u)
+
+    def prox_preimage(self, u: Tensor, jac_obj_augmented: Tensor) -> Tensor:
+        """Reconstruct q from a prox-consistent iterate, following MATLAB SSN.m.
+
+        Nonzero entries use the nonsmooth term's stationarity equation;
+        zero entries use the smooth gradient.
+        """
+        active = torch.abs(u) > 0
+        grad = torch.where(active, -self.penalty.jac_nonsmooth_term(u), jac_obj_augmented)
+        return u - self._tau * grad
+
+    @property
+    def _tau(self) -> float:
+        """The proximal step tau, fixed at construction; the proximal constant is alpha*tau."""
+        return self.param_groups[0]["tau"]
+
+    def normal_map(self, q: Tensor, u: Tensor, jac_obj_augmented: Tensor) -> Tensor:
+        """Evaluate G(q), using u = P(q) and the smooth gradient at u."""
+        return (q - u) / self._tau + jac_obj_augmented
+
+    def _stationary(self, normal_q: Tensor) -> bool:
+        """Whether ||G(q)||_inf is at or below tolerance_grad; zero disables the test."""
+        tolerance_grad = self.param_groups[0]["tolerance_grad"]
+        return tolerance_grad > 0.0 and (
+            torch.norm(normal_q, p=float("inf")).item() <= tolerance_grad
+        )
+
+    def _newton_system(self, u: Tensor, q: Tensor, normal_q: Tensor) -> NewtonSystem:
+        """Complete the Newton system at q with the selected Jacobians P'(q) and G'(q)."""
+        jac_prox = self.penalty.jac_prox(q, self._prox_constant(), prox_image=u)
+        return NewtonSystem(q, normal_q, self.jac_normal(u, jac_prox), jac_prox)
+
+    def _prox_constant(self) -> float:
+        return self.penalty.alpha * self._tau
+
+    def jac_normal(self, u: Tensor, jac_prox: Tensor) -> Tensor:
+        """Selected G'(q), using u = P(q) and jac_prox = P'(q)."""
+        I = torch.eye(u.numel(), device=u.device, dtype=u.dtype)
+        return (
+            (I - jac_prox) / self._tau
+            + self.hess_obj_augmented(u) @ jac_prox
+        )
+
+    def hess_obj_augmented(self, u: Tensor) -> Tensor:
+        """Hessian of the fitting term plus the diagonal Hessian of the correction."""
+        return self.penalty.hess_correction(u) + self.hess_obj
+
+    def _globalize(
+        self, closure: Callable[[], Tensor], u: Tensor, system: NewtonSystem, loss: Tensor,
+    ) -> tuple[Tensor, bool]:
+        """Run a strategy, store its state, and keep an accepted trial or undo a rejected one.
+
+        A strategy returns the last trial it evaluated, which the parameters still hold.
+        Return the objective kept and whether the trial was accepted.
+        """
         group = self.param_groups[0]
-        alpha, th, gamma = group["alpha"], group["th"], group["gamma"]
-        self.last_step_success = True
 
-        if self.q < 1.0:
-            # ``prox_scale`` is capped by the warm-start condition in the PDAP
-            # trainer.  The normal map uses prox_{alpha/inverse_step}.
-            inverse_step = alpha / self.prox_scale  # type: ignore[operator]
+        def evaluate_trial(q_trial: Tensor) -> Tensor:
+            vector_to_parameters(self.penalty.prox(q_trial, self._prox_constant()), self._params)
+            return self.objective(closure)
+
+        if group["method"] == "levenberg_marquardt":
+            q_trial, loss_trial, accepted = damped_newton_step(
+                system.q, system.normal_q, system.jac_normal, loss, evaluate_trial,
+                max_ls_iter=group["max_ls_iter"], tolerance_ls=group["tolerance_ls"],
+            )
         else:
-            # Stable log-penalty scaling inherited from the MATLAB reference.
-            inverse_step = 1.0 + alpha * gamma
+            state = self.state[self._params[0]]
+            sigma = state.setdefault("sigma", 0.01 * group["sigmamax"])
+            trial, state["sigma"] = trust_region_step(
+                system.q, system.normal_q, system.jac_normal, system.jac_prox, loss, evaluate_trial,
+                sigma=sigma, sigmamax=group["sigmamax"],
+            )
+            q_trial, loss_trial, accepted = trial
 
-        loss: Tensor = closure()
-        params: Tensor = self._clone_flat()
-
-        # Build the SSN system: proximal preimage, residual G(q), Jacobian DG.
-        q: Tensor = self._initialize_q(
-            alpha, gamma, inverse_step, th, params, loss
-        )
-        Gq: Tensor = self._initialize_G(
-            alpha, gamma, inverse_step, th, q, params, loss
-        )
-
-        # Optional first-order optimality early exit (disabled when tolerance_grad=0).
-        tolerance_grad: float = group["tolerance_grad"]
-        if tolerance_grad > 0.0 and torch.norm(Gq, p=float("inf")).item() <= tolerance_grad:
-            return loss
-
-        DG: Tensor = self._DG(alpha, gamma, inverse_step, th, q, params)
-
-        strategy = _STRATEGIES[group["method"]]
-        return strategy(
-            self, closure, loss, params, q, Gq, DG, inverse_step
-        )
+        if accepted:
+            loss = loss_trial
+        else:
+            vector_to_parameters(u, self._params)
+        return loss, accepted

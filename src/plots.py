@@ -3,9 +3,8 @@
 """Shared rendering for value-function experiments and current-paper figures.
 
 Current-paper renderers accept prepared arrays; ``src.results`` owns saved-model
-loading and physical prediction. Legacy convenience wrappers remain available.
-Renderers are limited to the manuscript's included figures.
-Tabular summaries live in ``src/metric.py``.
+loading and physical prediction. Renderers are limited to the manuscript's
+included figures. Tabular summaries live in ``src/tables.py``.
 """
 
 import logging
@@ -23,11 +22,9 @@ os.environ.setdefault("XDG_CACHE_HOME", _XDG_CACHE)
 
 import matplotlib.pyplot as plt
 import numpy as np
-import torch
 from matplotlib.colors import LinearSegmentedColormap
 
 from .plotstyle import FRONTIER_RC, PALETTE, apply_publication_style, style_frontier_axes
-from .results import history_atoms, model_from_history
 
 
 def save_figure(fig, path, *, dpi=300, tight=True, pad=2.0, close=True,
@@ -93,8 +90,8 @@ def plot_summary_frontier(series):
     return fig, ax
 
 
-def plot_feedback_trace(series, *, ylabel, time_limit):
-    """One VDP feedback panel; inputs already contain the desired quantity."""
+def plot_feedback_trace(series, *, ylabel, time_limit, nonnegative=True):
+    """One feedback panel from prepared controls, state norms, or running costs."""
     apply_publication_style()
     fig, ax = plt.subplots(figsize=(7, 5))
     for s in series:
@@ -103,28 +100,9 @@ def plot_feedback_trace(series, *, ylabel, time_limit):
     ax.set_xlabel(r"time $t$")
     ax.set_ylabel(ylabel)
     ax.set_xlim(0.0, time_limit)
-    ax.set_ylim(bottom=0.0)
+    if nonnegative:
+        ax.set_ylim(bottom=0.0)
     ax.legend(loc="upper right")
-    return fig, ax
-
-
-def plot_normal_cross_section(s, truth, series, *, ylabel):
-    """Draw a prepared reference and predictions; no branch selection here."""
-    apply_publication_style()
-    fig, ax = plt.subplots(figsize=(8.5, 4.4))
-    ax.axvline(0.0, color="0.8", lw=1.0, ls="--", zorder=0)
-    ax.plot(s, truth, color="0.0", ls="-", lw=2.6, label="true PMP", zorder=3)
-    for item in series:
-        ax.plot(s, item["y"], color=item["color"], ls=item["ls"], lw=2.0,
-                label=item["label"], zorder=2)
-    all_y = np.concatenate([truth, *(item["y"] for item in series)])
-    ymin, ymax = float(np.nanmin(all_y)), float(np.nanmax(all_y))
-    pad = 0.06 * max(ymax - ymin, 1.0)
-    ax.set_ylim(ymin - pad, ymax + pad)
-    ax.set_xlabel(r"$s$")
-    ax.set_ylabel(ylabel)
-    ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.0), ncol=3,
-              fontsize=10, borderaxespad=0.0)
     return fig, ax
 
 
@@ -152,43 +130,8 @@ def plot_regional_dumbbell(series, *, threshold):
     return fig, ax
 
 
-def plot_feedback_phase(curve, paths, starts, *, xlim, ylim):
-    apply_publication_style()
-    fig, ax = plt.subplots(figsize=(5.2, 4.2))
-    ax.scatter(curve[:, 0], curve[:, 1], s=3, color="0.1", zorder=3)
-    for side, color in (("A", PALETTE["blue_main"]), ("B", PALETTE["red_strong"])):
-        xs = paths[side]
-        ax.plot(xs[:, 0], xs[:, 1], color=color, lw=2.2, label=f"start {side}", zorder=2)
-        ax.scatter([starts[side][0]], [starts[side][1]], s=80, color=color,
-                   marker="x", lw=2.2, zorder=4)
-    ax.set_xlabel(r"$\theta$")
-    ax.set_ylabel(r"$\dot{\theta}$")
-    ax.set_xlim(*xlim)
-    ax.set_ylim(*ylim)
-    ax.legend(loc="upper right", fontsize=9)
-    return fig, ax
-
-
-def plot_pendulum_control(reference, series, *, time_limit):
-    apply_publication_style()
-    fig, ax = plt.subplots(figsize=(6.4, 4.4))
-    t_true, us_true = reference
-    all_us = np.concatenate([us_true, *(item["y"] for item in series)])
-    ylo, yhi = all_us.min() - 1.0, all_us.max() + 1.0
-    ax.plot(t_true, us_true, color="0.0", ls="-", lw=3.2, zorder=2, label="true PMP")
-    for item in series:
-        ax.plot(item["t"], item["y"], color=item["color"], ls=item["ls"],
-                lw=1.9, zorder=3, label=item["label"])
-    ax.axhline(0.0, color="0.85", lw=0.8, zorder=0)
-    ax.set_xlabel(r"time $t$")
-    ax.set_ylabel(r"feedback control $u(t)$")
-    ax.set_xlim(0, time_limit)
-    ax.set_ylim(ylo, yhi)
-    ax.legend(loc="upper right", fontsize=9)
-    return fig, ax
-
 # Default colormap for learned value surfaces — the "MATLAB surf" blue→yellow ramp
-# shared across all the experiment surface plots (see ``plot_model_value_surface``).
+# shared across all the experiment surface plots (see ``plot_value_surface``).
 _SURFACE_CMAP = LinearSegmentedColormap.from_list("surface_blue_yellow", [
     (0.2298, 0.2987, 0.7537),
     (0.1050, 0.5090, 0.9180),
@@ -218,16 +161,6 @@ def _get_field(dataset: Any, name: str) -> np.ndarray:
         "dataset must be a NumPy structured array (with fields) or a dict-like object containing keys "
         "'x', 'v', 'dv'."
     )
-
-
-def _best_iteration_atoms(history: Any, run_index: int = 0) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Best-iteration ``(a, b, u)`` from a fit result, robust to its container.
-
-    Accepts a single ``History`` object (attribute access), a dict-like run, or a
-    list/tuple of either (selecting ``run_index``). Returns inner weights ``a``
-    (n, d), inner bias ``b`` (n,), and outer weights ``u`` (1, n).
-    """
-    return history_atoms(history, run_index=run_index)
 
 
 # ---------------------------------------------------------------------------- #
@@ -264,23 +197,6 @@ def plot_weight_portrait(a, b, u, *, limit=4.0):
         axis._axinfo["grid"].update(color="0.85", linewidth=0.5)
     ax.view_init(elev=15, azim=-105)
     return fig, ax
-
-
-def plot_moment_order_panels(panels, orders, *, ylabel):
-    """Moment-order study with the current two-panel, shared-axis geometry."""
-    apply_publication_style()
-    fig, axes = plt.subplots(2, 1, figsize=(6.4, 6.4), sharex=True)
-    for ax, series in zip(axes, panels):
-        for item in series:
-            ax.plot(orders, item["y"], color=item["color"], marker=item["marker"],
-                    ls=item["ls"], lw=1.4, markersize=4.5,
-                    markeredgecolor="0.2", markeredgewidth=0.5)
-        ax.set_xticks(orders)
-        ax.set_xticklabels([f"{p:g}" for p in orders])
-        ax.set_yscale("log")
-        ax.set_ylabel(ylabel)
-    axes[1].set_xlabel(r"moment order $p$")
-    return fig, axes
 
 
 def style_vdp_reference_axes(ax, x) -> None:
@@ -576,97 +492,6 @@ def plot_vdp_value_with_gradient_arrows2d(
     if show:
         plt.show()
     return fig, ax
-
-
-def plot_model_value_surface(
-    history: "Any | str | os.PathLike[str]",
-    *,
-    activation: "str | Any" = "relu",
-    power: float = 1.0,
-    x_scale: "Optional[Sequence[float]]" = None,
-    v_scale: float = 1.0,
-    run_index: int = 0,
-    grid_n: int = 120,
-    x_range: Optional[Tuple[float, float]] = None,
-    y_range: Optional[Tuple[float, float]] = None,
-    dataset: Any = None,
-    ax: Optional[Any] = None,
-    title: Optional[str] = None,
-    cmap: Any = None,
-    vmax: Optional[float] = None,
-    xticks: "Optional[Sequence[float]]" = None,
-    yticks: "Optional[Sequence[float]]" = None,
-    zticks: "Optional[Sequence[float]]" = None,
-    elev: float = 15.0,
-    azim: float = -105.0,
-    colorbar: bool = False,
-    save_path: Optional[str] = None,
-    show: bool = True,
-) -> Tuple[plt.Figure, Any]:
-    """3D surface of the learned V(x) — the fitted network evaluated on a 2D grid.
-
-    Reproduces the left panel of Fig. 2 in Han & Yang (arXiv:2312.17467): the value
-    function as a surface, here the model's *learned* approximation (not the data
-    samples). Rebuilds a :class:`ShallowNetwork` from a fit result's best-iteration
-    atoms — ``history`` may be a ``History`` object, a path to its pickle, or a list
-    of runs (``run_index`` selects one). ``activation`` (a name resolved via
-    ``src.config.activations.get_activation``, or a callable) and ``power`` must
-    match the run's config, as they are not stored on the ``History``.
-
-    If training used max-abs normalization, pass ``x_scale`` (per-dim) and
-    ``v_scale`` so the grid is normalized before the forward pass and the output
-    rescaled back to physical units — the surface is then drawn over the physical
-    state plane. Pass ``ax`` (a 3D axis) to compose into a multi-panel figure.
-
-    This is the single source of truth for learned-value surface plots: callers
-    render **one surface per call** and arrange any row/grid in their markdown/LaTeX.
-    The uniform style is **no axis names**, **sparse ticks** ({min, 0, max} on x/y;
-    {0, mid, max} on z), and **no title** unless one is passed — the surface itself
-    stays smooth and precise (fine ``grid_n`` evaluation, no mesh lines drawn).
-    ``cmap`` defaults to the shared blue→yellow ``_SURFACE_CMAP``. Values below
-    zero are clipped to the display floor. ``vmax`` clips the surface above and
-    fixes the z-range (e.g. to the data's value range when the model extrapolates
-    wildly off-support); ``None`` auto-scales to the nonnegative surface.
-    ``xticks``/``yticks``/``zticks`` override the sparse defaults when a caller wants
-    explicit tick positions; pass ``x_range``/``y_range`` to set the displayed extent
-    (and re-evaluate the surface over it).
-
-    """
-    net = model_from_history(history, activation=activation, power=power,
-                             run_index=run_index)
-    d = int(net.hidden.weight.shape[1])
-    if d != 2:
-        raise ValueError(f"Expected 2D input, got d={d}. This function only supports 2D plots.")
-
-    # Determine grid range (physical units).
-    if x_range is None or y_range is None:
-        if dataset is not None:
-            x_data = np.asarray(_get_field(dataset, "x"))
-            if x_range is None:
-                x_range = (float(x_data[:, 0].min()), float(x_data[:, 0].max()))
-            if y_range is None:
-                y_range = (float(x_data[:, 1].min()), float(x_data[:, 1].max()))
-        else:
-            x_range = x_range or (-3.0, 3.0)
-            y_range = y_range or (-3.0, 3.0)
-
-    x0 = np.linspace(x_range[0], x_range[1], grid_n)
-    x1 = np.linspace(y_range[0], y_range[1], grid_n)
-    X0, X1 = np.meshgrid(x0, x1)
-    grid_points = np.column_stack([X0.ravel(), X1.ravel()])  # (grid_n^2, 2), physical
-
-    # The network was fit on normalized samples (x / x_scale, v / v_scale): feed
-    # normalized grid points and rescale the prediction back to physical units.
-    scale = np.ones(d) if x_scale is None else np.asarray(x_scale, dtype=np.float64).reshape(d)
-    with torch.no_grad():
-        V = net(torch.tensor(grid_points / scale, dtype=torch.float64)).numpy().reshape(grid_n, grid_n)
-    V = V * float(v_scale)
-
-    return plot_value_surface(
-        X0, X1, V, ax=ax, title=title, cmap=cmap, clip=(0.0, vmax),
-        xticks=xticks, yticks=yticks, zticks=zticks, elev=elev, azim=azim,
-        colorbar=colorbar, save_path=save_path, show=show,
-    )
 
 
 def plot_value_surface(

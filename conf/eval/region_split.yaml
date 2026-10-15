@@ -9,5 +9,5 @@ tube_radius: 0.3
 # all of their rows (build_region_eval_pool.py --exclude). A per-dataset pool would
 # make the oversampling comparison incomparable; the previous single-dataset pool
 # left the oversampled variants scored partly on rows they trained on.
-eval_pool: Pendulum_20260703_ada466c6182948469a197282906c3b6c/Pendulum_region_eval_pool_shared_20260913.npz
-distance_cache: Pendulum_20260703_ada466c6182948469a197282906c3b6c/Pendulum_pmp_value_samples_2000_20260703_region_distances.npz
+eval_pool: Pendulum_20260924_ebf42e75ab9748aa855f44aa2387b6df/Pendulum_region_eval_pool_shared_20260924.npz
+distance_cache: Pendulum_20260924_ebf42e75ab9748aa855f44aa2387b6df/Pendulum_pmp_value_samples_2000_20260924_region_distances.npz

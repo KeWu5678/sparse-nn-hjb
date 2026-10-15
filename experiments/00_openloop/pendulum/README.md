@@ -1,87 +1,113 @@
 # Open-loop data — pendulum swing-up
 
-Visualisations of the pendulum swing-up open-loop value data and the switching-set
-geometry it traces out (backward-PMP, `src/OpenLoop/pendulum`). These follow the
-paper's own figure code (Han & Yang, arXiv:2312.17467, `github_main_nosat.m`) and show
-the **data only** — no learned model. The dataset path is read from
-`conf/data/pendulum.yaml` (currently the 2000-path, 3,900-sample **two-sided** set
-under `rawdata/data/Pendulum_20260703_.../`; construction below). The regions
-calculation uses the co-located raw-trajectory pickle (2000 ordered paths).
-Regenerate with `python generate.py` from this directory (or `make openloop` from
-the repository root). Only the three TeX-included PNGs are generated, directly in
-`paper/plot/`. Figures carry no titles.
+`conf/data/pendulum.yaml` selects the September 24, 2026 production dataset:
+`rawdata/data/Pendulum_20260924_ebf42e75ab9748aa855f44aa2387b6df/Pendulum_pmp_value_samples_2000_20260924.npz`.
+The same directory holds its 2,000 raw trajectories, native switching curve,
+basin polygon, generation metadata, and distance/evaluation artifacts.
 
-| file | what it shows |
+## Numerical problem and generation
+
+The infinite-horizon running cost is `2 - 2 cos(theta) + omega² + u²`, with
+unit mass and length, damping 0.1, gravity 9.8, and unconstrained control.
+Backward PMP integration starts on the local LQR level `epsilon=2e-4`.
+Adaptive boundary sampling uses the value-20 contour. Each characteristic is
+integrated until value 100 or backward time 50, with maximum step 0.005 and
+relative/absolute tolerances `1e-10`/`1e-12`.
+
+From the repository root:
+
+```sh
+uv run python scripts/run_pendulum_pmp_openloop_example.py \
+  --num-trajectories 2000 --contour-delta 0.05 --basin-value-max 70 \
+  --level-set-samples 3900 --tag 20260924
+```
+
+The generator creates a new dated directory and prints its paths. For a later
+refresh, choose a new tag and update the data and evaluation configurations to
+the new outputs before training.
+
+The sample construction is:
+
+1. Integrate the 2,000 characteristics, retaining numerical state, value, and
+   costate data for each branch.
+2. Intersect equal-value contours with their `2pi` translates, track the four
+   switching arms at value spacing 0.05, and assemble the origin's basin using
+   the arm extent setting 70. Geometry comes from these same 2,000 fresh paths.
+   An empty basin stops generation. The setting 70 is not a sample-value cap.
+3. Truncate each path at its first basin exit. Screen all retained body points
+   against nearby raw branches before thinning: first-order value estimates
+   use the nearest 32 points within radius 0.1. A point must lie within 0.3 of
+   its own local lower envelope and beat each available adjacent branch by 0.3.
+   Interior body points without an adjacent-branch neighbour remain eligible.
+4. Harvest samples within distance 0.5 of the switching arms and their `+/-2pi`
+   translates using the same local comparisons. The central branch beyond its
+   first-exit prefix supplies the near-side pad; translated branches outside
+   the basin supply the far-side collar. Every pad/collar point must have an
+   available competing branch.
+5. Thin the pools separately to 3,000 body, 300 pad, and 600 collar samples.
+
+The current pools contain 881,672 body, 6,904 pad, and 129,156 collar points.
+These local branch checks establish a numerical consistency criterion, not a
+certificate of globally optimal values.
+
+## Sampling variants and evaluation inputs
+
+Use `scripts/investigation/make_twosided_oversampling_sets.py --data <production
+NPZ relative to rawdata/data> --tag <new tag>` to build a new variant directory.
+The current variants are under `rawdata/data/Pendulum_2sided_oversample_20260924/`:
+
+| Variant | Body | Pad | Collar | Total |
+| --- | ---: | ---: | ---: | ---: |
+| `base6k` | 4,615 | 462 | 923 | 6,000 |
+| `band40` | 3,600 | 800 | 1,600 | 6,000 |
+| `band60` | 2,400 | 1,200 | 2,400 | 6,000 |
+| `add2k` | 4,615 | 1,129 | 2,256 | 8,000 |
+
+`add2k` preserves every `base6k` row and adds 2,000 distinct band samples.
+The other variants reallocate a fixed sample budget. Their nominal band shares
+refer to pad/collar allocation within the generation width 0.5; they are not
+the fraction inside the evaluation tube of radius 0.3. The builder refuses an
+existing output directory.
+
+For the production NPZ and each variant, generate a distance cache with
+`precompute_region_distances.py --data <NPZ>`. Then run
+`build_region_eval_pool.py --data <production NPZ>`, supplying a separate
+`--exclude <variant NPZ>` for all four variants and `--out <shared pool NPZ>`.
+These scripts live under `scripts/investigation/`; all paths are relative to
+`rawdata/data/`. The common pool removes the union of all five sample sets.
+Update `conf/eval/region_split.yaml` and each `conf/data/pendulum*.yaml` to the
+new shared pool and aligned caches. The region split uses distance at most
+0.3 to the switching-set points tiled by `-2pi`, zero, and `+2pi`.
+
+## Plot the configured reference data
+
+```sh
+uv run python experiments/00_openloop/pendulum/generate.py
+```
+
+`make openloop` also runs this plotter and the VDP plotter. It reads existing
+configured artifacts; it does not generate new data or fit a model. Only the
+following PNGs are written under `paper/plot/`:
+
+| File | Content |
 | --- | --- |
-| `paper/plot/pendulum_value_scatter.png` | 3D scatter of the raw samples (θ, θ̇, V), coloured by value |
-| `paper/plot/pendulum_value_surface.png` | V(θ, θ̇) over the state plane (the 3000-sample set, periodic-folded into one cell then tiled) |
-| `paper/plot/pendulum_regions.png` | each state coloured by the upright it belongs to (nearest basin-cut characteristic, tiled by 2πk); the boundaries are the switching-set spirals winding around the hanging points ±π, ±3π (paper Fig. 2, left) |
+| `pendulum_value_scatter.png` | The configured 3,900 state/value samples |
+| `pendulum_value_surface.png` | Periodic interpolation of the configured sample values |
+| `pendulum_regions.png` | Nearest-characteristic visualization of periodically translated upright basins |
 
-These generated files are local; the distributed figures are embedded in the
-[tracked paper](../../../paper/paper_0805.pdf). The unused whole-trajectory PNG
-and old experiment-directory copies are archived locally under
-`outdated/experiment-code-cleanup-2026-09-12/unreferenced_pngs/` and are not
-distributed or regenerated. The optional local pipeline notes in
-`scripts/paper/README.md` describe the final allowlist/provenance check.
+The surface folds angles into one period, interpolates with seam copies, and
+tiles the result on `[-8,8]^2`. Its display construction restricts angular
+velocity samples to `[-7.7,7.7]` and clips grid queries to that interval. This
+plotting window is not the training support: the fresh samples extend beyond
+`[-9,9]^2`. The regions panel uses the saved basin and co-located raw paths;
+it does not inject an older switching curve or recompute one at a different cap.
 
-The regions figure tracks the switching set deeper (`_REGIONS_CAP = 80`) than the wired
-training data (`basin_value_max = 50`, which only resolves ~half a spiral turn); the deeper
-cut recovers the multi-winding spiral. This is for visualisation only — it does not change
-the training samples.
+Learned-controller comparisons are generated by
+`scripts/paper/pendulum_full_scope.py`. Each controller follows its own
+trajectory from each of two starts over `T=10`. The open-loop comparison is a
+finite-horizon numerical reference with free terminal state and zero terminal
+cost. See the [experiment workflow](../../README.md) for training and validation.
 
-## How the two-sided training set is constructed
-
-The wired dataset (`scripts/run_pendulum_pmp_openloop_example.py`, post-processing
-in `src/OpenLoop/pendulum/solver.py`) is built in five steps. The goal of steps
-4–5 is to put the gradient jump **in-sample**: the basin restriction alone yields
-one-sided data — every trajectory stops *at* the switching curve, so no model
-would ever see the jump.
-
-1. **Raw trajectories.** 2000 backward-PMP characteristics are integrated from
-   the local LQR boundary `∂L_ε` around the upright until the accumulated cost
-   hits `value_max = 100`. Each point carries the exact `(x, V, ∇V)` of *its*
-   branch — beyond the switching curve that branch is no longer optimal, but its
-   values remain exact branch data.
-2. **Switching curve.** Equal-value contours are intersected with their
-   2π-shifted copies; the crossings, arm-tracked across value levels, are the
-   switching-set spirals, and the reference reflection assembly closes the
-   upright smooth basin (the 2000-path auto-assembly is unstable — issue #18 —
-   so the validated 256-path basin is injected).
-3. **Basin restriction (the one-sided body).** Each trajectory is truncated at
-   its **first exit** from the basin polygon (the reference `inpolygon` cut).
-   The retained prefixes form the in-basin body pool (~823k points): the smooth
-   branch of the upright well, stopping at the curve.
-4. **Envelope-certified switching band (the two sides).** Candidates are the *raw*
-   trajectories tiled by k ∈ {−1, 0, +1}·2π in θ, gated to within 0.5 of the
-   **±2π-tiled** switching arms. A candidate from tile k is kept only if it is
-   certified envelope-optimal there: its branch value must beat every *other*
-   tile's branch value (first-order extrapolation from the nearest raw points)
-   by a margin, **and** match its *own* branch's local lower envelope (raw
-   trajectories re-enter after exiting, so a post-exit point can be beaten by
-   another sheet of its own branch). Survivors split into
-   - the **near-side pad** (k = 0 beyond the first-exit prefix): the central
-     branch is still optimal in the strip between the basin's conservative
-     value-cap trim and the true arm, but step 3 discards it;
-   - the **far-side collar** (k = ±1 outside the basin): the neighbouring
-     upright's branch across the arm — the other side of the jump.
-   Anchoring the gate on the tiled *switching curve* rather than the basin ring
-   matters: long ring stretches are value-cap trims ~1 unit short of the true
-   arm, and a
-   collar harvested from the *restricted* trajectories would miss every arm
-   stretch whose far-side value exceeds the basin cap. Global tiling of the
-   emitted samples (`periodic_copies`) is **not** a substitute: it multiplies
-   the training domain by identical wells and collapses the fit.
-5. **Thinning to the emitted set.** Body, pad, and collar pools are thinned
-   *separately* to the requested shares — the production set is
-   3,000 body + 300 pad + 600 collar = 3,900 — so the switching-band share is a design
-   parameter rather than the pools' incidental proportion. Each sample carries
-   a precomputed distance to the ±2π-tiled switching set
-   (`scripts/investigation/precompute_region_distances.py`).
-
-Verified on the production set: 0/900 switching-band samples violate the
-first-order-corrected lower envelope; the lowest-decile switching band (d ≤ 0.25)
-straddles the curve (221 near-side / 169 far-side); 44% of samples within 0.3
-of the switching curve have an opposite-side neighbour within 0.3 (0% in the one-sided
-data). The residual one-sided stretches are arms whose far branch lies beyond
-the `value_max` integration cap. Downstream use and findings:
-`experiments/02_pendulum/region_split/`.
+The old branch-restriction diagnosis and superseded data are preserved in the
+ignored `outdated/experiment-refresh-20260924/` archive; they are not inputs to
+this workflow.

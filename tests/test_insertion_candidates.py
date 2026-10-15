@@ -9,6 +9,8 @@ import pytest
 import torch
 
 import src.PDAP.insertion as insertion
+from src.config import make_penalty, resolve_model, validate_model_config
+from src.models import SparseNetwork
 
 
 def _inputs():
@@ -20,12 +22,7 @@ def _inputs():
 
 def _starts(values):
     points = torch.as_tensor(values, dtype=torch.float64)
-
-    def sample_sphere(n):
-        assert n == points.shape[0]
-        return points[:, :1].clone(), points[:, 1].clone()
-
-    return sample_sphere
+    return points[:, :1].clone(), points[:, 1].clone()
 
 
 def _fake_lbfgs(monkeypatch, outputs):
@@ -59,30 +56,27 @@ def _generate(
     merge_tol=1e-2,
     existing_atoms=None,
     use_sphere=False,
-    normalized=None,
     power=1.0,
 ):
     if starts is None:
         starts = [[1.0, 0.0] for _ in outputs]
     fake = _fake_lbfgs(monkeypatch, outputs)
     X, residual_v, residual_dv = _inputs()
-    a, b, n, discarded_outside = insertion._generate_candidates(
-        X,
-        residual_v,
-        residual_dv,
-        activation=torch.tanh,
-        power=power,
-        loss_weights=(1.0, 1.0),
-        sample_sphere=_starts(starts),
-        N=len(starts),
+    config = resolve_model({
+        "activation": "relu" if use_sphere else "tanh", "power": power, "moment_order": 2.0,
+    }, 1)
+    validate_model_config(config)
+    network = SparseNetwork(config)
+    if existing_atoms is not None:
+        network.set_atoms(*existing_atoms, torch.ones_like(existing_atoms[1]))
+    a, b, discarded_outside = insertion._generate_candidates(
+        network,
+        (X, residual_v, residual_dv),
+        initial_points=_starts(starts),
         merge_tol=merge_tol,
-        two_sided=True,
-        use_sphere=use_sphere,
-        existing_atoms=existing_atoms,
-        normalized=(not use_sphere) if normalized is None else normalized,
         radius=radius,
     )
-    return a, b, n, discarded_outside, fake
+    return a, b, a.shape[0], discarded_outside, fake
 
 
 @pytest.mark.parametrize(
@@ -113,24 +107,20 @@ def test_algorithm1_distinguishes_radius_search_failure_from_threshold_stop(
     monkeypatch, caplog
 ):
     X, residual_v, residual_dv = _inputs()
+    config = resolve_model({
+        "activation": "tanh", "power": 1.0, "alpha": 1.0, "moment_order": 2.0,
+    }, 1)
+    validate_model_config(config)
+    network = SparseNetwork(config)
+    penalty = make_penalty(config)
 
     _fake_lbfgs(monkeypatch, [[2.0, 0.0]])
     with caplog.at_level(logging.DEBUG):
         insertion.profile_threshold(
-            X,
-            residual_v,
-            residual_dv,
-            activation=torch.tanh,
-            power=1.0,
-            loss_weights=(1.0, 1.0),
-            alpha=1.0,
-            sample_sphere=_starts([[1.0, 0.0]]),
-            N=1,
+            network, penalty, (X, residual_v, residual_dv),
+            initial_points=_starts([[1.0, 0.0]]),
             max_insert=1,
-            use_sphere=False,
-            normalized=True,
             radius=1.0,
-            verbose=True,
         )
     assert "discarded 1 refined candidate(s) outside the search radius" in caplog.text
     assert "retained no distinct candidate after geometric filters" in caplog.text
@@ -140,20 +130,10 @@ def test_algorithm1_distinguishes_radius_search_failure_from_threshold_stop(
     _fake_lbfgs(monkeypatch, [[0.0, 0.0]])
     with caplog.at_level(logging.DEBUG):
         insertion.profile_threshold(
-            X,
-            residual_v,
-            residual_dv,
-            activation=torch.tanh,
-            power=1.0,
-            loss_weights=(1.0, 1.0),
-            alpha=1.0,
-            sample_sphere=_starts([[1.0, 0.0]]),
-            N=1,
+            network, penalty, (X, residual_v, residual_dv),
+            initial_points=_starts([[1.0, 0.0]]),
             max_insert=1,
-            use_sphere=False,
-            normalized=True,
             radius=1.0,
-            verbose=True,
         )
     assert "No retained candidate clears the insertion threshold" in caplog.text
     assert "discarded" not in caplog.text
@@ -168,22 +148,17 @@ def test_sphere_search_reports_when_only_existing_support_is_returned(
         torch.tensor([[1.0]], dtype=torch.float64),
         torch.tensor([0.0], dtype=torch.float64),
     )
+    config = resolve_model({"activation": "relu", "power": 2.0, "alpha": 1.0}, 1)
+    validate_model_config(config)
+    network = SparseNetwork(config)
+    network.set_atoms(*existing, torch.ones_like(existing[1]))
+    penalty = make_penalty(config)
 
     with caplog.at_level(logging.DEBUG):
         insertion.profile_threshold(
-            X,
-            residual_v,
-            residual_dv,
-            activation=torch.relu,
-            power=2.0,
-            loss_weights=(1.0, 1.0),
-            alpha=1.0,
-            sample_sphere=_starts([[1.0, 0.0]]),
-            N=1,
+            network, penalty, (X, residual_v, residual_dv),
+            initial_points=_starts([[1.0, 0.0]]),
             max_insert=1,
-            use_sphere=True,
-            existing_atoms=existing,
-            verbose=True,
         )
 
     assert "retained no distinct candidate after geometric filters" in caplog.text
@@ -238,14 +213,11 @@ def test_algorithm1_optimizes_each_random_start_once(monkeypatch):
     assert len(fake.instances) == 2
 
 
-def test_unnormalized_nonhomogeneous_search_is_not_supported(monkeypatch):
-    with pytest.raises(ValueError, match="requires normalized Algorithm 1"):
-        _generate(
-            monkeypatch,
-            outputs=[[1.0, 0.0], [0.0, 1.0]],
-            starts=[[1.0, 0.0], [0.0, 1.0]],
-            normalized=False,
-        )
+def test_nonhomogeneous_search_gets_normalization_from_the_network():
+    network = SparseNetwork(resolve_model({"activation": "tanh"}, 1))
+    assert network.normalized
+    with pytest.raises(TypeError, match="normalized"):
+        resolve_model({"activation": "tanh", "normalized": False}, 1)
 
 
 def test_algorithm1_deduplicates_by_absolute_parameter_distance(monkeypatch):

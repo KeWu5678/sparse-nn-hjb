@@ -73,6 +73,7 @@ def main() -> int:
         for tr in restricted if tr.state.size
     ])
     solver = PendulumPmpSolver(config=PendulumPmpSolverConfig(num_trajectories=len(raw)))
+    body = solver.screen_body_samples(body, tuple(raw))
     pad, collar = solver.build_collar_samples(tuple(raw), restricted, curve)
 
     x = np.vstack([body.x, pad.x, collar.x])

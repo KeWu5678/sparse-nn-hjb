@@ -3,161 +3,162 @@ from typing import Optional
 import torch
 
 
-def _to_boundary(
-    x: torch.Tensor,
-    d: torch.Tensor,
-    s: float
-    ) -> tuple[torch.Tensor, float]:
-    """
-    Project x + tau d to the boundary |x| = s by solving for tau.
-    In the algorithm, we should have
-    |x| <= s, |x + tau d| <= s
-    Returns the updated x and the step length tau used.
-    """
-    # Scalars used in quadratic for tau
-    dd = torch.dot(d, d)
-    xd = torch.dot(x, d)
-    xx = torch.dot(x, x)
+class MPCG:
+    """Modified projected CG for the normal-map Newton system.
 
-    # det = xd^2 + dd * (s^2 - xx)
-    det = xd * xd + dd * (s * s - xx)
-    # Numerical safety
-    det = torch.clamp(det, min=0.0)
-    tau = (s * s - xx) / (xd + torch.sqrt(det + 0.0))
-    x_new = x + tau * d
-    return x_new, float(tau)
+    The operators are evaluated at the current normal-map variable q.
 
-
-def mpcg(
-    H: torch.Tensor,
-    b: torch.Tensor,
-    rtol: float = 1e-3,
-    maxit: int = 100,
-    sigma: float = 0.0,
-    DP: Optional[torch.Tensor] = None,
-):
-    """Projected Conjugate Gradient with optional trust-region.
     Args:
-        H: (approximated) Hessian.
-        b: ( - gradient f) Right-hand side vector.
-        rtol: Relative tolerance.
-        maxit: Maximum inner iterations.
-        sigma: Trust-region radius (<= 0 disables TR handling).
-        DP: Projection/preconditioner used only in inner products (can be None for identity).
-
-    Returns:
-        x:      Solution vector
-        flag:   'convgd' | 'maxitr' | 'negdef' | 'radius'
-        pred:   Predicted overall decrease in the model (scalar float)
-        relres: Relative residual
-        iters:  Number of iterations performed (int)
+        jac_normal: Selected derivative G′(q) of the optimality normal map.
+            This matrix need not be symmetric.
+        jac_prox: Symmetric positive semidefinite derivative P′(q) of the proximal
+            map. jac_prox @ jac_normal must be symmetric. None uses the identity.
     """
-    device = b.device
-    dtype = b.dtype
 
-    x = torch.zeros_like(b)
+    def __init__(
+        self, jac_normal: torch.Tensor, jac_prox: Optional[torch.Tensor] = None
+    ) -> None:
+        self.jac_normal = jac_normal
+        self.jac_prox = jac_prox
 
-    # r(x) = b - H x, start with x = 0
-    r = b.clone()
-    z = r.clone()
-    DPz = z if DP is None else (DP @ z)
-    resres = torch.dot(r, DPz)  # r' * DP * z
+    def solve(
+        self,
+        r: torch.Tensor,
+        rtol: float = 1e-3,
+        maxit: int = 100,
+        sigma: float = 0.0,
+    ) -> tuple[torch.Tensor, str]:
+        """Solve jac_normal @ step = r, truncating on curvature or the radius.
 
-    # clone of the iterates and preconditioned iterates
-    d = z.clone()
-    DPd = DPz.clone()
+        Each call initializes the CG iteration from a zero step.
 
-    # Residuals
-    res0 = torch.sqrt(torch.clamp(resres, min=0.0)) # projected residual
-    fres0 = torch.sqrt(torch.dot(r, r)) # full residual
-    epseps = -0.0 # current step decrease in the functional j(x) = (1/2) * DP(x)' * H(x) - DP(x)' * b
-    pred = -0.0 # predicted overall decrease in the model
+        Args:
+            r: Initial residual −G(q), equal to the Newton right-hand side.
+            rtol: Relative tolerance for predicted reduction and residual checks.
+            maxit: Maximum CG iterations, excluding the final residual correction.
+            sigma: Trust-region radius (<= 0 disables the radius constraint).
 
-    iters = 0
-    flag = 'convgd'
+        Returns:
+            step: Newton increment in q coordinates.
+            stop_reason: 'convgd', 'maxitr', 'negdef' (nonpositive curvature),
+                or 'radius'.
+        """
+        # All working values belong to this solve.
+        step = torch.zeros_like(r)
+        if not bool(torch.any(r)):
+            return step, "convgd"
 
-    # Main loop; stopping like in MATLAB
-    # while sqrt(-epseps) >= sqrt(-pred)*rtol and sqrt(resres) >= res0*(1e-2*rtol)
-    def _continue() -> bool:
-        left = torch.sqrt(torch.tensor(max(0.0, -epseps), device=device, dtype=dtype))
-        right = torch.sqrt(torch.tensor(max(0.0, -pred), device=device, dtype=dtype)) * rtol
-        res_ok = torch.sqrt(torch.clamp(resres, min=0.0)) >= res0 * (1e-2 * rtol)
-        return (left >= right) and bool(res_ok)
+        jac_prox_d = r if self.jac_prox is None else (self.jac_prox @ r)
+        rho = torch.dot(r, jac_prox_d)
+        d = r
+        pred_step = r.new_tensor(-0.0)
+        pred = r.new_tensor(-0.0)
+        res0 = torch.sqrt(torch.clamp(rho, min=0.0))
 
-    while _continue():
-        iters += 1
-        if iters > maxit:
-            flag = 'maxitr'
-            iters = maxit
-            break
+        iterations = 0
+        stop_reason = "convgd"
 
-        Hd = H @ d
-        gamma = torch.dot(Hd, DPd)
+        # Run CG with the MATLAB stopping rules and truncation conditions.
+        while not self._cg_converged(pred_step, pred, rho, rtol, res0):
+            iterations += 1
+            if iterations > maxit:
+                stop_reason = "maxitr"
+                break
 
-        # Negative curvature
-        if gamma <= 0:
-            flag = 'negdef'
-            if sigma > 0:
-                x, tau = _to_boundary(x, d, sigma)
-                pred = pred - tau * resres.item() + 0.5 * tau * tau * gamma.item()
-                r = r - tau * Hd
-                resres = torch.dot(r, r) if DP is None else torch.dot(r, DP @ r)
-            relres = float(torch.sqrt(torch.clamp(resres, min=0.0)) / (res0 + 1e-30))
-            return x, flag, float(pred), relres, iters
+            jac_normal_d = self.jac_normal @ d
+            gamma = torch.dot(jac_normal_d, jac_prox_d)
 
-        alpha = resres / (gamma + 1e-30)
-        xnew = x + alpha * d
+            if self._is_neg_def(gamma):
+                if sigma > 0:
+                    step = self._to_boundary(step, d, sigma)
+                return step, "negdef"
 
-        # Trust region redius reached
-        normx = torch.norm(xnew)
-        if sigma > 0 and normx > sigma:
-            flag = 'radius'
-            x, tau = _to_boundary(x, d, sigma)
-            pred = pred - tau * resres.item() + 0.5 * tau * tau * gamma.item()
-            r = r - tau * Hd
-            resres = torch.dot(r, r) if DP is None else torch.dot(r, DP @ r)
-            relres = float(torch.sqrt(torch.clamp(resres, min=0.0)) / (res0 + 1e-30))
-            return x, flag, float(pred), relres, iters
+            alpha = rho / (gamma + 1e-30)
+            step_new = step + alpha * d
+            if self._exceed_radius(step_new, sigma):
+                return self._to_boundary(step, d, sigma), "radius"
+
+            step = step_new
+            pred_step = -0.5 * (alpha * rho)
+            r, d, jac_prox_d, rho = self._cg_update(
+                r, d, jac_prox_d, rho, alpha, jac_normal_d
+            )
+            pred = pred + pred_step
+
+        # Correct the full residual by minimizing ||r - theta * jac_normal @ r||².
+        jac_normal_r = self.jac_normal @ r
+        numerator = torch.dot(r, jac_normal_r)
+        denom = torch.dot(jac_normal_r, jac_normal_r) + 1e-30
+        theta = numerator / denom
+
+        step_new = step + theta * r
+        if self._exceed_radius(step_new, sigma):
+            stop_reason = "radius"
+            step = self._to_boundary(step, r, sigma)
         else:
-            x = xnew
+            step = step_new
 
-        r = r - alpha * Hd
-        epseps = -0.5 * (alpha * resres).item()
-        pred = pred + epseps
+        return step, stop_reason
 
-        z = r.clone()
-        DPz = z if DP is None else (DP @ z)
-        resresold = resres
-        resres = torch.dot(r, DPz)
+    @staticmethod
+    def _cg_converged(
+        pred_step: torch.Tensor,
+        pred: torch.Tensor,
+        rho: torch.Tensor,
+        rtol: float,
+        res0: torch.Tensor,
+    ) -> bool:
+        """Check the inner CG model-decrease and weighted-residual tolerances."""
+        left = torch.sqrt(torch.clamp(-pred_step, min=0.0))
+        right = torch.sqrt(torch.clamp(-pred, min=0.0)) * rtol
+        model_decrease_tol_met = not bool(left >= right)
+        residual_tol_met = not bool(
+            torch.sqrt(torch.clamp(rho, min=0.0)) >= res0 * (1e-2 * rtol)
+        )
+        return model_decrease_tol_met or residual_tol_met
 
-        beta = - (alpha * torch.dot(Hd, DPz)) / (resresold + 1e-30)
-        d = z + beta * d
-        DPd = DPz + beta * DPd
+    @staticmethod
+    def _is_neg_def(gamma: torch.Tensor) -> bool:
+        """Test nonpositive curvature along d, including zero curvature."""
+        return bool(gamma <= 0)
 
-    # determine theta to minimize ||H(x + theta z) - b||^2
-    z = r.clone()
-    Hz = H @ z
-    numerator = torch.dot(r, Hz)
-    denom = torch.dot(Hz, Hz) + 1e-30
-    theta = numerator / denom
+    @staticmethod
+    def _exceed_radius(step: torch.Tensor, sigma: float) -> bool:
+        """Test whether a step lies outside an enabled trust region."""
+        return sigma > 0 and bool(torch.norm(step) > sigma)
 
-    xnew = x + theta * z
-    normx = torch.norm(xnew)
-    if sigma > 0 and normx > sigma:
-        flag = 'radius'
-        x, theta_val = _to_boundary(x, z, sigma)
-        theta = torch.tensor(theta_val, device=device, dtype=dtype)
-    else:
-        x = xnew
+    def _cg_update(
+        self,
+        r: torch.Tensor,
+        d: torch.Tensor,
+        jac_prox_d: torch.Tensor,
+        rho: torch.Tensor,
+        alpha: torch.Tensor,
+        jac_normal_d: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Return the next residual, direction, weighted direction, and rho."""
+        r = r - alpha * jac_normal_d
+        jac_prox_r = r if self.jac_prox is None else (self.jac_prox @ r)
+        rho_prev = rho
+        rho = torch.dot(r, jac_prox_r)
 
-    DPz = z if DP is None else (DP @ z)
-    pred = pred - theta.item() * resres.item() + 0.5 * (theta * theta * torch.dot(Hz, DPz)).item()
-    r = r - theta * Hz
-    # MATLAB: z = r; relres = sqrt(r' * z) / fres0 = ||r|| / fres0
-    z = r
-    relres = float(torch.sqrt(torch.dot(r, z)) / (fres0 + 1e-30))
+        beta = -(alpha * torch.dot(jac_normal_d, jac_prox_r)) / (rho_prev + 1e-30)
+        d = r + beta * d
+        jac_prox_d = jac_prox_r + beta * jac_prox_d
+        return r, d, jac_prox_d, rho
 
-    return x, flag, float(pred), relres, iters
+    @staticmethod
+    def _to_boundary(step: torch.Tensor, d: torch.Tensor, sigma: float) -> torch.Tensor:
+        """Return the boundary step along d, starting inside the trust region."""
+        dd = torch.dot(d, d)
+        xd = torch.dot(step, d)
+        xx = torch.dot(step, step)
+
+        # Discriminant of the quadratic equation for tau.
+        det = xd * xd + dd * (sigma * sigma - xx)
+        det = torch.clamp(det, min=0.0)
+        tau = (sigma * sigma - xx) / (xd + torch.sqrt(det + 0.0))
+        return step + tau * d
 
 
-__all__ = ["mpcg"]
+__all__ = ["MPCG"]

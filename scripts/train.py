@@ -3,20 +3,20 @@
 
 A run = pick a registered model + a data source, override the rest::
 
-    python scripts/train.py +model=profile +data=vdp model.activation=softplus
+    python scripts/train.py +model=profile +data=vdp model.activation=softplus model.moment_order=2.01
     python scripts/train.py -m +experiment=log_penalty
 
 This entry is domain-agnostic — it loads a ``.npy``/``.npz`` with keys ``x, v, dv`` and
 fits the PDAP model described by the config. With no group selected, the schema
-defaults reproduce a single VDP signed-profile run.
+defaults reproduce a single VDP signed-profile run. Every job is recorded as one
+MLflow run, so ``MLFLOW_TRACKING_URI`` must name a reachable tracking store.
 """
 
 from __future__ import annotations
 
 import argparse
-import logging
-import os
-import pickle
+import hashlib
+import json
 import random
 import re
 import secrets
@@ -32,7 +32,9 @@ if hasattr(argparse.ArgumentParser, "_check_help"):
     argparse.ArgumentParser._check_help = lambda _self, _action: None
 
 import hydra
+import mlflow
 import numpy as np
+import structlog
 import torch
 from hydra.core.config_store import ConfigStore
 from hydra.core.hydra_config import HydraConfig
@@ -41,55 +43,143 @@ from omegaconf import DictConfig, ListConfig, OmegaConf
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
+from src.config import make_penalty, resolve_model, validate_model_config, validate_optimizer_config
 from src.config.schema import ExperimentConfig
-from src.data import DATA_DIR, load_value_samples, normalize_value_samples, split_value_samples
-from src.eval import distance_binned_error, region_split_errors
-from src.experiment_logging import ExperimentRun
-from src.logging_config import configure_logging
-from src.models import build_model
-from src.PDAP import PDAP
+from src.data import (
+    DATA_DIR,
+    load_arrays,
+    load_value_samples,
+    make_dataloaders,
+    normalize_value_samples,
+)
+from src.eval import region_metrics
+from src.logging import configure_logging
+from src.models import SparseNetwork
+from src.PDAP import PDAP, History
+from src.tracking import git_tags, log_config, log_fit, require_tracking_store
+from src.training import run_training
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
-def _slug(value: object) -> str:
-    slug = re.sub(r"[^A-Za-z0-9]+", "", str(value).lower())
-    return slug or "run"
-
-
-def _to_container(value):
-    if isinstance(value, DictConfig | ListConfig):
-        return OmegaConf.to_container(value, resolve=True)
-    return value
-
-
-def _select(hydra_cfg, path: str):
-    return _to_container(OmegaConf.select(hydra_cfg, path))
+# `conf/config.yaml` pulls in `config_schema` via its defaults list, so the typed
+# base must be in the ConfigStore before @hydra.main composes below.
+ConfigStore.instance().store(name="config_schema", node=ExperimentConfig)
 
 
-def hydra_metadata(hydra_cfg) -> dict:
-    return {
-        "output_dir": str(_select(hydra_cfg, "runtime.output_dir")),
-        "job": {
-            "name": _select(hydra_cfg, "job.name"),
-            "id": _select(hydra_cfg, "job.id"),
-            "num": _select(hydra_cfg, "job.num"),
-        },
-        "runtime": {
-            "choices": _select(hydra_cfg, "runtime.choices") or {},
-        },
-        "overrides": {
-            "task": _select(hydra_cfg, "overrides.task") or [],
-        },
-    }
+@hydra.main(version_base=None, config_path="../conf", config_name="config")
+def main(cfg: DictConfig) -> None:
+    # This setup owns job logging; Hydra supplies each run's output directory.
+    # `env.verbose` controls stderr, and `env.log_file` overrides the JSONL path.
+    hydra_cfg = HydraConfig.get()
+    run_dir = Path(hydra_cfg.runtime.output_dir)
+    log_file = cfg.env.log_file or (run_dir / "run.jsonl")
+    configure_logging(console=cfg.env.verbose, level=cfg.env.log_level, log_file=log_file)
+    run_name = run_name_from_config(cfg, hydra_cfg=hydra_cfg)
+    with structlog.contextvars.bound_contextvars(
+        run_name=run_name, experiment=cfg.name, seed=cfg.env.seed,
+    ):
+        logger.info("run_started")
+        try:
+            run_id = _tracked_experiment(cfg, hydra_cfg, run_name)
+        except Exception:
+            logger.exception("run_failed")
+            raise
+        logger.info("run_completed", run_id=run_id)
 
 
-def run_id_from_config(
+def _tracked_experiment(cfg: DictConfig, hydra_cfg, run_name: str) -> str:
+    """Run the experiment inside one MLflow run and return its MLflow run ID.
+
+    The run records configuration and provenance before training, so a run that
+    raises is kept, marked FAILED, with what it was attempting.
+    """
+    require_tracking_store()
+    mlflow.set_experiment(cfg.name)
+    tags = {**git_tags(REPO_ROOT), **hydra_tags(hydra_cfg)}
+    with mlflow.start_run(run_name=run_name, tags=tags) as run:
+        log_config(OmegaConf.to_container(cfg, resolve=True))
+        mlflow.log_params(hydra_choice_params(hydra_cfg))
+        _run_experiment(cfg)
+    return run.info.run_id
+
+
+def _run_experiment(cfg: DictConfig) -> None:
+    """Train the configured model and record its results in the active MLflow run."""
+    set_seed(cfg.env.seed)
+    validate_optimizer_config(cfg.training)
+    mlflow.set_tags(provenance_tags(cfg))
+
+    # Data preprocessing is external to the network. The trainer holds only
+    # configuration and returns a History.
+    samples = load_value_samples(cfg.data.path)
+    data, normalizer = normalize_value_samples(samples) if cfg.data.normalize else (samples, None)
+    input_dim = data["x"].shape[1]
+    logger.info("data_loaded", path=cfg.data.path, input_dim=input_dim)
+    model_config = resolve_model(cfg.model, input_dim)
+    validate_model_config(model_config)
+
+    history = _train(cfg, model_config, data, normalizer)
+    summary = history.summary()
+    logger.info(
+        "evaluation_summary", best_iteration=summary["best_iteration"],
+        neurons=summary["neurons"], rel_l2_val=summary["rel_l2_val"],
+        rel_grad_val=summary["rel_grad_val"], rel_h1_val=summary["rel_h1_val"],
+    )
+    extra = _evaluate_regions(cfg, model_config, history, samples, normalizer)
+    log_fit(history, normalizer=normalizer, extra=extra)
+
+
+def _train(cfg: DictConfig, model_config: dict, data, normalizer) -> History:
+    train_loader, valid_loader = make_dataloaders(
+        data, cfg.data.train_fraction, seed=cfg.env.seed,
+    )
+    network = SparseNetwork(model_config)
+    penalty = make_penalty(model_config)
+    trainer = PDAP(cfg.training, penalty, network, train_loader, insertion=model_config["insertion"])
+    return run_training(
+        trainer, valid_loader,
+        num_iterations=cfg.training.num_iterations,
+        display_every=cfg.training.display_every,
+        normalizer=normalizer,
+    )
+
+
+def _evaluate_regions(cfg: DictConfig, model_config: dict, history: History, samples, normalizer) -> dict:
+    """Regional errors of the selected checkpoint, when ``eval.kind=region_split``.
+
+    The default ``global`` evaluation adds nothing. ``region_split`` (pendulum,
+    via conf/data/pendulum.yaml) scores the switching tube and the rest on the
+    region-evaluation pool and, with a distance cache, the dataset's
+    distance-binned error profile.
+    """
+    if cfg.eval.kind != "region_split":
+        return {}
+    if not cfg.eval.eval_pool:
+        raise ValueError("eval.kind=region_split requires eval.eval_pool")
+    network = history.restore(SparseNetwork(model_config))
+    pool = load_arrays(cfg.eval.eval_pool, "x", "v", "dv", "distance")
+    distance = (load_arrays(cfg.eval.distance_cache, "distance")["distance"]
+                if cfg.eval.distance_cache else None)
+    region = region_metrics(network, normalizer, pool, tube_radius=cfg.eval.tube_radius,
+                            samples=samples, distance=distance)
+    logger.info(
+        "region_summary",
+        rel_h1_switching=region["rel_h1_switching"] if region["count_switching"] else None,
+        count_switching=int(region["count_switching"]),
+        rel_h1_rest=region["rel_h1_rest"] if region["count_rest"] else None,
+        count_rest=int(region["count_rest"]),
+    )
+    return region
+
+
+def run_name_from_config(
     cfg: DictConfig,
     *,
     hydra_cfg=None,
     today: str | None = None,
     suffix: str | None = None,
 ) -> str:
+    """Human-readable MLflow run name: experiment, data choice, date, random suffix."""
     choices = _select(hydra_cfg, "runtime.choices") if hydra_cfg is not None else {}
     data_choice = (choices or {}).get("data") or Path(str(cfg.data.path)).stem
     run_date = today or datetime.now().strftime("%Y%m%d")
@@ -97,26 +187,35 @@ def run_id_from_config(
     return "_".join([_slug(cfg.name), _slug(data_choice), run_date, run_suffix])
 
 
-def require_mlflow_tracking() -> None:
-    """Fail before training when the tracking server is not reachable.
+def hydra_tags(hydra_cfg) -> dict[str, str]:
+    """Where Hydra placed this job and which command-line overrides produced it."""
+    tags = {"hydra.output_dir": str(_select(hydra_cfg, "runtime.output_dir"))}
+    for key in ("name", "id", "num"):
+        value = _select(hydra_cfg, f"job.{key}")
+        if value is not None:
+            tags[f"hydra.job.{key}"] = str(value)
+    if overrides := _select(hydra_cfg, "overrides.task"):
+        tags["hydra.overrides.task"] = json.dumps(overrides)
+    return tags
 
-    ``publish_record_to_mlflow`` returns False when ``MLFLOW_TRACKING_URI`` is
-    unset, so an entire sweep can complete with nothing published. Checked here,
-    at startup, rather than at ``run.finish()``.
+
+def hydra_choice_params(hydra_cfg) -> dict[str, str]:
+    """The config-group options Hydra composed, e.g. ``hydra.choice.data``."""
+    choices = _select(hydra_cfg, "runtime.choices") or {}
+    return {f"hydra.choice.{key}": str(value) for key, value in choices.items()}
+
+
+def provenance_tags(cfg: DictConfig) -> dict[str, str]:
+    """What a later reader needs to trust the stored results.
+
+    Hashes of the files training and evaluation read; ``src.results`` refuses a
+    dataset whose bytes changed.
     """
-    uri = os.environ.get("MLFLOW_TRACKING_URI")
-    if not uri:
-        raise RuntimeError(
-            "env.require_mlflow=true but MLFLOW_TRACKING_URI is unset; "
-            "start the server (docker compose -f deploy/docker/compose.yaml up -d) "
-            "and export MLFLOW_TRACKING_URI=http://127.0.0.1:5000"
-        )
-    import mlflow
-
-    try:
-        mlflow.MlflowClient(tracking_uri=uri).search_experiments(max_results=1)
-    except Exception as error:  # noqa: BLE001 -- any failure to reach it is fatal here
-        raise RuntimeError(f"MLflow tracking server unreachable at {uri}: {error}") from error
+    tags = {"data_sha256": _sha256(DATA_DIR / cfg.data.path)}
+    if cfg.eval.kind == "region_split":
+        for name in ("eval_pool", "distance_cache"):
+            tags[f"{name}_sha256"] = _sha256(DATA_DIR / cfg.eval[name])
+    return tags
 
 
 def set_seed(seed: int) -> None:
@@ -125,164 +224,24 @@ def set_seed(seed: int) -> None:
     torch.manual_seed(seed)
 
 
-def region_split_metrics(cfg, model, data, normalizer) -> dict:
-    """Switching-tube vs rest errors on the region-eval pool + binned profile.
+def _sha256(path: Path) -> str:
+    with path.open("rb") as source:
+        return hashlib.file_digest(source, "sha256").hexdigest()
 
-    The tube/rest split is scored on the **region-eval pool** — the dense
-    certified two-sided point set with the training rows excluded (strictly
-    out-of-sample) — inside/outside the fixed tube {distance ≤ tube_radius}.
-    The distance-binned profile diagnostic stays on the emitted dataset (the
-    dataset-aligned distance cache).
 
-    The caller supplies the model restored from ``History`` at the same selected
-    iteration used by the run's global validation metrics. Predictions and
-    targets are scored in original V and gradient units, not training units.
-    """
-    if not cfg.eval.eval_pool:
-        raise ValueError("eval.kind=region_split requires eval.eval_pool")
-    with np.load(DATA_DIR / cfg.eval.eval_pool) as pool:
-        x_pool = np.asarray(pool["x"], dtype=np.float64)
-        v_pool = np.asarray(pool["v"], dtype=np.float64).reshape(-1, 1)
-        dv_pool = np.asarray(pool["dv"], dtype=np.float64)
-        distance_pool = np.asarray(pool["distance"], dtype=np.float64)
-    # Normalize model inputs only; evaluation compares original V and gradient
-    # units. In particular, anisotropic input scaling changes H1/gradient ratios.
-    if normalizer is not None:
-        x_pool = x_pool / normalizer.x_scale
-    tube_mask = torch.from_numpy(distance_pool <= cfg.eval.tube_radius)
+def _slug(value: object) -> str:
+    slug = re.sub(r"[^A-Za-z0-9]+", "", str(value).lower())
+    return slug or "run"
 
-    v_pred_chunks, dv_pred_chunks = [], []
-    for lo in range(0, len(x_pool), 100_000):
-        xb = torch.as_tensor(x_pool[lo:lo + 100_000], dtype=torch.float64)
-        vb, dvb = model.predict_tensors(xb)
-        if normalizer is not None:
-            vb, dvb = normalizer.denormalize_tensors(vb, dvb)
-        v_pred_chunks.append(vb)
-        dv_pred_chunks.append(dvb)
-    v_pred = torch.cat(v_pred_chunks)
-    dv_pred = torch.cat(dv_pred_chunks)
-    metrics = region_split_errors(
-        v_pred, dv_pred,
-        torch.as_tensor(v_pool, dtype=torch.float64),
-        torch.as_tensor(dv_pool, dtype=torch.float64),
-        tube_mask,
-    )
 
-    if cfg.eval.distance_cache:
-        with np.load(DATA_DIR / cfg.eval.distance_cache) as cache:
-            distance = np.asarray(cache["distance"], dtype=np.float64)
-        if distance.shape[0] != data["x"].shape[0]:
-            raise ValueError(
-                f"distance cache has {distance.shape[0]} rows, dataset has "
-                f"{data['x'].shape[0]}; the cache is not aligned to this dataset"
-            )
-        x = torch.as_tensor(data["x"], dtype=torch.float64)
-        v = torch.as_tensor(data["v"], dtype=torch.float64)
-        dv = torch.as_tensor(data["dv"], dtype=torch.float64)
-        v_pred_d, dv_pred_d = model.predict_tensors(x)
-        if normalizer is not None:
-            v_pred_d, dv_pred_d = normalizer.denormalize_tensors(v_pred_d, dv_pred_d)
-            v, dv = normalizer.denormalize_tensors(v, dv)
-        metrics.update(
-            distance_binned_error(v_pred_d, dv_pred_d, v, dv, torch.from_numpy(distance))
-        )
-    return metrics
+def _select(hydra_cfg, path: str):
+    return _to_container(OmegaConf.select(hydra_cfg, path))
 
-# `conf/config.yaml` pulls in `config_schema` via its defaults list, so the typed
-# base must be in the ConfigStore before @hydra.main composes below.
-ConfigStore.instance().store(name="config_schema", node=ExperimentConfig)
 
-@hydra.main(version_base=None, config_path="../conf", config_name="config")
-def main(cfg: DictConfig) -> None:
-    # Every run logs to its own file in the Hydra output dir, so parallel sweep
-    # workers (joblib) don't interleave their progress tables on the shared
-    # console. `env.verbose` still controls console streaming; `env.log_file`
-    # overrides the per-run default when set.
-    if cfg.env.require_mlflow:
-        require_mlflow_tracking()
-    hydra_cfg = HydraConfig.get()
-    run_dir = Path(hydra_cfg.runtime.output_dir)
-    log_file = cfg.env.log_file or (run_dir / "run.log")
-    configure_logging(verbose=cfg.env.verbose, level=cfg.env.log_level, log_file=log_file)
-    set_seed(cfg.env.seed)
-    trainer = PDAP(cfg)
-
-    # Create the run record before model construction/training so elapsed_s covers
-    # the actual run, not only JSON serialization.
-    run = ExperimentRun(
-        output_dir=run_dir,
-        name=cfg.name,
-        run_id=run_id_from_config(cfg, hydra_cfg=hydra_cfg),
-        config=OmegaConf.to_container(cfg, resolve=True),
-        hydra=hydra_metadata(hydra_cfg),
-    )
-
-    # Data preprocessing lives in the script: load, normalize, split.  The model
-    # is built by build_model; the trainer holds only config and returns a History.
-    data = load_value_samples(cfg.data.path)
-    normalizer = None
-    if cfg.data.normalize:
-        data, normalizer = normalize_value_samples(data)
-    input_dim = data["x"].shape[1]
-    logger.info("loaded %s  (d=%d)", cfg.data.path, input_dim)
-    train_data, valid_data = split_value_samples(data, cfg.data.train_fraction)
-    model = build_model(cfg, input_dim)
-
-    history = trainer.fit(
-        model, train_data, valid_data,
-        num_iterations=cfg.training.num_iterations,
-        num_insertion=cfg.training.num_insertion,
-        max_insert=cfg.training.max_insert,
-        amp_tol=cfg.training.prune_amp_tol,
-        reporting_normalizer=normalizer,
-        # Always emit the progress tables to the logger so every run's log file is
-        # complete. `env.verbose` only controls whether they also stream to the
-        # console (configure_logging above) — which interleaves under parallel
-        # sweeps, so leave it off and read the per-run run.log instead.
-        verbose=True,
-    )
-
-    metrics = history.summary_metrics()
-    logger.info(
-        "best iter %d | neurons %d | rel-L2 %.3e | rel-semiH1 %.3e | rel-H1 %.3e (val)",
-        metrics["best_iteration"],
-        metrics["best_neurons"],
-        metrics["rel_l2_val"],
-        metrics["rel_grad_val"],
-        metrics["rel_h1_val"],
-    )
-
-    # Pluggable post-fit evaluation (conf/eval). The default `global` adds nothing;
-    # `region_split` (pendulum, via conf/data/pendulum.yaml) reports val errors
-    # split by distance to the switching set, merged into the run record so the
-    # analysis layer reads them like any other metric.
-    if cfg.eval.kind == "region_split":
-        evaluation_model = build_model(cfg, input_dim)
-        history.restore_model(evaluation_model)
-        region = region_split_metrics(cfg, evaluation_model, data, normalizer)
-        metrics.update(region)
-        logger.info(
-            "region split | switching H1 %.3e (n=%d) | rest H1 %.3e (n=%d)",
-            region["switching_h1"], int(region["switching_count"]),
-            region["rest_h1"], int(region["rest_count"]),
-        )
-
-    artifact = run_dir / f"result_{run.run_id}.pkl"
-    with artifact.open("wb") as file:
-        pickle.dump(history, file)
-    run.add_artifact("fit_history", artifact)
-
-    # Persist the run record into Hydra's per-run output dir (Hydra also writes
-    # .hydra/config.yaml). MLflow can be added as a backend behind this interface.
-    run.log_metrics(metrics)
-    record = run.finish(
-        status="completed",
-        summary={
-            "normalization": normalizer.to_dict() if normalizer is not None else None,
-            "metric_coordinates": "physical",
-        },
-    )
-    logger.info("run record: %s", record)
+def _to_container(value):
+    if isinstance(value, DictConfig | ListConfig):
+        return OmegaConf.to_container(value, resolve=True)
+    return value
 
 
 if __name__ == "__main__":
