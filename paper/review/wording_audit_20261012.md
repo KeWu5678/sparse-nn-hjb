@@ -1,635 +1,975 @@
 # Mathematical wording audit of `paper_0805.tex`
 
-Reviewed on 12 October 2026. This is an audit and a set of proposed corrections; no changes have been made to the manuscript, PDF, figures, or implementation.
+Originally reviewed on 12 October 2026; reassessed and reorganized on 16 October 2026. This revision updates the review document only. Confirmed manuscript changes are marked as applied below.
 
-The review covers the abstract, all six sections, theorem statements and proofs, algorithms, captions, and conclusion (source lines 75–3824). Locations refer to the source as reviewed. Figure numbering was checked against the existing `.aux` file. The control panel of Figure 12 was also inspected, and a few implementation details were checked where they determine the meaning of the prose. This is a wording and mathematical-precision review, not an independent certification of all proofs or numerical results.
+The original audit covered the abstract, all six sections, theorem statements and proofs, algorithms, captions, and conclusion (source lines 75–3824). It checked figure numbering against the existing `.aux` file, inspected the Figure 12 control panel, and consulted implementation details where needed. The present revision checks the findings against the current manuscript and relevant source code. It is a review of wording and the identified mathematical issues, not an independent certification of every proof or numerical result.
 
-Source SHA-256: `4d31eaeff939ccfd3c7d018f3e937d90cb522c811880369993538e233f7868d6`.
+**Locations:** Manuscript line ranges and page numbers retain the original audit's locations; nearby lines may have shifted. Links now use the current repository path. References to implementation details have been refreshed where checked in this revision.
 
-**Reading the findings:** **Correction** identifies a definite misstatement, missing condition in the displayed claim, or incorrect reference. **Clarification** identifies wording with a defensible interpretation that should be made explicit. **Verify** requires settling a mathematical convention or intended scope. **Presentation** concerns the professor's requested figure improvement. Suggested text is for review, not an applied edit.
+**Version records:** Original manuscript SHA-256: `4d31eaeff939ccfd3c7d018f3e937d90cb522c811880369993538e233f7868d6`. Manuscript used for the 16 October reassessment: `44cc4a94bc170efa419728297795b591101f8e1dec2ebc94a5ab025e32a6dad0`.
 
-The highest priorities are the TPBVP derivative convention, exact versus numerical optimality, the finite-horizon feedback interpretation, the scalar/measure penalty distinction, the scope of the convergence claim, and Figure 12's saturation disclosure.
+**Reading the findings:** Each main item contains separately numbered points, an immediate **Proposed fix** for each point, and an **Overall fix** combining the remaining actions. **Correction** identifies a concrete misstatement or mismatch. **Proof-gap repair** identifies a missing step needed by an argument. **Clarification** makes an intended object, scope, or convention explicit. **Optional** marks an editorial improvement rather than a demonstrated mathematical defect. **Verify** identifies a convention or hypothesis that must be settled before choosing a correction. Mixed items distinguish these assessments point by point.
+
+**Status flags:** `pending` means a proposed change or check remains open; optional proposals can also be pending. `applied` means the change is confirmed in the manuscript. `withdrawn` means the recommendation is no longer requested. Item flags summarize the recommendation; flags beside numbered points record partial completion. The smaller wording items have a Status column.
+
+The revision retains concrete findings, narrows optional wording objections, and withdraws I1's proposed optimality disclaimer and I8's proposed weakening of the clustering claim. The agreed A2 residual wording and A5 “discontinuous gradient” wording are used below. Section 9 summarizes the remaining work.
 
 ## 1. The professor's comments
 
 ### P1 — Existence does not assert uniqueness
 
-**Correction · [line 131](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:131), page 2.**
+**Status:** `applied`
 
-> “We assume the minimizer exists.”
+**Article correction applied; optional scope clarification · [line 131](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:131), page 2.**
 
-No minimizer has been selected and uniqueness has not been established. The appropriate existential formulation is:
+1. `applied` — **Existence wording.** The original “the minimizer” was less precise before any minimizer had been selected. The current manuscript already says “We assume a minimizer exists.”
 
-> “We assume that a minimizer exists.”
+   **Proposed fix:** Retain the current sentence. No further replacement is needed.
 
-If the assumption is intended to apply to the full domain of the value function, be explicit: “For every initial pair $(t_0,x)$ under consideration, we assume that the optimal-control problem admits at least one minimizer.” Subsequently write “let $u^*$ be an optimal control.” Grammatically, **“a minimizer exists”** is correct; “a minimizer exist” is not.
+2. `withdrawn` — **Scope of the assumption.** Existence for a fixed initial pair and existence for every initial pair are different assumptions. This is only an issue if the intended scope is unclear in context.
 
-This is not a reason to replace every occurrence of “the.” Once a particular minimizer is fixed, “the chosen minimizer” is unambiguous. The minimum **value** is also a single number even when several minimizers attain it.
+   **Proposed fix:** If needed, add the quantifier “for every initial pair under consideration.” Do not add uniqueness or change later uses of “the” after an object has been selected.
+
+**Overall fix:** Keep “We assume a minimizer exists.” An explicit initial-pair quantifier is optional; no blanket article replacement is warranted.
 
 ### P2 — Define the derivative and duality in TPBVP
 
-**Clarification · [lines 133–150](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:133), especially line 142, page 2.**
+**Status:** `pending`
 
-> `-d p*/dt = partial_y (f(y*) + g(y*)u*)^top p* + partial_y h(y*)`
+**Clarification · [lines 133–150](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:133), especially line 142, page 2.**
 
-The notation does not specify the Jacobian convention, the gradient convention, the space containing the costate, or what is held fixed during differentiation. In particular, the transpose could appear to apply before differentiation, and a reader could differentiate the feedback dependence of $u^*$ rather than holding the control fixed.
+1. `pending` — **Jacobian and gradient convention.** In the displayed costate equation, the placement of the transpose leaves the derivative convention unclear.
 
-A precise convention is to identify $(\mathbb R^d)^*$ with $\mathbb R^d$ using the Euclidean inner product, represent gradients and costates by columns, and define
+   **Proposed fix:** Set $F(y,u)=f(y)+g(y)u$, use column gradients, define $(D_yF)_{ij}=\partial F_i/\partial y_j$, and write
 
-$$
-F(y,u)=f(y)+g(y)u,\qquad
-H(y,u,p)=h(y)+\eta|u|^2+p^\top F(y,u).
-$$
+   $$
+   -\dot p^*(t)=D_yF(y^*(t),u^*(t))^\top p^*(t)+\nabla h(y^*(t)).
+   $$
 
-Then state
+2. `pending` — **Costate and duality convention.** A column costate implicitly uses the Euclidean identification of $(\mathbb R^d)^*$ with $\mathbb R^d$.
 
-$$
--\dot p^*(t)
-=D_yF(y^*(t),u^*(t))^\top p^*(t)+\nabla h(y^*(t))
-=\nabla_yH(y^*(t),u^*(t),p^*(t)),
-$$
+   **Proposed fix:** State this identification once. Then $D_yF^\top$ is the Euclidean adjoint. The identity $\langle D_yFz,p\rangle=\langle z,D_yF^\top p\rangle$ may be included if the professor's requested explanation calls for it; a separate duality discussion is unnecessary.
 
-with $u$ and $p$ held fixed in the partial derivative. Explain that $D_yF$ has entries $\partial F_i/\partial y_j$, and its transpose is the Euclidean adjoint:
+3. `withdrawn` — **Variables held fixed.** The state derivative in PMP holds the control fixed, even when the optimal control is later expressed through the state and costate.
 
-$$
-\langle D_yF\,z,p\rangle_{\mathbb R^d}
-=\langle z,D_yF^\top p\rangle_{\mathbb R^d}.
-$$
+   **Proposed fix:** Say that $D_yF$ is taken with $u$ fixed. If the Hamiltonian $H(y,u,p)=h(y)+\eta|u|^2+p^\top F(y,u)$ is introduced, say that $\nabla_yH$ holds both $u$ and $p$ fixed.
 
-Equivalently, retain a covector costate and use $D_yF^*p+D_yh$, defining the dual map. One explicit convention suffices. The state and costate differential equations should be understood almost everywhere for $L^2$ controls, consistently with line 150.
+4. `withdrawn` — **Meaning of the differential equations.** With $L^2$ controls, the state and costate equations are understood almost everywhere.
+
+   **Proposed fix:** Add “the differential equations hold almost everywhere on $(t_0,T)$.”
+
+**Overall fix:** Give one column-vector/Jacobian convention, use the displayed $D_yF^\top p+\nabla h$ equation, and state that the control is held fixed and the equations hold almost everywhere. Introducing $H$ is optional.
 
 ### P3 — Figure 12 must identify the saturation of the applied control
 
-**Clarification · [lines 3646–3650](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:3646) and [3722](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:3722), Figure 12, page 40.**
+**Status:** `pending`
 
-> “Pendulum controls and realized costs from $A=(0.74,0.61)$.”
+**Caption clarification · [lines 3646–3650](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:3646) and [3722](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:3722), Figure 12, page 40.**
 
-The body mentions $|u|\le30$, but the caption does not. The $\mathrm{ReLU}^3$ trace has long plateaus at $\pm30$; without the caption qualification these can look like a property of the raw learned feedback. It is the **applied control** that is saturated, not the cubic ReLU activation. This also differs from the value-surface display clipping already disclosed in Figure 11.
+1. `pending` — **The applied control is saturated.** The body gives $|u|\le30$, but Figure 12's caption does not explain the plateaus at $\pm30$.
 
-Suggested caption addition:
+   **Proposed fix:** Add: “The learned controls are saturated at $\pm30$ before being applied to the dynamics; the long $\mathrm{ReLU}^3$ plateaus reflect this saturation.”
 
-> “The learned controls are saturated at $\pm30$ before being applied to the dynamics. In particular, the long $\mathrm{ReLU}^3$ plateaus reflect saturation of the applied control.”
+2. `pending` — **The implemented law and its costs.** The displayed gradient formula gives the raw feedback; the rollouts and their running costs use its saturated version.
 
-Define the implemented law near the experiment description:
+   **Proposed fix:** Identify the implemented law once near the experiment description, for example
 
-$$
-u_{\rm applied}(x)
-=\operatorname{clip}_{[-30,30]}
-\left(-\frac{1}{2\eta m\ell^2}\,
-\partial_{\dot\theta}\widehat V(x)\right).
-$$
+   $$
+   u_{\rm applied}(x)=\operatorname{clip}_{[-30,30]}
+   \left(-\frac{1}{2\eta m\ell^2}\partial_{\dot\theta}\widehat V(x)\right),
+   $$
 
-Make clear that the associated realized costs use this saturated law. Do not describe saturation as mere plot clipping. The same clarification applies to Figure 13; the analogous Van der Pol bound is $50$ (line 3415). The experiment's unconstrained optimal-control problem and the saturated numerical controller should remain distinguishable.
+   and say that the reported costs use this law. A sentence stating the same operation is sufficient if an extra display is undesirable.
+
+3. `withdrawn` — **The same convention in related figures.** Figure 13 uses the same bound; the Van der Pol rollout uses $50$.
+
+   **Proposed fix:** Include the relevant bound in those control captions as well. Keep this distinct from clipping a value surface for display.
+
+**Overall fix:** State the saturation operation once in the body and its bound in the control captions. For Figure 12, combine that caption addition with the axis-scale clarification in N9.
 
 ### P4 — Figure 12 hides the initial transient
 
-**Presentation · [lines 3709–3723](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:3709), Figure 12.**
+**Status:** `pending`
 
-The full $[0,40]$ time axis compresses the initial peaks, sign changes, and convergence of several controls. Add an inset or a separate initial-time panel, provisionally $0\le t\le2$, choosing the final interval from the existing traces. Retain the full-time panel because it reveals the sustained Gaussian oscillations and $\mathrm{ReLU}^3$ saturation. State the zoom interval in the caption. No figure has been changed in this audit.
+**Presentation · [lines 3709–3723](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:3709), Figure 12.**
+
+1. `pending` — **The initial transient is compressed.** The full $[0,40]$ axis makes early peaks and sign changes difficult to compare.
+
+   **Proposed fix:** Add an inset or a separate initial-time panel. Use $[0,2]$ provisionally and choose the final interval from the existing traces.
+
+2. `pending` — **The long-time behavior remains informative.** The full interval shows sustained Gaussian oscillations and $\mathrm{ReLU}^3$ saturation.
+
+   **Proposed fix:** Retain the full-time panel and identify the zoom interval in the caption.
+
+**Overall fix:** Show both the initial transient and the full rollout, with the zoom interval stated explicitly.
 
 ## 2. Abstract and introductory claims
 
 ### A1 — The abstract calls the measure functional a concave scalar penalty
 
-**Correction · [line 92](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:92).**
+**Status:** `applied`
 
-> “where the concave scalar penalty $\Phi_\phi$ has finite positive right slope at zero”
+**Correction already applied · [line 92](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:92).**
 
-The scalar function is $\phi:[0,\infty)\to[0,\infty)$; $\Phi_\phi$ acts on signed measures. The finite right derivative belongs to $\phi$. Moreover, $\Phi_\phi$ is generally not concave on the signed-measure space: opposite nonzero measures have positive penalty while their midpoint has zero penalty.
+1. `applied` — **The scalar penalty and the measure functional are different objects.** The scalar function is $\phi$; $\Phi_\phi$ acts on signed measures. In general, $\Phi_\phi$ is not concave on that signed-measure space: opposite nonzero measures have positive penalty while their midpoint has zero penalty.
 
-Suggested wording: “where $\Phi_\phi$ is the measure penalty induced by a concave scalar function $\phi$ satisfying $0<\phi'(0+)<\infty$.”
+   **Proposed fix:** Attribute scalar concavity to $\phi$. The current abstract already does so.
+
+2. `applied` — **The finite right derivative belongs to $\phi$.** A slope at zero in this statement is a property of the scalar penalty.
+
+   **Proposed fix:** Retain the current attribution of the finite positive right slope to $\phi$.
+
+**Overall fix:** No further change. The current sentence, “where $\Phi_\phi$ is induced by a concave scalar penalty $\phi$ with finite positive right slope at zero,” addresses both points.
 
 ### A2 — Specify what converges at the claimed rate, and for which algorithm
 
-**Correction · [lines 98–99](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:98), [290–291](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:290), and [3791–3792](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:3791).**
+**Status:** `applied`
 
-> “which achieves a best-iterate rate of order $n^{-1/2}$”
+**Terminology alignment applied · [lines 98–100](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:98), [289–291](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:289), and [3793–3794](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:3793).**
 
-Corollary 5.2 bounds the smallest **insertion-condition violation** $\min_{0\le k<n}\Delta(\mu_k)$. It assumes exact global candidate maximization, one-atom insertion, and a correction that does not increase the objective. It does not bound the objective gap, the fitted-function error, or the distance to a minimizer, and it does not directly cover the implemented multistart search. The detailed corollary correctly says this at lines 2787–2788; the summaries should preserve it.
+1. `applied` — **The rate concerns a specified residual.** Corollary 5.2 bounds $\min_{0\le k<n}\Delta(\mu_k)$, where $\Delta(\mu)=(\|P_{p,\mu}\|_\infty-\alpha L_\phi)_+$. The manuscript now calls this the first-order optimality residual for atom insertion and defines that name alongside $\Delta$. Its vanishing enforces the necessary insertion inequality, not the full stationarity system. The [terminology research](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/review/insertion_residual_terminology_20261016.md) records the primary-source comparison supporting this scoped description.
 
-Suggested wording: “For an idealized single-atom insertion scheme with exact global candidate search and a correction that does not increase the post-insertion objective, we prove an $O(n^{-1/2})$ best-iterate bound on the insertion-condition violation.” Also correct **PDPA** to **PDAP** at line 98.
+   **Proposed fix:** Retain the agreed wording: “an $O(n^{-1/2})$ best-iterate bound on the first-order optimality residual for atom insertion.” It is now applied in the abstract, contribution paragraph, and conclusion.
+
+2. `applied` — **The algorithmic hypotheses determine the scope.** The corollary assumes exact global candidate maximization, single-atom insertion, and correction that does not increase the post-insertion objective.
+
+   **Proposed fix:** Retain “For the single-atom PDAP scheme with exact search and monotone correction.” These qualifications are already present in the current summaries. Keep their precise definitions in the corollary.
+
+3. `applied` — **The acronym.** The original abstract used PDPA.
+
+   **Proposed fix:** Retain PDAP; this is already corrected.
+
+**Overall fix:** Applied consistently in the abstract, contributions, and conclusion: “For the single-atom PDAP scheme with exact search and monotone correction, we prove an $O(n^{-1/2})$ best-iterate bound on the first-order optimality residual for atom insertion.” The residual is named at its definition; no further change under A2 is needed.
 
 ### A3 — Clarify the normalization and local-minimality scopes in the abstract
 
-**Clarification · [lines 93–104](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:93).**
+**Status:** `applied`
 
-> “with $p>0$”; “makes the dictionary vanish at infinity”; “every local minimizer”
+**Narrowed; optional summary clarification · [lines 93–104](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:93).**
 
-Defining the weight only requires $p>0$, but dictionary decay requires a growth gap. The existence theorem uses $p>s_0$ and decay in $L^2(D)$; the gradient-level support results use $p>s_1$ and decay in $H^1(D)$. “Local” also depends on a topology: the weighted variation norm for the nonhomogeneous problem, and total variation on the sphere for the homogeneous problem.
+1. `applied` — **The moment condition depends on the result.** Defining $w_p$ requires $p>0$; decay uses $p>s_0$ for the value dictionary and $p>s_1$ for the full $H^1$ dictionary. The current abstract already says “choosing $p$ sufficiently large,” so it no longer suggests that every $p>0$ gives decay.
 
-Suggested wording: “For moment order exceeding the relevant dictionary growth exponent, normalization makes the dictionary vanish at infinity in the required function-space norm.” Identify the local-minimality topologies once in the summary, or refer explicitly to the definitions. Keep the weaker existence assumptions distinct from the stronger support assumptions.
+   **Proposed fix:** Retain the current abstract wording. If greater precision is wanted, use “For $p$ exceeding the relevant dictionary growth exponent.” Keep the distinct $L^2$ and $H^1$ assumptions in the theorem statements.
+
+2. `withdrawn` — **Local minimality uses a topology.** The body defines weighted-variation local minimality for the nonhomogeneous problem and total-variation local minimality on the sphere.
+
+   **Proposed fix:** Retain those definitions. Naming both topologies again in the abstract is optional, not a correction required by an identified false claim.
+
+**Overall fix:** No mandatory abstract expansion. Preserve the existing growth qualification and the precise theorem-level assumptions and topology definitions.
 
 ### A4 — State the range of the homogeneous sparsity result
 
-**Clarification · [lines 101–104](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:101), [263–267](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:263), and [293–304](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:293).**
+**Status:** `pending`
 
-The phrase “positively $k$-homogeneous” omits the range of $k$. At $k=1$, the quadratic rescaling gives $q=1$ and a finite slope, while the singular-penalty finite-support argument in Section 4 uses $k\ge2$ and $0<q<1$. The radial rescaling lemma itself has a broader range.
+**Scope clarification; abstract range already applied · [lines 101–104](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:101), [263–267](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:263), and [293–304](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:293).**
 
-Suggested wording for the sparsity claims: “For positively $k$-homogeneous activations with $k\ge2$ and the stated dictionary regularity, …”. Specify that the equivalence is with the **radially optimized quadratic-parameter-regularized problem**, rather than suggesting equivalence with the nonhomogeneous objective.
+1. `pending` — **The sparsity results use $k\ge2$.** At $k=1$, quadratic rescaling yields $q=1$; the singular-slope argument uses $0<q<1$. The current abstract includes $k\ge2$, while the contribution paragraph should make the scope of its sparsity claims equally clear.
+
+   **Proposed fix:** State “For $k\ge2$” before the finite-support and width conclusions in the contribution paragraph. Keep the broader range of the radial rescaling lemma itself.
+
+2. `withdrawn` — **The equivalence concerns a particular regularized problem.** The sphere penalty comes from optimizing quadratic inner- and outer-parameter regularization over radial rescalings. The contribution paragraph already identifies this source; the abstract's “equivalent measure problem” can refer to it more clearly.
+
+   **Proposed fix:** If revising that abstract sentence, write: “For positively $k$-homogeneous activations, radial optimization of quadratic parameter regularization yields a measure problem on the unit sphere with penalty proportional to $|c|^{2/(k+1)}$.”
+
+**Overall fix:** Retain $k\ge2$ for the sparsity claims and identify quadratic parameter regularization as the source of the sphere formulation. Do not narrow the rescaling lemma unnecessarily.
 
 ### A5 — Attribute the gradient discontinuity to the intended benchmark
 
-**Clarification · [lines 107–109](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:107).**
+**Status:** `applied`
 
-> “the Van der Pol oscillator and the pendulum swing-up problems, whose value function has a gradient discontinuity”
+**Correction already applied · [lines 107–109](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:107).**
 
-The singular relative clause can appear to apply to both problems. The switching-set discussion concerns the pendulum benchmark. Suggested wording: “We study the algorithms on the Van der Pol oscillator and pendulum swing-up benchmarks; the latter has a value function whose gradient jumps across a switching set.”
+1. `applied` — **The gradient discontinuity belongs to the pendulum benchmark.** The original relative clause could appear to describe both benchmarks.
 
-### I1 — Distinguish exact optimal data from numerical PMP labels
+   **Proposed fix:** Retain the wording already agreed and applied: “We study the resulting algorithms on the Van der Pol oscillator and pendulum swing-up benchmarks; the latter has a value function with a discontinuous gradient.”
 
-**Correction/clarification · [lines 81–85](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:81), [133–135](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:133), [180–181](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:180), [214–225](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:214), and [3100–3104](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:3100).**
+**Overall fix:** No further change; retain “discontinuous gradient” without introducing a switching set in this sentence.
 
-> “We recover optimal feedback laws”; “Value and gradient are generated … by the Pontryagin maximum principle”; “The optimal feedback law is then synthesized from the fitted value function”
+### I1 — Numerical recovery wording and data qualifications — withdrawn
 
-PMP gives necessary conditions. A converged TPBVP solution is not automatically a global optimum; neither are its accumulated cost and initial costate automatically the exact value and value gradient. Similarly, fitting a value function and validating the resulting controller does not by itself prove optimality. The experiment's later “numerical open-loop reference” terminology is appropriately cautious.
+**Status:** `withdrawn`
 
-Suggested wording: “We approximate optimal feedback laws using numerical value and costate labels from open-loop solves.” In the mathematical data description, distinguish the ideal case—costate of an optimal trajectory at a differentiability point—from the numerical case. Introduce $v^m$ as the numerical cost label approximating $V(x^m)$; this also supplies the missing definition for $v^m$ in the captions at lines 3112 and 3529. Use “candidate feedback law” for a fitted network. Optimality verification requires additional hypotheses and an argument; see [Liberzon, Section 5.1.4](https://liberzon.csl.illinois.edu/teaching/cvoc/node97.html).
+**The earlier recommendation overreached · [lines 81–85](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:81), [133–135](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:133), [180–181](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:180), [214–225](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:214), and [3100–3104](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:3100).**
+
+1. `withdrawn` — **“Recover” does not by itself assert certified global optimality.** In this numerical-method context, the word describes the reconstruction being pursued. The review did not identify an argument that deduces optimality merely from solving the TPBVP.
+
+   **Proposed fix:** Retain “recover.” Withdraw the proposed replacement by “approximate.” That replacement would not address PMP sufficiency in any event.
+
+2. `withdrawn` — **The status of the data is already distinguished.** The current text describes numerical cost and initial-costate labels and conditions the gradient identity on an exact optimal trajectory at a differentiability point. The experiments use “numerical open-loop reference.”
+
+   **Proposed fix:** Retain these qualifications. Add no general global-optimality disclaimer.
+
+3. `applied` — **The previously missing value-label definition is present.** The current data paragraph defines $v^m$ as accumulated cost and $g^m$ as the initial costate.
+
+   **Proposed fix:** Retain these definitions; no additional label definition is needed under I1.
+
+**Overall fix:** No manuscript change under I1. The recommendation is withdrawn; retain the numerical recovery terminology and existing conditional gradient identity.
 
 ### I2 — Make the control problem's well-posedness assumptions visible before using them
 
-**Clarification · [lines 119–131](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:119) and [154–174](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:154).**
+**Status:** `pending`
 
-The stated $C^1$ regularity is local regularity; it does not ensure that every $L^2$ control generates a state on the entire interval, that the value is finite everywhere, or that all hypotheses for the dynamic-programming/viscosity statement hold. The stronger state-solvability assumption appears only at lines 2581–2584. For example, a smooth vector field can still have trajectories that blow up in finite time.
+**Narrowed; assumption-scope clarification · [lines 119–131](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:119) and [154–174](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:154).**
 
-Suggested wording: identify admissible controls as those for which the state exists on the full horizon, or state the intended global solvability assumption near (P). Qualify the HJB statement by the hypotheses under which it is used, rather than treating $C^1$ alone as sufficient. This is an assumption-scope issue, not a request to prove a new control theorem. The assumptions must suit the present unbounded-control setting.
+1. `withdrawn` — **Existence of a minimizer is already assumed.** The review must account for this assumption rather than discuss $C^1$ regularity as if it were the only hypothesis.
+
+   **Proposed fix:** Keep “We assume a minimizer exists.” No replacement of that sentence is proposed.
+
+2. `withdrawn` — **Full-horizon state solvability is a separate issue.** $C^1$ coefficients provide local regularity, but do not alone rule out finite-time blow-up. The algorithms section separately assumes full-horizon solvability and differentiability of the control-to-state map.
+
+   **Proposed fix:** If that assumption is intended throughout the paper, make its scope explicit near (P) or cross-reference the existing assumption. Alternatively, define admissible controls by full-horizon state existence. Choose the formulation matching the intended control class; neither option follows merely from changing the minimizer sentence.
+
+3. `pending` — **The DPP/HJB assertion needs its applicable framework.** Full-horizon solvability and existence of a minimizer do not, by themselves, state every hypothesis of a dynamic-programming/viscosity theorem.
+
+   **Proposed fix:** Identify an applicable result and its assumptions for the unbounded-control setting, or state the intended DPP/HJB characterization as an assumption. Avoid the unsupported placeholder “under standard hypotheses.” This is a scope check, not a request to prove a new control theorem.
+
+**Overall fix:** Preserve the minimizer-existence sentence. Clarify the scope of the already stated state-solvability assumption and identify the framework supporting the HJB characterization; do not insert an unspecified package of “standard” assumptions.
 
 ### I3 — Specify the viscosity sign convention
 
-**Verify · [lines 158–170](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:158).**
+**Status:** `applied`
 
-The displayed HJB is $V_t+\inf_u\{\nabla_xV\cdot F+h+\eta|u|^2\}=0$. Classically it is equivalent to its negative. Under the conventional viscosity definition in which an upper test function must give $F\le0$, multiplication of an equation by $-1$ is not innocuous. For the backward, terminal-value minimization problem the usual operator is
+**Sign-convention correction applied · [lines 158–170](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:158).**
 
-$$
--V_t-\inf_u\{\nabla_xV\cdot F+h+\eta|u|^2\}=0.
-$$
+1. `applied` — **The viscosity interpretation depends on the sign convention.** The original displayed equation was $V_t+\inf_u\{\nabla_xV\cdot F+h+\eta|u|^2\}=0$. Under the convention that an upper test function gives an operator value $\le0$, the backward terminal-value operator is its negative. Classical equivalence alone does not settle the viscosity interpretation. [Liberzon, Section 5.3.3](https://liberzon.csl.illinois.edu/teaching/cvoc/node104.html) explicitly discusses this sign choice.
 
-Specify the convention used for the displayed equation, or write the equation with the standard backward operator before asserting that it is satisfied in the viscosity sense. This matters precisely where the value function is nonsmooth. [Liberzon, Section 5.3.3](https://liberzon.csl.illinois.edu/teaching/cvoc/node104.html) explicitly explains this sign issue.
+   **Proposed fix:** Either specify the convention used for the displayed equation, or adopt that convention's backward operator:
+
+   $$
+   -V_t-\inf_u\{\nabla_xV\cdot F+h+\eta|u|^2\}=0.
+   $$
+
+**Overall fix:** Applied: the displayed HJB now uses the backward operator with $-V_t$. The feedback formula is unchanged apart from explicitly identifying the spatial gradient.
 
 ### I4 — Say “pointwise” at differentiability points, and identify the spatial gradient
 
-**Clarification · [lines 164–172](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:164).**
+**Status:** `applied`
 
-> “At points where $V$ is differentiable, the equation holds classically”
+**Optional clarity improvement · [lines 164–172](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:164).**
 
-The intended pointwise statement is different from claiming that $V$ is a classical solution on an open region. Because $V$ depends on both $t$ and $x$, the unqualified $\nabla V$ also needs a convention.
+1. `withdrawn` — **“Holds classically” at a point has a defensible reading.** In context, it can mean that the derivatives exist and satisfy the equality at that point. It need not assert a classical solution on an open neighborhood.
 
-Suggested wording: “At points of differentiability in $(t,x)$, the HJB equality holds pointwise. Here and below, $\nabla_xV$ denotes the spatial gradient.” Use $\nabla_xV$ in the feedback formula. A pointwise Hamiltonian minimizer should not be conflated with a globally verified feedback law across nonsmooth points.
+   **Proposed fix:** Optionally use the more direct wording “At points of differentiability in $(t,x)$, the HJB equality holds pointwise.” Do not classify the existing sentence as a mathematical error on this wording alone.
+
+2. `applied` — **The feedback uses the spatial gradient.** Since $V$ depends on both time and state, an explicit convention for $\nabla V$ would help.
+
+   **Proposed fix:** State once that $\nabla V$ denotes $\nabla_xV$, or use $\nabla_xV$ consistently in the HJB and feedback formulas.
+
+**Overall fix:** If editing this passage, use “holds pointwise” and identify the spatial gradient once. No additional global-optimality qualification is needed here.
 
 ### I5 — Learning the initial-time slice does not recover the full finite-horizon feedback
 
-**Clarification · [line 214](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:214), [lines 3412–3420](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:3412), and [3801–3802](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:3801).**
+**Status:** `pending`
 
-> “We write $V(x):=V(0,x)$.”
+**Clarification of the implemented feedback · [line 214](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:214), [lines 3412–3420](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:3412), and [3801–3802](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:3801).**
 
-The finite-horizon feedback generally depends on $\nabla_xV(t,x)$ and on the remaining horizon. A network fitted only to $V(0,x)$ supplies the initial-time feedback. Applying its gradient for all simulation times gives a stationary law based on a fixed horizon, rather than the full time-dependent optimal feedback for a fixed terminal time.
+1. `withdrawn` — **The learned finite-horizon target is an initial-time slice.** $V(x):=V(0,x)$ records a fixed remaining horizon. The full finite-horizon feedback generally depends on time as well as state.
 
-This is the implemented Van der Pol interpretation: [the feedback function](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/scripts/paper/vdp_summary_figures.py:102) takes only the state and evaluates the fitted network's gradient.
+   **Proposed fix:** State that the Van der Pol network is fitted to the initial-time value slice.
 
-Suggested addition: “For the finite-horizon benchmark, we learn the initial-time value slice and apply its gradient as a stationary candidate feedback throughout the rollout. This does not assert recovery of the complete time-dependent optimal feedback.” Treat the pendulum's stationary infinite-horizon value separately.
+2. `pending` — **The rollout uses that slice at every time.** The [implemented feedback](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/scripts/paper/vdp_summary_figures.py:104) evaluates the fitted gradient as a function of the current state, producing a stationary law.
+
+   **Proposed fix:** Add: “For the finite-horizon benchmark, we learn the initial-time value slice and apply its gradient as a stationary feedback throughout the rollout.”
+
+**Overall fix:** Add the single implementation sentence above. It explains the actual controller without adding a general optimality disclaimer. Keep the stationary infinite-horizon pendulum interpretation separate, as in N4.
 
 ### I6 — A feedback law does not require solving HJB
 
-**Correction · [line 176](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:176).**
+**Status:** `applied`
 
-> “one usually seeks a feedback law, which requires solving the HJB equation”
+**Correction of an unnecessarily restrictive claim · [line 176](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:176).**
 
-Feedback laws can be designed by many methods, including ones without an optimality claim. Even an optimal-control computation need not explicitly solve HJB over the state domain.
+1. `applied` — **Feedback synthesis does not require solving HJB.** “One usually seeks a feedback law, which requires solving the HJB equation” presents one route as a universal requirement.
 
-Suggested wording: “One route to an optimal feedback law is to compute the value function through the HJB equation.”
+   **Proposed fix:** Retain the focus on feedback computation for nonlinear control. The applied wording is: “For nonlinear control problems, one usually seeks an optimal feedback law, which can be constructed from the value function obtained by solving the HJB equation.”
+
+**Overall fix:** Applied: preserve the motivation of computing feedback laws for nonlinear control and describe HJB as a way to obtain the value function used in their construction.
 
 ### I7 — Avoid universal robustness and necessity claims
 
-**Clarification/correction · [line 153](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:153), [173–174](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:173), and [247](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:247).**
+**Status:** `applied`
 
-> “The open-loop control is not robust”; “corrects deviations”; “sparsity is necessary … such as knowledge distillation”
+**Mixed: two clarifications and one correction · [line 153](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:153), [173–174](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:173), and [247](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:247).**
 
-Open-loop control does not react to measured deviations, but actual robustness depends on the dynamics and disturbance model. Feedback reacts to the state, but “corrects” can suggest an unproved stability guarantee. Sparsity is useful for compact representations and can model point objects; knowledge distillation does not in general require a sparse network.
+1. `applied` — **Open-loop response and robustness are different properties.** “The open-loop control is not robust” is broader than the subsequent explanation that it does not respond to measured deviations.
 
-Suggested wording: “An open-loop control does not adjust in response to state disturbances”; “state feedback adapts the input to the current state”; and “sparse representations are useful for computational efficiency and for modeling point-like objects.” If retaining distillation, describe sparsity as one possible compression mechanism.
+   **Proposed fix:** Use “An open-loop control does not adjust in response to state disturbances.” This states the intended mechanism directly.
 
-### I8 — The cited paper does not establish a universal failure of convex penalties
+2. `applied` — **Feedback response does not specify its effectiveness.** “Corrects deviations” is understandable informally, but can be made more precise without invoking a stability claim.
 
-**Correction · [lines 253–255](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:253).**
+   **Proposed fix:** Use “State feedback adapts the input to the current state.”
 
-> “convex penalties cannot effectively eliminate redundant neurons”
+3. `applied` — **Sparsity is not a prerequisite for knowledge distillation.** The claim that it is necessary for that application is too strong.
 
-The claim should be that convex regularization **need not** remove all redundancy, rather than that it cannot do so. The cited paper describes possible overparameterization and examples with clustered neurons.
+   **Proposed fix:** Describe sparsity as useful for computational efficiency and compact representations. If distillation is retained, describe sparse models as one possible choice rather than a requirement.
 
-Suggested wording: “Pieper and Petrosyan show that convex $\ell^1$ regularization need not eliminate redundant or clustered neurons, and investigate nonconvex penalties to promote sparsity.” [Primary source, introduction and Section 5.1](https://arxiv.org/pdf/2004.11515).
+**Overall fix:** Applied: the manuscript now states that open-loop control does not adjust to state disturbances, state feedback adapts the input to the current state, and sparsity is useful for the listed applications.
+
+### I8 — Proposed weakening of the clustering claim — withdrawn
+
+**Status:** `withdrawn`
+
+**The earlier recommendation overread the claim · [lines 253–255](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:253).**
+
+1. `withdrawn` — **The clustering claim is supported by the cited paper.** Section 5.1, Figure 3, and Table 1(a) show dense clusters in the $\ell^1$ solution: 342 neurons versus 15 for the nonconvex solution with $\gamma=1$, with approximation errors 0.0045 and 0.0038. The discussion on pages 3–4 explains that splitting a coefficient into coefficients of the same sign preserves the $\ell^1$ penalty. The ability to remove individual connections does not rebut this failure to eliminate clustered redundancy. [Primary source, Section 5.1 and the preceding explanation](https://arxiv.org/pdf/2004.11515).
+
+   **Proposed fix:** Withdraw the required replacement of “cannot effectively eliminate” by “need not eliminate.” Retain the clustering argument. Specifying “$\ell^1$ regularization” instead of “convex penalties” is optional precision, not a required correction.
+
+**Overall fix:** No manuscript change is required under I8. The recommendation to weaken the clustering claim is withdrawn.
 
 ### I9 — ReLU can be used for first-gradient fitting
 
-**Correction · [lines 256–259](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:256).**
+**Status:** `applied`
 
-> “this formulation does not extend to the gradient fitting … the second-order weak derivative of ReLU does not exist as a function … we cannot use it to approximate high-order derivatives”
+**Correction · [lines 256–259](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:256).**
 
-The argument confuses first-gradient fitting with second-derivative regularity. ReLU has a bounded weak first derivative, and finite ReLU networks belong to $H^1(D)$ on bounded domains. The paper itself uses a gradient-trained ReLU baseline. Its second distributional derivative is a Dirac measure in one dimension, so a $C^1$ activation assumption or higher-Sobolev regularity is a separate issue.
+1. `applied` — **First-gradient fitting does not require a function-valued second derivative.** ReLU has a bounded weak first derivative, and finite ReLU networks belong to $H^1(D)$ on bounded domains. The manuscript also uses a gradient-trained ReLU baseline.
 
-Suggested wording: “ReLU admits weak first derivatives and can be used in $H^1$ fitting. However, it is not $C^1$, and its second distributional derivative is not represented by a locally integrable function. The present smooth-dictionary analysis therefore requires additional regularity.” Name the particular result or optimization step needing that regularity instead of declaring gradient fitting impossible.
+   **Proposed fix:** Replace “does not extend to the gradient fitting” with “poses difficulties for gradient fitting”.
 
-### I10 — The novelty comparison overstates the cited paper's restriction to ReLU
+2. `withdrawn` — **The stronger regularity restriction needs its actual purpose.** ReLU is not $C^1$, and its second distributional derivative in one dimension is a Dirac measure. Those facts concern stronger regularity requirements, not the existence of its weak first derivative.
 
-**Correction · [line 279](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:279), also [256](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:256).**
+   **Proposed fix:** The additional explanation is withdrawn. Retain the existing sentence about second-order weak derivatives and higher-order approximation.
 
-> “the original paper which only considers the ReLU case”
+**Overall fix:** Applied only the phrase replacement in I9.1. The rest of the manuscript passage is unchanged; no explanatory sentence is added.
 
-The cited paper focuses on ReLU but explicitly says that much of its theory extends to other activations and kernel methods. The sharper comparison is the move to the unbounded inner-parameter domain and the gradient-augmented fidelity, with the present normalization and growth assumptions.
+### I10 — Clarify the cited paper's focus on ReLU
 
-Suggested wording: “Starting from the ReLU setting emphasized by Pieper and Petrosyan, we treat gradient-augmented fitting on the unbounded inner-parameter domain using a weighted normalization.” [Primary source, page 2](https://arxiv.org/pdf/2004.11515).
+**Status:** `applied`
+
+**Minor wording clarification · [line 279](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:279), also [256](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:256).**
+
+1. `applied` — **“Only” overstates the paper's focus on ReLU.** Pieper and Petrosyan focus on ReLU, while their general theory allows other activations on a compact parameter domain. This does not cover the unrestricted nonhomogeneous setting treated here. [Primary source, page 2](https://arxiv.org/pdf/2004.11515); [general framework, Section 2.1](https://arxiv.org/pdf/2004.11515#page=7).
+
+   **Proposed fix:** Replace “only considers the ReLU case” with “focuses on the ReLU case”.
+
+**Overall fix:** Applied the phrase replacement. Retain the existing comparison concerning nonhomogeneous activations on the unbounded parameter domain; no broader rewrite is needed.
 
 ### I11 — Name the representation and the particular assumptions that fail
 
-**Clarification · [lines 266–267](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:266), [280–285](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:280), and [1990–1992](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:1990).**
+**Status:** `applied`
 
-> “the usual functional tools … are not applicable”; “a weak representation of the formulation”; “does not extend the result in Section 3”
+**Clarification · [lines 266–267](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:266), [280–285](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:280), and [1990–1992](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:1990).**
 
-These expressions leave the affected mathematical object or result unspecified. Infinite slope excludes the finite-slope hypotheses used in Section 3; it does not rule out standard existence methods generally. The representation theorem concerns the measure penalty as a supremum over test-function expressions, not an unspecified weak solution of the learning problem.
+1. `withdrawn` — **Infinite slope excludes specific hypotheses.** “The usual functional tools … are not applicable” is broader than the finite-slope obstruction actually used.
 
-Suggested wording: “The infinite right derivative at zero falls outside the finite-slope assumptions of Section 3 and requires a separate argument.” For the contribution: “We represent the measure penalty as a supremum of weak-* continuous test-function expressions and deduce weak-* lower semicontinuity.” Also call $\rho$ an activation on $\mathbb R$ and $\Omega$ the inner-parameter domain; “activations on $\Omega$” blurs these two domains.
+   **Proposed fix:** Use “The infinite right derivative at zero falls outside the finite-slope assumptions of Section 3 and requires a separate argument.” Use the same explanation at the start of Section 4.
+
+2. `applied` — **The representation has a specific object and consequence.** “A weak representation of the formulation” leaves both unspecified.
+
+   **Proposed fix:** Replace “the formulation” with “the penalty $\Phi_\phi$”.
+
+3. `applied` — **The activation domain and parameter domain are different.** The activation $\rho$ acts on $\mathbb R$; the dictionary is indexed by $\Omega=\mathbb R^{d+1}$.
+
+   **Proposed fix:** Replace “continuous activations on $\Omega$” with “continuous activations $\rho:\mathbb R\to\mathbb R$ satisfying the stated growth bound, with inner parameters in $\Omega$.”
+
+**Overall fix:** Applied the penalty and domain clarifications in I11.2 and I11.3; I11.1 is withdrawn. The continuous-activation assumptions of the existence theorem are preserved.
 
 ## 3. Measure theory and the nonhomogeneous formulation
 
 ### M1 — Atomic does not mean finitely atomic
 
-**Correction · [lines 420–421](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:420).**
+**Status:** `withdrawn`
 
-> “agrees exactly with the finite sum on atomic measures”
+**Correction of terminology · [lines 420–421](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:420).**
 
-An atomic measure may have countably infinitely many atoms. Suggested wording: “agrees exactly with the finite-network sum on finitely supported measures.”
+1. `withdrawn` — **Atomic measures need not have finite support.** “Agrees exactly with the finite sum on atomic measures” includes countably infinite atomic measures.
+
+   **Proposed fix:** Use “agrees exactly with the finite-network sum on finitely supported measures.”
+
+**Overall fix:** Replace “atomic” by “finitely supported” where the claim concerns a finite network sum.
 
 ### M2 — The test-function construction requires disjoint closures
 
-**Correction · [lines 741–758](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:741).**
+**Status:** `applied`
 
-> “pairwise disjoint relatively compact open neighborhoods”; later, “Their supports are pairwise disjoint.”
+**Proof-gap repair in the neighborhood choice · [lines 741–758](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:741).**
 
-Disjoint open sets can have intersecting closures. The displayed cutoff is positive throughout its open neighborhood, so its support contains that neighborhood's closure. The required stronger choice is available for these finitely many disjoint compact sets.
+1. `applied` — **Disjoint open sets can have intersecting closures.** The displayed cutoff is positive throughout $U_i$, so its support is $\overline{U_i}$. Pairwise disjoint open neighborhoods alone do not justify the later assertion of disjoint supports or ensure that those supports lie inside $U$.
 
-Suggested wording: “Choose open neighborhoods with pairwise disjoint compact closures contained in $U$. By outer regularity, shrink them while retaining the $C_i$ to obtain the sets $U_i$.” This makes the later support assertion justified without changing the lemma.
+   **Proposed fix:** Choose the finitely many neighborhoods with pairwise disjoint compact closures contained in $U$. Then use outer regularity to shrink them while retaining the compact sets $C_i$; the closure properties are preserved.
+
+**Overall fix:** Strengthen the neighborhood choice to “open neighborhoods with pairwise disjoint compact closures contained in $U$.” The existing cutoff construction then has the required support properties.
 
 ### M3 — Allow finite and empty atom index sets
 
-**Correction · [lines 820–824](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:820), also [957–959](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:957).**
+**Status:** `withdrawn`
 
-> $\mu_{\rm atom}=\sum_{j\ge1}c_j\delta_{\omega_j}$, with distinct $\omega_j$ and $c_j\ne0$
+**Minor indexing correction · [lines 820–824](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:820), also [957–959](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:957).**
 
-As written, the indexing and nonzero requirement exclude finite and empty atomic parts, both of which the theorem covers. Suggested wording: use $\sum_{j\in I}$, where $I$ is finite or countable, possibly empty, and pass to the limit through finite subsets exhausting $I$. Adjust “the first $N$ atoms” accordingly. This is an indexing correction, not a failure of the theorem.
+1. `withdrawn` — **The enumeration should include finite and empty atomic parts.** Writing $\sum_{j\ge1}c_j\delta_{\omega_j}$ while requiring every $c_j\ne0$ literally selects an infinite atom sequence.
+
+   **Proposed fix:** Use $\sum_{j\in I}c_j\delta_{\omega_j}$ with $I$ at most countable, possibly empty.
+
+2. `withdrawn` — **The limiting argument should use the same indexing convention.** “The first $N$ atoms” needs a convention when there are finitely many or no atoms.`z
+
+   **Proposed fix:** Pass through finite subsets exhausting $I$, taking an eventually constant sequence of subsets when $I$ is finite.
+
+**Overall fix:** Use an at-most-countable index set and finite-subset exhaustion throughout these two passages. This repairs notation without changing the theorem.
 
 ### M4 — Concentration on a set is different from topological support
 
-**Clarification · [lines 971–974](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:971).**
+**Status:** `withdrawn`
 
-> “The atomic part is supported on the countable atom set”
+**Optional terminology clarification · [lines 971–974](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:971).**
 
-The atom set need not be closed; its closure may include points that carry no point mass. The manuscript correctly notes this at lines 361–362. The mutual-singularity argument needs measure concentration, not a topological-support assertion.
+1. `withdrawn` — **“Supported on” can mean concentration in measure-theoretic usage.** Under that reading the sentence is valid. It can nevertheless be confused with topological support, which contains the closure of the atom set and can include points with no point mass.
 
-Suggested wording: “The atomic part is concentrated on the countable atom set, while the nonatomic part assigns that set zero total variation.”
+   **Proposed fix:** For consistency with the earlier distinction in the paper, optionally write: “The atomic part is concentrated on the countable atom set, while the nonatomic part assigns that set zero total variation.”
+
+**Overall fix:** “Concentrated on” is clearer here. The original wording is not, by itself, a false mutual-singularity argument.
 
 ### M5 — An example of escape is not a statement about every escaping sequence
 
-**Correction · [lines 1009–1010](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:1009).**
+**Status:** `applied`
 
-> “Mass escaping to infinity carries a non-vanishing value contribution unless $K(\omega)$ tends to zero”
+**Correction of the scope of an example · [lines 1009–1010](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:1009).**
 
-Failure of dictionary decay does not mean that every escaping sequence has a nonvanishing contribution. Suggested wording: “This example shows that mass escaping to infinity can retain a nonzero contribution when the dictionary does not vanish at parameter infinity.”
+1. `applied` — **Failure of dictionary decay allows escape effects but does not force them for every sequence.** The sentence “Mass escaping to infinity carries a non-vanishing value contribution unless $K(\omega)$ tends to zero” is stronger than the example establishes.
+
+   **Proposed fix:** Use “This example shows that mass escaping to infinity can retain a nonzero contribution when the dictionary does not vanish at parameter infinity.”
+
+**Overall fix:** State the possibility demonstrated by the example, using “can retain.”
 
 ### M6 — Say precisely what normalization prevents
 
-**Clarification · [lines 1031–1032](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:1031), also [3790](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:3790).**
+**Status:** `withdrawn`
 
-> “a penalty … aware of the location of the atom to prevent the escape”
+**Clarification of what normalization achieves · [lines 1031–1032](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:1031), also [3790](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:3790).**
 
-Normalization does not prohibit locations, or normalized measure mass, from escaping. For $|\omega_n|\to\infty$, the measure $\mu_n=w_p(\omega_n)^{-1}\delta_{\omega_n}$ has constant normalized penalty $\phi(1)$ while $(\mu_n)_p=\delta_{\omega_n}$ escapes. The growth gap makes its represented contribution vanish.
+1. `withdrawn` — **Normalization does not forbid parameter escape.** If $|\omega_n|\to\infty$ and $\mu_n=w_p(\omega_n)^{-1}\delta_{\omega_n}$, then $(\mu_n)_p=\delta_{\omega_n}$ escapes while its penalty remains $\phi(1)$. The growth gap makes the represented contribution vanish.
 
-Suggested wording: “We address the loss of weak-* lower semicontinuity using a location-weighted penalty on measures of finite $p$-th moment. Under the growth gap, escaping normalized mass has a vanishing represented contribution in $L^2(D)$.” Use $H^1(D)$ only under the stronger gradient-growth hypothesis.
+   **Proposed fix:** Replace “prevent the escape” with a statement about controlling the effect of escape: “Under the growth gap, escaping normalized mass has a vanishing represented contribution.”
+
+2. `withdrawn` — **The function-space norm depends on the growth hypothesis.** The existence argument uses $L^2(D)$ decay; $H^1(D)$ decay requires the stronger gradient-growth condition.
+
+   **Proposed fix:** Name $L^2(D)$ in the existence discussion and use $H^1(D)$ only where its hypotheses have been imposed.
+
+**Overall fix:** Explain that the location-weighted penalty and normalization address the loss of weak-* lower semicontinuity by making escaping contributions vanish in the appropriate norm. They need not prevent atom locations from escaping.
 
 ### M7 — The problem admits a minimizer; its infimum is attained
 
-**Correction, minor · [lines 1233–1236](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:1233).**
+**Status:** `withdrawn`
 
-> “$\inf_{\mu\in\mathcal M_p(\Omega)}J(\mu)$ admits at least one global minimizer”
+**Optional editorial precision · [lines 1233–1236](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:1233).**
 
-An infimum is a scalar. Suggested wording: “The infimum … is attained by at least one $\bar\mu\in\mathcal M_p(\Omega)$.” The existing “at least one” qualification is correct.
+1. `withdrawn` — **The displayed infimum denotes a scalar, although its use as shorthand for the minimization problem is understandable.** “The infimum … admits a minimizer” can be written more directly without changing the mathematical claim.
+
+   **Proposed fix:** Use “The infimum … is attained by at least one $\bar\mu\in\mathcal M_p(\Omega)$.”
+
+**Overall fix:** Optionally replace “admits at least one global minimizer” after the displayed infimum with “is attained by at least one …”. Retain the existing nonuniqueness-compatible qualification.
 
 ### M8 — Population integration and empirical averaging have different normalization
 
-**Clarification · [lines 400–402](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:400) and [498–507](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:498).**
+**Status:** `withdrawn`
 
-> “the corresponding empirical fidelity”
+**No identified error; optional normalization note · [lines 400–402](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:400) and [498–507](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:498).**
 
-The population measure is unnormalized Lebesgue measure, whereas $l^M$ is a sample mean. With uniform samples and exact labels, its expectation is $L/|D|$, not $L$. For nonuniform samples the sampling distribution also matters. No unbiasedness claim is presently made, so this is a clarification rather than a false equality.
+1. `withdrawn` — **The two losses have different normalizations.** The population loss uses Lebesgue measure; the empirical loss uses a sample mean. For uniform samples with exact labels, the latter has expectation $L/|D|$. The paper does not assert that it is an unbiased estimator of $L$.
 
-Suggested wording: “For supplied sample labels, define the empirical mean loss …”. If relating population and empirical regularization parameters, state the measure normalization and sampling distribution explicitly.
+   **Proposed fix:** No correction is required solely because it is called the “corresponding empirical fidelity.” Optionally call it the “empirical mean loss.”
+
+2. `withdrawn` — **A quantitative population-to-sample comparison would need the normalization.** A relation between regularization parameters would also depend on the sampling distribution and loss scaling.
+
+   **Proposed fix:** Specify those details if such a comparison is made. Do not add assumptions or rescale the current loss merely to answer a comparison the paper does not make.
+
+**Overall fix:** Keep the current definitions. A short normalization note is optional; no equality or unbiasedness claim has been found to correct.
 
 ### M9 — Define the space of admissible derivative directions
 
-**Clarification · [lines 1302–1307](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:1302).**
+**Status:** `applied`
 
-> “For a measure $\mu$ and an admissible direction $\mu'$”
+**Clarification of the derivative domain · [lines 1302–1307](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:1302).**
 
-The preceding fidelity is extended-valued, and the existence theorem uses weaker assumptions than those needed for differentiability everywhere on $\mathcal M_p$. “Admissible” has not been defined here.
+1. `applied` — **“Admissible direction” is not defined at the derivative formula.** The fidelity is extended-valued under the weaker existence assumptions, so the formula needs a domain where the $H^1$ residual and directional output are defined.
 
-Suggested wording: “Throughout this subsection, assume Assumption 3.1 and $p>s_1$. Then for $\mu,\mu'\in\mathcal M_p(\Omega)$, …”. Alternatively define the narrower finite-energy directions explicitly. The derivative's measure/function pairing at lines 1348–1352 is already a useful precise convention.
+   **Applied fix:** The sentence now reads: “Under Assumption 3.1 and $p>s_1$, the Gâteaux derivative at $\mu\in\mathcal M_p(\Omega)$ in any direction $\mu'\in\mathcal M_p(\Omega)$ is …”.
 
-### M10 — Name necessary conditions as necessary
+**Overall fix:** State the derivative's domain before using the formula. Keep the existing measure/function pairing convention and preserve the weaker assumptions of the separate existence theorem.
 
-**Clarification · [line 1363](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:1363) and [1465–1469](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:1465).**
+### M10 — Clarify the necessary conditions and the compact-set remark
 
-> “The optimality condition”; “any violation … is confined to a compact set”
+**Status:** `applied`
 
-The theorem supplies several necessary conditions, not an equivalence with local optimality. A more precise title is “Necessary conditions for local optimality.” In the subsequent compact-set discussion, $\bar P_p$ belongs to an already fixed local minimizer, so the theorem excludes any violation. State the useful algorithmic observation for an arbitrary iterate $\mu$: since $P_{p,\mu}\in C_0(\Omega)$, violations of the positive insertion threshold are contained in a compact superlevel set.
+**Mixed: optional title and clarification of the remark · [line 1363](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:1363) and [1465–1469](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:1465).**
+
+1. `withdrawn` — **The theorem states necessary conditions.** Its hypotheses and conclusion already make that logical direction clear; “The optimality condition” does not by itself assert sufficiency.
+
+   **Proposed fix:** Optionally use the more descriptive title “Necessary conditions for local optimality.”
+
+2. `applied` — **The compact-set remark originally used the profile of a local minimizer.** For that profile, the theorem already excludes any threshold exceedance, so the remark's intended algorithmic observation was vacuous.
+
+   **Applied fix:** The remark now considers any $\mu\in\mathcal M_p(\Omega)$ under Assumption 3.1 and $p>s_1$, and states that all points with $|P_{p,\mu}(\omega)|>\alpha L_\phi$ lie in the compact set $\{|P_{p,\mu}|\ge\alpha L_\phi\}$. The final sentence still refers to the lemma localizing the minimizer's support.
+
+**Overall fix:** Applied the compact-set observation to an arbitrary measure. The optional theorem-title change remains withdrawn.
 
 ### M11 — A lost guarantee is not a counterexample
 
-**Correction · [line 1831](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:1831), with [1865–1873](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:1865).**
+**Status:** `applied`
 
-> “separation fails for convex penalty”
+**Correction of the example title · [line 1831](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:1831), with [1865–1873](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:1865).**
 
-The example shows that the curvature hypothesis fails at the convex endpoint and the guaranteed separation scale tends to zero. It does not exhibit minimizers violating separation.
+1. `applied` — **The example establishes degeneration of a guarantee.** The body shows that the curvature hypothesis fails at the convex endpoint and the guaranteed separation scale tends to zero. It does not construct minimizers violating separation.
 
-Suggested title: “Degeneration of the separation bound at the convex endpoint.” The body already largely makes the correct distinction.
+   **Proposed fix:** Replace “separation fails for convex penalty” with “Degeneration of the separation bound at the convex endpoint.”
+
+**Overall fix:** Change the title to match the conclusion already stated in the body.
 
 ### M12 — Give the ReLU-power row its regularity range
 
-**Clarification · [line 1969](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:1969).**
+**Status:** `withdrawn`
 
-> $(z_+)^k$ with $s_0=s_1=k$ and $p>k$
+**Clarification of the table scope · [line 1969](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:1969).**
 
-The admissible-activation discussion invokes $C^1$ regularity, which fails at $k=1$. Add “$k\ge2$” to agree with Section 4, or explicitly say that the row reports only growth exponents and does not assert all regularity hypotheses at $k=1$.
+1. `withdrawn` — **The growth exponents and the full regularity assumptions are different claims.** The ReLU-power row's growth bounds can be useful at $k=1$, but the surrounding $C^1$ setting excludes ReLU itself. The comparison with Section 4 uses $k\ge2$.
+
+   **Proposed fix:** Add “$k\ge2$” to the row if it is intended to list activations satisfying all the standing hypotheses. If it lists growth exponents only, state that limitation explicitly.
+
+**Overall fix:** Make the table's intended scope explicit. The shortest consistent choice is to label the row $(z_+)^k$, $k\ge2$.
 
 ## 4. Homogeneous formulation
 
 ### H1 — “Every atom” and “any finite representation” include zero-feature neurons
 
-**Correction · [lines 1995–1997](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:1995) and [2124–2132](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:2124).**
+**Status:** `applied`
 
-> “every atom can be moved onto the unit sphere”; “consider any finite representation”
+**Correction of the rescaling statement · [single-neuron statement](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:2079) and [finite-network statement](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:2099).**
 
-The single-neuron lemma assumes a nonzero coefficient and a nonzero represented atom function, but the finite-network conclusion drops these assumptions. $\omega/|\omega|$ is undefined at zero. A nonzero direction can also yield the zero function, such as $(a,b)=(0,-1)$ for ReLU powers. Preserving a zero function does not force the radial coefficient relation used in the proof. Merging duplicate locations and discarding zero coefficients (lines 1122–1124) does not remove all zero-feature neurons.
+1. `applied` — **The normalization is undefined at a zero inner parameter.** “Any finite representation” includes $\omega_n=0$, whereas $\omega_n/|\omega_n|$ is then undefined.
 
-Suggested wording: “After discarding neurons representing the zero function, consider a finite representation with $c_n\ne0$ and $K(\omega_n)\ne0$ for every $n$.” Earlier: “Every nonzero atom function can be represented with a unit inner parameter after rescaling its outer coefficient.”
+   **Applied fix:** Restrict the finite-network statement to representations with nonzero inner parameters before defining the normalized parameters.
+
+2. `applied` — **Define the parameter rescaling explicitly.** The original function-equality constraint required $K(\widehat\omega)\ne0$ to deduce the coefficient relation. That restriction is unnecessary when the rescaling itself is prescribed.
+
+   **Applied fix:** Define $\omega=\lambda\widehat\omega$ and $c=\widetilde c\lambda^{-k}$ for $\lambda>0$, remove the condition $K(\widehat\omega)\ne0$ and its use in the proof, and restrict the finite-network conclusion to independent radial rescalings of this form. The proposed exclusion of all zero-function neurons is superseded by this formulation.
+
+3. `withdrawn` — **The introductory sentence should use the same scope.** “Every atom can be moved onto the unit sphere” includes the degenerate cases just excluded.
+
+   **Proposed fix:** Use “Every nonzero atom function can be represented with a unit inner parameter after rescaling its outer coefficient.”
+
+**Overall fix:** Prescribe the parameter rescaling directly and require nonzero inner parameters for normalization. The introductory wording change in H1.3 remains withdrawn.
 
 ### H2 — The exponent is $q$, not the function $\psi_k$
 
-**Correction, minor · [lines 2176–2184](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:2176).**
+**Status:** `applied`
 
-> “define the scalar penalty … which is the exponent of Lemma …”
+**Minor wording correction · [lines 2160–2161](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:2160).**
 
-Suggested wording: “Here $q$ is the exponent obtained in Lemma 4.4 when $\xi=\zeta=2$.” This removes the ambiguous antecedent.
+1. `applied` — **The exponent is $q$.** After defining $\psi_k(t)=t^q$, “which is the exponent” had an ambiguous antecedent.
+
+   **Applied fix:** The sentence now reads: “Here $q$ is the exponent obtained in Lemma 4.4 when $\xi=\zeta=2$.”
+
+**Overall fix:** Named $q$ explicitly in the explanatory sentence.
 
 ### H3 — Continuity into $H^1$ does not imply continuity of sampled gradients
 
-**Correction of scope · [lines 2239–2247](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:2239).**
+**Status:** `withdrawn`
 
-> “its dictionary is continuous on the compact sphere, all results below hold with $L$ replaced by $l^M$”
+**Correction of the generality of the sampled extension · [lines 2239–2247](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:2239).**
 
-The standing assumption at lines 2091–2093 is continuity of $K:\mathbb S^d\to H^1(D)$. For a general such dictionary, point values and gradient point values need not be well defined or continuous in the parameter. The next sentence establishes the needed property for the specific ReLU-power dictionary.
+1. `withdrawn` — **$H^1$ continuity does not provide pointwise gradient evaluation.** For a general dictionary continuous into $H^1(D)$, sampled values and gradients need not be well defined or continuous in the parameter. Thus that assumption alone does not justify the extension to $l^M$.
 
-Suggested wording: “For $\mathrm{ReLU}^k$ with $k\ge2$, the sampled value-and-gradient dictionary is well defined and continuous on the compact sphere. Consequently, the following results also hold with $L$ replaced by $l^M$, using the corresponding sampled norms and bounds.” For a general dictionary, explicitly assume this sampled continuity.
+   **Proposed fix:** For the general statement, assume that the sampled value-and-gradient dictionary is well defined and continuous on the sphere.
+
+2. `withdrawn` — **The intended ReLU-power case already has the required property.** The following sentence establishes it for $k\ge2$.
+
+   **Proposed fix:** Move that fact before the sampled-extension claim and scope the claim to it: “For $\mathrm{ReLU}^k$ with $k\ge2$, the sampled value-and-gradient dictionary is well defined and continuous on the compact sphere. Consequently, the following results also hold with $L$ replaced by $l^M$, using the corresponding sampled norms and bounds.”
+
+**Overall fix:** State sampled continuity as the reason for the empirical extension. Either restrict to the established ReLU-power case or add the explicit assumption for a general dictionary.
 
 ### H4 — Explain the passage from a parameter minimizer to a merged measure
 
-**Clarification, proof exposition · [lines 2530–2532](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:2530).**
+**Status:** `withdrawn`
 
-> “The bound above applies to every minimizer of $F_N$ … its coefficients can be varied independently.”
+**Proof-exposition clarification · [lines 2530–2532](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:2530).**
 
-The compact parameter product used in the existence proof allows repeated locations and zero coefficients, whereas the measure penalty merges repeated locations. The conclusion is justified, but the identification should be stated.
+1. `withdrawn` — **The parameter penalty and measure penalty treat duplicate locations differently.** $F_N$ sums penalties before merging, whereas $J_{\psi_k}$ uses the merged measure.
 
-Suggested addition: “At a minimizer of $F_N$, two nonzero coefficients cannot occupy the same location: merging them preserves the output and strictly decreases the $q$-penalty for $0<q<1$. After discarding zero coefficients, $F_N=J_{\psi_k}$, and coefficient variations imply the atomwise optimality condition.” This is an explanatory repair, not a claim that the existence theorem is false.
+   **Proposed fix:** Explain that two nonzero coefficients at the same location cannot occur at a global minimizer of $F_N$: replacing them by their sum and a zero coefficient preserves the width allowance and output, and strictly decreases the $q$-penalty for $0<q<1$.
+
+2. `withdrawn` — **The atomwise condition then follows from coefficient variations.** After duplicate nonzero coefficients are excluded and zero coefficients are discarded, the two objective values agree.
+
+   **Proposed fix:** Add: “After discarding zero coefficients, $F_N=J_{\psi_k}$, and independent coefficient variations give the atomwise optimality condition.”
+
+**Overall fix:** Insert the duplicate-merging explanation before applying the measure-level width bound to minimizers of $F_N$. The argument supports the stated conclusion without a new theorem.
 
 ## 5. Algorithms
 
 ### G1 — Do not silently reuse population certificates for sampled ones
 
-**Correction/clarification · [lines 2834–2868](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:2834).**
+**Status:** `withdrawn`
 
-> “$\Delta(\mu_t,\omega)>0$, that is, $|P^M_{p,\mu_t}(\omega)|>\alpha L_\phi$”
+**Clarification of quantities used in the empirical algorithm · [lines 2834–2868](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:2834).**
 
-The earlier $\Delta$ uses the population profile $P_{p,\mu}$, and $R(\mu)$ uses a population $H^1$ residual and growth constant. These are not literally the same quantities as their empirical counterparts. The earlier convention replacing $L$ inside $J_{\psi_k}$ does not define this replacement for the nonhomogeneous certificates.
+1. `withdrawn` — **The insertion residual changes when the loss changes.** The earlier $\Delta$ uses the population profile, while the algorithm tests the empirical profile $P^M_{p,\mu}$.
 
-Define $\Delta^M(\mu,\omega)=(|P^M_{p,\mu}(\omega)|-\alpha L_\phi)_+$ and the sampled feature bound and search radius, or explicitly state that all certificate quantities in this subsection use sampled norms, labels, and the corresponding growth constants. Explain why the insertion proof transfers to that finite-dimensional feature space.
+   **Proposed fix:** Define $\Delta^M(\mu,\omega)=(|P^M_{p,\mu}(\omega)|-\alpha L_\phi)_+$ and use it consistently, or explicitly announce that $\Delta$ denotes this sampled quantity throughout the algorithm subsection.
+
+2. `withdrawn` — **The feature bound and search radius also change.** The population $B_p$ and $R(\mu)$ depend on the population feature and residual norms.
+
+   **Proposed fix:** Define their sampled counterparts, or include them in the same convention: all profiles, residuals, feature bounds, and radii in this subsection are computed with $l^M$, its supplied labels, and the corresponding sampled growth constants.
+
+3. `withdrawn` — **The insertion proof transfers through its Hilbert-space structure.** The empirical loss is one half of a squared Euclidean norm of the sampled value-and-gradient residual. The needed sampled feature bounds must also hold.
+
+   **Proposed fix:** Add one sentence explaining this substitution and state the sampled bounds used. This supplies the link to the theorem without duplicating its proof.
+
+**Overall fix:** Adopt one explicit sampled convention for all insertion quantities and explain the finite-dimensional version of the theorem. A global renaming of every symbol is unnecessary if the convention is clear.
 
 ### G2 — Pruning is outside the stated decrease guarantee
 
-**Clarification · [lines 2622–2627](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:2622), [2919–2920](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:2919), [3032–3033](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:3032), and [3119–3120](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:3119).**
+**Status:** `withdrawn`
 
-The one-atom theorem guarantees decrease at insertion, and the accepted correction preserves that decrease. The algorithms then remove small nonzero coefficients without a displayed objective acceptance test. Pruning reduces the penalty but can increase the fidelity; small coefficient magnitude alone does not prove a net decrease.
+**Clarification of the decrease guarantee · [lines 2622–2627](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:2622), [2919–2920](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:2919), [3032–3033](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:3032), and [3119–3120](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:3119).**
 
-Suggested wording: “The one-candidate decrease guarantee applies before tolerance-based pruning. Monotonicity of the complete outer iteration additionally requires pruning to preserve the objective decrease.” If a safeguard is intended, document it explicitly. This does not imply that the recorded numerical iterates actually increased.
+1. `withdrawn` — **The stated acceptance rule covers correction before pruning.** The pseudocode then removes small nonzero coefficients. Penalty reduction alone does not guarantee that the accompanying fidelity increase is smaller.
+
+   **Proposed fix:** State that the one-candidate decrease guarantee applies before tolerance-based pruning, unless an objective check for pruning is included.
+
+2. `withdrawn` — **A claim about the whole outer iteration would need to include pruning.** This issue concerns the scope of the guarantee; it does not show that the recorded numerical iterates increased.
+
+   **Proposed fix:** If full-iteration monotonicity is intended, require the pruning step to preserve the decrease and document its acceptance test. Otherwise keep the guarantee explicitly attached to insertion and accepted correction.
+
+**Overall fix:** Locate the decrease guarantee before pruning, or include pruning in the objective acceptance rule. Do not infer numerical failure from the absence of that rule.
 
 ### G3 — Repair the incomplete explanation of finite-amplitude insertion
 
-**Correction · [lines 2928–2930](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:2928).**
+**Status:** `applied`
 
-> “since the zero network is a local minimizer and the infinitesimal, we need good initialization method, which is provided by the Theorem …”
+**Correction of an incomplete sentence and its reference · [lines 2898–2905](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:2898).**
 
-The sentence is incomplete. The cited atom-weight theorem gives stationarity and a lower bound at existing atoms; it does not directly give the displayed proximal initialization.
+1. `applied` — **The explanation is grammatically incomplete.** “Since the zero network is a local minimizer and the infinitesimal” leaves the mathematical reason unfinished.
 
-Suggested wording: “For $0<q<1$, the zero measure is a local minimizer and infinitesimal insertion cannot supply the finite-slope descent test. We therefore test finite-amplitude insertions and choose their coefficients by minimizing the one-atom objective increment.” Refer to the subsequent increment/proximal formulas for the initialization, and to Remark 4.9 for the singular-slope obstruction.
+   **Applied fix:** Explain that globally minimizing the objective change over the inserted coefficient permits a finite jump out of the local minimum at zero whenever the chosen atom admits a decrease. Retain the reference to the singular-slope remark.
+
+2. `applied` — **The cited atom-weight theorem does not give the displayed initialization.** It supplies necessary conditions and weight bounds at existing atoms.
+
+   **Applied fix:** Describe the theorem's weight bound as guidance for initialization away from zero, and distinguish it from the implemented approach: globally minimize the objective change over the inserted coefficient and accept the insertion only if this change is negative.
+
+**Overall fix:** Distinguish initialization guided by the theorem from the insertion method used in the algorithm, and explain why the latter can escape the local minimum at zero.
 
 ### G4 — Normalize inside the sphere search objective
 
-**Correction · [lines 3020–3021](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:3020).**
+**Status:** `pending`
 
-> “run unconstrained L-BFGS w.r.t. $|P|$ and normalize onto $\mathbb S^d$”
+**Correction of the algorithm description · [lines 3020–3021](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:3020).**
 
-This reads as maximizing the unnormalized homogeneous profile and normalizing only afterwards. Such a profile satisfies $P(r\omega)=r^kP(\omega)$ and is unbounded in magnitude if it is nonzero somewhere. The actual [search closure](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/src/PDAP/insertion.py:328) normalizes before each feature evaluation.
+1. `pending` — **Normalizing only after optimization describes a different search.** The unnormalized homogeneous profile satisfies $P(r\omega)=r^kP(\omega)$ and is unbounded in magnitude if it is nonzero somewhere. The [implemented closure](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/src/PDAP/insertion.py:285) normalizes before feature evaluation.
 
-Suggested wording: “Run L-BFGS on $z\mapsto |P^M_{\mu_t}(z/|z|)|$ for nonzero $z$, then return $\omega=z/|z|$.” Mention the numerical zero-norm safeguard if needed for reproducibility.
+   **Proposed fix:** Write “Run L-BFGS on $z\mapsto|P^M_{\mu_t}(z/|z|)|$ for nonzero $z$, then return $\omega=z/|z|$.” State the numerical small-norm safeguard only if needed to specify the implementation fully.
+
+**Overall fix:** Put the normalization inside the search objective so that the pseudocode describes the implemented sphere search.
 
 ### G5 — A finite search finds no accepted candidate, not necessarily no descent direction
 
-**Clarification · [lines 2911–2912](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:2911), [3023–3025](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:3023), and [3123](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:3123).**
+**Status:** `withdrawn`
 
-> “terminate if there is none”; “no candidate clears the insertion threshold”
+**No required correction; optional stopping clarification · [lines 2911–2912](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:2911), [3023–3025](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:3023), and [3123](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:3123).**
 
-Clarify “none among the candidates returned by the multistart search.” Otherwise stopping can be read as a globally certified insertion condition. The conclusion correctly acknowledges that the search is local; preserve that meaning in the pseudocode and stopping description.
+1. `withdrawn` — **The pseudocode already refers to the returned candidates.** “Keep the candidates satisfying …; terminate if there is none” follows the multistart search explicitly. In that context it does not claim that every possible direction was searched.
 
-### G6 — A local solver targets a minimization problem without necessarily attaining a minimum
+   **Proposed fix:** Retain the pseudocode. If a standalone stopping description is desired, use “Stop when none of the candidates returned by the multistart search passes the acceptance test.”
 
-**Clarification · [lines 2810–2824](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:2810).**
+2. `withdrawn` — **The search limitation is already stated elsewhere.** The algorithm discussion and conclusion distinguish multistart search from the exact maximization used in the rate theorem.
 
-> “Algorithm … minimizes”; “correction then minimizes”
+   **Proposed fix:** Retain those existing scope statements. Add no separate global-certification disclaimer under this item.
 
-In context these can describe the optimization task, but the method is local and only a nonincrease acceptance condition is asserted. A finite solver run is not guaranteed to attain a local or global minimum. Prefer “Algorithm … targets the empirical objective” and “the coefficient correction applies a local solver to …”. Retain the explicit acceptance rule already given at lines 2607–2611.
+**Overall fix:** No mandatory edit. The longer stopping sentence is available only as an optional clarification outside the pseudocode's existing context.
+
+### G6 — Local-solver wording — withdrawn
+
+**Status:** `withdrawn`
+
+**Objective descriptions are acceptable in context · [lines 2810–2824](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:2810).**
+
+1. `withdrawn` — **“Minimizes” can describe the optimization task.** “Algorithm … minimizes” and “correction then minimizes” introduce the objectives being solved. They do not alone assert that a finite local-solver run attains a minimum.
+
+   **Proposed fix:** Retain these descriptions. The proposed blanket replacement by “targets” is unnecessary.
+
+2. `withdrawn` — **The actual solver guarantee is already explicit.** The manuscript says that the method is local and accepts correction only when it does not increase the post-insertion objective.
+
+   **Proposed fix:** Retain that acceptance rule. Address the separate pruning issue under G2.
+
+**Overall fix:** No manuscript change under G6. Keep the objective descriptions and the existing statement of the solver's acceptance condition.
 
 ## 6. Numerical wording and captions
 
 ### N1 — Give sampled error formulas their actual labels and normalization
 
-**Clarification · [lines 3046–3056](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:3046) and [3170–3172](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:3170).**
+**Status:** `applied`
 
-> “relative errors” in $L^2$ and $H^1$; “all three relative gradient errors”
+**Clarification of the reported metrics · [lines 3020–3030](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:3020) and [3119–3121](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:3119).**
 
-The text correctly says that norms are evaluated empirically, but the formulas use the exact $V$ and $\nabla V$, even though the actual labels are numerical values and costates. At switching points there is no classical $\nabla V$. The separately quoted relative gradient error is also not defined by either of the two preceding formulas.
+1. `withdrawn` — **The formulas should identify the actual evaluation labels.** The manuscript already says the norms are empirical, so this is a notation clarification rather than evidence of a claimed exact-error theorem. Using $(v^m,g^m)$ also avoids writing a classical gradient at a nondifferentiable sample.
 
-Define the empirical errors using $(v^m,g^m)$ and the evaluation set, including
+   **Proposed fix:** For the evaluation index set $E$, write
 
-$$
-\mathrm{Err}_{\nabla}
-=\left(\frac{\sum_{m\in E}|\nabla\widehat V(x^m)-g^m|^2}
-{\sum_{m\in E}|g^m|^2}\right)^{1/2},
-$$
+   $$
+   \mathrm{Err}_{L^2}
+   =\left(\frac{\sum_{m\in E}|\widehat V(x^m)-v^m|^2}
+   {\sum_{m\in E}|v^m|^2}\right)^{1/2},
+   \qquad
+   \mathrm{Err}_{H^1}
+   =\left(\frac{\sum_{m\in E}\bigl(|\widehat V(x^m)-v^m|^2+
+   |\nabla\widehat V(x^m)-g^m|^2\bigr)}
+   {\sum_{m\in E}\bigl(|v^m|^2+|g^m|^2\bigr)}\right)^{1/2}.
+   $$
 
-when the denominator is nonzero. Call $\mathrm{Err}_{H^1}$ a sampled relative value-and-gradient error, with the usual $H^1$ interpretation for appropriate samples and labels. Numerical-reference error is not automatically error against the exact value function.
+   Keep the usual $L^2$ and $H^1$ error labels, with the existing explanation that they are evaluated empirically on the original physical scale.
+
+2. `applied` — **The separately reported gradient error lacked a definition.** It was not one of the two preceding metrics.
+
+   **Applied fix:** Replaced the gradient-only error comparison with the already-defined relative $H^1$ errors reported in the gradient-training table: softplus $0.223\to0.0311$, $\tanh$ $0.241\to0.0218$, and Gaussian $0.182\to0.0111$. The comparison uses the same six runs and selected checkpoints as the table.
+
+   The Algorithm 2 discussion now also calls its metric the “relative $H^1$ error” in place of “combined value–gradient error.” Its values already matched the table and are unchanged.
+
+**Overall fix:** Replaced the gradient-only comparison with the table's $H^1$ values. Retained the existing empirical metric definitions and physical-scale convention; N1.1 remains withdrawn.
 
 ### N2 — A gradient feature is not just the activation's first derivative
 
-**Correction · [lines 3234–3235](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:3234).**
+**Status:** `applied`
 
-> “the first derivative is the basis that reconstructs $\nabla V$”
+**Correction of the feature description; narrowed · [lines 3181–3183](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:3181).**
 
-The gradient features are the vectors $a\rho'(a\cdot x+b)$, with the affine argument and slope factor; they need not form a linearly independent basis. “Reconstructs” also suggests exact recovery.
+1. `withdrawn` — **The gradient feature includes the affine argument and slope vector.** It is $a\rho'(a\cdot x+b)$, not merely $\rho'$.
 
-Suggested wording: “The gradient channel uses the features $a\rho'(a\cdot x+b)$ to approximate $\nabla V$.”
+   **Proposed fix:** Name the full vector feature in the caption.
+
+2. `applied` — **The feature family need not be a basis.** No linear independence is established or needed.
+
+   **Applied fix:** Deleted the caption sentence “Under the gradient-augmented loss, the first derivative is the basis that reconstructs $\nabla_x V$.”
+
+3. `withdrawn` — **“Reconstructs” does not itself assert exact recovery.** The earlier review's objection to that verb was unnecessary in this numerical context.
+
+   **Proposed fix:** Withdraw that objection. Choose the verb for readability, not as a substitute for a mathematical qualification.
+
+**Overall fix:** Deleted the caption's basis claim. N2.1 and N2.3 remain withdrawn.
 
 ### N3 — Describe the pendulum data as numerical branch data
 
-**Clarification · [lines 3519–3520](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:3519).**
+**Status:** `applied`
 
-> “The open loop algorithm follows from … The state-value-gradient triple is generated with discontinuous gradient.”
+**Clarification of the procedure and the source of nonsmoothness · [lines 3483–3484](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:3483).**
 
-“Follows from” does not explain which procedure is adopted, and a finite data triple does not itself possess a discontinuous gradient. The discontinuity concerns the underlying value function across competing optimal branches.
+1. `applied` — **“The open loop algorithm follows from …” leaves the adopted procedure vague.** The cited method integrates PMP characteristics backward from local LQR terminal data. [Han and Yang (2024)](https://proceedings.mlr.press/v242/han24a.html).
 
-Suggested wording: “We follow the numerical PMP-based data-generation procedure of Han and Yang. It supplies state, numerical value, and costate labels for a value function with a gradient jump across the switching set.” Retain the distinction between labels on smooth branches and labels assigned at nonsmooth points. The cited procedure uses backward characteristics initialized from a local LQR approximation; see [Han and Yang (2024)](https://proceedings.mlr.press/v242/han24a.html).
+   **Applied fix:** Use “We follow the open-loop algorithm of” with the existing citation to Han and Yang. No additional procedural description was needed.
+
+2. `applied` — **A finite data triple does not itself have a discontinuous gradient.** The discontinuity is a property of the underlying value function; the labels contain costs and costates.
+
+   **Applied fix:** Use “The state-value-gradient triple is generated for a value function with a discontinuous gradient.”
+
+**Overall fix:** Clarified the attribution of the open-loop algorithm and attributed the discontinuous gradient to the value function.
 
 ### N4 — The pendulum switches from finite to infinite horizon
 
-**Clarification · [lines 3498–3503](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:3498), [3642–3650](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:3642), and [3703–3707](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:3703).**
+**Status:** `withdrawn`
 
-The introduction defines $\mathcal C$ and $V$ for a finite horizon with zero terminal cost; this benchmark reuses them for an infinite-horizon problem. The rollout and the numerical comparison reference then use $T=40$. These are three distinct roles for the horizon.
+**Optional clarification of horizon conventions · [lines 3498–3503](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:3498), [3642–3650](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:3642), and [3703–3707](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:3703).**
 
-Suggested addition: “In this subsection, $V$ denotes the stationary infinite-horizon value function. We evaluate the resulting candidate controllers over a finite rollout horizon and compare their truncated running costs with a finite-horizon numerical PMP reference.” This avoids suggesting that the plotted finite-horizon reference is an independently computed exact infinite-horizon optimum.
+1. `withdrawn` — **The pendulum problem explicitly changes to infinite horizon.** The integral to infinity already defines that change, so reusing $V$ and $\mathcal C$ is not inherently an error.
+
+   **Proposed fix:** For clarity, add “In this subsection, $V$ denotes the stationary infinite-horizon value function.”
+
+2. `withdrawn` — **The rollouts and the comparison solve use a finite horizon.** The text already specifies $T=40$, a free terminal state, and zero terminal cost for the numerical open-loop reference.
+
+   **Proposed fix:** Retain those details. Optionally connect the two roles with “We assess the learned feedback using truncated running costs over a finite rollout horizon.”
+
+**Overall fix:** A short statement identifying the stationary target is sufficient. Keep the existing finite-horizon reference description; no additional optimality warning is called for.
 
 ### N5 — The pendulum gradient feedback formula needs its differentiability qualifier
 
-**Clarification · [lines 3642–3646](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:3642).**
+**Status:** `withdrawn`
 
-> “gives the optimal control in feedback form”
+**Local differentiability clarification · [lines 3642–3646](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:3642).**
 
-This is precisely the example with a nondifferentiable value function. Suggested wording: “At states where $V$ is differentiable, Hamiltonian minimization gives …”. At the switching set, specify any branch or generalized-gradient selection if one is used; do not imply that the displayed classical derivative is defined there. The next sentence's “candidate feedback law” for $\widehat V$ is already appropriate.
+1. `withdrawn` — **The displayed classical derivative is defined at differentiability points.** The introductory formula already carries this qualification, but repeating it beside the pendulum formula makes the local meaning explicit in the nonsmooth benchmark.
+
+   **Proposed fix:** Begin “At states where $V$ is differentiable, Hamiltonian minimization gives …”.
+
+2. `withdrawn` — **The rollout evaluates the fitted function's gradient.** The next sentence already replaces $V$ with $\widehat V$. This alone does not require a new branch-selection rule for the exact value function.
+
+   **Proposed fix:** Retain that implementation description. Specify a branch or generalized-gradient rule only if the experiment actually evaluates such a rule for the nonsmooth target; none is required merely to use a smooth fit.
+
+**Overall fix:** Add the local differentiability qualifier to the exact formula and retain the current fitted-feedback description. Do not invent a branch-selection requirement for the learned controller.
 
 ### N6 — The parameter cross-references do not lead to parameter values
 
-**Correction · [lines 3582–3583](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:3582) and [3634–3635](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:3634).**
+**Status:** `applied`
 
-> “parameters in Table …”; “parameter values reported in Figure …”
+**Correction of two cross-references · [frontier caption](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:3550) and [surface caption](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:3596).**
 
-The referenced pendulum feedback table contains widths, costs, and stabilization outcomes, not the model hyperparameters. Figure 1(b)'s caption does not list those parameter values either. Supply the selected $(\alpha,\gamma,p)$ or $\alpha$ values in an actual table/caption and point to it. Until then, remove the assertion that these locations report the parameters. This is a definite reference error.
+1. `applied` — **The frontier caption points to a table without hyperparameters.** The referenced pendulum feedback table lists widths, costs, and stabilization outcomes.
+
+   **Applied fix:** Deleted the sentence claiming that the selected runs and parameters are reported in the feedback table.
+
+2. `applied` — **The surface caption points to a figure without parameter values.** Figure 1(b)'s caption does not provide them either.
+
+   **Applied fix:** Deleted the sentence claiming that the parameter values are reported in Figure 1(b).
+
+**Overall fix:** Removed both unsupported claims about where the parameter values are reported.
 
 ### N7 — Distinguish the two different pendulum references
 
-**Clarification · [lines 3681–3697](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:3681) and [3701–3707](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:3701).**
+**Status:** `withdrawn`
 
-The table's “reference (PMP)” is the sampled-PMP feedback heuristic, as its caption correctly explains. Figures 12–13 instead use a separately solved finite-horizon open-loop reference. Their different constructions can be missed when both are called “reference.”
+**Optional reference-label clarification · [lines 3681–3697](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:3681) and [3701–3707](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:3701).**
 
-Suggested row label: “sampled-PMP feedback.” Suggested figure label/caption term: “finite-horizon PMP open-loop reference.” Preserve the existing statement that the open-loop reference is the least-cost converged solve among the tested initializations; it is not a certified global optimum.
+1. `withdrawn` — **The table and figures use different reference constructions.** The table's caption identifies a sampled-PMP feedback heuristic; Figures 12–13 use separately solved finite-horizon open-loop trajectories. The body already explains both constructions.
+
+   **Proposed fix:** Make the short labels equally specific: “sampled-PMP feedback” in the table and “finite-horizon PMP open-loop reference” in the figures.
+
+2. `withdrawn` — **The selection rule for the open-loop reference is already disclosed.** It is the least-cost converged solve among the tested initializations.
+
+   **Proposed fix:** Retain that statement. Do not append an additional global-optimality disclaimer.
+
+**Overall fix:** Distinguish the reference types in their labels while preserving the existing construction and selection descriptions.
 
 ### N8 — Define the running-cost symbol and distinguish it from the training objective
 
-**Clarification · [lines 3446–3454](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:3446) and [3679–3694](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:3679).**
+**Status:** `applied`
 
-> $J(t)=\int_0^t\ell(y(s),u(s))\,ds$
+**Definition clarification; optional notation change · [line 3413](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:3413).**
 
-The running-cost function $\ell(y,u)$ is not defined in this passage, while $J$ has denoted the regularized learning objective and $\ell$ later denotes pendulum length. Function arguments distinguish some uses, but the accumulation of meanings is avoidable.
+1. `applied` — **The integrand $\ell(y,u)$ is not defined locally.** The running cost has already been given as $h(y)+\eta|u|^2$, and $\ell$ also denotes pendulum length.
 
-Suggested wording: define the accumulated control cost explicitly as $\mathcal C_{[0,t]}=\int_0^t[h(y(s))+\eta|u(s)|^2]ds$, or state clearly that $J(t)$ in the numerical figures denotes accumulated running cost, independently of the training objective. Defining the integrand directly avoids introducing another $\ell$.
+   **Applied fix:** Replaced $\ell(y(s),u(s))$ with $h(y(s))+\eta|u(s)|^2$ in the definition of $J(t)$.
+
+2. `withdrawn` — **$J(t)$ is reused for accumulated control cost.** Its argument distinguishes it from the training functional, but a local definition would make that convention clear. Renaming it is optional.
+
+   **Proposed fix:** State “In the numerical figures, $J(t)=\int_0^t[h(y(s))+\eta|u(s)|^2]\,ds$ denotes accumulated running cost.” Alternatively, use $\mathcal C_{[0,t]}$ consistently if a notation change is preferred.
+
+**Overall fix:** Defined the plotted cost directly using the known running-cost integrand. N8.2 remains withdrawn.
 
 ### N9 — Disclose Figure 12's cost-axis scale
 
-**Clarification · [line 3722](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:3722), Figure 12(b).**
+**Status:** `withdrawn`
 
-The [plotting code](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/scripts/paper/control_comparison.py:47) uses a symmetric-log scale with threshold $1$ for the cost panel of start A; [the caller](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/scripts/paper/pendulum_figures.py:634) enables it only for A. Thus Figure 13 does not use the same cost scale. This is useful to disclose when readers compare growth and relative distances between curves.
+**Optional caption clarification · [line 3688](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:3688), Figure 12(b).**
 
-Suggested caption addition: “The cost axis is linear up to $J=1$ and logarithmic above that threshold.” Combine this with P3 rather than adding a disconnected note.
+1. `withdrawn` — **Figure 12(b) uses a symmetric-log cost axis.** The [plotting code](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/scripts/paper/control_comparison.py:48) sets threshold $1$; the [caller](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/scripts/paper/pendulum_figures.py:332) enables it only for start A. Figure 13 therefore uses a different cost scale.
+
+   **Proposed fix:** Add “The cost axis is linear up to $J=1$ and logarithmic above that threshold.”
+
+**Overall assessment:** Withdrawn because the axis tick labels already make the logarithmic scale clear. Describing the linear portion below $J=1$ is optional and adds little to this comparison.
 
 ### N10 — Identify the reconstructed switching set as a numerical approximation
 
-**Clarification · [lines 3747–3764](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:3747).**
+**Status:** `applied`
 
-> “Validation errors on gradient discontinuity”; “Let $S$ denote the boundary …”; “Numerically, we use reconstructed points on $S$”
+**Clarification of the evaluation region · [lines 3747–3764](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:3747).**
 
-The reported errors are in a neighborhood of a reconstructed set, not on a mathematically known discontinuity boundary. The body already mentions reconstruction; make the notation and title retain that distinction.
+1. `applied` — **The errors are evaluated near the discontinuity.** The title “Validation errors on gradient discontinuity” does not match the neighborhood used in the experiment.
 
-Suggested title: “Validation errors near the gradient discontinuity.” Define $S$ as the theoretical switching set and $\widehat S$ as its reconstructed sample representation, or state that distances in the experiment are computed to the reconstructed point set. Specify that the near/far subsets are intersected with the evaluation domain. Do not claim an error directly on $S$.
+   **Proposed fix:** Use “Validation errors near the gradient discontinuity.”
+
+2. `withdrawn` — **The numerical distances use reconstructed points.** The body already mentions reconstruction, but “points on $S$” can suggest exact knowledge of the theoretical boundary.
+
+   **Proposed fix:** Say “Numerical distances are computed to a reconstructed point set approximating $S$, together with its periodic copies.” Introducing a separate symbol $\widehat S$ is optional.
+
+3. `withdrawn` — **The near/far split is within the evaluation set.** That is already implicit in the reported evaluation procedure.
+
+   **Proposed fix:** If spelling out the subsets, define the near subset as evaluation points within distance $0.3$ of the reconstructed set and the far subset as the remaining evaluation points. No claim about evaluating the entire state domain is needed.
+
+**Overall fix:** Change “on” to “near” in the title and state what point set is used for numerical distances. Keep the split tied to the specified evaluation set.
 
 ### N11 — The conclusion drops the strong-concavity hypothesis
 
-**Clarification · [lines 3789–3792](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:3789).**
+**Status:** `withdrawn`
 
-> “together with the concave penalty, yields existence, finite support, separation and width bounds, and a quantitative decay rate”
+**Clarification of conclusion-level assumptions · [lines 3789–3792](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:3789).**
 
-Mere concavity does not supply all these conclusions. The finite-support and separation theorem uses the stronger curvature assumption, while existence and insertion decrease have weaker hypotheses. The rate also has the algorithmic conditions in A2.
+1. `withdrawn` — **Concavity alone does not give all the listed sparsity conclusions.** Existence uses weaker assumptions, while finite support and separation use the stronger curvature hypothesis. The current abstract already distinguishes them, but the conclusion groups them under “the concave penalty.”
 
-Suggested wording: “Under the respective growth and penalty assumptions, normalization gives existence; strong concavity on bounded intervals yields finite support, separation, and width bounds. An idealized insertion scheme satisfies the stated decay bound for the insertion-condition violation.”
+   **Proposed fix:** Use “Under the respective growth and penalty assumptions, normalization gives existence; strong concavity on bounded intervals yields finite support, separation, and width bounds.”
+
+2. `applied` — **The rate wording matches A2.** The conclusion now uses “first-order optimality residual for atom insertion” and retains the single-atom, exact-search, and monotone-correction hypotheses.
+
+   **Proposed fix:** Retain the agreed residual wording and hypotheses from A2.
+
+**Overall fix:** Separate the assumptions for existence and sparsity in the conclusion. The rate sentence is already aligned with the abstract under A2. No stronger existence assumptions are needed.
 
 ### N12 — Define what “global” means in the validation discussion
 
-**Clarification · [lines 3559–3574](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:3559) and [3804](/Users/chaoruiz/Documents/Repos/sparse-nn-hjb/paper/paper_0805.tex:3804).**
+**Status:** `withdrawn`
 
-> “global relative $H^1$ validation error”; “global validation accuracy”
+**Optional definition of a comparison term · [lines 3559–3574](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:3559) and [3804](/Users/chaoruiz/Documents/Repos/SparseNNforHJB/paper/paper_0805.tex:3804).**
 
-Here “global” means the error on the full validation set, as opposed to its near-switching or far-switching subsets. It does not mean an error over the entire state space or a globally minimal error among all networks. Define this usage once, or write “relative $H^1$ error on the full validation set.”
+1. `withdrawn` — **“Global” refers to the full validation set.** The discussion contrasts this error with the errors on subsets near and far from the gradient discontinuity. The intended meaning is recoverable from context.
+
+   **Proposed fix:** Define that usage once, or write “relative $H^1$ error on the full validation set.”
+
+**Overall fix:** Prefer “full validation set” when it shortens the explanation. No separate statement about global optimization or the entire state space is needed.
 
 ## 7. Smaller wording and grammar corrections
 
-These are separate from the mathematical findings above. Some are awkward rather than false, but fixing them makes the argument easier to read.
+Each row is a separate, single-point item. Its final column gives both the proposed fix and the complete fix for that point. Where a mathematical issue is handled above, the row refers to that item rather than adding another requirement. The source locations are those of the original audit.
 
-| Source lines | Current wording | Suggested wording |
-| --- | --- | --- |
-| 83–85 | “Value and gradient are generated” | “Numerical value and costate labels are generated” (see I1). |
-| 88 | “, We study” | “, we study”. |
-| 98 | “Primal-Dual-Active-Point (PDPA)” | “primal–dual active point (PDAP)”. |
-| 115 | “the dynamic optimal control problem in the space-time domain” | “the following finite-horizon optimal-control problem”. |
-| 205 | “sufficiently smooth” | Name the required regularity or refer to Assumption 3.1. Avoid suggesting $C^\infty$ where $C^1$ suffices. |
-| 220 | “denote the costate” | “denote the initial costate value”; $g^m=p^{*,m}(0)$ is a vector, not the entire costate trajectory. |
-| 256–259 | “the gradient fitting”; “the smooth activation functions” | “gradient fitting”; “smooth activation functions”, with the mathematical correction in I9. |
-| 262 | “The difficulty is, such extension requires” | “Such an extension requires”. |
-| 266 | “admits infinite slope at 0” | “has infinite right derivative at zero” (for the stated range of $k$). |
-| 272 | “adress” | “address”. |
-| 278 | “finite positive right slope” | “finite positive right derivative at zero”. |
-| 279 | “nonhomogeneous defined on the unbounded domain” | “nonhomogeneous, with inner parameters in an unbounded domain”. |
-| 284–285 | “of implied polynomial growth condition” | “satisfying the stated polynomial growth bound”. The continuous-activation existence claim itself is valid. |
-| 287 | “we proved”; “finite atomic” | “we prove”; “finitely atomic” or “finitely supported”, consistently. |
-| 288 | “the number of neurons of optimal network” | “the reduced width of every globally minimizing network” for the a priori global bound; distinguish the local minimizer-dependent bound. |
-| 290 | “with $n^{-1/2}$ best-iterate rate” | “with an $O(n^{-1/2})$ best-iterate bound on …”, identifying the quantity and hypotheses (A2). |
-| 666 | “relaxed assmuptions” | “weaker assumptions”. |
-| 710–711 | “a finite subcover Let” | “a finite subcover. Let”. |
-| 1032 | “The space of measure of finite moment” | “The space of measures with finite $p$-th moment”. |
-| 1987 | “widely used in the Sobolev training” | “used in Sobolev training”; retain “widely” only if intended and supported. |
-| 2615 | “sampled value–gradient norm” | “sampled value–gradient seminorm” on the function dictionary, or “Euclidean norm of the sampled feature vector”; finitely many samples do not define a norm on the whole function space. |
-| 2596 | A numeric citation followed by “surveys generation methods” | “Generation methods are surveyed in [citation].” |
-| 3002–3003 | “has superlinear convergence rate locally under nonsingularity” | “converges locally superlinearly near a root on a fixed smooth branch whose Jacobian is nonsingular”. This should remain a local Newton statement, not a guarantee for branch-changing iterations. |
-| 3117 | “The Algorithm …, Algorithm … use” | “Algorithms … and … use”. |
-| 3154 | “fixed bound $\lambda\le e^5$” | “fixed radial bound $|\omega|\le e^5$”, or explicitly define $\lambda=|\omega|$ here. |
-| 3169 | “Effect of the gradient training” | “Effect of gradient training”. |
-| 3353 | “atom power $k$” | “activation degree $k$” or “homogeneity degree $k$”. |
-| 3460 | “Algorithm 1 leaves them free” | “Algorithm 1 permits varying atom norms within its search region”; its objective and capped numerical search still constrain the choice. |
-| 3494 | “We observe the pendulum example” | “We consider the pendulum example”. |
-| 3519 | “The open loop algorithm follows from” | “The open-loop data-generation procedure follows”, with the explanation in N3. |
-| 3589 | “The network shows limitation in approximating the optimal value function” | State the observed limitation of the displayed fits, e.g. “The displayed fits deviate from the numerical reference near the switching region.” Do not infer a limitation of the network class from these selected runs. |
-| 3747 | “Validation errors on gradient discontinuity” | “Validation errors near the gradient discontinuity”. |
+| Point | Status | Source lines | Wording or issue | Proposed and overall fix |
+| --- | --- | --- | --- | --- |
+| W1 | `applied` | 83–85 | The earlier review requested a replacement of “Value and gradient are generated.” | **Applied:** retain the current “Numerical estimates of the value and gradient.” No additional replacement under I1. |
+| W2 | `applied` | 88 | “, We study” | Use “, we study”. |
+| W3 | `applied` | 98 | The original acronym was PDPA. | **Applied:** retain PDAP. Lowercasing the expanded algorithm name is optional. |
+| W4 | `withdrawn` | 115 | “the dynamic optimal control problem in the space-time domain” | Prefer “the following finite-horizon optimal-control problem”. |
+| W5 | `withdrawn` | 205 | “sufficiently smooth” does not identify the regularity being invoked. | Refer to the applicable dictionary assumption; do not strengthen the separate continuous-activation existence theorem. |
+| W6 | `applied` | 220 | The earlier review requested identification of the initial costate. | **Applied:** the current data paragraph defines $g^m$ as the initial costate. Retain it. |
+| W7 | `applied` | 256–259 | “the gradient fitting” | Use “gradient fitting”, together with the substantive correction in I9. |
+| W8 | `applied` | 256–259 | “the smooth activation functions” | **Applied:** removed the article to read “smooth activation functions”. The additional regularity explanation remains withdrawn under I9.2. |
+| W9 | `applied` | 262 | “The difficulty is, such extension requires” | Use “Such an extension requires”. |
+| W10 | `applied` | 266 | “admits infinite slope at 0” | Use “has infinite right derivative at zero”, in the range $k\ge2$ used here. |
+| W11 | `applied` | 272 | “adress” | Use “address”. |
+| W12 | `withdrawn` | 278 | “finite positive right slope” | Optionally use “finite positive right derivative at zero” to make the evaluation point explicit. |
+| W13 | `applied` | 279 | “nonhomogeneous defined on the unbounded domain” | Use “nonhomogeneous, with inner parameters in an unbounded domain”; see I11 for the domain distinction. |
+| W14 | `applied` | 284–285 | “of implied polynomial growth condition” | Use “satisfying the stated polynomial growth bound”. |
+| W15 | `applied` | 287 | “we proved” in the contributions list | Use “we prove”, consistently with the other contributions. |
+| W16 | `withdrawn` | 287 | “finite atomic” as an adjective | Prefer “finitely atomic” or “finitely supported”, consistently. |
+| W17 | `withdrawn` | 288 | “the number of neurons of optimal network” does not distinguish the width bounds. | Use “the reduced width of every globally minimizing network” for the a priori global bound; retain the minimizer-dependent nature of the local bound. |
+| W18 | `applied` | 290 | The contribution paragraph now names the first-order optimality residual for atom insertion. | **Applied:** retain A2's agreed residual wording and the current algorithmic hypotheses. |
+| W19 | `applied` | 666 | “relaxed assmuptions” | Use “weaker assumptions”. |
+| W20 | `applied` | 710–711 | “a finite subcover Let” | Use “a finite subcover. Let”. |
+| W21 | `applied` | 1032 | “The space of measure of finite moment” | Use “The space of measures with finite $p$-th moment”. |
+| W22 | `applied` | 1987 | “widely used in the Sobolev training” | **Applied:** removed the article to read “widely used in Sobolev training”, retaining “widely” and the existing citations. |
+| W23 | `withdrawn` | 2615 | “sampled value–gradient norm” on the whole function dictionary | Say “sampled value–gradient seminorm” there, or “Euclidean norm of the sampled feature vector”. Finitely many samples do not define a norm on the whole function space. |
+| W24 | `withdrawn` | 2596 | A numeric citation is the grammatical subject of “surveys generation methods”. | Use “Generation methods are surveyed in [citation].” |
+| W25 | `withdrawn` | 3002–3003 | “has superlinear convergence rate locally under nonsingularity” | Use “converges locally superlinearly near a root whose Jacobian is nonsingular”, retaining the existing exact, undamped, fixed-smooth-branch qualification. |
+| W26 | `applied` | 3117 | “The Algorithm …, Algorithm … use” | Use “Algorithms … and … use”. |
+| W27 | `applied` | 3154 | “fixed bound $\lambda\le e^5$” without a local radial definition | Use “fixed radial bound $\lvert\omega\rvert\le e^5$”, or define $\lambda=\lvert\omega\rvert$ there. |
+| W28 | `applied` | 3169 | “Effect of the gradient training” | Use “Effect of gradient training”. |
+| W29 | `applied` | 3353 | “atom power $k$” | Prefer “activation degree $k$” or “homogeneity degree $k$”. |
+| W30 | `withdrawn` | 3460 | “Algorithm 1 leaves them free” for atom norms | Use “Algorithm 1 permits varying atom norms within its search region”. |
+| W31 | `applied` | 3494 | “We observe the pendulum example” | Use “We consider the pendulum example”. |
+| W32 | `applied` | 3519 | “The open loop algorithm follows from” | **Applied:** “We follow the open-loop algorithm of” with the existing citation, as in N3.1. |
+| W33 | `withdrawn` | 3589 | “The network shows limitation in approximating the optimal value function” generalizes from selected fits. | Describe the displayed fits, for example “The displayed fits show visible approximation errors,” and identify the observed feature if discussing it further. |
+| W34 | `applied` | 3747 | “Validation errors on gradient discontinuity” | Use “Validation errors near the gradient discontinuity”, as in N10. |
+
+**Overall fix:** Apply the remaining grammar and terminology edits individually. Keep rows marked applied, and treat optional word choices as optional. Do not use this table to reintroduce the withdrawn I1 or G6 recommendations.
 
 ## 8. Wording already qualified correctly
 
-These checks matter because indiscriminate changes would introduce new inaccuracies.
+These are preservation checks, not additional findings requiring revisions.
 
-- **“The global minimum” is not a uniqueness claim.** A minimum value and a minimizing argument are different objects. At line 95, “existence of a global minimizer” would be more explicit about attainment, but “the global minimum” is not wrong merely because minimizers may be nonunique.
-- **The weaker existence theorem is intentional.** Lines 1230–1240 require only continuity of the activation, its value-growth bound, and $p>s_0$. Do not replace this with the full $C^1$/gradient-growth assumptions required for later results.
-- **Several uniqueness statements are justified.** Lines 1257–1258 concern the inverse image of a fixed normalized measure under a bijection. The unique zero minimizer in the zero-target/zero-dictionary cases and the unique radial minimizer at line 2154 have explicit arguments. They should not be weakened merely to match P1.
-- **Reduced width is defined.** Lines 1122–1124 merge repeated locations and discard zero coefficients. Later support-cardinality bounds are not bounds on every redundant parameter listing of the same network.
-- **The detailed rate statement is appropriately limited.** Lines 2787–2788 explicitly deny an objective-gap or global-minimizer convergence conclusion; the conclusion also acknowledges the gap between exact search and multistart search.
-- **The nonconvex proximal map is a selected minimizer.** Lines 2936–2941 use membership in an argmin and specify the tie at zero. This already avoids an unjustified uniqueness assertion.
-- **Numerical stabilization is not called asymptotic stability.** Lines 3652–3659 give a finite-time sampled criterion and explicitly state its limitation. The table caption repeats the criterion.
-- **The selection states are not presented as independent tests.** Lines 3557–3563 disclose how A and B are used in model selection.
-- **Figure 11 already discloses display clipping.** Lines 3628–3631 explicitly say that surfaces are clipped to $[0,60]$ for visualization and that errors and feedback use the unclipped fit. The missing Figure 12 disclosure concerns control saturation instead.
-- **The target-region figure already limits its claim.** Lines 3546–3551 identify nearest-characteristic coloring as an approximation and say that it does not compare branch costs at every grid point.
+1. **“The global minimum” does not assert a unique minimizer.** The minimum value and a minimizing argument are different objects. “Existence of a global minimizer” would emphasize attainment, but the definite article is not a uniqueness error.
+2. **The weaker existence theorem is intentional.** It uses continuity of the activation, the value-growth bound, and $p>s_0$. Preserve those assumptions rather than importing the stronger gradient-growth assumptions of later results.
+3. **The identified uniqueness statements have specific arguments.** These concern the inverse image under the normalization bijection, the zero minimizer in the zero-target/zero-dictionary cases, and the radial minimizer. P1 does not require weakening them.
+4. **Reduced width is defined.** Repeated locations are merged and zero coefficients discarded. Support bounds concern that reduced representation; H1 separately addresses zero-feature neurons in the rescaling lemma.
+5. **The detailed rate statement already specifies its scope.** The corollary identifies the residual and its hypotheses, and the conclusion distinguishes exact from multistart search. The summary terminology is aligned under A2; retain it.
+6. **The nonconvex proximal map is a selected minimizer.** Membership in the argmin and the tie at zero are already specified; no uniqueness correction is needed.
+7. **Numerical stabilization is explicitly defined.** The finite-time sampled criterion and its scope are stated in the body and caption. Retain them.
+8. **The selection states are identified as selection states.** The manuscript explains how A and B enter model selection. No new independent-test disclaimer is needed.
+9. **Figure 11 already identifies display clipping.** It says that the surfaces are clipped for visualization and that errors and feedback use the unclipped fit. P3 concerns the different operation of saturating applied controls.
+10. **The target-region figure identifies its numerical construction.** Its nearest-characteristic coloring is already described as an approximation. Retain that description.
+11. **The data paragraph distinguishes exact identities from numerical labels.** It defines accumulated costs and initial costates and gives the gradient identity conditionally. Retain it; I1 is withdrawn.
+12. **The correction solver's scope is stated.** The text describes a local method with a nonincrease acceptance rule. Keep this rule; G6 is withdrawn. Handle pruning separately through G2.
 
-## 9. Suggested order for a later revision
+**Overall fix:** Preserve these qualifications and definitions. Avoid adding repeated caveats or weakening valid statements merely to make terminology uniform.
 
-1. Resolve P1–P3, I1–I5, A1–A4, G1, and G4, because they affect the meaning of the mathematical formulation or the headline guarantees.
-2. Correct theorem/proof language in M1–M7, M11, H1, and H3; retain the distinctions listed in Section 8.
-3. Repair numerical labels, parameter references, and captions, including the Figure 12 initial-time view.
-4. Apply the smaller language edits and check that the abstract and conclusion use the same assumptions and terminology as the formal results.
+## 9. Combined revision plan
 
-No manuscript or figure edits are included in this report.
+1. **Preserve applied and withdrawn points.** P1's article correction, A1, A2, A5, I3, I6, I7, I10, and I4's spatial-gradient notation are already applied. I1, I8, and G6 are withdrawn. M8 and G5 identify no required correction in the current context.
+2. **Correct concrete mathematical and descriptive mismatches.** Retain the corrections concerning first-gradient fitting (I9), finite versus countable atoms (M1 and M3), the compact-neighborhood choice (M2), the rescaling scope (H1), and the sampled-dictionary scope (H3). Use the narrower example conclusions in M5 and M11.
+3. **Make definitions and dependencies explicit where they matter.** Resolve the TPBVP derivative convention (P2), check the state-solvability/DPP scope (I2), explain the parameter-to-measure step (H4), and define the empirical insertion quantities (G1). Retain the now-explicit derivative domain (M9), the minimizer-existence sentence, and the applied HJB sign correction.
+4. **Align the algorithm description with its operations.** Repair the finite-amplitude insertion explanation (G3), put normalization inside the sphere-search objective (G4), and specify the scope of decrease before or after pruning (G2). Preserve the existing descriptions of the local solver and candidate search.
+5. **Align summaries and numerical descriptions.** Retain A2's applied residual sentence and A5's “discontinuous gradient”; state the homogeneous sparsity range (A4) and the conclusion's curvature assumption (N11). Clarify the stationary use of the initial-time value slice (I5).
+6. **Repair the remaining metrics, references, and captions.** Define the standalone gradient metric (N1), correct the gradient features (N2), repair the parameter cross-references (N6), define the plotted cost (N8), and coordinate Figure 12's saturation, initial-time view, and axis-scale changes (P3, P4, N9). Apply the other numerical clarifications only to the extent described in their individual overall fixes.
+7. **Finish with the single-point edits in Section 7.** Optional clarifications remain choices; they are not additional mathematical defects.
+
+**Overall fix:** Make the retained local corrections, preserve the qualifications already present, and keep the abstract and conclusion consistent with the formal results. This revision changes the review document only; manuscript, figure, and implementation changes remain separate actions.
