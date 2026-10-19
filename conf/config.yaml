@@ -9,7 +9,7 @@ defaults:
   - config_schema      # ExperimentConfig, registered in scripts/train.py
                        # `eval` is absent: each conf/data/<name>.yaml selects its own.
   - _self_
-  - override hydra/job_logging: none  # src.logging owns job handlers and destinations.
+  - override hydra/job_logging: none  # Hydra adds no log handlers; scripts/train.py calls src.logging.configure_logging.
 
 name: run
 
