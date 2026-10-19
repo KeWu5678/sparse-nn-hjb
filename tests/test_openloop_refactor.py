@@ -88,8 +88,8 @@ def test_vdp_solver_public_imports_are_available() -> None:
     )
 
     problem = VdpOptimalControlProblem(T_final=0.1)
-    config = VdpOpenLoopSolverConfig(profile="fast", num_time_points=11, max_iter=1)
+    config = VdpOpenLoopSolverConfig(num_time_points=11)
     solver = VdpOpenLoopSolver(problem=problem, config=config)
 
     assert solver.problem.T_final == 0.1
-    assert solver.config.profile == "fast"
+    assert solver.time_grid.shape == (11,)

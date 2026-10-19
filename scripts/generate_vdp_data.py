@@ -30,7 +30,7 @@ def main() -> None:
     states = grid_initial_states(args.grid_size, args.grid_size, (-3, 3), (-3, 3))
     solver = VdpOpenLoopSolver(
         VdpOptimalControlProblem(T_final=3.0),
-        VdpOpenLoopSolverConfig(profile="pmp", num_time_points=151),
+        VdpOpenLoopSolverConfig(num_time_points=151),
     )
 
     def progress(done, total):
