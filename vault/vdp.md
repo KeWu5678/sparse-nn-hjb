@@ -25,7 +25,7 @@ collocation mesh; the gradient label is `dV(x) = p(0)`. The result is a
 numerical stationary reference, not a certificate of global optimality.
 
 Collocation is the only VDP open-loop method; the reduced-gradient profiles
-(Barzilai–Borwein and L-BFGS-B) were retired in ADR 0017.
+(Barzilai–Borwein and L-BFGS-B) were retired in ADR 0019.
 
 ## Dataset
 

@@ -20,8 +20,8 @@ immutable object with typed fields `x`, `v`, `dv`.
 
 The dataclass stores `v` as `(n,)`, one scalar value per sample. The `(N, 1)`
 shape is a requirement of the network and tensor batches, so it is applied in
-one place, `to_tensors`, which splitting, saved-run validation, and region
-evaluation all use to convert arrays to tensors. Concatenation requires at least
+one place, `to_tensors`, which splitting and region evaluation use to convert
+arrays to tensors. Concatenation requires at least
 one chunk; an empty set is built explicitly with `ValueSamples.empty(dimension)`
 instead of defaulting to two columns. The dataclass
 marks its arrays read-only, because `frozen=True` prevents field reassignment

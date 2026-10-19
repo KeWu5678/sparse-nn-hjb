@@ -16,8 +16,7 @@ import pytest
 import torch
 from ssn_test_problem import closure_for
 
-from src.config import resolve_model, validate_model_config
-from src.models import SparseModel, make_penalty
+from src.config import make_penalty, resolve_model, validate_model_config
 from src.SSN import SSN
 
 GOLDEN_PATH = Path(__file__).parent / "fixtures" / "ssn_golden.npz"
@@ -59,7 +58,7 @@ def _run_trajectory(config: dict) -> np.ndarray:
     # SSN adds the penalty to the closure's fitting term.
     model_config = resolve_model({"alpha": alpha, "gamma": gamma, "power": power}, P)
     validate_model_config(model_config)
-    penalty = make_penalty(alpha, gamma, SparseModel(model_config).penalty_exponent)
+    penalty = make_penalty(model_config)
 
     kind = config["kind"]
     if kind == "ssn":

@@ -119,6 +119,12 @@ def _as_value_samples(raw: Any) -> ValueSamples:
     return ValueSamples(arrays["x"], arrays["v"], arrays["dv"])
 
 
+def load_arrays(path: str | Path, *keys: str) -> dict[str, np.ndarray]:
+    """Named float64 arrays of an ``.npz`` file under DATA_DIR."""
+    with np.load(DATA_DIR / path) as source:
+        return {key: np.asarray(source[key], dtype=np.float64) for key in keys}
+
+
 def file_sha256(path: str | Path) -> str:
     """SHA-256 of a file's bytes, the identity recorded for datasets and generator sources."""
     with Path(path).open("rb") as source:
@@ -165,6 +171,10 @@ class ValueSampleNormalizer:
 
     def to_dict(self) -> dict[str, Any]:
         return {"x_scale": self.x_scale.tolist(), "v_scale": self.v_scale}
+
+    @classmethod
+    def from_dict(cls, values: dict[str, Any]) -> "ValueSampleNormalizer":
+        return cls(np.asarray(values["x_scale"], dtype=np.float64), float(values["v_scale"]))
 
 
 def make_dataloaders(

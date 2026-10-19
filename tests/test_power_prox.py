@@ -5,16 +5,20 @@ from __future__ import annotations
 import pytest
 import torch
 
-from src.models import make_penalty
+from src.models import FractionalPenalty, LogPenalty
+
+
+def _penalty(q: float):
+    return LogPenalty(1.0, 0.0) if q == 1.0 else FractionalPenalty(1.0, q)
 
 
 def power_prox(v: torch.Tensor, lambda_: float, q: float) -> torch.Tensor:
     """The vector prox of lambda_*|.|^q; alpha does not enter it."""
-    return make_penalty(1.0, 0.0, q).prox(v, lambda_)
+    return _penalty(q).prox(v, lambda_)
 
 
 def jac_power_prox(v: torch.Tensor, lambda_: float, q: float) -> torch.Tensor:
-    penalty = make_penalty(1.0, 0.0, q)
+    penalty = _penalty(q)
     return penalty.jac_prox(v, lambda_, prox_image=penalty.prox(v, lambda_))
 
 

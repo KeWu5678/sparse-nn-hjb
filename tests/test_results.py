@@ -1,29 +1,22 @@
 import hashlib
-import json
-import pickle
-from types import SimpleNamespace
 
 import numpy as np
 import pytest
 import torch
 
-from src.data import ValueSamples, split_value_samples
-from src.eval import relative_errors
-from src.results import (
-    evaluate_history,
-    history_atoms,
-    load_run,
-    load_run_for_artifact,
-    model_from_history,
-    predict_physical,
-    validation_metrics,
-    validation_samples,
-    value_surface_grid,
-)
+from src.PDAP import History
+from src.results import find_runs, load_mlflow_run, predict_physical, value_surface_grid
+
+
+def _atoms(c: float) -> dict[str, torch.Tensor]:
+    return {"inner_weight": torch.tensor([[1., 2.]], dtype=torch.float64),
+            "inner_bias": torch.tensor([.5], dtype=torch.float64),
+            "c": torch.tensor([c], dtype=torch.float64)}
 
 
 @pytest.fixture
-def record_path(tmp_path):
+def example(tmp_path):
+    """A fit and the fields recorded with it; tests edit them before recording."""
     samples = {
         "x": np.arange(1, 21, dtype=float).reshape(10, 2),
         "v": np.arange(1, 11, dtype=float).reshape(10, 1),
@@ -31,19 +24,14 @@ def record_path(tmp_path):
     }
     data_path = tmp_path / "data.npz"
     np.savez(data_path, **samples)
-    history = SimpleNamespace(
-        best_iteration=1,
-        inner_weights=[{"weight": torch.tensor([[1., 2.]]), "bias": torch.tensor([.5])}
-                       for _ in range(2)],
-        outer_weights=[torch.tensor([[1.]]), torch.tensor([[3.]])],
-        err_h1_val=[123., 456.],
+    with data_path.open("rb") as stream:
+        data_sha256 = hashlib.sha256(stream.read()).hexdigest()
+    history = History(
+        rows=[{"objective_train": 2., "rel_h1_val": 123.}, {"objective_train": 1., "rel_h1_val": 456.}],
+        states=[_atoms(1.), _atoms(3.)],
+        diagnostics=[{}, {}],
     )
-    artifact = tmp_path / "result_example.pkl"
-    with artifact.open("wb") as stream:
-        pickle.dump(history, stream)
-    path = tmp_path / "example.json"
-    record = {
-        "run_id": "example", "status": "completed",
+    return {
         "config": {
             "model": {"kind": "signed", "activation": "relu", "power": 1.,
                       "normalized": True, "moment_order": 99., "th": 0.5},
@@ -51,46 +39,68 @@ def record_path(tmp_path):
             "env": {"seed": 42},
         },
         "normalization": {"x_scale": [2., 4.], "v_scale": 8.},
-        "metric_coordinates": "physical",
-        "artifacts": [{"name": "fit_history", "path": artifact.name}],
+        "tags": {"data_sha256": data_sha256, "hydra.output_dir": str(tmp_path / "jobs" / "0")},
+        "history": history,
     }
-    path.write_text(json.dumps(record))
-    return path
 
 
-def test_loading_rejects_dataset_changed_since_training(record_path):
-    record = json.loads(record_path.read_text())
-    data_path = record_path.parent / "data.npz"
-    record["data_sha256"] = hashlib.sha256(data_path.read_bytes()).hexdigest()
-    record_path.write_text(json.dumps(record))
-    load_run(record_path)
+@pytest.fixture
+def record(tracking_store, example, tmp_path):
+    """Record ``example`` as an MLflow run laid out as ``src.tracking`` writes one."""
+    def record(status="FINISHED", experiment="run") -> str:
+        found = tracking_store.get_experiment_by_name(experiment)
+        experiment_id = found.experiment_id if found else tracking_store.create_experiment(
+            experiment, artifact_location=(tmp_path / "mlartifacts" / experiment).as_uri())
+        run_id = tracking_store.create_run(experiment_id).info.run_id
+        tracking_store.log_dict(run_id, example["config"], "config.json")
+        if example["normalization"] is not None:
+            tracking_store.log_dict(run_id, example["normalization"], "normalization.json")
+        history = tmp_path / run_id / "history.pt"
+        history.parent.mkdir()
+        torch.save(example["history"].to_dict(), history)
+        tracking_store.log_artifact(run_id, str(history))
+        for key, value in example["tags"].items():
+            tracking_store.set_tag(run_id, key, value)
+        tracking_store.set_terminated(run_id, status)
+        return run_id
+    return record
+
+
+def test_loading_rejects_dataset_changed_since_training(example, record):
+    data_path = example["config"]["data"]["path"]
+    run_id = record()
+    load_mlflow_run(run_id)
     with np.load(data_path) as stored:
         arrays = {name: stored[name] for name in stored.files}
     arrays["v"] = arrays["v"] + 1.0
     np.savez(data_path, **arrays)
     with pytest.raises(ValueError, match="dataset differs"):
-        load_run(record_path)
+        load_mlflow_run(run_id)
 
 
-def test_saved_run_uses_recorded_scaling_not_dataset_maxima(record_path):
-    run = load_run(record_path)
-    with torch.no_grad():
-        v, dv = predict_physical(run, [[2., 4.]])
+def test_only_finished_runs_load(record):
+    with pytest.raises(ValueError, match="expected a finished MLflow run"):
+        load_mlflow_run(record(status="FAILED"))
+
+
+def test_saved_run_uses_recorded_scaling_not_dataset_maxima(record):
+    run = load_mlflow_run(record())
+    v, dv = predict_physical(run, [[2., 4.]])
     torch.testing.assert_close(v, torch.tensor([[84.]], dtype=torch.float64))
     torch.testing.assert_close(dv, torch.tensor([[12., 12.]], dtype=torch.float64))
     assert v.shape == (1, 1) and dv.shape == (1, 2)
     assert not v.requires_grad and not dv.requires_grad
     assert run.iteration == 1
+    assert run.history.rows[1]["rel_h1_val"] == 456.
     # Objective/measure normalization is not another transform of V.
-    assert run.record["config"]["model"]["moment_order"] == 99.
+    assert run.config["model"]["moment_order"] == 99.
     assert run.model.moment_order is None
     # Historical mixture metadata remains readable; it is not a runtime option.
-    assert run.record["config"]["model"]["th"] == 0.5
-    assert run.stored_metric_coordinates == "physical"
+    assert run.config["model"]["th"] == 0.5
 
 
-def test_checkpoint_override_does_not_change_saved_model(record_path):
-    run = load_run(record_path)
+def test_checkpoint_override_does_not_change_saved_model(record):
+    run = load_mlflow_run(record())
     before = {k: v.clone() for k, v in run.model.state_dict().items()}
     v, dv = predict_physical(run, [[2., 4.]], iteration=0)
     torch.testing.assert_close(v, torch.tensor([[28.]], dtype=torch.float64))
@@ -102,108 +112,34 @@ def test_checkpoint_override_does_not_change_saved_model(record_path):
         predict_physical(run, [[2., 4.]], iteration=-1)
 
 
-def test_loading_and_validation_split_leave_rng_unchanged(record_path):
-    np.random.seed(173)
-    torch.manual_seed(173)
-    np_state = np.random.get_state()
-    torch_state = torch.random.get_rng_state().clone()
-    run = load_run(record_path)
-    actual = validation_samples(run)
-    assert np.random.get_state()[2:] == np_state[2:]
-    np.testing.assert_array_equal(np.random.get_state()[1], np_state[1])
-    torch.testing.assert_close(torch.random.get_rng_state(), torch_state)
-
-    with np.load(run.record["config"]["data"]["path"]) as data:
-        samples = ValueSamples(x=data["x"], v=data["v"], dv=data["dv"])
-    np.random.seed(42)
-    _, expected = split_value_samples(samples, .6)
-    for a, b in zip(actual, expected):
-        torch.testing.assert_close(a, b, rtol=0, atol=0)
-
-
-def test_rescoring_ignores_stored_normalized_errors(record_path):
-    record = json.loads(record_path.read_text())
-    record.pop("metric_coordinates")
-    record_path.write_text(json.dumps(record))
-    with pytest.warns(UserWarning, match="Stored metrics use training coordinates"):
-        run = load_run(record_path)
-    assert run.stored_metric_coordinates == "training"
-    raw = record_path.read_bytes()
-    x, v, dv = validation_samples(run)
-    expected = relative_errors(*predict_physical(run, x), v, dv)
-    metrics = validation_metrics(run)
-    assert list(metrics.values()) == list(expected)
-    curve = evaluate_history(run)
-    np.testing.assert_array_equal(curve["iteration"], [0, 1])
-    np.testing.assert_array_equal(curve["neurons"], [1, 1])
-    assert curve["rel_h1"][1] == expected[2]
-    assert curve["rel_h1"][0] == relative_errors(*predict_physical(run, x, 0), v, dv)[2]
-    assert run.history.err_h1_val == [123., 456.]
-    assert record_path.read_bytes() == raw
-
-
-@pytest.mark.parametrize("coordinates", ["training", "physical", "unknown", None])
-def test_stored_metric_coordinate_contract(record_path, coordinates):
-    record = json.loads(record_path.read_text())
-    record["metric_coordinates"] = coordinates
-    record_path.write_text(json.dumps(record))
-    raw = record_path.read_bytes()
-    if coordinates not in ("training", "physical"):
-        with pytest.raises(ValueError, match="metric_coordinates"):
-            load_run(record_path)
-    elif coordinates == "training":
-        with pytest.warns(UserWarning, match="Stored metrics use training coordinates"):
-            assert load_run(record_path).stored_metric_coordinates == coordinates
-    else:
-        assert load_run(record_path).stored_metric_coordinates == coordinates
-    assert record_path.read_bytes() == raw
-
-
-def test_normalization_disabled_is_identity(record_path):
-    record = json.loads(record_path.read_text())
-    record["normalization"] = None
-    record["config"]["data"]["normalize"] = False
-    record_path.write_text(json.dumps(record))
-    v, dv = predict_physical(load_run(record_path), [[1., 1.]])
+def test_normalization_disabled_is_identity(example, record):
+    example["normalization"] = None
+    example["config"]["data"]["normalize"] = False
+    v, dv = predict_physical(load_mlflow_run(record()), [[1., 1.]])
     torch.testing.assert_close(v, torch.tensor([[10.5]], dtype=torch.float64))
     torch.testing.assert_close(dv, torch.tensor([[3., 6.]], dtype=torch.float64))
 
 
-@pytest.mark.parametrize("normalization", [None, {"x_scale": [2., 0.], "v_scale": 8.},
-                                        {"x_scale": [2.], "v_scale": 8.}])
-def test_missing_or_invalid_normalization_is_not_guessed(record_path, normalization):
-    record = json.loads(record_path.read_text())
-    record["normalization"] = normalization
-    record_path.write_text(json.dumps(record))
+def test_missing_normalization_is_not_guessed(example, record):
+    example["normalization"] = None
     with pytest.raises(ValueError, match="normalization"):
-        load_run(record_path)
+        load_mlflow_run(record())
 
 
-def test_legacy_containers_and_artifact_entrypoint(record_path):
-    run = load_run_for_artifact(record_path.with_name("result_example.pkl"))
-    w, b, c = history_atoms([vars(run.history)])
-    assert w.shape == (1, 2) and b.shape == (1,) and c.shape == (1, 1)
-    net = model_from_history([vars(run.history)], "relu", 1.)
-    torch.testing.assert_close(net.c, run.model.c)
-
-
-def test_historical_prediction_power_does_not_require_solver_support(record_path):
-    run = load_run(record_path)
-    net = model_from_history(run.history, torch.relu, power=4.)
-
-    value, gradient = net(torch.tensor([[1., 1.]], dtype=torch.float64))
+def test_prediction_power_does_not_require_solver_support(example, record):
+    example["config"]["model"]["power"] = 4.
+    example["normalization"] = None
+    example["config"]["data"]["normalize"] = False
+    value, gradient = predict_physical(load_mlflow_run(record()), [[1., 1.]])
 
     torch.testing.assert_close(value, torch.tensor([[3. * 3.5 ** 4]], dtype=torch.float64))
     torch.testing.assert_close(gradient, torch.tensor([[12. * 3.5 ** 3, 24. * 3.5 ** 3]], dtype=torch.float64))
 
 
-def test_saved_nonhomogeneous_predictions_do_not_require_a_training_order(record_path):
-    record = json.loads(record_path.read_text())
-    record["config"]["model"]["activation"] = "tanh"
-    record["config"]["model"].pop("moment_order")
-    record_path.write_text(json.dumps(record))
-    before = record_path.read_bytes()
-    run = load_run(record_path)
+def test_saved_nonhomogeneous_predictions_do_not_require_a_training_order(example, record):
+    example["config"]["model"]["activation"] = "tanh"
+    example["config"]["model"].pop("moment_order")
+    run = load_mlflow_run(record())
 
     value, gradient = predict_physical(run, [[2., 4.]])
 
@@ -211,52 +147,23 @@ def test_saved_nonhomogeneous_predictions_do_not_require_a_training_order(record
     torch.testing.assert_close(value, (24 * activation).reshape(1, 1))
     torch.testing.assert_close(gradient, (12 * (1 - activation.square())).repeat(1, 2))
     assert run.model.moment_order is None
-    assert record_path.read_bytes() == before
 
 
-def test_relocated_artifact_does_not_read_old_declared_copy(record_path):
-    old = record_path.with_name("old.pkl")
-    old.write_bytes(b"unreadable old artifact")
-    record = json.loads(record_path.read_text())
-    record["artifacts"][0]["path"] = str(old)
-    record_path.write_text(json.dumps(record))
-    run = load_run_for_artifact(record_path.with_name("result_example.pkl"))
-    assert run.iteration == 1
-    torch.testing.assert_close(predict_physical(run, [[2., 4.]])[0],
-                               torch.tensor([[84.]], dtype=torch.float64))
-
-    # The transform must be checked against the actual supplied artifact.
-    run.history.inner_weights[1]["weight"] = np.ones((1, 3))
-    with record_path.with_name("result_example.pkl").open("wb") as stream:
-        pickle.dump(run.history, stream)
-    with pytest.raises(ValueError, match="normalization"):
-        load_run_for_artifact(record_path.with_name("result_example.pkl"))
-
-
-def test_relocated_record_prefers_its_adjacent_fit_over_an_existing_old_copy(record_path):
-    old = record_path.with_name("old.pkl")
-    old.write_bytes(b"unreadable old artifact")
-    record = json.loads(record_path.read_text())
-    record["artifacts"][0]["path"] = str(old)
-    record_path.write_text(json.dumps(record))
-
-    run = load_run(record_path)
-    torch.testing.assert_close(predict_physical(run, [[2., 4.]])[0],
-                               torch.tensor([[84.]], dtype=torch.float64))
-
-
-def test_empty_support_and_empty_prediction_batch(record_path):
-    run = load_run(record_path)
+def test_empty_support_and_empty_prediction_batch(example, record):
+    example["history"].states[0] = {
+        "inner_weight": torch.empty((0, 2), dtype=torch.float64),
+        "inner_bias": torch.empty(0, dtype=torch.float64),
+        "c": torch.empty(0, dtype=torch.float64),
+    }
+    run = load_mlflow_run(record())
     v, dv = predict_physical(run, np.empty((0, 2)))
     assert v.shape == (0, 1) and dv.shape == (0, 2)
-    run.history.inner_weights[0] = {"weight": np.empty((0, 2)), "bias": np.empty(0)}
-    run.history.outer_weights[0] = np.empty((1, 0))
     v, dv = predict_physical(run, [[1., 2.]], iteration=0)
     assert torch.count_nonzero(v) == 0 and torch.count_nonzero(dv) == 0
 
 
-def test_surface_grid_uses_same_unclipped_prediction(record_path):
-    run = load_run(record_path)
+def test_surface_grid_uses_same_unclipped_prediction(record):
+    run = load_mlflow_run(record())
     x0, x1, value = value_surface_grid(run, x_range=(0., 2.), y_range=(0., 4.), grid_n=3)
     assert x0.shape == x1.shape == value.shape == (3, 3)
     assert value[-1, -1] == 84.  # Above the paper's display ceiling, not clamped.
@@ -264,41 +171,21 @@ def test_surface_grid_uses_same_unclipped_prediction(record_path):
     np.testing.assert_array_equal(value.ravel(), expected.numpy().ravel())
 
 
-@pytest.mark.parametrize("coordinates", [None, "training"])
-def test_explicit_legacy_recovery_must_reproduce_saved_metrics(record_path, coordinates):
-    record = json.loads(record_path.read_text())
-    record.pop("normalization")
-    record.pop("metric_coordinates")
-    if coordinates is not None:
-        record["metric_coordinates"] = coordinates
-    with np.load(record["config"]["data"]["path"]) as samples:
-        indices = np.random.RandomState(42).permutation(10)[6:]
-        x = samples["x"][indices] / [19., 20.]
-        truth = samples["v"][indices] / 10.
-        grad_truth = samples["dv"][indices] * np.array([19., 20.]) / 10.
-    predicted = 3. * (x[:, :1] + 2. * x[:, 1:] + .5)
-    grad_predicted = np.tile([3., 6.], (4, 1))
-    ev = np.sum((predicted - truth) ** 2)
-    eg = np.sum((grad_predicted - grad_truth) ** 2)
-    tv = np.sum(truth ** 2)
-    tg = np.sum(grad_truth ** 2)
-    record["metrics"] = [{"values": {
-        "rel_l2_val": float(np.sqrt(ev / tv)),
-        "rel_grad_val": float(np.sqrt(eg / tg)),
-        "rel_h1_val": float(np.sqrt((ev + eg) / (tv + tg))),
-    }}]
-    record_path.write_text(json.dumps(record))
-    raw = record_path.read_bytes()
-    with pytest.raises(ValueError, match="no recorded normalization"):
-        load_run(record_path)
-    with pytest.warns(UserWarning, match="Stored metrics use training coordinates"):
-        run = load_run(record_path, recover_legacy_normalization=True)
-    assert run.normalization_recovered
-    np.testing.assert_array_equal(run.normalizer.x_scale, [19., 20.])
-    assert run.normalizer.v_scale == 10.
-    assert record_path.read_bytes() == raw
+def test_find_runs_lists_finished_runs_in_job_folder_order(example, record, tmp_path):
+    # String order of the folders, as they list on disk: "p_2.5" sorts before "p_2/".
+    folders = [tmp_path / "p_2" / "0", tmp_path / "p_2.5" / "0", tmp_path / "p_3" / "0"]
+    run_ids = {}
+    for folder in reversed(folders):
+        example["tags"]["hydra.output_dir"] = str(folder)
+        run_ids[folder] = record(experiment="study")
+    example["tags"]["hydra.output_dir"] = str(tmp_path / "p_1" / "0")
+    record(status="FAILED", experiment="study")
 
-    record["metrics"][0]["values"]["rel_grad_val"] *= 1.1
-    record_path.write_text(json.dumps(record))
-    with pytest.raises(ValueError, match="did not reproduce"):
-        load_run(record_path, recover_legacy_normalization=True)
+    runs = find_runs("study")
+
+    expected = [folders[1], folders[0], folders[2]]
+    assert [run.run_id for run in runs] == [run_ids[folder] for folder in expected]
+    assert runs[0].config == example["config"]
+    assert runs[0].artifacts == {"config.json", "normalization.json", "history.pt"}
+    with pytest.raises(ValueError, match="no MLflow experiment"):
+        find_runs("missing")

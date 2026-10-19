@@ -187,7 +187,7 @@ integration helpers.
 This module owns the Shapely dependency and converts geometry results back to
 plain NumPy arrays.
 
-Value samples are the shared `src.data.ValueSamples` type (ADR 0016); the
+Value samples are the shared `src.data.ValueSamples` type (ADR 0018); the
 pendulum package does not define its own sample object.
 
 Internally, `ValueSamples` should store separate plain NumPy arrays:

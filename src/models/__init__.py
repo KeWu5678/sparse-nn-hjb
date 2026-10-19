@@ -1,6 +1,6 @@
 """The sparse model and its proximal penalty, shared by PDAP and SSN."""
 
-from .penalty import FractionalPenalty, LogPenalty, Penalty, make_penalty
-from .sparse_model import SparseModel
+from .penalty import FractionalPenalty, LogPenalty, Penalty
+from .sparse_network import SparseNetwork
 
-__all__ = ["FractionalPenalty", "LogPenalty", "Penalty", "SparseModel", "make_penalty"]
+__all__ = ["FractionalPenalty", "LogPenalty", "Penalty", "SparseNetwork"]

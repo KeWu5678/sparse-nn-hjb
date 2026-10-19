@@ -27,6 +27,7 @@ from typing import Optional, Tuple
 
 from torch import Tensor
 
+from ..models.penalty import FractionalPenalty, LogPenalty, Penalty
 from .activations import ACTIVATIONS, get_activation, get_growth, get_use_sphere
 
 
@@ -60,7 +61,7 @@ class ModelConfig:
     # Algorithm 1 evaluates the penalty on the normalized measure
     # mu_p = w_p*mu, with w_p(omega) = 1 + |omega|^p.  For a signed profile model
     # with a nonhomogeneous activation this is the only supported objective;
-    # SparseModel applies it automatically.  Algorithm 2 is sphere-normalized and does not use
+    # SparseNetwork applies it automatically.  Algorithm 2 is sphere-normalized and does not use
     # this parameter.
     moment_order: Optional[float] = None  # Explicit for nonhomogeneous models; unused on the sphere.
 
@@ -71,7 +72,7 @@ class TrainingConfig:
 
     # outer PDAP loop
     num_iterations: int = 10      # T_out
-    num_insertion: int = 50       # N_trial, candidates sampled per iteration
+    num_of_initial_pts: int = 50  # N_trial, initial points of the multistart search per iteration
     max_insert: int = 15          # N_ins, cap on atoms inserted per iteration (batch mode)
     prune_amp_tol: float = 1e-8   # eps_prune: drop atoms with |c_n| <= this
     # --- paper-conformance axes (paper/paper_0805.tex, Section 5) --------------
@@ -158,7 +159,7 @@ class EvalConfig:
     """Post-fit evaluation: which metrics to compute on the fitted model.
 
     ``kind="global"`` (the default) reproduces today's behavior — only the
-    global ``summary_metrics``.  ``kind="region_split"`` additionally reports
+    global History summary.  ``kind="region_split"`` additionally reports
     errors split into the **switching tube** — the fixed-radius tubular
     neighborhood {distance to the ±2π-tiled switching curve ≤ ``tube_radius``}
     — and the **rest**, scored on the dense **region-eval pool** (``eval_pool``:
@@ -188,10 +189,6 @@ class EnvConfig:
     """
 
     seed: int = 42
-    # Abort at startup when MLflow is not reachable, instead of training for hours
-    # and discovering at run.finish() that publish_record_to_mlflow silently
-    # returned False because MLFLOW_TRACKING_URI was unset. Sweeps set it.
-    require_mlflow: bool = False
     verbose: bool = True  # Readable stderr; JSONL file output is always enabled.
     log_level: str = "INFO"  # Shared threshold for both outputs.
     log_file: Optional[str] = None  # Defaults to run.jsonl in Hydra's output directory.
@@ -242,6 +239,7 @@ def resolve_model(config, input_dim: int) -> dict:
         "activation_name": activation_name,
         "use_sphere": use_sphere,
         "power": config.power,
+        "penalty_exponent": 2.0 / (config.power + 1.0),
         "alpha": config.alpha,
         "gamma": config.gamma,
         "loss_weights": tuple(config.loss_weights),
@@ -252,7 +250,7 @@ def resolve_model(config, input_dim: int) -> dict:
 
 
 def validate_model_config(config) -> None:
-    """Validate resolved model settings before constructing a training problem.
+    """Validate resolved model settings before constructing a network.
 
     The insertion rule in this mapping must also be the one supplied to PDAP.
     Prediction-only reconstruction does not call this training configuration gate.
@@ -294,17 +292,25 @@ def validate_model_config(config) -> None:
             raise ValueError("finite_step insertion minimizes the power penalty and requires gamma == 0")
 
 
+def make_penalty(config) -> Penalty:
+    """The penalty family of validated model settings: the log penalty at q = 1, else the fractional penalty."""
+    if config["penalty_exponent"] == 1.0:
+        return LogPenalty(config["alpha"], config["gamma"])
+    return FractionalPenalty(config["alpha"], config["penalty_exponent"])
+
+
 def validate_optimizer_config(training: TrainingConfig) -> None:
     """Validate the training settings before constructing PDAP.
 
-    Each paper-conformance axis is checked here rather than at use, so a typo
-    fails at setup instead of midway through a sweep.
+    Each setting with a fixed set of values is checked here rather than at use,
+    so a typo fails at setup instead of midway through a sweep.
     """
     for name, value, allowed in (
         ("training.insert_init", training.insert_init, ("warm_start", "guaranteed")),
         ("training.insert_mode", training.insert_mode, ("batch", "sequential")),
         ("training.loop_order", training.loop_order, ("correction_first", "insertion_first")),
         ("training.radial_cap", training.radial_cap, ("fixed", "theorem")),
+        ("training.method", training.method, ("levenberg_marquardt", "steihaug_cg")),
     ):
         if value not in allowed:
             raise ValueError(f"{name} must be one of {allowed}, got {value!r}")

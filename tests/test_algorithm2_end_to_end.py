@@ -5,12 +5,11 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import torch
-from ssn_test_problem import penalty_for
 
-from src.config import resolve_model, validate_model_config
+from src.config import make_penalty, resolve_model, validate_model_config
 from src.config.schema import EnvConfig, ExperimentConfig, ModelConfig, TrainingConfig
 from src.data import ValueSamples, make_dataloaders
-from src.models import SparseModel
+from src.models import SparseNetwork
 from src.PDAP import PDAP
 from src.training import run_training
 
@@ -35,7 +34,7 @@ def test_algorithm2_fits_an_exact_relu_power_atom(power: float) -> None:
             gamma=0.0,
         ),
         training=TrainingConfig(
-            num_insertion=20, max_insert=1,
+            num_of_initial_pts=20, max_insert=1,
             insert_mode="sequential",
             loop_order="insertion_first",
             correction_guard=True,
@@ -46,17 +45,14 @@ def test_algorithm2_fits_an_exact_relu_power_atom(power: float) -> None:
     )
     model_config = resolve_model(cfg.model, input_dim=2)
     validate_model_config(model_config)
-    model = SparseModel(model_config)
+    network = SparseNetwork(model_config)
     train_loader, valid_loader = make_dataloaders(data, cfg.data.train_fraction)
 
     history = run_training(
-        PDAP(cfg.training, penalty_for(model_config, model), insertion=model_config["insertion"]),
-        model,
-        train_loader,
+        PDAP(cfg.training, make_penalty(model_config), network, train_loader, insertion=model_config["insertion"]),
         valid_loader,
         num_iterations=2,
-        verbose=False,
     )
 
-    assert history.final_neurons > 0
-    assert np.all(np.diff(np.asarray(history.train_loss)) <= 1e-12)
+    assert history.run["final_neurons"] > 0
+    assert np.all(np.diff(np.asarray([row["objective_train"] for row in history.rows])) <= 1e-12)

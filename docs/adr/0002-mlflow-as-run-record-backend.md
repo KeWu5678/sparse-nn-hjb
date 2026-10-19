@@ -1,8 +1,11 @@
 ---
-status: accepted
+status: superseded by 0016
 ---
 
 # MLflow is an optional dashboard projection of local Run Records
+
+Superseded by [ADR 0016](0016-mlflow-is-the-system-of-record.md): MLflow is now the
+system of record and local JSON Run Records are no longer written.
 
 See [mlflow.md](mlflow.md) for day-to-day usage.
 
@@ -20,7 +23,7 @@ backend DB is lost, the dashboard can be rebuilt from local Run Records later.
 
 - Write and keep the local JSON Run Record on successful completion (`finish()`).
 - Failed training runs retain diagnostic logs but do not produce a Run Record
-  or a dashboard entry. The generic runner does not call `fail()`.
+  or a dashboard entry.
 - If `MLFLOW_TRACKING_URI` is set, publish dashboard metadata to MLflow after the
   JSON record is written.
 - Do not upload artifacts to MLflow or S3 in v1. MLflow stores local artifact

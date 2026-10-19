@@ -14,17 +14,10 @@ logger = logging.getLogger(__name__)
 
 def ssn_refine_outerweights(
     optimizer: SSN, coefficients: torch.nn.Parameter, closure: Callable[[], torch.Tensor], *,
-    iterations: int, correction_guard: bool, verbose: bool = False,
+    iterations: int, correction_guard: bool,
 ) -> dict:
-    """Run the SSN iteration budget, discarding a correction that increases the objective.
+    """Run the SSN iteration budget, discarding a correction that increases the objective."""
 
-    This is the correction step of Algorithms 1 and 2: if the correction increases
-    J, the post-insertion coefficients are kept. A nonfinite result is always
-    discarded; correction_guard=False preserves the historical unguarded
-    comparison. An exception restores the post-insertion coefficients and
-    propagates. No convergence claim is made after the fixed budget. The
-    optimizer evaluates the starting objective with the closure.
-    """
     start = coefficients.detach().clone()
     initial_loss = optimizer.objective(closure)
     if not torch.isfinite(start).all() or not torch.isfinite(initial_loss):
@@ -39,19 +32,18 @@ def ssn_refine_outerweights(
     if not accepted:
         _restore(coefficients, start)
         loss = initial_loss
-    if verbose:
-        group = optimizer.param_groups[0]
-        logger.debug(
-            "SSN correction  iterations=%d  objective=%.6e->%.6e  accepted=%s  "
-            "failed_steps=%d  prox_scale=%s  tau=%.6e",
-            iterations, float(initial_loss.detach()), float(loss.detach()),
-            str(accepted).lower(), failed_steps, group["prox_scale"], group["tau"],
-        )
+    group = optimizer.param_groups[0]
+    logger.debug(
+        "SSN correction  iterations=%d  objective=%.6e->%.6e  accepted=%s  "
+        "failed_steps=%d  prox_scale=%s  tau=%.6e",
+        iterations, float(initial_loss.detach()), float(loss.detach()),
+        str(accepted).lower(), failed_steps, group["prox_scale"], group["tau"],
+    )
     return {
         "ssn_iterations": iterations,
         "ssn_failed_steps": failed_steps,
         "ssn_last_step_success": optimizer.last_step_success,
-        "correction_accepted": accepted,
+        "ssn_refinement_accepted": accepted,
     }
 
 

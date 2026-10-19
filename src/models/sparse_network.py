@@ -5,28 +5,21 @@ from torch import Tensor, nn
 from torch.nn import functional as F
 
 
-class SparseModel(nn.Module):
-    """Own the sparse network and its data fitting without owning samples.
-
-    obj evaluates data fitting from predictions and targets; Proximal owns the
-    penalty term, and callers form the objective obj + Proximal.penalty. The
-    problem supplies the penalty exponent q = 2/(power+1) its activation implies.
-    Optimizers own parameter mutation, differentiation of the objective, and iterations.
-    Construction consumes an already resolved configuration. Training setup must
-    validate its penalty, geometry and insertion before constructing the problem.
-    """
+class SparseNetwork(nn.Module):
+    """Own the sparse network and its data fitting without owning samples."""
 
     inner_weight: Tensor
     inner_bias: Tensor
 
     def __init__(self, config) -> None:
         super().__init__()
-        self._activation_name = config["activation_name"]
-        self._activation = config["activation"]
-        self._use_sphere = config["use_sphere"]
-        self._moment_order = config["moment_order"]
-        self._power = config["power"]
-        self._loss_weights = config["loss_weights"]
+        self.activation_name = config["activation_name"]
+        self.activation = config["activation"]
+        self.use_sphere = config["use_sphere"]
+        self.moment_order = config["moment_order"]
+        self.power = config["power"]
+        self.penalty_exponent = config["penalty_exponent"]
+        self.loss_weights = config["loss_weights"]
         self.register_buffer("inner_weight", torch.empty((0, config["input_dim"]), dtype=torch.float64))
         self.register_buffer("inner_bias", torch.empty(0, dtype=torch.float64))
         self.c = nn.Parameter(torch.empty(0, dtype=torch.float64))
@@ -36,47 +29,15 @@ class SparseModel(nn.Module):
         return self.inner_weight.shape[1]
 
     @property
-    def activation(self):
-        return self._activation
-
-    @property
-    def activation_name(self) -> str | None:
-        return self._activation_name
-
-    @property
-    def moment_order(self) -> float | None:
-        return self._moment_order
-
-    @property
     def n_neurons(self) -> int:
         return self.inner_weight.shape[0]
 
     @property
-    def use_sphere(self) -> bool:
-        return self._use_sphere
-
-    @property
     def normalized(self) -> bool:
-        return not self._use_sphere
-
-    @property
-    def power(self) -> float:
-        return self._power
-
-    @property
-    def penalty_exponent(self) -> float:
-        return 2.0 / (self._power + 1.0)
-
-    @property
-    def loss_weights(self) -> tuple[float, float]:
-        return self._loss_weights
+        return not self.use_sphere
 
     def set_atoms(self, inner_weight: Tensor, inner_bias: Tensor, c: Tensor) -> None:
         """Replace support with independent copies of the supplied atom tensors.
-
-        Inputs must be detached tensors shaped (n, input_dim), (n,), and (n,),
-        respectively, already matching the module's dtype and device.
-        Replacing support replaces c's Parameter, so subsequent corrections use the new c.
         """
         self.inner_weight = inner_weight.clone()
         self.inner_bias = inner_bias.clone()
@@ -122,48 +83,49 @@ class SparseModel(nn.Module):
 
         Being elementwise, its Jacobian is diagonal: a unit cotangent gives rho'(z).
         """
-        return self._activation(z) ** self._power
+        return self.activation(z) ** self.power
 
     def moment_weight_of_atoms(
         self, inner_weight: Tensor | None = None, inner_bias: Tensor | None = None,
     ) -> Tensor:
         """Moment weights w_p(omega) = 1 + |omega|^p of the current or supplied atoms.
-
-        Return one weight per atom, or ones on the sphere; the atoms are not
-        modified. The weights remain differentiable during candidate search.
         """
         inner_weight = self.inner_weight if inner_weight is None else inner_weight
         inner_bias = self.inner_bias if inner_bias is None else inner_bias
         if not self.normalized:
             return torch.ones_like(inner_bias)
         squared_norm = (inner_weight * inner_weight).sum(dim=-1) + inner_bias * inner_bias
-        return 1.0 + squared_norm.clamp_min(0.0).pow(self._moment_order / 2.0)
+        return 1.0 + squared_norm.clamp_min(0.0).pow(self.moment_order / 2.0)
 
-    def obj(self, prediction: tuple[Tensor, Tensor], target: tuple[Tensor, Tensor]) -> Tensor:
-        """Weighted empirical H1 quadratic, excluding the sparsity penalty.
-
-        The value channel has one entry per sample. Both channels remain
-        differentiable; the gradient channel is flattened sample-major.
+    def obj(self, x: Tensor, target: tuple[Tensor, Tensor], c: Tensor | None = None) -> Tensor:
+        """Weighted empirical H1 quadratic of the network at x, excluding the sparsity penalty.
         """
+        prediction = self(x) if c is None else torch.func.functional_call(self, {"c": c}, (x,))
         rv, rg = ((value - reference).reshape(-1) for value, reference in zip(prediction, target))
         n = rv.numel()
-        w1, w2 = self._loss_weights
+        w1, w2 = self.loss_weights
         return 0.5 * ((w1 / n) * rv.dot(rv) + (w2 / n) * rg.dot(rg))
 
-    def jac_obj(self, Kv: Tensor, Kg: Tensor, residual) -> Tensor:
-        """Coefficient gradient of obj from value/input-gradient Jacobians.
+    def jac_obj(
+        self, residual, inner_weight: Tensor | None = None, inner_bias: Tensor | None = None,
+    ) -> Tensor:
+        """Gradient of obj in the outer weights of the current or supplied atoms.
 
-        Kv is (N,n), Kg is (N*d,n); residual contains (X, value error,
-        input-gradient error). Residuals are fixed during candidate search;
-        supplied Jacobians retain their gradients with respect to the neurons.
+        residual is (x, value error, input-gradient error) and is held fixed. A
+        supplied atom's entry is the slope at weight zero and stays
+        differentiable with respect to the atom during candidate search.
         """
+        Kv, Kg = self.kernel(residual[0], inner_weight, inner_bias)
         rv, rg = (r.detach().reshape(-1, 1) for r in residual[1:])
         n = Kv.shape[0]
-        w1, w2 = self._loss_weights
+        w1, w2 = self.loss_weights
         return w1 * ((Kv * rv).sum(0) / n) + w2 * ((Kg * rg).sum(0) / n)
 
-    def hess_obj(self, Kv: Tensor, Kg: Tensor) -> Tensor:
-        """Full coefficient Hessian of obj, including cross terms between neurons."""
+    def hess_obj(
+        self, x: Tensor, inner_weight: Tensor | None = None, inner_bias: Tensor | None = None,
+    ) -> Tensor:
+        """Full Hessian of obj in the outer weights of the current or supplied atoms."""
+        Kv, Kg = self.kernel(x, inner_weight, inner_bias)
         n = Kv.shape[0]
-        w1, w2 = self._loss_weights
+        w1, w2 = self.loss_weights
         return (w1 / n) * (Kv.T @ Kv) + (w2 / n) * (Kg.T @ Kg)

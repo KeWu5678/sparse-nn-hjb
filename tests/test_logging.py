@@ -160,9 +160,8 @@ def test_context_reaches_both_apis_and_restores_after_an_exception(tmp_path):
     (True, "INFO", False), (False, "INFO", True), (True, "WARNING", True),
 ])
 def test_hydra_runner_owns_jsonl_output_and_honors_logging_overrides(
-    tmp_path, monkeypatch, console, level, override_file,
+    tmp_path, tracking_store, console, level, override_file,
 ):
-    monkeypatch.delenv("MLFLOW_TRACKING_URI", raising=False)
     dataset = tmp_path / "samples.npz"
     x = np.arange(4.0).reshape(-1, 1)
     np.savez(dataset, x=x, v=x**2, dv=2*x)
@@ -181,8 +180,9 @@ def test_hydra_runner_owns_jsonl_output_and_honors_logging_overrides(
     )
 
     records = [json.loads(line) for line in log_file.read_text().splitlines()]
-    record_path = next(run_dir.glob("*.json"))
-    record = json.loads(record_path.read_text())
+    [run] = tracking_store.search_runs([tracking_store.get_experiment_by_name("run").experiment_id])
+    config = json.loads(Path(tracking_store.download_artifacts(
+        run.info.run_id, "config.json", str(tmp_path))).read_text())
     if level == "WARNING":
         assert records == []
         assert result.stderr == ""
@@ -194,11 +194,11 @@ def test_hydra_runner_owns_jsonl_output_and_honors_logging_overrides(
         ]
         assert len(events) == len(set(events))
         assert all({"event", "level", "logger", "timestamp"} <= record.keys() for record in records)
-        assert all(entry["run_id"] == record["run_id"] for entry in records)
-        assert all(entry["experiment"] == record["name"] for entry in records)
-        assert all(entry["seed"] == record["config"]["env"]["seed"] for entry in records)
+        assert all(entry["run_name"] == run.info.run_name for entry in records)
+        assert all(entry["experiment"] == config["name"] for entry in records)
+        assert all(entry["seed"] == config["env"]["seed"] for entry in records)
         assert records[1]["path"] == str(dataset) and records[1]["input_dim"] == 1
-        assert records[-1]["record_path"] == str(record_path)
+        assert records[-1]["run_id"] == run.info.run_id
         if console:
             for event in events:
                 assert result.stderr.count(event) == 1
@@ -209,36 +209,40 @@ def test_hydra_runner_owns_jsonl_output_and_honors_logging_overrides(
     if override_file:
         assert not (run_dir / "run.jsonl").exists()
     assert (run_dir / ".hydra" / "config.yaml").exists()
-    assert record["status"] == "completed"
-    assert record["config"]["env"]["verbose"] is console
-    assert record["config"]["env"]["log_level"] == level
-    assert record["config"]["env"]["log_file"] == (str(log_file) if override_file else None)
+    assert run.info.status == "FINISHED"
+    assert config["env"]["verbose"] is console
+    assert config["env"]["log_level"] == level
+    assert config["env"]["log_file"] == (str(log_file) if override_file else None)
 
 
-@pytest.mark.parametrize("require_mlflow,error", [
-    (False, "FileNotFoundError"), (True, "RuntimeError"),
+@pytest.mark.parametrize("tracked,error", [
+    (True, "FileNotFoundError"), (False, "RuntimeError"),
 ])
 def test_hydra_failure_logs_one_outcome_and_preserves_the_original_error(
-    tmp_path, monkeypatch, require_mlflow, error,
+    tmp_path, monkeypatch, request, tracked, error,
 ):
-    monkeypatch.delenv("MLFLOW_TRACKING_URI", raising=False)
+    if tracked:
+        client = request.getfixturevalue("tracking_store")
+    else:
+        monkeypatch.delenv("MLFLOW_TRACKING_URI", raising=False)
     run_dir = tmp_path / "failed"
     result = subprocess.run(
         [sys.executable, "scripts/train.py", f"data.path={tmp_path / 'missing.npz'}",
-         f"hydra.run.dir={run_dir}", "env.verbose=false",
-         f"env.require_mlflow={str(require_mlflow).lower()}"],
+         f"hydra.run.dir={run_dir}", "env.verbose=false"],
         cwd=Path(__file__).resolve().parents[1], capture_output=True, text=True, timeout=30,
     )
 
     assert result.returncode != 0
     records = [json.loads(line) for line in (run_dir / "run.jsonl").read_text().splitlines()]
     assert [record["event"] for record in records] == ["run_started", "run_failed"]
-    assert records[0]["run_id"] == records[1]["run_id"]
+    assert records[0]["run_name"] == records[1]["run_name"]
     assert records[1]["level"] == "error"
     assert records[1]["exception"].count("Traceback (most recent call last)") == 1
     assert error in records[1]["exception"]
     assert error in result.stderr
-    assert not list(run_dir.glob("*.json"))
+    if tracked:
+        [run] = client.search_runs([client.get_experiment_by_name("run").experiment_id])
+        assert run.info.status == "FAILED" and run.info.run_name == records[0]["run_name"]
 
 
 def _run_logging(output_dir, source):

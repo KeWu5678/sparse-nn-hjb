@@ -2,7 +2,7 @@
 
 Current-paper generators reconstruct models through `src.results` and render
 prepared arrays through `src.plots`. They consume the dated datasets selected
-by `conf/data/*.yaml` and the current experiment records. Publication output
+by `conf/data/*.yaml` and the current MLflow runs. Publication output
 is restricted to PNGs included by `paper/paper_0805.tex`.
 
 ## Ownership
@@ -11,7 +11,8 @@ is restricted to PNGs included by `paper/paper_0805.tex`.
 | --- | --- |
 | `src.results` | Load recorded fits, restore checkpoints, and evaluate physical values/gradients |
 | `src.data` | Load value samples and apply/reverse data normalization |
-| `src.eval` | Compute errors from prediction/target tensors |
+| `src.metrics` | The catalog of recorded metric names, meanings and coordinates |
+| `src.eval` | Compute those metrics from a network and samples |
 | `src.plots` | Render prepared arrays and export figures |
 | `src.plotstyle` | Shared palette, typography, and axes conventions |
 | Paper scripts | Select runs and evaluation inputs, construct references, simulate feedback, and write reports |
@@ -19,27 +20,29 @@ is restricted to PNGs included by `paper/paper_0805.tex`.
 ## Evaluate a current saved fit
 
 ```python
-from src.results import load_run, predict_physical, validation_samples
-from src.eval import relative_errors
+from src.results import load_mlflow_run, predict_physical
 
-run = load_run(record_path)
-x, v_true, dv_true = validation_samples(run)
+run = load_mlflow_run(run_id)
 v_pred, dv_pred = predict_physical(run, x)
-l2, gradient, h1 = relative_errors(v_pred, dv_pred, v_true, dv_true)
+h1 = run.metrics["rel_h1_val"]               # selected checkpoint
+curve = [row["rel_h1_val"] for row in run.history.rows]  # every checkpoint (MLflow: trace.rel_h1_val)
 ```
 
-`load_run` restores the saved `best_iteration` using the recorded model and
-normalization. Current fits are stored beside their records as
-`result_<run_id>.pkl`. `predict_physical` accepts physical states `(N,d)` and
+`load_mlflow_run` restores the selected checkpoint using the recorded model
+and normalization; the fit is the run's `history.pt` artifact
+([ADR 0016](adr/0016-mlflow-is-the-system-of-record.md),
+[ADR 0017](adr/0017-metric-catalog.md)). Metric names and meanings are listed in
+`src.metrics.CATALOG`. `find_runs(experiment)`
+lists an MLflow experiment's finished runs with their typed config, metrics and
+tags, in Hydra job-folder order, for selecting a `run_id`. `predict_physical`
+accepts physical states `(N,d)` and
 returns detached float64 tensors `(N,1)` and `(N,d)`. An optional `iteration`
 evaluates another checkpoint without changing the selected model. Predictions
 are not clipped, and loading/evaluation preserve the caller's random state.
 
-`validation_samples` reproduces the recorded seed and training fraction.
-`evaluate_history(run)` scores all checkpoints on that same holdout and returns
-`iteration`, `neurons`, `rel_l2`, `rel_grad`, and `rel_h1` in iteration order.
-A sorted support frontier is a reporting view, not a different checkpoint
-selection rule.
+`run.history.rows` holds every checkpoint's recorded metrics in iteration
+order, including `neurons` and the physical `rel_*_val` errors. A sorted
+support frontier is a reporting view, not a different checkpoint selection rule.
 
 ### Normalization and regional evaluation
 
@@ -50,18 +53,17 @@ inverse transform is `V=s_v V_n` and `dV=(s_v/s_x) dV_n`, implemented by
 `ValueSampleNormalizer`. Input scaling can change a relative H1 error even when
 a common value scale leaves relative L2 unchanged.
 
-Current records include explicit normalization and
-`metric_coordinates: physical`. The runner passes `reporting_normalizer` to
-`run_training`; direct callers that normalize samples should do the same. Current
-publication preflight rejects missing normalization and nonphysical metrics.
-Archived normalization recovery is not part of the fresh publication workflow.
+Current runs include explicit normalization. The runner passes `normalizer` to
+`run_training`; direct callers that normalize samples should do the same.
+`src.metrics.CATALOG` states whether each metric is measured in physical or
+training coordinates. Publication preflight rejects missing normalization.
 
 Pendulum regional scores use the shared pool in `conf/eval/region_split.yaml`.
 The pool excludes the union of the production dataset and all four sampling
 variants. The switching tube has distance at most 0.3 to the saved switching
 points and their adjacent periodic translates. The dataset-aligned distance
 cache serves distance-binned diagnostics. These artifacts are hashed before
-training and their hashes are recorded. Current records already contain
+training and their hashes are recorded. Current runs already contain
 physical regional metrics; no rescoring sidecar is required.
 
 Within each run, the selected checkpoint minimizes the training objective.
@@ -150,7 +152,6 @@ and the six current sweep presets. Local/ignored paper commands are:
 ```sh
 uv run python scripts/paper/preflight.py
 make openloop
-uv run python experiments/01_vdp/paper_log_penalty/p_study_figure.py
 uv run python scripts/paper/vdp_full_scope.py --homogeneous-alpha 1e-6
 uv run python scripts/paper/pendulum_full_scope.py
 uv run python scripts/paper/preflight.py --require-figures --write-manifest
@@ -159,26 +160,26 @@ uv run python scripts/paper/preflight.py --require-figures --write-manifest
 The VDP command explicitly uses homogeneous alpha `1e-6` for frontier/feedback
 comparisons; its separate surface/table comparison uses `1e-5`. The two benchmark
 generators read current `log_penalty`, `frac_exp_penalty`, and relevant baseline
-or oversampling record roots. They validate the corresponding benchmark before
-writing outputs. The moment-order figure reads both `moment_order_study` roots.
+or oversampling MLflow experiments. They validate the corresponding benchmark before
+writing outputs.
 The local Algorithm 1/2 `analysis.py` wrappers delegate to those same generators.
 
 Preflight constructs the expected grid dynamically from `conf/experiment/`
 (currently 588 cells). It checks cell completeness/uniqueness, current dataset
-paths and recorded hashes, completed status, physical metrics, normalization,
-fit-file presence, training settings, and pendulum evaluation-input hashes.
+paths and recorded hashes, physical metrics, normalization, the fit artifact,
+training settings, and pendulum evaluation-input hashes of the finished MLflow runs.
 It rejects the legacy VDP dataset hash.
 
 `--require-figures` derives the allowed paths from TeX and rejects missing
 included PNGs or unreferenced PNGs under `experiments/` and `paper/plot/`.
 `--write-manifest` writes `scripts/paper/current_run_manifest.json` with exact
-SHA-256 hashes of records, adjacent fits, datasets, evaluation inputs, and the
+MLflow run IDs, SHA-256 hashes of their `history.pt` artifacts, datasets, evaluation inputs, and the
 checked figures. Numerical correctness still requires separate verification.
 
 Relevant checks include:
 
 ```sh
-uv run pytest tests/test_results.py tests/test_history.py tests/test_experiment_logging.py
+uv run pytest tests/test_results.py tests/test_history.py tests/test_tracking.py
 uv run pytest tests/test_control_comparison.py tests/test_paper_feedback_results.py
 ```
 

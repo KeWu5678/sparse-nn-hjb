@@ -1,35 +1,20 @@
 """Insertion strategies for the PDAP outer loop.
-
-An insertion strategy proposes new atoms (inner weights/biases) to add to the
-current support, given the data and the current residual.  Both strategies use
-multistart L-BFGS on the profile P(omega), but their parameter domains and
-acceptance tests differ:
-
-  * ``profile_threshold`` — for a nonhomogeneous dictionary, sample inside the
-    theorem/numerical radius, jointly refine ``omega=(a,b)``, discard final
-    points outside that radius, remove Euclidean near-duplicates, and apply the
-    configured profile threshold.  There is no direction-then-radius code path.
-  * ``finite_step`` — accept candidates with a profitable finite step, i.e. where
-    min_c Delta J(c; omega) < 0; returns the
-    optimal outer weight c* alongside each atom.  Used for the q<1 penalty.
-
-The strategies are pure functions: the caller supplies the precomputed residual
-(so the "zero network" first iteration is just residual = -target), the shared
-problem and its penalty.
+profile_threshold: for a nonhomogeneous dictionary.
+finite_step: for fractional penalty families: accept candidates with a profitable finite step.
 """
 
 from __future__ import annotations
 
 import logging
 import math
-from typing import Callable, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 import numpy as np
 import torch
 
-from ..models import Penalty, SparseModel
+from ..models import Penalty, SparseNetwork
 
-# Numerical bound for random starts and final candidate filtering.
+# Numerical bound for random initial points and final candidate filtering.
 FIXED_LOG_CLAMP = 5.0
 
 logger = logging.getLogger(__name__)
@@ -44,40 +29,23 @@ __all__ = [
 # Strategy 1: profile-threshold acceptance
 # ---------------------------------------------------------------------------- #
 def profile_threshold(
-    problem: SparseModel,
+    network: SparseNetwork,
     penalty: Penalty,
     residual: tuple[torch.Tensor, torch.Tensor, torch.Tensor], *,
-    sample_sphere: Callable[[int], Tuple[torch.Tensor, torch.Tensor]],
-    N: int,
+    initial_points: Tuple[torch.Tensor, torch.Tensor],
     max_insert: int = 15, merge_tol: float = 1e-2,
-    existing_atoms: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
-    verbose: bool = True,
     lbfgs_lr: float = 1e-2, lbfgs_steps: int = 200,
     insert_init: str = "warm_start",
     radius: Optional[float] = None,
 ) -> Tuple[np.ndarray, np.ndarray, Optional[np.ndarray]]:
-    """Select candidates for Algorithm 1 or the ReLU--L1 baseline.
-
-    Normalized Algorithm 1 accepts ``|P(omega)| / w_p(omega) > alpha``.
-    The ReLU--L1 baseline has sphere-normalized inner parameters but no moment
-    normalization, so it accepts ``|P(omega)| > alpha``.
-    Both use the implemented log/L1 family with ``L_phi = phi'(0+) = 1``;
-    for a general penalty the threshold would be ``alpha * L_phi``.
-
-    Candidates are ranked by their margin above the applicable threshold. For
-    Algorithm 1 this is the certificate violation
-    ``Delta(mu, omega) = |P(omega)| / w_p(omega) - alpha``.
-
-    Returns ``(W, b, c)``; ``c`` is ``None`` unless ``insert_init="guaranteed"``,
-    in which case it carries the theorem's per-atom coefficient.
+    """Select candidates for Algorithm 1; accepts ``|P(omega)| / w_p(omega) > alpha``.
+    Candidates are ranked by their margin above the applicable threshold.
     """
-    input_dim = problem.input_dim
+    input_dim = network.input_dim
 
     a, b, discarded_outside = _generate_candidates(
-        problem, residual, sample_sphere=sample_sphere, N=N,
-        merge_tol=merge_tol,
-        existing_atoms=existing_atoms, lbfgs_lr=lbfgs_lr, lbfgs_steps=lbfgs_steps,
-        radius=radius,
+        network, residual, initial_points=initial_points, merge_tol=merge_tol,
+        lbfgs_lr=lbfgs_lr, lbfgs_steps=lbfgs_steps, radius=radius,
     )
 
     guaranteed = insert_init == "guaranteed"
@@ -87,9 +55,9 @@ def profile_threshold(
     margins: List[float] = []
     accepted_c: List[float] = []
     for a_i, b_i in zip(a, b):
-        slope, curvature = _slope_and_curvature(problem, residual, a_i, b_i)
+        slope, curvature = _slope_and_curvature(network, residual, a_i, b_i)
         abs_slope = abs(slope)
-        moment_weight = float(problem.moment_weight_of_atoms(a_i, b_i))
+        moment_weight = float(network.moment_weight_of_atoms(a_i, b_i))
         threshold = penalty.alpha * moment_weight
         # Retain the physical-profile comparison, including its rounding.
         if abs_slope <= threshold or (guaranteed and curvature < 1e-30):
@@ -107,28 +75,27 @@ def profile_threshold(
     if guaranteed:
         accepted_c = [accepted_c[i] for i in best]
 
-    if verbose:
-        rule = (
-            "|P|/w_p above alpha*L_phi" if problem.normalized
-            else "|P| above alpha"
-        )
+    rule = (
+        "|P|/w_p above alpha*L_phi" if network.normalized
+        else "|P| above alpha"
+    )
+    logger.debug(
+        "Candidate search  sampled=%d  unique=%d  accepted=%d/%d  "
+        "rule=%s (init=%s)",
+        initial_points[0].shape[0], a.shape[0], len(accepted_a), max_insert, rule, insert_init,
+    )
+    if discarded_outside:
         logger.debug(
-            "Candidate search  sampled=%d  unique=%d  accepted=%d/%d  "
-            "rule=%s (init=%s)",
-            N, a.shape[0], len(accepted_a), max_insert, rule, insert_init,
+            "Candidate search discarded %d refined candidate(s) outside the "
+            "search radius",
+            discarded_outside,
         )
-        if discarded_outside:
-            logger.debug(
-                "Candidate search discarded %d refined candidate(s) outside the "
-                "search radius",
-                discarded_outside,
-            )
-        if not accepted_a and a.shape[0] == 0:
-            logger.debug(
-                "Candidate search retained no distinct candidate after geometric filters"
-            )
-        elif not accepted_a:
-            logger.debug("No retained candidate clears the insertion threshold")
+    if not accepted_a and a.shape[0] == 0:
+        logger.debug(
+            "Candidate search retained no distinct candidate after geometric filters"
+        )
+    elif not accepted_a:
+        logger.debug("No retained candidate clears the insertion threshold")
 
     c = np.array(accepted_c, dtype=np.float64) if guaranteed else None
     return *_as_arrays(accepted_a, accepted_b, input_dim), c
@@ -138,25 +105,20 @@ def profile_threshold(
 # Strategy 2: finite-step acceptance
 # ---------------------------------------------------------------------------- #
 def finite_step(
-    problem: SparseModel,
+    network: SparseNetwork,
     penalty: Penalty,
     residual: tuple[torch.Tensor, torch.Tensor, torch.Tensor], *,
-    sample_sphere: Callable[[int], Tuple[torch.Tensor, torch.Tensor]],
-    N: int,
+    initial_points: Tuple[torch.Tensor, torch.Tensor],
     max_insert: int = 15, merge_tol: float = 1e-2,
-    existing_atoms: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
-    verbose: bool = True,
     lbfgs_lr: float = 1e-2, lbfgs_steps: int = 200,
     radius: Optional[float] = None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Accept atoms with a profitable finite step (Delta J(c*) < 0); return c* too."""
-    input_dim = problem.input_dim
+    input_dim = network.input_dim
 
     a, b, _ = _generate_candidates(
-        problem, residual, sample_sphere=sample_sphere, N=N,
-        merge_tol=merge_tol,
-        existing_atoms=existing_atoms, lbfgs_lr=lbfgs_lr, lbfgs_steps=lbfgs_steps,
-        radius=radius,
+        network, residual, initial_points=initial_points, merge_tol=merge_tol,
+        lbfgs_lr=lbfgs_lr, lbfgs_steps=lbfgs_steps, radius=radius,
     )
 
     accepted_a: List[torch.Tensor] = []
@@ -164,7 +126,7 @@ def finite_step(
     accepted_c: List[float] = []
     decreases: List[float] = []
     for a_i, b_i in zip(a, b):
-        slope, curvature = _slope_and_curvature(problem, residual, a_i, b_i)
+        slope, curvature = _slope_and_curvature(network, residual, a_i, b_i)
         if curvature < 1e-30 or abs(slope) < 1e-30:
             continue
         c_star = penalty.insertion_weight(slope, curvature)
@@ -187,12 +149,11 @@ def finite_step(
     accepted_b = [accepted_b[i] for i in best]
     accepted_c = [accepted_c[i] for i in best]
 
-    if verbose:
-        logger.debug(
-            "Candidate search  sampled=%d  unique=%d  accepted=%d/%d  "
-            "rule=adding atom reduces objective (q=%.3f)",
-            N, a.shape[0], len(accepted_a), max_insert, problem.penalty_exponent,
-        )
+    logger.debug(
+        "Candidate search  sampled=%d  unique=%d  accepted=%d/%d  "
+        "rule=adding atom reduces objective (q=%.3f)",
+        initial_points[0].shape[0], a.shape[0], len(accepted_a), max_insert, network.penalty_exponent,
+    )
 
     return *_as_arrays(accepted_a, accepted_b, input_dim), np.array(accepted_c, dtype=np.float64)
 
@@ -201,12 +162,10 @@ def finite_step(
 # Candidate search shared by both strategies
 # ---------------------------------------------------------------------------- #
 def _generate_candidates(
-    problem: SparseModel,
+    network: SparseNetwork,
     residual: tuple[torch.Tensor, torch.Tensor, torch.Tensor], *,
-    sample_sphere: Callable[[int], Tuple[torch.Tensor, torch.Tensor]],
-    N: int,
+    initial_points: Tuple[torch.Tensor, torch.Tensor],
     merge_tol: float,
-    existing_atoms: Optional[Tuple[torch.Tensor, torch.Tensor]],
     lbfgs_lr: float = 1e-2,
     lbfgs_steps: int = 200,
     radius: Optional[float] = None,
@@ -223,12 +182,12 @@ def _generate_candidates(
     """
     search_radius = float(radius) if radius is not None else math.exp(FIXED_LOG_CLAMP)
     normalized_residual = _normalize_residual(residual)
-    a, b = _sample_starts(problem, sample_sphere, N, search_radius)
+    a, b = _sample_initial_pts(network, initial_points, search_radius)
     a, b, discarded_outside = _refine_and_deduplicate(
-        problem, normalized_residual, a, b,
+        network, normalized_residual, a, b,
         search_radius=search_radius, merge_tol=merge_tol, steps=lbfgs_steps, lr=lbfgs_lr,
     )
-    a, b = _reject_support_repeats(problem, a, b, existing_atoms)
+    a, b = _reject_support_repeats(network, a, b)
     return a, b, discarded_outside
 
 
@@ -243,19 +202,18 @@ def _normalize_residual(
     return X, residual_value / residual_norm, residual_gradient / residual_norm
 
 
-def _sample_starts(
-    problem: SparseModel,
-    sample_sphere: Callable[[int], Tuple[torch.Tensor, torch.Tensor]],
-    N: int,
+def _sample_initial_pts(
+    network: SparseNetwork,
+    initial_points: Tuple[torch.Tensor, torch.Tensor],
     search_radius: float,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
-    """Sample N search starts.
+    """Initial points from the sampled directions.
 
     Homogeneous models use the sampled directions directly; nonhomogeneous
     models give each direction a log-uniform radius (ADR 0006).
     """
-    a, b = sample_sphere(N)
-    if not problem.use_sphere:
+    a, b = initial_points
+    if not network.use_sphere:
         log_r_min = math.log(math.exp(-3.0))
         log_r_max = math.log(max(search_radius, math.exp(-3.0) * 1.001))
         uniform = torch.rand(a.shape[0], dtype=torch.float64)
@@ -266,22 +224,22 @@ def _sample_starts(
 
 
 def _refine_and_deduplicate(
-    problem: SparseModel,
+    network: SparseNetwork,
     normalized_residual: tuple[torch.Tensor, torch.Tensor, torch.Tensor],
     a: torch.Tensor, b: torch.Tensor, *,
     search_radius: float, merge_tol: float, steps: int, lr: float,
 ) -> Tuple[torch.Tensor, torch.Tensor, int]:
-    """Refine the starts and remove duplicates; also count those discarded outside the radius.
+    """Refine the initial points, drop duplicates, count those discarded outside the radius.
 
-    A nonhomogeneous search uses one joint solve from each random start, then
-    filters and deduplicates once.  Algorithm 2 retains its repeated sphere
-    refinement after merges.
+    A nonhomogeneous search uses one joint solve from each random initial
+    point, then filters and deduplicates once.  Algorithm 2 retains its
+    repeated sphere refinement after merges.
     """
-    use_sphere = problem.use_sphere
+    use_sphere = network.use_sphere
     discarded_outside = 0
     refinement_rounds = 5 if use_sphere else 1
     for _ in range(refinement_rounds):
-        a, b = _maximize_score(problem, normalized_residual, a, b, steps=steps, lr=lr)
+        a, b = _maximize_score(network, normalized_residual, a, b, steps=steps, lr=lr)
         if not use_sphere:
             omega = torch.cat([a, b.reshape(-1, 1)], dim=1)
             inside = torch.linalg.vector_norm(omega, dim=1) <= search_radius
@@ -295,12 +253,12 @@ def _refine_and_deduplicate(
 
 
 def _maximize_score(
-    problem: SparseModel,
+    network: SparseNetwork,
     normalized_residual: tuple[torch.Tensor, torch.Tensor, torch.Tensor],
     a: torch.Tensor, b: torch.Tensor, *,
     steps: int, lr: float, eps: float = 1e-12,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
-    """Locally maximize the score |P(omega)| / w_p(omega) from each starting point.
+    """Locally maximize the score |P(omega)| / w_p(omega) from each initial point.
 
     For a positively homogeneous activation the parameter is gauge-fixed to
     the sphere, so the profile is maximized over directions and the iterate
@@ -313,11 +271,10 @@ def _maximize_score(
     joint maximizer.
 
     The nonhomogeneous solve is unconstrained.  Its caller may subsequently
-    discard a final point outside the radius used to sample its start.
+    discard a final point outside the radius used to sample its initial point.
     """
-    use_sphere = problem.use_sphere
-    input_dim = problem.input_dim
-    X = normalized_residual[0]
+    use_sphere = network.use_sphere
+    input_dim = network.input_dim
     results_a, results_b = [], []
     for a0, b0 in zip(a, b):
         omega = torch.cat([a0.reshape(-1), b0.reshape(-1)]).detach().clone().requires_grad_(True)
@@ -326,11 +283,10 @@ def _maximize_score(
         def closure():
             opt.zero_grad()
             omega_s = omega / omega.norm().clamp_min(eps) if use_sphere else omega
-            features = problem.kernel(
-                X, omega_s[:input_dim].reshape(1, -1), omega_s[input_dim].reshape(1),
-            )
-            profile = problem.jac_obj(*features, normalized_residual)[0]
-            score = profile.abs() / problem.moment_weight_of_atoms(
+            profile = network.jac_obj(
+                normalized_residual, omega_s[:input_dim].reshape(1, -1), omega_s[input_dim].reshape(1),
+            )[0]
+            score = profile.abs() / network.moment_weight_of_atoms(
                 omega_s[:input_dim], omega_s[input_dim],
             )
             (-score).backward()
@@ -366,9 +322,8 @@ def _remove_duplicates(
 
 
 def _reject_support_repeats(
-    problem: SparseModel,
+    network: SparseNetwork,
     a: torch.Tensor, b: torch.Tensor,
-    existing_atoms: Optional[Tuple[torch.Tensor, torch.Tensor]],
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """Drop candidates that numerically repeat an atom of the current support.
 
@@ -377,12 +332,10 @@ def _reject_support_repeats(
     points are distinct atoms and must remain admissible.  In particular, do
     not reuse the much wider candidate-to-candidate deduplication tolerance.
     The k=1 ReLU--L1 baseline retains its established candidate behavior.
-    Existing atoms are used only for this check; they are not search starts.
+    Existing atoms are used only for this check; they are not initial points.
     """
-    has_support = existing_atoms is not None and existing_atoms[0].shape[0] > 0
-    if problem.use_sphere and problem.penalty_exponent < 1.0 and has_support and a.shape[0] > 0:
-        W_exist, b_exist = existing_atoms
-        support_omega = torch.cat([W_exist, b_exist.reshape(-1, 1)], dim=1)
+    if network.use_sphere and network.penalty_exponent < 1.0 and network.n_neurons > 0 and a.shape[0] > 0:
+        support_omega = torch.cat([network.inner_weight, network.inner_bias.reshape(-1, 1)], dim=1)
         support_unit = support_omega / support_omega.norm(dim=1, keepdim=True).clamp_min(1e-12)
         omega = torch.cat([a, b.reshape(-1, 1)], dim=1)
         unit = omega / omega.norm(dim=1, keepdim=True).clamp_min(1e-12)
@@ -400,14 +353,13 @@ def _reject_support_repeats(
 # Candidate evaluation shared by both strategies
 # ---------------------------------------------------------------------------- #
 def _slope_and_curvature(
-    problem: SparseModel,
+    network: SparseNetwork,
     residual: tuple[torch.Tensor, torch.Tensor, torch.Tensor],
     a: torch.Tensor, b: torch.Tensor,
 ) -> Tuple[float, float]:
     """The fitting term's slope and curvature in a new atom's coefficient, at zero."""
-    features = problem.kernel(residual[0], a.reshape(1, -1), b.reshape(1))
-    slope = float(problem.jac_obj(*features, residual)[0])
-    curvature = float(problem.hess_obj(*features)[0, 0])
+    slope = float(network.jac_obj(residual, a.reshape(1, -1), b.reshape(1))[0])
+    curvature = float(network.hess_obj(residual[0], a.reshape(1, -1), b.reshape(1))[0, 0])
     return slope, curvature
 
 

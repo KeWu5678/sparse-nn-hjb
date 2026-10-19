@@ -33,7 +33,7 @@ def test_vdp_feedback_figures_simulate_only_the_benchmark_horizon(tmp_path, monk
     monkeypatch.setattr(summary.PROBLEM.__class__, "rk4_rollout", lambda self, *a, **kw: capture(*a, **kw))
     monkeypatch.setattr(summary, "_model_feedback", lambda *a: lambda x: 0.)
     monkeypatch.setattr(summary, "plot_control_comparison", lambda *a, **kw: {})
-    models = {key: {"result_path": "unused"} for key in
+    models = {key: {"run_id": "unused"} for key in
               ("softplus", "gaussian", "relu3", "tanh", "relu2")}
     (tmp_path / "figures").mkdir()
     summary.plot_feedback(models, None, None, output_dir=tmp_path)
@@ -101,29 +101,28 @@ def test_pendulum_selection_prioritizes_stabilization_then_global_error(monkeypa
         pytest.skip("controller selection is a local artifact")
     monkeypatch.syspath_prepend(str(ROOT))
     selector = importlib.import_module("scripts.paper.pendulum_selection")
-    selection = selector.load_selection()  # Also verifies all candidate hashes.
+    selection = selector.load_selection()  # Also verifies the candidate runs.
     candidates = selector.candidates()
     report = json.loads((directory / "stability.json").read_text())
     for family, chosen in selection["selected"].items():
         ordered = sorted((r for r in candidates if r["activation"] == family),
-                         key=lambda r: (r["global_h1"], r["record_path"]))
+                         key=lambda r: r["global_h1"])
         tested = [r for r in selection["tested"] if r["activation"] == family]
-        assert [r["record_path"] for r in tested] == [
-            r["record_path"] for r in ordered[:len(tested)]]
+        assert [r["run_id"] for r in tested] == [
+            r["run_id"] for r in ordered[:len(tested)]]
         assert all(not r["stabilized"] for r in tested[:-1])
         if chosen["stabilized"]:
             assert tested[-1]["stabilized"]
-            assert chosen["record_path"] == tested[-1]["record_path"]
+            assert chosen["run_id"] == tested[-1]["run_id"]
         else:
             assert len(tested) == len(ordered) and not tested[-1]["stabilized"]
-            assert chosen["record_path"] == ordered[0]["record_path"]
+            assert chosen["run_id"] == ordered[0]["run_id"]
         for row in tested:
             outcomes = row["outcomes"]
             assert row["stabilized"] == (
                 set(outcomes) == {"A", "B"}
                 and all(r["sustained_upright"] for r in outcomes.values()))
-        assert ROOT / report["records"][family]["path"] == Path(chosen["record_path"])
-        assert report["records"][family]["sha256"] == chosen["record_sha256"]
+        assert report["runs"][family]["run_id"] == chosen["run_id"]
         results = [r for r in report["results"]
                    if r["controller"] == family and r["horizon"] == selection["horizon"]]
         assert len(results) == 2
