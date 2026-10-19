@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 import torch
 
-from src.data import split_value_samples
+from src.data import ValueSamples, split_value_samples
 from src.eval import relative_errors
 from src.results import (
     evaluate_history,
@@ -114,7 +114,7 @@ def test_loading_and_validation_split_leave_rng_unchanged(record_path):
     torch.testing.assert_close(torch.random.get_rng_state(), torch_state)
 
     with np.load(run.record["config"]["data"]["path"]) as data:
-        samples = {k: data[k] for k in ("x", "v", "dv")}
+        samples = ValueSamples(x=data["x"], v=data["v"], dv=data["dv"])
     np.random.seed(42)
     _, expected = split_value_samples(samples, .6)
     for a, b in zip(actual, expected):

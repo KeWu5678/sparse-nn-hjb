@@ -76,7 +76,7 @@ def _parse_args(argv):
 
 
 def _generation_metadata(problem, config, args) -> dict:
-    sources = [Path(__file__), ROOT / "src/OpenLoop/value_samples.py",
+    sources = [Path(__file__), ROOT / "src/data.py",
                ROOT / "src/OpenLoop/collocation.py",
                *sorted((ROOT / "src/OpenLoop/allen_cahn").glob("*.py"))]
     return {

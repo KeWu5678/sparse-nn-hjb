@@ -228,11 +228,11 @@ class PendulumSwingUpProblem:
         """True PMP feedback κ*(x) = feedback_from_gradient(∇V_true), nearest-neighbour
         interpolated from the dataset's costate samples. Returns a ``u_of_x`` closure."""
         from scipy.spatial import cKDTree
-        tree = cKDTree(samples["x"])
+        tree = cKDTree(samples.x)
 
         def u(x):
             _, j = tree.query(np.asarray(x).reshape(1, 2))
-            return float(self.feedback_from_gradient(samples["dv"][j])[0])
+            return float(self.feedback_from_gradient(samples.dv[j])[0])
         return u
 
 

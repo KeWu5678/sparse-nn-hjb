@@ -10,7 +10,7 @@ import numpy as np
 from numpy.polynomial.legendre import leggauss
 from scipy.integrate import solve_bvp
 
-from src.OpenLoop.value_samples import ValueSamples
+from src.data import ValueSamples
 
 
 class PontryaginProblem(Protocol):

@@ -44,7 +44,13 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from src.config import resolve_model, validate_model_config, validate_optimizer_config
 from src.config.schema import ExperimentConfig
-from src.data import DATA_DIR, load_value_samples, make_dataloaders, normalize_value_samples
+from src.data import (
+    DATA_DIR,
+    load_value_samples,
+    make_dataloaders,
+    normalize_value_samples,
+    to_tensors,
+)
 from src.eval import distance_binned_error, region_split_errors
 from src.experiment_logging import ExperimentRun
 from src.logging import configure_logging
@@ -175,14 +181,12 @@ def region_split_metrics(cfg, model, data, normalizer) -> dict:
     if cfg.eval.distance_cache:
         with np.load(DATA_DIR / cfg.eval.distance_cache) as cache:
             distance = np.asarray(cache["distance"], dtype=np.float64)
-        if distance.shape[0] != data["x"].shape[0]:
+        if distance.shape[0] != data.size:
             raise ValueError(
                 f"distance cache has {distance.shape[0]} rows, dataset has "
-                f"{data['x'].shape[0]}; the cache is not aligned to this dataset"
+                f"{data.size}; the cache is not aligned to this dataset"
             )
-        x = torch.as_tensor(data["x"], dtype=torch.float64)
-        v = torch.as_tensor(data["v"], dtype=torch.float64)
-        dv = torch.as_tensor(data["dv"], dtype=torch.float64)
+        x, v, dv = to_tensors(data)
         v_pred_d, dv_pred_d = model(x)
         if normalizer is not None:
             v_pred_d, dv_pred_d = normalizer.denormalize_tensors(v_pred_d, dv_pred_d)
@@ -247,7 +251,7 @@ def _run_experiment(cfg: DictConfig, hydra_cfg, run_dir: Path, run_id: str) -> P
     normalizer = None
     if cfg.data.normalize:
         data, normalizer = normalize_value_samples(data)
-    input_dim = data["x"].shape[1]
+    input_dim = data.x.shape[1]
     logger.info("data_loaded", path=cfg.data.path, input_dim=input_dim)
     model_config = resolve_model(cfg.model, input_dim)
     validate_model_config(model_config)

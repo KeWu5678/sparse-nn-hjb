@@ -17,13 +17,12 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from src.data import DATA_DIR  # noqa: E402
+from src.data import DATA_DIR, ValueSamples  # noqa: E402
 from src.OpenLoop.pendulum import (  # noqa: E402
     PendulumPmpSolver,
     PendulumPmpSolverConfig,
     PendulumSwingUpProblem,
 )
-from src.OpenLoop.value_samples import ValueSamples  # noqa: E402
 
 
 def parse_args() -> argparse.Namespace:
@@ -119,8 +118,8 @@ def main() -> None:
             "harvest are no-ops. No dataset has been emitted."
         )
     raw_sample_count = solution.value_samples.size
-    collar_pool = solution.collar_samples or ValueSamples.concatenate([])
-    pad_pool = solution.pad_samples or ValueSamples.concatenate([])
+    collar_pool = solution.collar_samples or ValueSamples.empty(2)
+    pad_pool = solution.pad_samples or ValueSamples.empty(2)
     # Thin the in-basin body, near-side pad, and far-side collar pools separately
     # so the emitted dataset hits the requested near-switch shares (uniform
     # thinning would give the band only its pool proportion).
@@ -134,12 +133,12 @@ def main() -> None:
     collar_samples = (
         thin_value_samples(collar_pool, collar_target)
         if collar_target > 0
-        else ValueSamples.concatenate([])
+        else ValueSamples.empty(2)
     )
     pad_samples = (
         thin_value_samples(pad_pool, pad_target)
         if pad_target > 0
-        else ValueSamples.concatenate([])
+        else ValueSamples.empty(2)
     )
     value_samples = ValueSamples.concatenate([basin_samples, pad_samples, collar_samples])
     if value_samples.size != args.level_set_samples:

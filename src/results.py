@@ -15,13 +15,13 @@ import pickle
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import numpy as np
 import torch
 
 from .config import resolve_model
-from .data import DATA_DIR, TensorSamples, ValueSampleNormalizer, load_value_samples
+from .data import DATA_DIR, TensorSamples, ValueSampleNormalizer, load_value_samples, to_tensors
 from .eval import relative_errors
 from .models import SparseModel
 
@@ -243,13 +243,12 @@ def _validation_samples(record: dict[str, Any], samples=None) -> TensorSamples:
     cfg = record["config"]
     if samples is None:
         samples = load_value_samples(cfg["data"]["path"])
-    n = len(samples["x"])
+    n = samples.size
     split = int(n * float(cfg["data"]["train_fraction"]))
     if not 0 < split < n:
         raise ValueError("recorded train_fraction must leave nonempty train and validation sets")
     indices = np.random.RandomState(int(cfg["env"]["seed"])).permutation(n)[split:]
-    return cast(TensorSamples, tuple(torch.as_tensor(samples[k][indices], dtype=torch.float64)
-                                    for k in ("x", "v", "dv")))
+    return to_tensors(samples, indices)
 
 
 def _recover_legacy_normalizer(record: dict[str, Any], model) -> ValueSampleNormalizer:

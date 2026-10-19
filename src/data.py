@@ -1,10 +1,16 @@
-"""Value-sample loading, normalization, splitting, and batching.
+"""Value samples: the dataset type, its file format, normalization, splitting, and batching.
 
-The shared training data contract is a mapping with ``x``, ``v``, and ``dv``:
+Open-loop generators produce and PDAP training consumes one type,
+:class:`ValueSamples`, holding ``n`` value samples ``(x, V(x), dV(x))`` as
+read-only float64 arrays:
 
-  * ``x``  has shape ``(N, d)``
-  * ``v``  has shape ``(N, 1)``
-  * ``dv`` has shape ``(N, d)``
+  * ``x``  has shape ``(n, d)``
+  * ``v``  has shape ``(n,)``
+  * ``dv`` has shape ``(n, d)``
+
+On disk a dataset is an ``.npz`` file with arrays ``x``, ``v``, and ``dv``.
+Tensor batches carry ``v`` with shape ``(N, 1)`` to match network outputs; that
+reshape happens only in :func:`to_tensors`.
 
 Normalization is a pre-training data transform, not optimizer behavior.  The
 gradient is transformed by the chain rule so normalized samples remain
@@ -14,9 +20,10 @@ consistent: if ``x_norm = x / s_x`` and ``v_norm = v / s_v``, then
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import numpy as np
 import torch
@@ -26,8 +33,66 @@ from torch.utils.data import DataLoader, TensorDataset
 #: is the one place that name becomes a path (see :func:`load_value_samples`).
 DATA_DIR = Path(__file__).resolve().parents[1] / "rawdata" / "data"
 
-ValueSamples = dict[str, np.ndarray]
 TensorSamples = tuple[torch.Tensor, torch.Tensor, torch.Tensor]
+
+
+@dataclass(frozen=True)
+class ValueSamples:
+    """Read-only float64 value samples; shapes are given in the module docstring."""
+
+    x: np.ndarray
+    v: np.ndarray
+    dv: np.ndarray
+
+    def __post_init__(self) -> None:
+        # Copy before freezing so the caller's arrays stay writable.
+        x = np.array(self.x, dtype=np.float64)
+        v = np.array(self.v, dtype=np.float64).reshape(-1)
+        dv = np.array(self.dv, dtype=np.float64)
+        if x.ndim != 2 or x.shape[1] < 1:
+            raise ValueError(f"x must have shape (n, d) with d >= 1, got {x.shape}")
+        if dv.shape != x.shape:
+            raise ValueError(f"dv must have shape {x.shape}, got {dv.shape}")
+        if v.shape != (x.shape[0],):
+            raise ValueError(f"v must have {x.shape[0]} values, got {v.size}")
+        for name, array in (("x", x), ("v", v), ("dv", dv)):
+            array.setflags(write=False)
+            object.__setattr__(self, name, array)
+
+    @property
+    def size(self) -> int:
+        return int(self.x.shape[0])
+
+    @classmethod
+    def empty(cls, dimension: int) -> ValueSamples:
+        return cls(np.empty((0, dimension)), np.empty(0), np.empty((0, dimension)))
+
+    @classmethod
+    def concatenate(cls, chunks: Sequence[ValueSamples]) -> ValueSamples:
+        """Stack one or more chunks in order; prepend :meth:`empty` if there may be none."""
+        if not chunks:
+            raise ValueError("concatenate needs at least one chunk; use ValueSamples.empty(dimension)")
+        return cls(
+            x=np.concatenate([chunk.x for chunk in chunks], axis=0),
+            v=np.concatenate([chunk.v for chunk in chunks], axis=0),
+            dv=np.concatenate([chunk.dv for chunk in chunks], axis=0),
+        )
+
+    def save_npz(self, path: str | Path) -> Path:
+        """Write the dataset file at an explicit path, creating its directory."""
+        output_path = Path(path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        np.savez(output_path, x=self.x, v=self.v, dv=self.dv)
+        return output_path
+
+
+def to_tensors(samples: ValueSamples, rows: Any = slice(None)) -> TensorSamples:
+    """Float64 tensors ``(x, v, dv)`` of the selected rows, with ``v`` shaped ``(N, 1)``."""
+    return (
+        torch.tensor(samples.x[rows], dtype=torch.float64),
+        torch.tensor(samples.v[rows], dtype=torch.float64).reshape(-1, 1),
+        torch.tensor(samples.dv[rows], dtype=torch.float64),
+    )
 
 
 def full_batch(loader: DataLoader) -> TensorSamples:
@@ -118,17 +183,7 @@ def _as_value_samples(raw: Any) -> ValueSamples:
     missing = {"x", "v", "dv"} - set(arrays)
     if missing:
         raise KeyError(f"value-sample data is missing keys: {sorted(missing)}")
-
-    x = np.asarray(arrays["x"], dtype=np.float64)
-    v = np.asarray(arrays["v"], dtype=np.float64).reshape(-1, 1)
-    dv = np.asarray(arrays["dv"], dtype=np.float64)
-    if x.ndim != 2:
-        raise ValueError(f"x must have shape (N, d), got {x.shape}")
-    if dv.shape != x.shape:
-        raise ValueError(f"dv must have shape {x.shape}, got {dv.shape}")
-    if v.shape[0] != x.shape[0]:
-        raise ValueError(f"v must have {x.shape[0]} rows, got {v.shape[0]}")
-    return {"x": x, "v": v, "dv": dv}
+    return ValueSamples(arrays["x"], arrays["v"], arrays["dv"])
 
 
 def load_value_samples(path: str | Path) -> ValueSamples:
@@ -154,16 +209,16 @@ class ValueSampleNormalizer:
 
     @classmethod
     def fit(cls, samples: ValueSamples) -> "ValueSampleNormalizer":
-        x_scale = np.maximum(np.max(np.abs(samples["x"]), axis=0), 1e-12)
-        v_scale = float(np.maximum(np.max(np.abs(samples["v"])), 1e-12))
+        x_scale = np.maximum(np.max(np.abs(samples.x), axis=0), 1e-12)
+        v_scale = float(np.maximum(np.max(np.abs(samples.v)), 1e-12))
         return cls(x_scale=np.asarray(x_scale, dtype=np.float64), v_scale=v_scale)
 
     def normalize(self, samples: ValueSamples) -> ValueSamples:
-        return {
-            "x": samples["x"] / self.x_scale,
-            "v": samples["v"] / self.v_scale,
-            "dv": samples["dv"] * (self.x_scale / self.v_scale),
-        }
+        return ValueSamples(
+            x=samples.x / self.x_scale,
+            v=samples.v / self.v_scale,
+            dv=samples.dv * (self.x_scale / self.v_scale),
+        )
 
     def denormalize_prediction(self, value: np.ndarray, gradient: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         value_phys = np.asarray(value, dtype=np.float64) * self.v_scale
@@ -197,10 +252,9 @@ def split_value_samples(
     set to the last few trajectories — a spatially clustered wedge, not a
     representative hold-out. The permutation draws from the global NumPy RNG, which
     the run script seeds (``env.seed``) before calling, so the split is
-    reproducible per run. ValueSamples are already float64 with v shaped (N, 1)
-    (see _as_value_samples), so the tensors inherit that contract.
+    reproducible per run. :func:`to_tensors` gives ``v`` its ``(N, 1)`` batch shape.
     """
-    n = samples["x"].shape[0]
+    n = samples.size
     split = int(n * train_fraction)
     if not 0 < split < n:
         raise ValueError(
@@ -208,7 +262,4 @@ def split_value_samples(
             "both sides must be non-empty"
         )
     perm = np.random.permutation(n)
-    take = lambda idx: cast(TensorSamples, tuple(
-        torch.tensor(samples[k][idx], dtype=torch.float64) for k in ("x", "v", "dv")
-    ))
-    return take(perm[:split]), take(perm[split:])
+    return to_tensors(samples, perm[:split]), to_tensors(samples, perm[split:])

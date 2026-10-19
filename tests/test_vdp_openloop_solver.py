@@ -6,8 +6,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from src.data import load_value_samples
 from src.OpenLoop.collocation import CollocationConfig, CollocationSolver
-from src.OpenLoop.value_samples import ValueSamples
 from src.OpenLoop.vdp import VdpOptimalControlProblem, grid_initial_states
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -107,7 +107,7 @@ def test_generator_publishes_one_complete_dated_dataset(tmp_path) -> None:
     assert sorted(path.name for path in run_dir.iterdir()) == [
         "VDP_pmp_grid_2x2_20260605.npz", "VDP_pmp_meta_grid_2x2_20260605.json",
     ]
-    loaded = ValueSamples.load_npz(run_dir / "VDP_pmp_grid_2x2_20260605.npz")
+    loaded = load_value_samples(run_dir / "VDP_pmp_grid_2x2_20260605.npz")
     assert loaded.x.shape == (4, 2)
     assert loaded.v.ndim == 1
     assert loaded.dv.shape == loaded.x.shape

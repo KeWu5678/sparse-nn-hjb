@@ -4,19 +4,6 @@ import sys
 import numpy as np
 
 
-def test_openloop_value_samples_public_import_is_available() -> None:
-    from src.OpenLoop import ValueSamples
-
-    samples = ValueSamples(
-        x=np.zeros((1, 2)),
-        v=np.zeros(1),
-        dv=np.zeros((1, 2)),
-    )
-
-    assert samples.size == 1
-    assert samples.to_pdap_dict()["x"].dtype == np.float64
-
-
 def test_vdp_sampling_helpers_create_grid_and_random_points() -> None:
     from src.OpenLoop.vdp import grid_initial_states, random_initial_states
 
@@ -36,7 +23,6 @@ def test_pendulum_solver_public_imports_are_available() -> None:
         PendulumPmpSolver,
         PendulumPmpSolverConfig,
         PendulumSwingUpProblem,
-        ValueSamples,
     )
 
     problem = PendulumSwingUpProblem(control_limit=2.0)
@@ -45,11 +31,10 @@ def test_pendulum_solver_public_imports_are_available() -> None:
 
     assert problem.control_limit == 2.0
     assert solver.config.value_max == 0.5
-    assert ValueSamples.__name__ == "ValueSamples"
 
 
 def test_value_samples_save_npz_uses_explicit_output_path(tmp_path) -> None:
-    from src.OpenLoop import ValueSamples
+    from src.data import ValueSamples
 
     samples = ValueSamples(
         x=np.zeros((1, 2)),

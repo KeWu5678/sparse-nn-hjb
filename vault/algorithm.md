@@ -183,8 +183,10 @@ warm-start selection; SparseModel and the Penalty supply their mathematical eval
     (`prox_scale`, `proximal_step`).
   - `strategies.py` — Levenberg–Marquardt and Steihaug CG globalization.
   - `mpcg.py` — projected/trust-region CG inner solve.
-- `data.py` — reading, normalization, splitting, standard DataLoader factories,
-  and complete-sample assembly. Loaders and samples remain external to the model.
+- `data.py` — the single `ValueSamples` type shared by open-loop generation and
+  training (ADR 0016), its `.npz` file format, normalization, splitting, tensor
+  conversion, standard DataLoader factories, and complete-sample assembly.
+  Loaders and samples remain external to the model.
 - `eval.py` — relative errors and metric/report assembly, using the problem's
   canonical `obj` and the Penalty's sparsity functional for its objective mathematics.
 - `training.py` — external `run_training` loop, timing, evaluation, recording
@@ -201,8 +203,8 @@ warm-start selection; SparseModel and the Penalty supply their mathematical eval
     settings remain unchanged for serialization.
   - `activations.py` — canonical activation registry used by configs and scripts.
   - `scripts/train.py` registers the Hydra `config_schema` before composition.
-- Open-loop data subsystem: `src/OpenLoop/` — shared `ValueSamples`, the shared
-  finite-horizon Pontryagin collocation solver `collocation.py`, the VDP and
+- Open-loop data subsystem: `src/OpenLoop/` — the shared finite-horizon
+  Pontryagin collocation solver `collocation.py`, the VDP and
   Allen–Cahn problem definitions under `src/OpenLoop/vdp/` and
   `src/OpenLoop/allen_cahn/`, and paper-backed infinite-horizon pendulum data
   generation under `src/OpenLoop/pendulum/`.

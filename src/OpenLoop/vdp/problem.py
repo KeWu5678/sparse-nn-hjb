@@ -114,8 +114,8 @@ class VdpOptimalControlProblem:
         would make the gradient piecewise-constant and the control spuriously bang-bang.
         Returns a ``u_of_x`` closure."""
         from scipy.interpolate import CloughTocher2DInterpolator, NearestNDInterpolator
-        smooth = CloughTocher2DInterpolator(samples["x"], samples["dv"][:, 1])
-        nearest = NearestNDInterpolator(samples["x"], samples["dv"][:, 1])  # fill outside hull
+        smooth = CloughTocher2DInterpolator(samples.x, samples.dv[:, 1])
+        nearest = NearestNDInterpolator(samples.x, samples.dv[:, 1])  # fill outside hull
 
         def u(x):
             x = np.asarray(x).reshape(1, 2)

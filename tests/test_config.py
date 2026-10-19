@@ -177,7 +177,7 @@ def test_construct_problem_from_loaded_dataset() -> None:
     if not (DATA_DIR / cfg.data.path).exists():
         pytest.skip(f"dataset not present (rawdata/ is gitignored): {cfg.data.path}")
     data = load_value_samples(cfg.data.path)
-    model_config = resolve_model(cfg.model, input_dim=data["x"].shape[1])
+    model_config = resolve_model(cfg.model, input_dim=data.x.shape[1])
     validate_model_config(model_config)
     model = SparseModel(model_config)
     assert model.input_dim == 2

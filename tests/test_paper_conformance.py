@@ -12,7 +12,7 @@ from ssn_test_problem import penalty_for
 from src.config import resolve_model, validate_model_config, validate_optimizer_config
 from src.config.activations import ACTIVATIONS, GROWTH, get_growth
 from src.config.schema import EnvConfig, ExperimentConfig, ModelConfig, TrainingConfig
-from src.data import make_dataloader, split_value_samples
+from src.data import ValueSamples, make_dataloader, split_value_samples, to_tensors
 from src.eval import metrics
 from src.models import SparseModel
 from src.models.penalty import _phi
@@ -22,12 +22,12 @@ from src.PDAP.radius import certificate_radius, sample_extent
 from src.training import run_training
 
 
-def _data(n: int = 60, seed: int = 0) -> dict:
+def _data(n: int = 60, seed: int = 0) -> ValueSamples:
     """The same synthetic nonlinear target the golden characterization uses."""
     g = torch.Generator().manual_seed(seed)
     x = torch.rand(n, 2, generator=g, dtype=torch.float64) * 3 - 1.5
     r2 = (x * x).sum(1, keepdim=True)
-    return {"x": x.numpy(), "v": torch.log(1 + r2).numpy(), "dv": (2 * x / (1 + r2)).numpy()}
+    return ValueSamples(x=x.numpy(), v=torch.log(1 + r2).numpy(), dv=(2 * x / (1 + r2)).numpy())
 
 
 def _cfg(**over) -> ExperimentConfig:
@@ -235,7 +235,7 @@ def test_search_radius_never_exceeds_the_fixed_clamp() -> None:
     """The theorem radius only ever tightens the search (docs/adr/0006)."""
     for p in (2.01, 2.5, 3.0, 4.0):
         cfg = _cfg(moment_order=p, radial_cap="theorem")
-        data = tuple(torch.as_tensor(_data()[key]) for key in ("x", "v", "dv"))
+        data = to_tensors(_data())
         model_config = resolve_model(cfg.model, 2)
         validate_model_config(model_config)
         problem = SparseModel(model_config)
@@ -257,7 +257,7 @@ def test_certificate_radius_is_one_for_zero_residual() -> None:
 
 
 def test_certificate_radius_is_unavailable_without_hypotheses() -> None:
-    extent = sample_extent(torch.as_tensor(_data()["x"]))
+    extent = sample_extent(torch.as_tensor(_data().x))
     # No declared growth data -> keep the fixed comparison bound.
     assert certificate_radius(get_growth("snake_b0_25"), extent=extent,
                               residual_norm=1.0, alpha=1e-5, moment_order=2.01) is None
@@ -286,11 +286,7 @@ def test_insertion_reuses_the_residual_for_the_theorem_radius() -> None:
         loop_order="insertion_first",
         radial_cap="theorem",
     )
-    samples = _data(n=8)
-    data = tuple(
-        torch.as_tensor(samples[key], dtype=torch.float64)
-        for key in ("x", "v", "dv")
-    )
+    data = to_tensors(_data(n=8))
     torch.manual_seed(0)
     np.random.seed(0)
     model_config = resolve_model(cfg.model, input_dim=2)
