@@ -9,17 +9,14 @@ your machine --> container (mlflow server, 127.0.0.1:5000)
 client config: MLFLOW_TRACKING_URI=http://127.0.0.1:5000
 ```
 
-MLflow is a *projection* of the local JSON Run Records, not the system of
-record. Run Records under `rawdata/logs/multirun/` are the source of truth, and
-any sweep can be re-projected at any time, so the dashboard's SQLite store is
-disposable.
-
-The application logs params, scalar metrics, tags, and local artifact paths. It
-does not upload `result_<run_id>.pkl` or JSON records as MLflow artifacts.
+MLflow is the system of record for training runs: each job logs its params,
+metrics, tags and artifacts (`config.json`, `normalization.json`, `history.pt`)
+to this server, and nothing else keeps a copy. Training refuses to start when
+the server is unreachable.
 
 See:
 
-- [`docs/adr/0002-mlflow-as-run-record-backend.md`](../docs/adr/0002-mlflow-as-run-record-backend.md)
+- [`docs/adr/0016-mlflow-is-the-system-of-record.md`](../docs/adr/0016-mlflow-is-the-system-of-record.md)
 - [`docs/adr/0014-retire-the-ec2-mlflow-target.md`](../docs/adr/0014-retire-the-ec2-mlflow-target.md)
 - [`docs/adr/mlflow.md`](../docs/adr/mlflow.md) — operational guide
 
@@ -45,27 +42,12 @@ Stop it with:
 docker compose -f deploy/docker/compose.yaml down
 ```
 
-## Publish Runs
-
-Run experiments normally; local Run Records are written whether the dashboard is
-up or not. Then project them into MLflow:
-
-```bash
-export MLFLOW_TRACKING_URI=http://127.0.0.1:5000
-.venv/bin/python scripts/upload_run_records_to_mlflow.py \
-  rawdata/logs/multirun/vdp/log_penalty
-```
-
-Re-running the importer creates additional MLflow runs for the same JSON;
-deduplication is not implemented.
-
 ## State And Versions
 
 State lives in `deploy/docker/mlflow-data/` (gitignored) and survives
-`docker compose down`. Both the SQLite database and any server-uploaded artifacts
-(`mlartifacts/`) use this bind mount; the current importer still uploads only
-metadata. Re-importing Run Records restores the dashboard metadata, not uploaded
-artifact bytes, so preserve those files if artifact uploads are used.
+`docker compose down`. The SQLite database and the artifacts (`mlartifacts/`)
+both use this bind mount. It is the only copy of every result and cannot be
+rebuilt, so back it up; see [`docs/adr/mlflow.md`](../docs/adr/mlflow.md).
 
 The image tag in `compose.yaml` is pinned; keep it aligned with the resolved
 `mlflow` version in `uv.lock`.

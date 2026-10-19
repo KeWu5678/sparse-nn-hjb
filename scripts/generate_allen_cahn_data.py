@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 import platform
@@ -23,15 +22,15 @@ sys.path.insert(0, str(ROOT))
 import numpy as np
 import scipy
 
-from src.data import DATA_DIR
-from src.OpenLoop.allen_cahn import (
-    AllenCahnBatchError,
-    AllenCahnOpenLoopSolver,
-    AllenCahnProblem,
-    AllenCahnSampleFailure,
-    AllenCahnSolverConfig,
+from src.data import DATA_DIR, file_sha256
+from src.OpenLoop.allen_cahn import AllenCahnProblem
+from src.OpenLoop.collocation import (
+    BatchError,
+    CollocationConfig,
+    CollocationSolver,
+    SampleFailure,
 )
-from src.OpenLoop.allen_cahn.sampling import sobol_initial_states
+from src.OpenLoop.sampling import sobol_initial_states
 
 
 def main(argv=None) -> None:
@@ -39,14 +38,14 @@ def main(argv=None) -> None:
     problem = AllenCahnProblem(
         dimension=args.dimension, nu=args.diffusion, beta=args.beta, T_final=args.horizon,
     )
-    config = AllenCahnSolverConfig(
-        collocation_tol=args.tol, collocation_max_nodes=args.max_nodes,
+    config = CollocationConfig(
+        tol=args.tol, max_nodes=args.max_nodes,
         initial_mesh_points=args.mesh_points,
     )
     states = sobol_initial_states(args.samples, args.dimension, bound=args.bound, seed=args.seed)
     destination = args.output_dir / f"AllenCahn{args.dimension}_{args.tag}"
     metadata = _generation_metadata(problem, config, args)
-    generate_dataset(destination, AllenCahnOpenLoopSolver(problem, config), states,
+    generate_dataset(destination, CollocationSolver(problem, config), states,
                      metadata, workers=args.workers)
     print(f"data: {destination / 'value_samples.npz'}\n"
           f"metadata: {destination / 'metadata.json'}", flush=True)
@@ -76,7 +75,8 @@ def _parse_args(argv):
 
 
 def _generation_metadata(problem, config, args) -> dict:
-    sources = [Path(__file__), ROOT / "src/OpenLoop/value_samples.py",
+    sources = [Path(__file__), ROOT / "src/data.py",
+               ROOT / "src/OpenLoop/collocation.py", ROOT / "src/OpenLoop/sampling.py",
                *sorted((ROOT / "src/OpenLoop/allen_cahn").glob("*.py"))]
     return {
         "created_utc": datetime.now(timezone.utc).isoformat(),
@@ -96,7 +96,7 @@ def _generation_metadata(problem, config, args) -> dict:
                      "scipy": scipy.__version__},
         "requested_samples": args.samples, "retained_samples": 0, "complete": False,
         "generator_sha256": {
-            str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest()
+            str(path.relative_to(ROOT)): file_sha256(path)
             for path in sources
         },
     }
@@ -118,7 +118,7 @@ def generate_dataset(destination, solver, states, metadata, *, workers=1) -> Non
         _write_solver_records(destination, solution.sample_results)
         metadata["gradient_checks"] = check_value_gradients(solver, solution.value_samples)
         _save_validated_samples(destination, solution, metadata)
-    except AllenCahnBatchError as error:
+    except BatchError as error:
         _write_solver_records(destination, error.sample_results)
         metadata.update(failed_samples=len(error.failed_initial_states), error=str(error))
         raise
@@ -140,7 +140,7 @@ def _progress(dimension):
 def _write_solver_records(destination, results) -> None:
     diagnostics = [asdict(result.diagnostics) for result in results]
     failures = [dict(row=index, initial_state=result.initial_state.tolist(), **diagnostics[index])
-                for index, result in enumerate(results) if isinstance(result, AllenCahnSampleFailure)]
+                for index, result in enumerate(results) if isinstance(result, SampleFailure)]
     _write_json(destination / "diagnostics.json", diagnostics)
     _write_json(destination / "failures.json", failures)
 
@@ -182,7 +182,7 @@ def _save_validated_samples(destination, solution, metadata) -> None:
     path = samples.save_npz(destination / "value_samples.npz")
     metadata.update(
         complete=True, retained_samples=samples.size, failed_samples=0,
-        data_sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
+        data_sha256=file_sha256(path),
         max_collocation_residual=max(r.diagnostics.collocation_residual for r in solution.sample_results),
         max_boundary_residual=max(r.diagnostics.boundary_residual for r in solution.sample_results),
     )

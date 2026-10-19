@@ -28,12 +28,11 @@ from pathlib import Path
 import numpy as np
 import pytest
 import torch
-from ssn_test_problem import penalty_for
 
-from src.config import resolve_model, validate_model_config
+from src.config import make_penalty, resolve_model, validate_model_config
 from src.config.schema import EnvConfig, ExperimentConfig, ModelConfig, TrainingConfig
-from src.data import make_dataloaders
-from src.models import SparseModel
+from src.data import ValueSamples, make_dataloaders
+from src.models import SparseNetwork
 from src.PDAP import PDAP
 from src.training import run_training
 
@@ -53,12 +52,12 @@ def _cfg(name: str) -> ExperimentConfig:
     return ExperimentConfig(
         model=ModelConfig(kind=c["kind"], insertion=c["insertion"],
                           power=1.0, alpha=1e-4, gamma=c["gamma"]),
-        training=TrainingConfig(num_insertion=20),
+        training=TrainingConfig(num_of_initial_pts=20),
         env=EnvConfig(verbose=False),
     )
 
 
-def _make_data(n: int = 60, seed: int = 0) -> dict:
+def _make_data(n: int = 60, seed: int = 0) -> ValueSamples:
     """Synthetic target V = log(1 + ||x||^2), dV = 2x/(1+||x||^2).
 
     Genuinely nonlinear so both variants insert atoms non-trivially.
@@ -68,7 +67,7 @@ def _make_data(n: int = 60, seed: int = 0) -> dict:
     r2 = (x * x).sum(1, keepdim=True)
     v = torch.log(1 + r2)
     dv = 2 * x / (1 + r2)
-    return {"x": x.numpy(), "v": v.numpy(), "dv": dv.numpy()}
+    return ValueSamples(x=x.numpy(), v=v.numpy(), dv=dv.numpy())
 
 
 def _run_summary(name: str) -> np.ndarray:
@@ -77,21 +76,20 @@ def _run_summary(name: str) -> np.ndarray:
     np.random.seed(SEED)
     cfg = _cfg(name)
     data = _make_data()
-    model_config = resolve_model(cfg.model, input_dim=data["x"].shape[1])
+    model_config = resolve_model(cfg.model, input_dim=data.x.shape[1])
     validate_model_config(model_config)
-    model = SparseModel(model_config)
+    network = SparseNetwork(model_config)
     train_loader, valid_loader = make_dataloaders(data, cfg.data.train_fraction)
     out = run_training(
-        PDAP(cfg.training, penalty_for(model_config, model), insertion=model_config["insertion"]),
-        model,
-        train_loader, valid_loader, num_iterations=3, verbose=False,
+        PDAP(cfg.training, make_penalty(model_config), network, train_loader, insertion=model_config["insertion"]),
+        valid_loader, num_iterations=3,
     )
     return np.array(
         [
-            float(out.final_neurons),
-            float(out.best_err_l2_train),
-            float(out.best_err_h1_train),
-            float(out.train_loss[-1]),
+            float(out.run["final_neurons"]),
+            float(out.rows[out.best_iteration]["rel_l2_train"]),
+            float(out.rows[out.best_iteration]["rel_h1_train"]),
+            float(out.rows[-1]["objective_train"]),
         ],
         dtype=np.float64,
     )

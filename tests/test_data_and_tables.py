@@ -4,8 +4,8 @@ import numpy as np
 import pytest
 import torch
 
-from src.data import ValueSampleNormalizer, load_value_samples, split_value_samples
-from src.metric import format_table
+from src.data import ValueSampleNormalizer, ValueSamples, load_value_samples, split_value_samples
+from src.tables import format_table
 
 
 def test_load_value_samples_accepts_structured_npy(tmp_path):
@@ -19,23 +19,23 @@ def test_load_value_samples_accepts_structured_npy(tmp_path):
 
     samples = load_value_samples(path)
 
-    assert samples["x"].shape == (3, 2)
-    assert samples["v"].shape == (3, 1)
-    assert samples["dv"].shape == (3, 2)
+    assert samples.x.shape == (3, 2)
+    assert samples.v.shape == (3,)
+    assert samples.dv.shape == (3, 2)
 
 
 def test_value_sample_normalizer_uses_chain_rule_for_gradient():
-    samples = {
-        "x": np.array([[2.0, -4.0]]),
-        "v": np.array([[8.0]]),
-        "dv": np.array([[3.0, 5.0]]),
-    }
+    samples = ValueSamples(
+        x=np.array([[2.0, -4.0]]),
+        v=np.array([8.0]),
+        dv=np.array([[3.0, 5.0]]),
+    )
     normalizer = ValueSampleNormalizer.fit(samples)
     normalized = normalizer.normalize(samples)
 
-    np.testing.assert_allclose(normalized["x"], [[1.0, -1.0]])
-    np.testing.assert_allclose(normalized["v"], [[1.0]])
-    np.testing.assert_allclose(normalized["dv"], [[0.75, 2.5]])
+    np.testing.assert_allclose(normalized.x, [[1.0, -1.0]])
+    np.testing.assert_allclose(normalized.v, [1.0])
+    np.testing.assert_allclose(normalized.dv, [[0.75, 2.5]])
 
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
@@ -56,11 +56,11 @@ def test_tensor_denormalization_preserves_dtype_device_and_autograd(dtype):
 
 
 def test_split_converts_samples_to_float64():
-    samples = {
-        "x": np.ones((4, 2), dtype=np.float32),
-        "v": np.ones((4, 1), dtype=np.float32),
-        "dv": np.ones((4, 2), dtype=np.float32),
-    }
+    samples = ValueSamples(
+        x=np.ones((4, 2), dtype=np.float32),
+        v=np.ones(4, dtype=np.float32),
+        dv=np.ones((4, 2), dtype=np.float32),
+    )
     train, valid = split_value_samples(samples, train_fraction=0.5)
     assert all(tensor.dtype == torch.float64 for tensor in (*train, *valid))
 

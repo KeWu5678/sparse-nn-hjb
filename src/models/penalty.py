@@ -1,13 +1,7 @@
 """The coefficient penalty and the proximal maps built on it.
 
-For t >= 0, the log family has the fixed half-mixture used by the MATLAB
-2D/stereo references: phi(t) = t/2 + log(1+2*gamma*t)/(4*gamma).
-At gamma=0, phi(t)=t. The fractional family is t^q, with gamma=0 and the
-exact exponent q in {2/3, 1/2} implied by a validated activation power.
-The fractional maps use closed-form stationary roots together with the global
-objective-switching threshold; at an exact tie they return zero.
-
-Read top to bottom: the penalty families, then the scalar mathematics they use.
+log penalty: phi(t) = t/2 + log(1+2*gamma*t)/(4*gamma). At gamma=0, phi(t)=t.
+fractional penalty: t^q, with q in {2/3, 1/2} implied by a validated activation power.
 """
 
 from __future__ import annotations
@@ -19,34 +13,17 @@ import torch
 from torch import Tensor
 
 
-def make_penalty(alpha: float, gamma: float, penalty_exponent: float) -> Penalty:
-    """The configured family: the log penalty at q = 1, else the fractional penalty."""
-    if penalty_exponent == 1.0:
-        return LogPenalty(alpha, gamma)
-    if gamma != 0.0:
-        raise ValueError(f"the fractional penalty requires gamma == 0; got gamma={gamma}")
-    return FractionalPenalty(alpha, penalty_exponent)
-
-
 class Penalty(ABC):
-    """The penalty term alpha*Phi of the objective and its proximal maps.
-
-    alpha*Phi is the nonsmooth term alpha*sum|u|^q, which the proximal maps
-    handle exactly, plus a smooth correction that is zero unless a family adds
-    one. Proximal maps take the proximal constant lambda_.
+    """The penalty term and its proximal maps.
     """
 
     def __init__(self, alpha: float, penalty_exponent: float) -> None:
-        self._alpha = alpha
+        self.alpha = alpha
         self._penalty_exponent = penalty_exponent
-
-    @property
-    def alpha(self) -> float:
-        return self._alpha
 
     def value(self, u: Tensor) -> Tensor:
         """The penalty term alpha*Phi(u) of the objective."""
-        return self._alpha * self.sparsity_functional(u)
+        return self.alpha * self.sparsity_functional(u)
 
     @abstractmethod
     def sparsity_functional(self, u: Tensor) -> Tensor:
@@ -99,10 +76,10 @@ class Penalty(ABC):
         The global minimizer of the one-atom increment c*P + A*c^2/2 + alpha*|c|^q,
         for slope P and curvature A > 0.
         """
-        magnitude = self.scalar_prox(abs(slope) / curvature, self._alpha / curvature)
+        magnitude = self._scalar_prox(abs(slope) / curvature, self.alpha / curvature)
         return magnitude if slope < 0 else -magnitude
 
-    def scalar_prox(self, value: float, lambda_: float) -> float:
+    def _scalar_prox(self, value: float, lambda_: float) -> float:
         """Scalar proximal value of the nonsmooth term.
 
         Retain scalar scale arithmetic; the vector prox has a different
@@ -118,8 +95,8 @@ class Penalty(ABC):
         a minimizer, and the curvature is positive.
         """
         step = 0.0
-        if -slope >= self._alpha and curvature > 1e-30:
-            step = self.penalty_prox(-slope / curvature, self._alpha / curvature)
+        if -slope >= self.alpha and curvature > 1e-30:
+            step = self.penalty_prox(-slope / curvature, self.alpha / curvature)
         return step
 
     @abstractmethod
@@ -142,13 +119,13 @@ class LogPenalty(Penalty):
         return torch.sum(_phi(torch.abs(u), self._gamma))
 
     def jac_nonsmooth_term(self, u: Tensor) -> Tensor:
-        return self._alpha * torch.sign(u)
+        return self.alpha * torch.sign(u)
 
     def jac_correction(self, u: Tensor) -> Tensor:
-        return self._alpha * (torch.sign(u) * (_dphi(torch.abs(u), self._gamma) - 1.0))
+        return self.alpha * (torch.sign(u) * (_dphi(torch.abs(u), self._gamma) - 1.0))
 
     def hess_correction(self, u: Tensor) -> Tensor:
-        return torch.diag(self._alpha * _ddphi(torch.abs(u), self._gamma))
+        return torch.diag(self.alpha * _ddphi(torch.abs(u), self._gamma))
 
     def _closed_form_prox(self, v: Tensor, lambda_) -> Tensor:
         return _compute_prox_q_one(v, lambda_)
@@ -162,10 +139,10 @@ class LogPenalty(Penalty):
 
     def proximal_step(self, prox_scale: float | None) -> float:
         """tau = 1/(1 + alpha*gamma), eq. proximal-residual; prox_scale does not enter."""
-        return 1.0 / (1.0 + self._alpha * self._gamma)
+        return 1.0 / (1.0 + self.alpha * self._gamma)
 
     def scalar_penalty(self, c: float) -> float:
-        return self._alpha * float(_phi(torch.tensor(abs(c), dtype=torch.float64), self._gamma))
+        return self.alpha * float(_phi(torch.tensor(abs(c), dtype=torch.float64), self._gamma))
 
     def penalty_prox(self, value: float, lambda_: float) -> float:
         """The closed-form root, a minimizer when value >= lambda_; its caller checks that."""
@@ -186,7 +163,7 @@ class FractionalPenalty(Penalty):
 
     def jac_nonsmooth_term(self, u: Tensor) -> Tensor:
         s = torch.abs(u).clamp(min=1e-30)
-        return self._alpha * self._penalty_exponent * s ** (self._penalty_exponent - 1) * torch.sign(u)
+        return self.alpha * self._penalty_exponent * s ** (self._penalty_exponent - 1) * torch.sign(u)
 
     def _closed_form_prox(self, v: Tensor, lambda_) -> Tensor:
         """Choose the closed form by the exact q."""
@@ -205,8 +182,8 @@ class FractionalPenalty(Penalty):
         """
         if not 0.0 < rho < 1.0:
             raise ValueError(f"rho must satisfy 0 < rho < 1, got {rho}")
-        if self._alpha <= 0.0:
-            raise ValueError(f"alpha must be positive, got {self._alpha}")
+        if self.alpha <= 0.0:
+            raise ValueError(f"alpha must be positive, got {self.alpha}")
         magnitudes = coefficients.abs()
         nonzero = magnitudes[magnitudes > 0]
         if nonzero.numel() == 0:
@@ -214,20 +191,20 @@ class FractionalPenalty(Penalty):
         minimum = float(nonzero.min())
         exponent = self._penalty_exponent
         bound = rho * minimum ** (2.0 - exponent) / (2.0 * (1.0 - exponent))
-        return min(self._alpha, bound)
+        return min(self.alpha, bound)
 
     def proximal_step(self, prox_scale: float | None) -> float:
         """tau = lambda_t/alpha, eq. algorithm2-normal-map."""
         if prox_scale is None:
             raise ValueError("the fractional penalty requires prox_scale")
-        return prox_scale / self._alpha
+        return prox_scale / self.alpha
 
     def scalar_penalty(self, c: float) -> float:
         """The exact power, without the magnitude floor needed to differentiate the vector penalty."""
-        return self._alpha * abs(c) ** self._penalty_exponent
+        return self.alpha * abs(c) ** self._penalty_exponent
 
     def penalty_prox(self, value: float, lambda_: float) -> float:
-        return max(self.scalar_prox(value, lambda_), 0.0)
+        return max(self._scalar_prox(value, lambda_), 0.0)
 
 
 # The log penalty phi_gamma, soft thresholding, and the nonnegative step of lambda*phi
@@ -284,20 +261,7 @@ def _compute_prox_derivative_q_one(v, lambda_):
 
 
 def _phi_prox(v: float, lambda_: float, gamma: float) -> float:
-    """MATLAB's closed-form nonnegative step for ``lambda * phi(t)``.
-
-    The objective is J(t) = (t-v)^2/2 + lambda*phi(t), t >= 0.
-    At gamma=0 the step is nonnegative soft thresholding. Otherwise, with
-    gamma_bar = 2*gamma, stationarity gives
-        t^2 - a*t + (lambda-v)/gamma_bar = 0,
-        a = v - lambda/2 - 1/gamma_bar.
-    Delta is its discriminant; the larger root is clipped to t >= 0, as in
-    MATLAB setup_problem_NN_2d.m (theta=1/2).
-
-    For lambda, gamma >= 0, this is a global minimizer when lambda*gamma < 1
-    or v >= lambda. PDAP's warm-start acceptance guard ensures the latter.
-    Outside these regimes the root need not be globally optimal; no extra
-    objective comparison or rejection is performed, matching the reference.
+    """MATLAB's closed-form
     """
     if gamma == 0:
         return max(v - lambda_, 0.0)

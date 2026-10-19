@@ -3,9 +3,8 @@
 import numpy as np
 import pytest
 
-from src.data import load_value_samples, normalize_value_samples
-from src.OpenLoop.allen_cahn.sampling import sobol_initial_states
-from src.OpenLoop.value_samples import ValueSamples
+from src.data import ValueSamples, load_value_samples, normalize_value_samples
+from src.OpenLoop.sampling import sobol_initial_states
 
 
 @pytest.mark.parametrize("dimension", [2, 6, 10])
@@ -17,28 +16,34 @@ def test_sample_roundtrip_and_gradient_chain_rule(tmp_path, dimension):
     loaded = load_value_samples(path)
     normalized, transform = normalize_value_samples(loaded)
     np.testing.assert_allclose(
-        normalized["dv"], 2 * states * transform.x_scale / transform.v_scale,
+        normalized.dv, 2 * states * transform.x_scale / transform.v_scale,
     )
     recovered_value, recovered_gradient = transform.denormalize_prediction(
-        normalized["v"], normalized["dv"],
+        normalized.v, normalized.dv,
     )
-    np.testing.assert_allclose(recovered_value.ravel(), samples.v)
+    np.testing.assert_allclose(recovered_value, samples.v)
     np.testing.assert_allclose(recovered_gradient, samples.dv)
-    restored = ValueSamples.load_npz(path)
-    np.testing.assert_array_equal(restored.x, states)
+    np.testing.assert_array_equal(loaded.x, states)
 
 
 @pytest.mark.parametrize("dimension", [6, 10])
 def test_empty_and_concatenated_samples_keep_dimension(dimension):
-    empty = ValueSamples(np.empty((0, dimension)), np.empty(0), np.empty((0, dimension)))
+    empty = ValueSamples.empty(dimension)
     one = ValueSamples(np.ones((1, dimension)), np.ones(1), np.zeros((1, dimension)))
     assert empty.x.shape == (0, dimension)
     assert ValueSamples.concatenate([empty, one]).x.shape == (1, dimension)
 
 
-def test_legacy_empty_samples_remain_two_dimensional():
-    assert ValueSamples([], [], []).x.shape == (0, 2)
-    assert ValueSamples.concatenate([]).x.shape == (0, 2)
+def test_samples_need_an_explicit_dimension_and_are_read_only():
+    with pytest.raises(ValueError):
+        ValueSamples([], [], [])
+    with pytest.raises(ValueError):
+        ValueSamples.concatenate([])
+    states = np.zeros((2, 3))
+    samples = ValueSamples(states, np.zeros(2), states)
+    assert states.flags.writeable
+    with pytest.raises(ValueError):
+        samples.x[0, 0] = 1.0
 
 
 @pytest.mark.parametrize("dimension", [6, 10])

@@ -3,8 +3,13 @@
 import pytest
 import torch
 
-from src.models import FractionalPenalty, LogPenalty, make_penalty
+from src.config import make_penalty, resolve_model
+from src.models import FractionalPenalty, LogPenalty
 from src.models.penalty import _ddphi, _dphi, _phi
+
+
+def _penalty(alpha: float, gamma: float, q: float):
+    return LogPenalty(alpha, gamma) if q == 1.0 else FractionalPenalty(alpha, q)
 
 
 @pytest.mark.parametrize("gamma", [0.0, 0.1, 1.0, 10.0])
@@ -27,7 +32,7 @@ def test_fixed_log_penalty_and_derivatives(gamma: float) -> None:
 def test_penalty_value_and_ssn_remainder(q: float, gamma: float) -> None:
     u = torch.tensor([-2.0, -0.5, 0.25, 4.0], dtype=torch.float64, requires_grad=True)
     alpha = 0.3
-    penalty = make_penalty(alpha, gamma, q)
+    penalty = _penalty(alpha, gamma, q)
     value = alpha * (_phi(u.abs(), gamma) if q == 1 else u.abs().pow(q)).sum()
     torch.testing.assert_close(penalty.value(u), value)
 
@@ -50,26 +55,21 @@ def test_penalty_uses_the_magnitudes_of_signed_coefficients(q: float, gamma: flo
     else:
         expected = (magnitudes / 2 + torch.log1p(2 * gamma * magnitudes) / (4 * gamma)).sum()
 
-    actual = make_penalty(0.3, gamma, q).value(coefficients)
+    actual = _penalty(0.3, gamma, q).value(coefficients)
 
     torch.testing.assert_close(actual, 0.3 * expected)
 
 
 @pytest.mark.parametrize(
-    ("q", "gamma", "family"),
-    [(1.0, 1.0, LogPenalty), (0.5, 0.0, FractionalPenalty), (2 / 3, 0.0, FractionalPenalty)],
+    ("power", "gamma", "family"),
+    [(1.0, 1.0, LogPenalty), (3.0, 0.0, FractionalPenalty), (2.0, 0.0, FractionalPenalty)],
 )
-def test_make_penalty_selects_the_family_by_its_exponent(q: float, gamma: float, family: type) -> None:
-    penalty = make_penalty(0.3, gamma, q)
+def test_make_penalty_selects_the_family_by_its_exponent(power: float, gamma: float, family: type) -> None:
+    penalty = make_penalty(resolve_model({"power": power, "alpha": 0.3, "gamma": gamma}, 1))
 
     assert type(penalty) is family
     vector = penalty.value(torch.tensor([-2.0], dtype=torch.float64))
     assert penalty.scalar_penalty(-2.0) == pytest.approx(float(vector), rel=1e-15)
-
-
-def test_fractional_penalty_rejects_a_log_parameter() -> None:
-    with pytest.raises(ValueError, match="requires gamma == 0"):
-        make_penalty(0.3, 1.0, 0.5)
 
 
 def test_insertion_weight_is_the_prox_at_the_newton_point() -> None:

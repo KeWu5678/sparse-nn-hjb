@@ -1,5 +1,12 @@
 # Metrics and measuring: ownership and framework options
 
+> **Superseded (2026-10-15).** Metric names, History storage and the run
+> artifacts now follow [ADR 0017](../docs/adr/0017-metric-catalog.md) and
+> [ADR 0016](../docs/adr/0016-mlflow-is-the-system-of-record.md). The JSON run
+> records, `src/experiment_logging.py` and `src/problems/` described below no
+> longer exist. The ownership decisions (native PyTorch, full-split evaluation,
+> no metric framework) still hold.
+
 Investigated 2026-10-08. **Design accepted; implementation verified.** The user has
 confirmed prediction quality, solver diagnostics, and runtime costs are in scope,
 with an explicit constraint to keep the codebase small.
@@ -284,7 +291,7 @@ The following follows directly from [src/eval.py:60](../src/eval.py) and
 3. Keep loss weights/training coordinates separate from reporting transforms.
    Current fitting loss uses training coordinates; relative errors can use physical
    coordinates. Preserve the unweighted reported H1 convention, metric names,
-   empty-region NaNs, and absent sphere moment diagnostic (`psi_p=None`).
+   and empty-region NaNs.
 4. Region sums need region counts and their specified global reference sums;
    distance-bin edges must be common to the complete evaluation, not recomputed
    independently per batch. Support radii and total variation are observations

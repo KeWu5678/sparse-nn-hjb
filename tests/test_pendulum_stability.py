@@ -8,26 +8,37 @@ from src.OpenLoop.pendulum.problem import PendulumSwingUpProblem
 
 
 def test_selection_prioritizes_stabilization_then_global_h1():
-    candidates = [dict(record_path="best_region", global_h1=.3, near_h1=.01),
-                  dict(record_path="unstable", global_h1=.1, near_h1=.05),
-                  dict(record_path="best_stable", global_h1=.2, near_h1=.5)]
+    candidates = [dict(run_id="best_region", global_h1=.3, near_h1=.01),
+                  dict(run_id="unstable", global_h1=.1, near_h1=.05),
+                  dict(run_id="best_stable", global_h1=.2, near_h1=.5)]
     tested = []
     def stabilizes(row):
-        tested.append(row["record_path"])
-        return row["record_path"] != "unstable"
+        tested.append(row["run_id"])
+        return row["run_id"] != "unstable"
     chosen, passed = select_stabilizing_fit(candidates, stabilizes)
-    assert passed and chosen["record_path"] == "best_stable"
+    assert passed and chosen["run_id"] == "best_stable"
     assert tested == ["unstable", "best_stable"]
 
 
-def test_selection_reports_failure_when_no_candidate_stabilizes():
-    candidates = [dict(record_path="b", global_h1=.4), dict(record_path="a", global_h1=.2)]
+def test_selection_keeps_the_given_order_between_equal_errors():
+    candidates = [dict(run_id="first", global_h1=.2), dict(run_id="second", global_h1=.2)]
     tested = []
     def fails(row):
-        tested.append(row["record_path"])
+        tested.append(row["run_id"])
         return False
     chosen, passed = select_stabilizing_fit(candidates, fails)
-    assert not passed and chosen["record_path"] == "a"
+    assert not passed and chosen["run_id"] == "first"
+    assert tested == ["first", "second"]
+
+
+def test_selection_reports_failure_when_no_candidate_stabilizes():
+    candidates = [dict(run_id="b", global_h1=.4), dict(run_id="a", global_h1=.2)]
+    tested = []
+    def fails(row):
+        tested.append(row["run_id"])
+        return False
+    chosen, passed = select_stabilizing_fit(candidates, fails)
+    assert not passed and chosen["run_id"] == "a"
     assert tested == ["a", "b"]
     with pytest.raises(ValueError, match="finite global"):
         select_stabilizing_fit([], fails)

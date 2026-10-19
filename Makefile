@@ -3,8 +3,8 @@ PY := .venv/bin/python
 VERBOSE ?= false
 JOBS ?= 8
 EXPERIMENT ?= log_penalty
-# Records publish to MLflow live; env.require_mlflow makes a sweep abort at startup
-# rather than run for hours with the dashboard silently off.
+# Every job records its results as an MLflow run; training refuses to start
+# when this tracking store is unreachable.
 MLFLOW_TRACKING_URI ?= http://127.0.0.1:5000
 # One invocation writes a subtree per dataset; the layout is set by
 # hydra.sweep.subdir in each conf/experiment/<name>.yaml.
@@ -31,7 +31,7 @@ openloop:
 	$(PY) "experiments/00_openloop/pendulum/generate.py"
 
 sweep:
-	@if find "$(SWEEP_DIR)" -path '*/$(EXPERIMENT)/*' -name '*.json' -print -quit 2>/dev/null | grep -q .; then \
+	@if find "$(SWEEP_DIR)" -path '*/$(EXPERIMENT)/*' \( -name 'run.jsonl' -o -name '*.json' \) -print -quit 2>/dev/null | grep -q .; then \
 	  echo "$(SWEEP_DIR)/*/$(EXPERIMENT) already contains records; refusing to mix runs."; exit 2; \
 	fi
 	OMP_NUM_THREADS=1 MLFLOW_TRACKING_URI=$(MLFLOW_TRACKING_URI) \
@@ -39,5 +39,4 @@ sweep:
 	  hydra/launcher=joblib hydra.launcher.n_jobs=$(JOBS) \
 	  hydra.sweep.dir=$(SWEEP_DIR) \
 	  env.verbose=$(VERBOSE) \
-	  env.require_mlflow=true \
 	  env.seed=42

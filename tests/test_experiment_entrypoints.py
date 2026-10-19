@@ -1,7 +1,6 @@
 """Smoke the retained experiment interfaces without running fits or writing reports."""
 
 import importlib
-import json
 import os
 import runpy
 import subprocess
@@ -19,7 +18,6 @@ ROOT = Path(__file__).resolve().parents[1]
 @pytest.mark.parametrize("relative", [
     "scripts/paper/vdp_full_scope.py",
     "scripts/paper/pendulum_full_scope.py",
-    "experiments/01_vdp/paper_log_penalty/p_study_figure.py",
 ])
 def test_batch_paper_exports_select_a_consistent_backend(relative):
     path = ROOT / relative
@@ -77,34 +75,6 @@ def test_paper_entrypoints_delegate_to_shared_implementation(monkeypatch, group,
         with pytest.raises(SystemExit):
             runpy.run_path(str(path), run_name="__main__")
         assert calls[1].homogeneous_alpha == 1e-4
-
-
-def test_p_study_requires_a_complete_unique_grid(tmp_path, monkeypatch):
-    path = ROOT / "experiments/01_vdp/paper_log_penalty/p_study_figure.py"
-    if not path.exists():
-        pytest.skip("paper-workspace entry points are local/ignored under ADR 0011")
-    # Isolate grid completeness from the input-byte validation tested separately.
-    preflight = importlib.import_module("scripts.paper.preflight")
-    monkeypatch.setattr(preflight, "validate_record", lambda p: json.loads(p.read_text()))
-    namespace = runpy.run_path(str(path))
-    with pytest.raises(ValueError, match="incomplete"):
-        namespace["load"](tmp_path)
-    expected = {}
-    for activation in ("softplus", "tanh", "gaussian", "gelu_squared"):
-        for order in (2.01, 2.5, 3., 4.):
-            for alpha in (1e-4, 1e-5):
-                record = {
-                    "config": {"model": {"activation": activation,
-                                         "moment_order": order, "alpha": alpha}},
-                    "metrics": [{"values": {"radius_max": 5., "radius_r95": 3.,
-                                               "best_neurons": 4}}],
-                }
-                (tmp_path / f"{activation}_{order}_{alpha}.json").write_text(json.dumps(record))
-                expected[activation, order, alpha] = {"max_radius": 5., "r95": 3., "neurons": 4.}
-    assert namespace["load"](tmp_path) == expected
-    (tmp_path / "duplicate.json").write_text(json.dumps(record))
-    with pytest.raises(ValueError, match="duplicate"):
-        namespace["load"](tmp_path)
 
 
 @pytest.mark.parametrize("activation", ["relu", "leaky_relu"])

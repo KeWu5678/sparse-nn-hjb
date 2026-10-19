@@ -80,33 +80,33 @@ Unbounded Parameter Space}
 \begin{abstract}
 We recover optimal feedback laws for nonlinear control problems by
 approximating Hamilton--Jacobi--Bellman value functions with sparse shallow
-neural networks. Value and gradient are
+neural networks. Numerical estimates of the value and gradient are
 generated from the open-loop problem by the Pontryagin maximum principle, and
 the network is trained with a gradient-augmented $H^1$ fidelity. 
 
 For nonhomogeneous activation functions on
-the unbounded parameter space $\Omega=\mathbb R^{d+1}$, We study the normalized objective
+the unbounded parameter space $\Omega=\mathbb R^{d+1}$, we study the normalized objective
 \begin{equation*}
 	J(\mu)=L(\mu)+\alpha\Phi_\phi(\mu_p),
 \end{equation*}
-where the concave scalar penalty $\Phi_\phi$ has finite positive right slope at zero,
+where $\Phi_\phi$ is induced by a concave scalar penalty $\phi$ with finite positive right slope at zero,
 and $\mu_p=w_p\mu$ with $p>0$ and $w_p(\omega)=1+|\omega|^p$. 
-Normalization makes the dictionary vanish at infinity under a polynomial growth condition. 
+Under polynomial growth, choosing $p$ sufficiently large makes the normalized dictionary vanish at infinity.
 This yields existence of the global minimum by normalized weak-* compactness. 
 If the penalty is strongly concave on every bounded interval, every local minimizer
 has finite support and satisfies a covering-number bound. 
-A Primal-Dual-Active-Point (PDPA) algorithm is proposed, which achieves 
-a best-iterate rate of order $n^{-1/2}$. 
+We propose a Primal-Dual-Active-Point (PDAP) algorithm.
+For the single-atom PDAP scheme with exact search and monotone correction,
+we prove an $O(n^{-1/2})$ best-iterate bound on the first-order optimality residual for atom insertion.
 
 For positively $k$-homogeneous activations, we give an
-equivalent measure problem on the unit sphere with the fractional
-outer-coefficient penalty $|c|^{2/(k+1)}$. Every local minimizer has finite support, 
+equivalent measure problem on the unit sphere with the fractional-exponent penalty
+$|c|^{2/(k+1)}$ on the outer coefficients. For $\reluk$ with $k\ge2$, every local minimizer has finite support,
 while every global minimizer satisfies an explicit a priori width bound. 
 An insertion algorithm based on the optimality condition is proposed.
 
-The resulting algorithms are studied on the Van der Pol oscillator and the
-pendulum swing-up problems, whose value function has a gradient discontinuity
-across a switching set.
+We study the resulting algorithms on the Van der Pol oscillator and pendulum
+swing-up benchmarks; the latter has a value function with a discontinuous gradient.
 \end{abstract}
 \maketitle
 \tableofcontents
@@ -128,18 +128,18 @@ The problem under consideration is the dynamic optimal control problem in the sp
 We assume $y(t)\in\mathbb R^d$, $u(t)\in\mathbb R^{m_u}$,
 $h\in C^1(\mathbb R^d)$,
 $f\in C^1(\mathbb R^d;\mathbb R^d)$, and
-$g\in C^1(\mathbb R^d;\mathbb R^{d\times m_u})$. We assume the minimizer exists.
+$g\in C^1(\mathbb R^d;\mathbb R^{d\times m_u})$. We assume a minimizer exists.
 
-One approach computes an open-loop state-costate-control path for a fixed
-initial condition $x$. The Pontryagin maximum principle (PMP) yields a coupled
+One approach computes an open-loop trajectory of the state, costate, and control
+for a fixed initial condition $x$. The Pontryagin maximum principle (PMP) yields a coupled
 forward--backward two-point boundary value problem:
 \begin{equation*}
 \tag{TPBVP}\label{TPBVP}
 \left\{
 \begin{aligned}
-	&\frac{d}{dt}y^* = f(y^*) + g(y^*)u^*,\\
+	&\frac{d}{dt}y^*(t) = f(y^*(t)) + g(y^*(t))u^*(t),\\
 	& y^*(t_0) = x, \\
-	& -\frac{d}{dt} p^* = \partial_y \bigg( f(y^*) +  g(y^*) u^* \bigg)^\top p^* + \partial_y h(y^*),\\
+	& -\frac{d}{dt} p^*(t) = \partial_y \bigg( f(y^*(t)) +  g(y^*(t)) u^*(t) \bigg)^\top p^*(t) + \partial_y h(y^*(t)),\\
 	& p^*(T) = 0.
 \end{aligned}
 \right.
@@ -150,7 +150,7 @@ The stationarity condition with respect to the control gives
 	\quad\text{for almost every }t\in(t_0,T).
 \end{equation*}
 
-The open-loop control is not robust with respect to disturbances of the state \cite{azmi2021optimal}: it is computed for a single initial condition, and deviations from the optimal path are not corrected. In addition, numerical methods for the two-point boundary value problem are sensitive to the initial guess and may fail to converge.
+An open-loop control does not adjust in response to state disturbances \cite{azmi2021optimal}. In addition, numerical methods for the two-point boundary value problem are sensitive to the initial guess and may fail to converge.
 The dynamic programming principle instead introduces the value function
 \begin{equation*}
 	V(t,x):=\inf_u\mathcal C(u;t,x)
@@ -161,33 +161,34 @@ sense:
 \tag{HJB}\label{HJB}
 \left\{
 \begin{aligned}
-	& \partial_t V - \frac{1}{4\eta} \nabla V(t, x)^\top g(x)g(x)^\top \nabla V(t, x)
-	+ \nabla V(t, x)^\top f(x) + h(x) = 0, \\
+	& -\partial_t V + \frac{1}{4\eta} \nabla_x V(t, x)^\top g(x)g(x)^\top \nabla_x V(t, x)
+	- \nabla_x V(t, x)^\top f(x) - h(x) = 0, \\
 	& V(T, x) = 0.
 \end{aligned}
 \right.
 \end{equation*}
 At points where $V$ is differentiable, the equation holds classically and
 Hamiltonian minimization gives the feedback
-$u^*(t,x)=-(2\eta)^{-1}g(x)^\top\nabla V(t,x)$.
-The value function encodes the optimal cost from every state. The feedback law
-synthesized from it corrects deviations from a nominal path.
+$u^*(t,x)=-(2\eta)^{-1}g(x)^\top\nabla_x V(t,x)$.
+The value function encodes the optimal cost from every state.
+State feedback adapts the input to the current state.
 
-For nonlinear control problems one usually seeks a feedback law, which requires solving the HJB equation.
+For nonlinear control problems, one usually seeks an optimal feedback law,
+which can be constructed from the value function obtained by solving the HJB equation.
 Computing this function is notoriously difficult because of the curse of dimensionality.
 Alongside classical methods, data-driven methods have therefore become
 increasingly common.
 One line of work, introduced in \cite{nakamura2021adaptive}, generates the training data with \eqref{TPBVP} and approximates the optimal value function from it.
-The optimal feedback law is then synthesized from the fitted value function after validation.
+The feedback law is then synthesized from the fitted value function after validation.
 Its samples are causality-free: generating one does not require approximate
 values at neighbouring grid points.
 Moreover, Azmi, Kalise and Kunisch \cite{azmi2021optimal} enrich the dataset
 with adjoint information: a state-adjoint-control triple is generated by
-solving the open-loop problem, and at differentiability points the adjoint
-supplies the value gradient.
-The value function is then approximated by hyperbolic-cross basis functions
+solving the open-loop problem, and, for an optimal trajectory, the adjoint
+supplies the value gradient at differentiability points.
+The value function is then approximated by hyperbolic cross basis functions
 with an $\ell^1$ penalty, and including the adjoint data targets an $H^1$
-approximation. Neural-network approximations form another growing line of work
+approximation. Neural network approximations form another growing line of work
 \cite{lutter2020hjb, shilova2023revisiting}. Other prior information, such as
 semiconcavity of the value function, can also be incorporated. Alternatively,
 one can use an HJB- or physics-informed loss
@@ -205,6 +206,9 @@ $\omega_n=(a_n,b_n)$, and $c=(c_n)_{n=1}^N$, we use the two-layer network
 where $\rho$ is a sufficiently smooth activation function and $N$ the width of the network.
 We associate it with the finite signed measure
 $\mu_{\boldsymbol\omega,c}:=\sum_{n=1}^N c_n\delta_{\omega_n}$.
+Throughout, representations of finite networks are understood after repeated
+locations are merged and zero coefficients are discarded; their width $N$ is
+the number of remaining terms.
 Its gradient is
 \begin{equation*}
 	\nabla_x\mathcal{N}_{\boldsymbol\omega,c}(x)
@@ -212,17 +216,14 @@ Its gradient is
 \end{equation*}
 
 We write $V(x):=V(0,x)$.
-The training data are generated by solving \eqref{TPBVP}. For the trajectory
-issued from $x^m$, let
-\begin{equation*}
-	g^m:=p^{*,m}(0)
-\end{equation*}
-denote the costate. At every sample where $V$
-is differentiable, sensitivity relations give $g^m=\nabla V(x^m)$
+The training data are computed numerically from \eqref{TPBVP}. For the trajectory
+starting from $x^m$, let $v^m$ denote its accumulated cost and
+$g^m:=p^{*,m}(0)$ its initial costate. For an exact optimal trajectory at a sample
+where $V$ is differentiable, sensitivity relations give $g^m=\nabla_x V(x^m)$
 \cite{cristiani2010initialization,cannarsa1991some,clarke1987relationship}.
-At a nondifferentiable point, competing optimal paths may supply different costate
-labels; no classical gradient is asserted there. Thus the data consist of
-triples $\{x^m,V(x^m),g^m\}_{m=1}^M$.
+At a nondifferentiable point, competing optimal paths may supply different costates;
+no classical gradient is asserted there. Thus the data consist of
+triples $\{x^m,v^m,g^m\}_{m=1}^M$.
 We have the minimization problem
 \begin{equation*}
 \min_{N,\boldsymbol\omega,c}l^M(\mu_{\boldsymbol\omega,c}),
@@ -230,11 +231,11 @@ We have the minimization problem
 l^M(\mu_{\boldsymbol\omega,c}):=
 \frac{1}{2M}\sum_{m=1}^M
 \left(
-|V(x^m)-\mathcal N_{\boldsymbol\omega,c}(x^m)|^2
+|v^m-\mathcal N_{\boldsymbol\omega,c}(x^m)|^2
 +|g^m-\nabla\mathcal N_{\boldsymbol\omega,c}(x^m)|^2
 \right).
 \end{equation*}
-Fix a bounded Lipschitz domain $D\subset\mathbb R^d$.
+Fix a bounded Lipschitz domain $D\subset\mathbb R^d$, 
 Section~3 introduces the corresponding population fidelity $L$ with respect
 to Lebesgue measure on $D$.
 
@@ -244,7 +245,7 @@ The number of neurons $N$ is itself an optimization variable.
 Although width alone does not generally explain a model's inductive bias
 \cite{neyshabur2014search}, sparsity is crucial for computational efficiency
 in many problems.
-Furthermore, sparsity is necessary for certain applications, such as knowledge distillation and deconvolution of point-like objects.
+Furthermore, sparsity is useful for certain applications, such as knowledge distillation and deconvolution of point-like objects.
 
 
 A traditional sparse shallow network uses the ReLU activation and an
@@ -253,41 +254,44 @@ $\ell^1$ penalty on the outer coefficients
 Pieper and Petrosyan \cite{pieper2022nonconvex} showed that convex penalties
 cannot effectively eliminate redundant neurons when they cluster in a small
 neighborhood and introduced a nonconvex penalty for this purpose.
-However this formulation does not extend to the gradient fitting since the formulation is restricted to the ReLU setting: 
+However this formulation poses difficulties for gradient fitting since the formulation is restricted to the ReLU setting:
 the second-order weak derivative of ReLU does not exist as a function while it is a distribution, and we cannot
-use it to approximate high-order derivatives. 
-We need to extend to the smooth activation functions. 
+use it to approximate higher-order derivatives.
+We need to extend to smooth activation functions.
 
 
-The difficulty is, such extension requires a treatment of the unbounded inner-parameter space for gradient training.
+Such an extension requires a treatment of the unbounded space of inner
+parameters for gradient training.
 1. For positively $k$-homogeneous activations, radial scaling can be absorbed
 into the outer coefficient, and the network has an equivalent representation
 with inner parameters on the unit sphere. 
-However, the induced nonconvex penalty admits infinite slope at 0
+However, for $k\ge2$, the induced nonconvex penalty has infinite right derivative at zero
 and the usual functional tools to prove the existence and optimality are not applicable. 
 2. For nonhomogeneous activations such
 as $\tanh$, softplus, and the Gaussian, radial scaling changes the atom and
 cannot be removed by normalization. Without normalization, sequences
 with $|\omega|\to\infty$ may retain a nonzero contribution to the represented
-function, as shown in Section~\ref{sec:escape}. We adress those difficulties in each case.
+function, as shown in Section~\ref{sec:escape}. We address those difficulties in each case.
 \paragraph{\emph{Contributions}}
 The contributions are the following.
 \begin{enumerate}
 	\item \emph{Nonhomogeneous activations on the unbounded parameter domain.}
 	We adopt the objective function with gradient information from \cite{azmi2021optimal} and the nonconvex penalty from \cite{pieper2022nonconvex}. 
 	Like in \cite{pieper2022nonconvex}, we require the concave scalar penalties to have finite positive right slope.
-	However, unlike the original paper which only considers the ReLU case, we allow the activation functions to be nonhomogeneous defined on the unbounded domain.
-	We prove a weak representation of the formulation and derive weak-* lower semicontinuity
+	However, unlike the original paper which focuses on the ReLU case, we allow the activation functions to be nonhomogeneous, with inner parameters in an unbounded domain.
+	We prove a weak representation of the penalty $\Phi_\phi$ and derive weak-* lower semicontinuity
 	(Theorem~\ref{thm:phi-lsc} and Corollary~\ref{cor:phi-lsc-sublevels}).
 	In Theorem~\ref{thm:normalization} with the normalized atom $K_p$,
 	we extend the existence result of a global minimizer from the value loss with ReLU activation function
-	to the gradient-augmented loss with any continuous activations on $\Omega=\mathbb R^{d+1}$
-	of implied polynomial growth condition (Theorem~\ref{thm:existence}). 
+	to the gradient-augmented loss with any continuous activation $\rho:\mathbb R\to\mathbb R$
+	satisfying the stated polynomial growth condition, with inner parameters in $\Omega=\mathbb R^{d+1}$ (Theorem~\ref{thm:existence}).
 	Under strong concavity of the penalty on every bounded interval,
-	we proved that every local minimizer is finite atomic as in \cite{pieper2022nonconvex}.
+	we prove that every local minimizer is finite atomic as in \cite{pieper2022nonconvex}.
 	However, we further extend the result and prove that the number of neurons of optimal network admits an a priori bound
 	(Theorem~\ref{thm:finite_support}, Corollary~\ref{cor:finite-global-minimizer}). 
-	Based on that, we propose a new version of the PDAP algorithm with $n^{-1/2}$ best-iterate rate
+	We propose a new version of the PDAP algorithm.
+	For the single-atom PDAP scheme with exact search and monotone correction,
+	we prove an $O(n^{-1/2})$ best-iterate bound on the first-order optimality residual for atom insertion
 	(Theorem~\ref{thm:quantitative-insertion}, Corollary~\ref{cor:certificate-rate}).
 	\item \emph{The $k$-homogeneous formulation.} 
 	For positively $k$-homogeneous activations, we show that quadratic
@@ -295,12 +299,12 @@ The contributions are the following.
 	$|c|^{2/(k+1)}$ on the outer coefficients with unit-norm inner
 	parameters (Lemma~\ref{lem:homogeneous-penalty}), 
 	which is extended from the ReLU rescaling equivalence of \cite[Appendix~F, Proposition~3]{pieper2022nonconvex}.
-	The resulting problem is posed over all of $\mathcal M(\mathbb S^d)$, 
-	which has the same infimum as the finite-network problem (Lemma~\ref{lem:homogeneous_reduction}).
+	For $\reluk$ with $k\ge2$, the resulting problem is posed over all of $\mathcal M(\mathbb S^d)$,
+	which has the same infimum as the problem over finite networks (Lemma~\ref{lem:homogeneous_reduction}).
 	We prove that a global minimizer exists, and every global minimizer is a finite network obeying an explicit a priori width bound
 	(Theorem~\ref{thm:homogeneous_existence}).
 	We derive the atomwise optimality conditions and a positive lower bound on the weights of every
-	total-variation local minimizer (Theorem~\ref{thm:homogeneous_optimality}). 
+	local minimizer with respect to the total variation norm (Theorem~\ref{thm:homogeneous_optimality}).
 	Every local minimizer has finite support (Corollary~\ref{cor:homogeneous_local_support}).
 	An insertion algorithm is proposed based on the optimality condition (Algorithm~\ref{alg:q}).
 \end{enumerate}
@@ -340,7 +344,7 @@ Section~3.
 \subsection{Finite signed Radon measures}
 Let $\Omega$ be a locally compact Polish space. We write
 $\mathcal M(\Omega)$ for the Banach space of finite signed Radon measures on
-$\Omega$, equipped with the total-variation norm
+$\Omega$, equipped with the total variation norm
 \begin{equation*}
 	\|\mu\|_{\mathcal M(\Omega)}:=|\mu|(\Omega).
 \end{equation*}
@@ -401,7 +405,7 @@ Throughout the remainder of the paper, $D\subset\mathbb R^d$ is a bounded
 Lipschitz domain, $\nu:=\mathcal L^d|_D$ is the population measure,
 and $L^2(D)$ means $L^2(D,\nu)$. We assume that the population target
 $V$ belongs to $H^1(D)$. The symbol $M\ge1$ denotes the number of samples in
-an empirical loss. The inner-parameter domain is
+an empirical loss. The domain of the inner parameters is
 $\Omega=\mathbb R^{d+1}$, and $\rho\in C(\mathbb R)$ denotes the fixed
 activation function of \eqref{eq:network}, with
 \begin{equation*}
@@ -417,7 +421,7 @@ We reserve $p$ for the moment order.
 \subsection{The value operator and the gradient-augmented loss}
 The finite network $\mathcal N_{\boldsymbol\omega,c}$ corresponds to the
 finite atomic measure $\mu_{\boldsymbol\omega,c}$. This motivates the integral
-formulation below, which agrees exactly with the finite sum on atomic
+formulation in \eqref{eq:integral-representation}, which agrees exactly with the finite sum on atomic
 measures.
 
 \begin{assumption}[Regularity and polynomial growth of $\rho$]
@@ -443,7 +447,7 @@ $\nabla K(a,b)(x)=a\rho'(a\cdot x+b)$, and hence
 	\|K(\omega)\|_{H^1(D)}
 	\le C_K(1+|\omega|)^{s_1}.
 \end{equation}
-If $\omega_n\to\omega$, their pre-activations lie in a common compact
+If $\omega_n\to\omega$, their preactivations lie in a common compact
 interval on $D$. Uniform continuity of $\rho$ and $\rho'$ on that interval,
 together with $a_n\to a$, therefore gives
 $K(\omega_n)\to K(\omega)$ in $H^1(D)$. Thus
@@ -455,9 +459,10 @@ For $\mu\in\mathcal M(\Omega)$ satisfying
 	\int_\Omega\|K(\omega)\|_{H^1(D)}\,d|\mu|(\omega)<\infty,
 \end{equation}
 define the $H^1(D)$-valued Bochner integral
-\begin{equation*}
+\begin{equation}
+\label{eq:integral-representation}
 	\mathcal N\mu:=\int_\Omega K(\omega)\,d\mu(\omega).
-\end{equation*}
+\end{equation}
 By \eqref{eq:H1-growth}, condition~\eqref{eq:H1-Bochner-condition} holds for
 $\mu\in\mathcal M_p(\Omega)$ when $p>s_1$. For
 $\psi\in C_c^\infty(D)$ and $i\in\{1,\ldots,d\}$, the growth bound permits
@@ -475,34 +480,33 @@ Consequently,
 	\quad\text{in }L^2(D;\mathbb R^d).
 \end{equation*}
 For measures satisfying only
-$\int_\Omega\|K(\omega)\|_{L^2(D)}\,d|\mu|(\omega)<\infty$, the same
-definition is valid as an $L^2(D)$-valued Bochner integral. By
+$\int_\Omega\|K(\omega)\|_{L^2(D)}\,d|\mu|(\omega)<\infty$, the integral in
+\eqref{eq:integral-representation} is well defined as an $L^2(D)$-valued Bochner integral. By
 \eqref{eq:atom-L2-growth}, this includes $\mathcal M_p(\Omega)$ when
 $p>s_0$. In particular,
 $\mathcal N\mu_{\boldsymbol\omega,c}=\mathcal N_{\boldsymbol\omega,c}$.
 
 Whenever $\mathcal N\mu\in H^1(D)$, set $r_\mu:=\mathcal N\mu-V$.
-The fidelity term is the gradient-augmented loss with the distributional
-gradient convention. If the $L^2(D)$-valued integral defining
+If the $L^2(D)$-valued integral defining
 $\mathcal N\mu$ does not exist, we set $L(\mu)=+\infty$:
 \begin{equation*}
 	L(\mu) :=
 	\begin{cases}
 	\dfrac{1}{2} \|\mathcal{N}\mu - V \|^2_{L^2(D)}
-	+ \dfrac{1}{2} \|\nabla(\mathcal{N}\mu) - \nabla V \|_{L^2(D)}^2,
+	+ \dfrac{1}{2} \|\nabla(\mathcal{N}\mu) - \nabla_x V \|_{L^2(D)}^2,
 	& \mathcal{N}\mu \in H^1(D),\\[4pt]
 	+\infty, & \text{otherwise.}
 	\end{cases}
 \end{equation*}
 
-For sampled labels $(V(x^m),g^m)_{m=1}^M$ and a finite network for which the
+For sampled data $(v^m,g^m)_{m=1}^M$ and a finite network for which the
 displayed point values exist, the corresponding empirical fidelity is
 \begin{equation}
 \label{eq:empirical-fidelity}
 	l^M(\mu):=
 	\frac{1}{2M}\sum_{m=1}^M
 	\left(
-	|\mathcal N\mu(x^m)-V(x^m)|^2
+	|\mathcal N\mu(x^m)-v^m|^2
 	+|\nabla\mathcal N\mu(x^m)-g^m|^2
 	\right).
 \end{equation}
@@ -547,8 +551,10 @@ following conditions:
 The lower curvature control in Assumption~\ref{pen3}(1) is local and does not
 follow from global concavity. For example,
 $\phi(z)=z-\frac23z^{3/2}$ near the origin has
-$\phi''(z)=-\frac12z^{-1/2}$; it can be extended linearly after a small
-positive point so as to remain nondecreasing, concave, and coercive.
+$\phi''(z)=-\frac12z^{-1/2}$.
+Choose $0<\delta<1$, retain this formula on $[0,\delta]$, and use its
+tangent line at $\delta$ for $z>\delta$. The resulting function is
+nondecreasing, concave, and coercive.
 \end{remark}
 
 The following result follows from standard concavity estimates; see \cite{pieper2022nonconvex}.
@@ -585,11 +591,11 @@ $\phi(z_1)\ge\frac{z_1}{z_2}\phi(z_2)$.
 	&&\text{because $\phi(z)/z$ is nonincreasing}\\
 	&=\phi(z_2)+z_1\frac{\phi(z_2)}{z_2}\\
 	&\le\phi(z_2)+\phi(z_1)
-	&&\text{by the same monotonicity}.
+	&&\text{by the same monotonicity argument}.
 \end{align*}
 The cases with $z_1=0$ or $z_2=0$ follow from $\phi(0)=0$.
 
-(2) and (3) By the same monotonicity and $\phi(0)=0$,
+(2) and (3) By the same monotonicity argument and $\phi(0)=0$,
 \begin{equation*}
 	\frac{\phi(z)}z
 	\le\lim_{s\downarrow0}\frac{\phi(s)}s
@@ -663,7 +669,7 @@ Define
 \end{equation}
 
 We give a self-contained representation and proof of weak-* lower
-semicontinuity for this specific nonconvex functional under relaxed assmuptions. 
+semicontinuity for this specific nonconvex functional under weaker assumptions.
 Another proof for the general setting can be found in Bouchitt\'e--Buttazzo
  \cite[Theorem~3.3 and Remark~3.5]{bouchitte1990new}.
 
@@ -697,8 +703,8 @@ such that
 	|\mu|\bigl(U\setminus(K_+\cup K_-)\bigr)<\frac{\varepsilon}{4}.
 \end{equation}
 
-We now construct the required finite small-mass partition, including both the
-atomic and nonatomic parts. For every $\omega\in K_+\cup K_-$, continuity from
+We now construct a finite partition into sets of $|\mu|$-measure less than
+$\delta/2$, including both the atomic and nonatomic parts. For every $\omega\in K_+\cup K_-$, continuity from
 above gives
 \begin{equation*}
 	|\mu|\bigl(B_r(\omega)\bigr)
@@ -707,7 +713,7 @@ above gives
 	\qquad(r\downarrow0).
 \end{equation*}
 Choose $r_\omega>0$ such that
-$|\mu|(B_{r_\omega}(\omega))<\delta/2$. Compactness gives a finite subcover
+$|\mu|(B_{r_\omega}(\omega))<\delta/2$. Compactness gives a finite subcover.
 Let $B_1,\ldots,B_N$ be these balls. For each
 $\sigma\in\{+,-\}$, define inductively
 \begin{equation*}
@@ -739,9 +745,9 @@ Relabel the remaining sets $C_1,\ldots,C_m$. They are pairwise disjoint and sati
 Each $C_i$ lies entirely in either $P$ or $N$.
 
 Because the compact sets $C_i$ are finitely many, pairwise disjoint, and
-contained in the open set $U$, they have pairwise disjoint relatively compact
-open neighborhoods. Outer regularity lets us shrink these neighborhoods,
-while keeping each $C_i$ inside, to obtain open sets $U_i$ satisfying
+contained in the open set $U$, they have open neighborhoods with pairwise
+disjoint compact closures contained in $U$. Outer regularity lets us shrink
+these neighborhoods, while keeping each $C_i$ inside, to obtain open sets $U_i$ satisfying
 \begin{equation}
 \label{eq:phi-neighborhood-loss}
 	\sum_{i=1}^m|\mu|(U_i\setminus C_i)
@@ -873,7 +879,7 @@ Because $F$ is finite, its points have pairwise disjoint relatively compact
 neighborhoods. Moreover,
 $\mu_{\mathrm{rem}}(\{\omega_j\})=0$ for $j\in F$, so continuity of the measure from above
 allows these neighborhoods to be chosen with arbitrarily small total
-$|\mu_{\mathrm{rem}}|$-mass. Using the distance-function construction from
+$|\mu_{\mathrm{rem}}|$-mass. Using the construction in
 Lemma~\ref{lem:phi-coercivity}, choose $g_j\in C_c(\Omega)$, $j\in F$, with
 pairwise disjoint supports, $|g_j|\le1$, and
 \begin{equation*}
@@ -971,7 +977,7 @@ $\|\mu_{\atom}\|_{\mathcal M(\Omega)}$ in terms of $C$, while
 $\|\mu_{\cont}\|_{\mathcal M(\Omega)}\le C/L_\phi$. The atomic part is
 supported on the countable atom set, while the continuous part assigns that
 set zero variation. The two parts are therefore mutually singular, so their
-total-variation norms add to $\|\mu\|_{\mathcal M(\Omega)}$. Hence the
+total variation norms add to $\|\mu\|_{\mathcal M(\Omega)}$. Hence the
 sublevel is bounded in total variation.
 \end{proof}
 
@@ -987,11 +993,11 @@ for the unnormalized problem on the parameter domain.
 
 \subsubsection*{Escape on the unbounded parameter domain}
 \label{sec:escape}
-For positively homogeneous profiles the radial scale of $\omega$ is absorbed by
+For positively homogeneous activation functions the radial scale of $\omega$ is absorbed by
 the outer coefficient, and the parameter can be restricted to the unit sphere
 $\mathbb{S}^d$ (Section~4). But in general the domain is
 $\Omega = \mathbb{R}^{d+1}$, which is not compact.
-The regularizer $\Phi_\phi$ depends on the sizes of the
+The regularizer $\Phi_\phi$ depends on the sizes of the outer
 coefficients but not on the locations of the atoms. Along a sequence with
 $|\omega|\to\infty$, the fidelity need not be lower
 semicontinuous.
@@ -1006,8 +1012,8 @@ $\mu_n \overset{*}{\rightharpoonup} 0$, yet
 \end{equation*}
 strongly in $H^1(D)$. Hence
 $\liminf_{n\to\infty} L(\mu_n) = 0 < L(0)$, so the fidelity term is not
-weak-* lower semicontinuous. Mass escaping to infinity carries a non-vanishing
-value contribution unless $K(\omega)$ tends to zero as $|\omega|\to\infty$.
+weak-* lower semicontinuous. Mass escaping to infinity can retain a nonzero
+value contribution when $K(\omega)$ does not tend to zero as $|\omega|\to\infty$.
 
 Note that $\Phi_\phi(\mu_n) = \phi(1)$ is constant along this sequence, so the
 unnormalized coefficient penalty does not prevent this escape. The defect is
@@ -1018,7 +1024,7 @@ under the corresponding polynomial growth gap.
 
 \begin{example}[Nonattainment for softplus]
 \label{ex:softplus_escape}
-For the profile $\rho(z) = \log(1 + e^z)$ (softplus), let $b_n\to\infty$.
+For the activation function $\rho(z) = \log(1 + e^z)$ (softplus), let $b_n\to\infty$.
 The measures
 $\mu_n = \rho(b_n)^{-1}\delta_{(0, b_n)}$ fit $V \equiv 1$ exactly for every
 $n$ at penalty $\alpha\,\phi(1/\rho(b_n)) \to 0$, so $\inf J_0 = 0$ is not
@@ -1029,7 +1035,7 @@ $L(0)=\frac12\|1\|_{H^1(D)}^2>0$, a contradiction.
 \end{example}
 
 We need a penalty that is aware of the location of the atom to prevent the escape. 
-The space of measure of finite moment is the right space to work with. 
+The space of measures with finite $p$-th moment is the right space to work with.
 For $p>0$, let $w_p$ and $\mathcal M_p(\Omega)$ be as in
 \eqref{eq:moment-space}. For $\mu\in\mathcal M_p(\Omega)$, we define the
 normalized measure and normalized atom by
@@ -1054,8 +1060,7 @@ with inverse $d\mu=w_p^{-1}d\mu_p$, and
 \end{equation}
 Moreover, $\mu_n$ converges weak-* to $\mu$ in
 $C_{w_p^{-1}}(\Omega)^*$ if and only if
-$(\mu_n)_p\overset{*}{\rightharpoonup}\mu_p$ in $C_0(\Omega)^*$.
-The multiplication preserves the atom set and the polar sign, and
+$(\mu_n)_p\overset{*}{\rightharpoonup}\mu_p$ in $C_0(\Omega)^*$ and
 \begin{equation}
 \label{eq:normalization-decomposition}
 	(\mu_p)_{\atom}=w_p\mu_{\atom},
@@ -1081,8 +1086,8 @@ Finally,
 \end{theorem}
 \begin{proof}
 The isometric identification with $\mathcal M(\Omega)$, including its inverse,
-the norm identity, and the weak-* equivalence, is the polynomial-weight
-specialization of \cite[Section~5.1]{bartolucci-et-al}; in particular, this
+the norm identity, and the weak-* equivalence, is the specialization of
+\cite[Section~5.1]{bartolucci-et-al} to the weight $w_p$; in particular, this
 gives \eqref{eq:normalization-norm}. Since multiplication by the strictly
 positive function $w_p$ preserves null sets, the atom set, the polar sign, and
 nonatomicity, \eqref{eq:normalization-decomposition} follows immediately.
@@ -1096,8 +1101,8 @@ that of $K$ and $w_p$. For $r=|\omega|\ge1$, the growth estimate
 	&\le 2^{s_0}C_D r^{s_0-p}\longrightarrow0,
 	\qquad r\to\infty,
 \end{align*}
-because $p>s_0$. Thus $K_p\in C_0(\Omega;L^2(D))$. The change-of-measure
-identity for the Bochner integral now gives
+because $p>s_0$. Thus $K_p\in C_0(\Omega;L^2(D))$. Using
+$d\mu_p=w_p\,d\mu$ and $K_p=K/w_p$ in the Bochner integral gives
 \eqref{eq:normalization-output}. Finally,
 \eqref{eq:normalization-decomposition} and
 $|w_p\mu_{\cont}|=w_p|\mu_{\cont}|$ give
@@ -1119,9 +1124,6 @@ $\mu_{\boldsymbol\omega,c}=\sum_{n=1}^Nc_n\delta_{\omega_n}$, this becomes
 	+\alpha\sum_{n=1}^N
 	\phi\bigl(w_p(\omega_n)|c_n|\bigr).
 \end{equation*}
-Throughout, finite-network representations are understood after repeated
-locations are merged and zero coefficients are discarded; their width is
-therefore $\#\atom\mu$.
 
 \begin{definition}[Local minimizer]
 \label{def:local_min}
@@ -1134,8 +1136,8 @@ $J(\bar\mu)<\infty$ and there is $\varepsilon>0$ such that
 		\|\mu-\bar\mu\|_{\mathcal M_p(\Omega)}<\varepsilon.
 \end{equation*}
 \end{definition}
-By Theorem~\ref{thm:normalization}, this is exactly total-variation local
-minimality in the normalized coordinate $\mu_p$.
+By Theorem~\ref{thm:normalization}, this is exactly local minimality with
+respect to the total variation norm in the normalized coordinate $\mu_p$.
 
 \subsection{Existence of a global minimizer}
 \label{sec:existence}
@@ -1190,13 +1192,9 @@ Since $D$ is bounded and $\supp\chi_R$ is compact,
 	M_R:=\sup_{\omega\in\supp\chi_R,\ x\in D}
 	|[K_p(\omega)](x)|<\infty.
 \end{equation*}
-The absolute values of both truncated integrals are bounded by $CM_R$.
-The integrand $(\omega,x)\mapsto\chi_R(\omega)[K_p(\omega)](x)$ is jointly
-Borel measurable and bounded by $M_R$; Fubini's theorem therefore identifies
-the pointwise integrals above, almost everywhere in $x$, with representatives
-of the $L^2(D)$-valued Bochner integrals below.
-The constant function $2CM_R$ belongs to $L^2(D)$ because $D$ is bounded.
-Dominated convergence therefore yields
+The truncated integrals converge for every $x\in D$ and are bounded in
+absolute value by $CM_R$. Since $D$ is bounded, the constant function
+$CM_R$ belongs to $L^2(D)$. Dominated convergence then yields
 \begin{equation*}
 	\int_\Omega\chi_RK_p\,d(\mu_n)_p
 	\longrightarrow
@@ -1236,9 +1234,7 @@ Assumption~\ref{ass:value-growth}(1). If $p>s_0$ and $\alpha>0$, then
 admits at least one global minimizer.
 \end{theorem}
 \begin{proof}
-We use the direct method in the normalized measure coordinate. Only the
-stated continuity and value-growth bound for $\rho$ are needed. Since
-$V\in H^1(D)$,
+Since $V\in H^1(D)$,
 \begin{equation*}
 	J(0)=\frac12\|V\|_{H^1(D)}^2=:C<\infty.
 \end{equation*}
@@ -1247,7 +1243,7 @@ $J(\mu_n)\le C+1$. The fidelity and penalty are nonnegative, so
 \begin{equation*}
 	\Phi_\phi((\mu_n)_p)\le\frac{C+1}{\alpha}.
 \end{equation*}
-The total-variation sublevel bound in
+The bound on sublevels in the total variation norm given by
 Corollary~\ref{cor:phi-lsc-sublevels} shows that $((\mu_n)_p)$ is bounded in
 $\mathcal M(\Omega)$. Weak-* compactness and separability of $C_0(\Omega)$
 give, after passing to a subsequence,
@@ -1266,10 +1262,10 @@ Lemma~\ref{lem:value-continuity} gives
 The fidelity bound gives
 \begin{equation*}
 	\sup_n\|\nabla(\mathcal N\mu_n)\|_{L^2(D)}
-	\le\|\nabla V\|_{L^2(D)}+\sqrt{2(C+1)}.
+	\le\|\nabla_x V\|_{L^2(D)}+\sqrt{2(C+1)}.
 \end{equation*}
-After another subsequence,
-$\nabla(\mathcal N\mu_n)\rightharpoonup g$ weakly in $L^2(D)^d$.
+After another subsequence, we have
+$\nabla(\mathcal N\mu_n)\rightharpoonup g$ weakly in $L^2(D)^d$ for some $g$.
 For every $\psi\in C_c^\infty(D)^d$,
 \begin{align*}
 	\int_D g \cdot \psi \, dx
@@ -1281,8 +1277,18 @@ the last step by \eqref{eq:value-strong}. Hence
 $g = \nabla(\mathcal{N}\bar{\mu})$ distributionally and
 $\mathcal{N}\bar{\mu} \in H^1(D)$.
 
-The value part of the fidelity is continuous by \eqref{eq:value-strong}, and
-the gradient part is weakly lower semicontinuous. Hence
+The preceding argument shows that the gradients converge weakly in
+$L^2(D)^d$ to $\nabla(\mathcal N\bar\mu)$. By weak lower semicontinuity of
+the squared $L^2$ norm,
+\begin{equation*}
+	\frac12\|\nabla(\mathcal N\bar\mu)-\nabla_x V\|_{L^2(D)}^2
+	\le\liminf_{n\to\infty}
+	\frac12\|\nabla(\mathcal N\mu_n)-\nabla_x V\|_{L^2(D)}^2.
+\end{equation*}
+Thus the gradient part of the fidelity is lower semicontinuous along the
+chosen weak-* convergent subsequence of normalized measures. Together with
+the strong $L^2$ convergence of the values in \eqref{eq:value-strong}, this
+yields
 \begin{equation*}
 	L(\bar\mu)\le\liminf_{n\to\infty}L(\mu_n).
 \end{equation*}
@@ -1299,8 +1305,9 @@ $J(\bar\mu)\le\liminf_nJ(\mu_n)=\inf J$.
 
 \subsection{Optimality conditions and finite support}
 \label{sec:optimality}
-Let $\bar\mu$ be a local minimizer. For a measure $\mu$ and an admissible
-direction $\mu'$, the G\^ateaux derivative is
+Let $\bar\mu$ be a local minimizer. Under Assumption~\ref{ass:value-growth}
+and $p>s_1$, the G\^ateaux derivative at $\mu\in\mathcal M_p(\Omega)$ in
+any direction $\mu'\in\mathcal M_p(\Omega)$ is
 \begin{equation*}
 	DL(\mu)[\mu']
 	:=\lim_{t\to0}\frac{L(\mu+t\mu')-L(\mu)}{t}
@@ -1311,7 +1318,7 @@ The corresponding derivative profile is
 	P_\mu(\omega):=DL(\mu)[\delta_\omega]
 	=\langle r_\mu,K(\omega)\rangle_{H^1(D)}.
 \end{equation*}
-Define its normalized form and the uniform normalized feature bound by
+Define its normalized form and the uniform normalized bound by
 \begin{equation*}
 	P_{p,\mu}(\omega):=\frac{P_\mu(\omega)}{w_p(\omega)}
 	=\langle r_\mu,K_p(\omega)\rangle_{H^1(D)},
@@ -1389,7 +1396,7 @@ Moreover,
 \end{theorem}
 \begin{proof}
 We use Theorem~\ref{thm:normalization} to work with
-$\bar\mu_p$ in the total-variation norm. The normalized fidelity derivative
+$\bar\mu_p$ in the total variation norm. The normalized fidelity derivative
 in the direction $\xi\in\mathcal M(\Omega)$ is
 \begin{equation*}
 	\left\langle r_{\bar\mu},
@@ -1462,11 +1469,12 @@ Theorem~\ref{thm:normalization} gives \eqref{eq:weighted-cont-equality}.
 \end{proof}
 
 \begin{remark}
-Because $\bar P_p\in C_0(\Omega)$ and $\alpha L_\phi>0$, every closed
-positive superlevel set of $|\bar P_p|$ is compact. Thus any
-violation of \eqref{eq:weighted-insertion} is confined to a compact set,
-even when the unnormalized function $\bar P$ does not decay at parameter
-infinity. Lemma~\ref{lem:support-bound} uses a lower superlevel to
+Under Assumption~\ref{ass:value-growth} and $p>s_1$, let
+$\mu\in\mathcal M_p(\Omega)$. Since $P_{p,\mu}\in C_0(\Omega)$, all points
+satisfying $|P_{p,\mu}(\omega)|>\alpha L_\phi$ lie in the compact set
+$\{\omega\in\Omega:|P_{p,\mu}(\omega)|\ge\alpha L_\phi\}$, even when
+$P_\mu$ does not decay at parameter infinity.
+Lemma~\ref{lem:support-bound} uses a lower superlevel to
 localize the entire support.
 \end{remark}
 
@@ -1526,21 +1534,18 @@ Theorem~\ref{opt_cdt} and monotonicity of $\phi'$ now give
 	=\alpha\phi'(t_\omega)
 	\geq\alpha\phi'\bigl(T(\bar\mu)\bigr).
 \end{equation*}
-Thus every atom lies in $\mathcal K(\bar\mu)$.
-
-On the continuous part, Theorem~\ref{opt_cdt} gives
+Thus every atom lies in $\mathcal K(\bar\mu)$. On the continuous part, Theorem~\ref{opt_cdt} gives
 \begin{equation*}
 	|\bar P_p(\omega)|=\alpha L_\phi
 	\geq\alpha\phi'\bigl(T(\bar\mu)\bigr)
 	\qquad |(\bar\mu_p)_{\cont}|\text{-almost everywhere}.
 \end{equation*}
 Hence $(\bar\mu_p)_{\cont}$ is concentrated on the closed set
-$\mathcal K(\bar\mu)$.  Theorem~\ref{thm:normalization} preserves the
-atomic and continuous decompositions.  Since $w_p$ is strictly positive,
-each component of $\bar\mu_p=w_p\bar\mu$ has the same null sets, and hence
-the same support, as the corresponding component of $\bar\mu$.  Taking
-closures for the atomic part and supports for the continuous part proves
-\eqref{eq:localized-support}.
+$\mathcal K(\bar\mu)$.  
+
+By \eqref{eq:normalization-decomposition} and $w_p>0$, both
+components of $\bar\mu$ are concentrated on the closed set
+$\mathcal K(\bar\mu)$, which proves \eqref{eq:localized-support}.
 \end{proof}
 
 \begin{theorem}[Finite support and separation of local minimizers]
@@ -1577,11 +1582,6 @@ where the covering number $N_{\mathrm{cov}}(A,r)$ is the least number of
 balls of radius $r$ needed to cover $A$.
 \end{theorem}
 \begin{proof}
-We use the isometry of Theorem~\ref{thm:normalization}, the first-order
-identities of Theorem~\ref{opt_cdt}, and local
-coefficient variations to prove the assertions. Concavity, coercivity, and
-$L_\phi>0$ imply that $\phi(t)>0$ for $t>0$.
-
 The zero objective case is immediate:
 \begin{equation*}
 	J(\bar\mu)=0
@@ -1592,7 +1592,7 @@ The zero objective case is immediate:
 	\quad\Longrightarrow\quad
 	\bar\mu=0,
 \end{equation*}
-where the middle implication follows from $L_\phi>0$ and
+where the second implication follows from $L_\phi>0$ and
 $\phi(t)>0$ for $t>0$. We may therefore suppose $J(\bar\mu)>0$.
 Lemma~\ref{lem:support-bound}
 gives the compact set $\mathcal K$ and already localizes the atomic and
@@ -1600,10 +1600,8 @@ continuous supports.  Every normalized atom magnitude
 \begin{equation*}
 	t_i:=|\bar\mu_p(\{\omega_i\})|
 \end{equation*}
-	satisfies $t_i\leq T$ by Lemma~\ref{lem:support-bound}. The curvature
-assumption gives $\phi''(t)\leq-\gamma_T$ for $0<t\leq T$.
-Integrating this inequality from the origin, using
-$\phi'(0+)=L_\phi$, and then integrating once more gives
+satisfies $t_i\leq T$ by Lemma~\ref{lem:support-bound}. 
+Proposition~\ref{secondorderestimate}(2), applied with $A=T$, gives
 \begin{equation}
 \label{eq:curvature-linear-gap}
 	L_\phi t-\phi(t)\geq\frac{\gamma_T}{2}t^2
@@ -1641,25 +1639,26 @@ minimum there.  Its second derivative satisfies
 \end{align*}
 This proves \eqref{eq:normalized-atom-separation}.
 
-We next rule out the continuous part by concentrating a local piece of one
-sign.  Suppose $(\bar\mu_p)_{\cont}\neq0$ and write
+We next rule out the continuous part by concentrating a local piece,
+following Pieper and Petrosyan~\cite[Appendix~C]{pieper2022nonconvex}.
+Suppose $(\bar\mu_p)_{\cont}\neq0$ and write
 \begin{equation*}
 	d(\bar\mu_p)_{\cont}=\sigma\,d\lambda,
 	\qquad
 	\lambda:=|(\bar\mu_p)_{\cont}|,
 \end{equation*}
-where $\sigma$ takes the values $-1$ and $1$ $\lambda$-almost everywhere.
-Choose $\sigma_0\in\{-1,1\}$ such that the restriction of $\lambda$ to
-$\{\sigma=\sigma_0\}$ is nonzero, and denote that restriction again by
-$\lambda$. Theorem~\ref{opt_cdt} gives
-$\bar P_p=-\alpha L_\phi\sigma_0$ on a set of full $\lambda$-measure. The
-support of a Radon measure has full measure, while the countable set
-$\atom\bar\mu$ has zero $\lambda$-measure because $\lambda$ is nonatomic.
-The intersection of these three full $\lambda$-measure sets is nonempty, so choose
+where $\sigma\in\{-1,1\}$ $\lambda$-almost everywhere.
+Without loss of generality, assume $\lambda(\{\sigma=1\})>0$,
+and restrict $\lambda$ to this set.
+
+By Theorem~\ref{opt_cdt}, $\bar P_p=-\alpha L_\phi$ holds
+$\lambda$-almost everywhere. Since $\lambda$ is nonatomic, the
+countable set of existing atoms has zero $\lambda$-measure.
+We can therefore choose
 \begin{equation*}
 	\bar\omega\in\supp\lambda\setminus\atom\bar\mu
 	\qquad\text{such that}\qquad
-	\bar P_p(\bar\omega)=-\alpha L_\phi\sigma_0.
+	\bar P_p(\bar\omega)=-\alpha L_\phi.
 \end{equation*}
 For $\delta>0$, put
 \begin{equation*}
@@ -1677,8 +1676,8 @@ $\mu_\delta$ through its normalized coordinate by
 \begin{equation*}
 	(\mu_\delta)_p
 	:=\bar\mu_p
-	-\sigma_0\lambda|_{B_\delta(\bar\omega)}
-	+\sigma_0r_\delta\delta_{\bar\omega}.
+	-\lambda|_{B_\delta(\bar\omega)}
+	+r_\delta\delta_{\bar\omega}.
 \end{equation*}
 The target point is not an atom, and Theorem~\ref{thm:normalization} gives
 \begin{equation*}
@@ -1688,10 +1687,10 @@ If $e_\delta:=\mathcal N(\mu_\delta-\bar\mu)$, then
 \begin{align*}
 	\|e_\delta\|_{H^1(D)}
 	&\leq\varepsilon_\delta r_\delta,
-	&&\text{by the Bochner-integral triangle inequality},\\
+	&&\text{by the Cauchy--Schwarz inequality},\\
 	\langle r_{\bar\mu},e_\delta\rangle_{H^1(D)}
-	&=\sigma_0r_\delta\bar P_p(\bar\omega)
-	-\sigma_0\int_{B_\delta(\bar\omega)}\bar P_p\,d\lambda
+	&=r_\delta\bar P_p(\bar\omega)
+	-\int_{B_\delta(\bar\omega)}\bar P_p\,d\lambda
 	=0,
 	&&\text{by Theorem~\ref{opt_cdt}}.
 \end{align*}
@@ -1736,7 +1735,7 @@ global minimizer is finite atomic, and
 	\right\}.
 \end{align}
 The minimum on the right is attained.  If $\mu_*$ is any global minimizer
-with $J(\mu_*)>0$, then it satisfies the data-dependent bound
+with $J(\mu_*)>0$, then it satisfies the following bound
 \begin{equation}
 \label{eq:data-dependent-neuron-bound}
 	\#\atom(\mu_*)
@@ -1758,7 +1757,7 @@ and
 	\geq\alpha\phi'(T_0)\right\}.
 \end{equation}
 Then $\mathcal K_0$ is compact, every atom of every global minimizer lies in
-$\mathcal K_0$, and
+$\mathcal K_0$, and the following a priori bound holds:
 \begin{equation}
 \label{eq:apriori-neuron-bound}
 	\#\atom(\mu_*)
@@ -1769,16 +1768,6 @@ $\mathcal K_0$, and
 If $V=0$, then the zero measure is the unique global minimizer.
 \end{corollary}
 \begin{proof}
-We combine the direct method in Theorem~\ref{thm:existence} with the local
-result in Theorem~\ref{thm:finite_support}.  Theorem~\ref{thm:existence}
-gives a global minimizer.  Every global minimizer is
-$\mathcal M_p(\Omega)$-local, so Theorem~\ref{thm:finite_support} makes it
-finite atomic; when its objective is positive, Theorem~\ref{thm:finite_support}
-also gives \eqref{eq:data-dependent-neuron-bound}. The minimizer's
-finite-network representation has the same objective and is optimal among
-finite networks, since these form a subset of the admissible measures.
-Thus both sides of \eqref{eq:attained-finite-network} are equal and attained.
-
 Suppose $V\neq0$.  Then a global minimizer $\mu_*$ has positive objective,
 because Theorem~\ref{thm:finite_support} would otherwise give
 $\mu_*=0$, whose fidelity is positive.  By comparison with the zero measure,
@@ -1821,14 +1810,14 @@ Theorem~\ref{thm:finite_support} on $K_p(\mathcal K_0)$ proves
 \eqref{eq:apriori-neuron-bound}.
 
 If $V=0$, then $J(0)=0$.  Nonnegativity makes zero the minimum, and the
-zero-objective conclusion of Theorem~\ref{thm:finite_support} shows that no
+conclusion of Theorem~\ref{thm:finite_support} for $J(\bar\mu)=0$ shows that no
 other global minimizer exists.
 \end{proof}
 
 The hypotheses used so far are jointly satisfiable, and the following family
 makes the constants explicit.
 
-\begin{example}[separation fails for convex penalty]
+\begin{example}[Degeneration of the separation bound at the convex endpoint]
 \label{ex:log-penalty}
 For $\gamma\ge0$, define
 \begin{equation}
@@ -1935,8 +1924,8 @@ $\bar P_p\in C_0(\Omega)$, the gap below $\alpha L_\phi$ is uniform;
 this replaces compactness of the parameter domain in their proof.
 The bound \eqref{eq:local-penalty-lower-bound} supplies their penalty
 estimate for small perturbations, with $L_\phi$ in place of $1$.
-Their remaining argument gives total-variation local minimality of
-$\bar\mu_p$, and the normalization isometry yields the claim.
+Their remaining argument gives local minimality of $\bar\mu_p$ with respect to
+the total variation norm, and the normalization isometry yields the claim.
 \end{proof}
 
 
@@ -1953,8 +1942,8 @@ $\|K(\omega)\|_{L^2(D)}\le\|K(\omega)\|_{H^1(D)}$, it is consistent to impose
 $s_0\le s_1$, as Assumption~\ref{ass:value-growth} does. The exponent $s_1$ is obtained by estimating
 $a\rho'(a\cdot x+b)$ separately. The condition
 $p>s_1$ normalizes the full $H^1$ atom; together with
-Assumption~\ref{pen3}(2), it is sufficient for the finite-support conclusion in
-Theorem~\ref{thm:finite_support}. The following
+Assumption~\ref{pen3}(2), it is sufficient for the conclusion of
+Theorem~\ref{thm:finite_support} that local minimizers have finite support. The following
 exponents satisfy the pointwise bounds on a bounded domain.
 \begin{equation*}
 \begin{array}{lccc}
@@ -1965,26 +1954,19 @@ exponents satisfy the pointwise bounds on a bounded domain.
 \tanh z              &0&1&p>1\\
 e^{-z^2}             &0&1&p>1\\
 \log(1+e^z)          &1&1&p>1\\
-\bigl(z\Phi(z)\bigr)^2 &2&2&p>2\\
-(z_+)^k              &k&k&p>k\\
+\mathrm{GELU}(z)^2    &2&2&p>2\\
 \bottomrule
 \end{array}
 \end{equation*}
 For bounded activations such as $\tanh$ and the Gaussian, existence alone
 requires only $p > 0$; the condition $p > 1$ in the table is the one that also
-dominates the elementary global $H^1$ growth estimate. The fourth row is the
-squared Gaussian error linear unit, written $\mathrm{GELU}^2$ below, with
-$\Phi$ the standard normal distribution function; since $\Phi$ takes values in
-$(0,1)$ we have $|z\Phi(z)|\le|z|$, and its derivative
-$2z\Phi(z)\bigl(\Phi(z)+z\varphi(z)\bigr)$ grows linearly, which gives
-$s_0=s_1=2$. The last row is listed for comparison with the positively
-homogeneous formulation of Section~4.
+dominates the elementary global $H^1$ growth estimate.
 
 
 
 \section{The \texorpdfstring{$k$}{k}-homogeneous formulation}
 
-The $\reluk$ activation function is of particular interest since it is widely used in the Sobolev training \cite{li2024twolayer,heeringa2024embeddings}.
+The $\reluk$ activation function is of particular interest since it is widely used in Sobolev training \cite{li2024twolayer,heeringa2024embeddings}.
 For gradient fitting with $\reluk$ we use $k\ge2$, so that
 $K(\omega)\in C^1(\overline D)$.
 As we will see in this section, the induced penalty is $\psi_k(t)=t^q$ with
@@ -1997,8 +1979,7 @@ $\mathbb S^d\subset\mathbb R^{d+1}$ at the cost of rescaling its outer
 coefficient. The parameter domain of the resulting problem is compact, so the
 dictionary is bounded, and neither the polynomial weight $w_p$ nor the
 weighted space $\mathcal M_p(\Omega)$ of Section~3 is required. Throughout
-this section we work on $\mathcal M(\mathbb S^d)$ with the total-variation
-norm $\|\cdot\|_{\mathcal M(\mathbb S^d)}$, which we identify with the
+this section we work on $\mathcal M(\mathbb S^d)$ with the total variation norm $\|\cdot\|_{\mathcal M(\mathbb S^d)}$, which we identify with the
 subspace of $\mathcal M(\Omega)$ of measures vanishing outside
 $\mathbb S^d$.
 
@@ -2044,11 +2025,11 @@ with the weak gradient.
 \label{thm:homogeneous-operator}
 The $\reluk$ dictionary of Lemma~\ref{lem:reluk-dictionary} is continuous
 from $\mathbb S^d$ into $H^1(D)$.
-For any continuous dictionary $K:\mathbb S^d\to H^1(D)$, the constant
+The constant
 \begin{equation*}
 	C_S:=\sup_{\omega\in\mathbb S^d}\|K(\omega)\|_{H^1(D)}
 \end{equation*}
-is finite, and $C_S>0$ for the $\reluk$ dictionary.
+is finite and strictly positive.
 The value operator $\mathcal N:\mathcal M(\mathbb S^d)\to H^1(D)$ is
 well defined, bounded, and linear, with
 \begin{equation}
@@ -2057,40 +2038,18 @@ well defined, bounded, and linear, with
 	\le C_S\|\mu\|_{\mathcal M(\mathbb S^d)}
 	\qquad\bigl(\mu\in\mathcal M(\mathbb S^d)\bigr).
 \end{equation}
-Consequently, $\mu_m\to\mu$ in total variation implies
-$\mathcal N\mu_m\to\mathcal N\mu$ in $H^1(D)$ and $L(\mu_m)\to L(\mu)$
-for every fixed $V\in H^1(D)$.
 \end{theorem}
 \begin{proof}
-We verify dictionary continuity for $\reluk$ by uniform continuity, then
-apply the Bochner integral estimate to a general continuous dictionary.
-By Lemma~\ref{lem:reluk-dictionary}(2), the functions
-$(\omega,x)\mapsto[K(\omega)](x)$ and
-$(\omega,x)\mapsto\nabla K(\omega)(x)$ are continuous on the compact set
-$\mathbb S^d\times\overline D$, hence uniformly continuous. Thus
-$\omega_j\to\omega$ in $\mathbb S^d$ implies uniform convergence of both
-the atoms and their gradients on $D$. Since $D$ has finite measure, this gives
-$K(\omega_j)\to K(\omega)$ in $H^1(D)$.
+By Lemma~\ref{lem:reluk-dictionary}(2), the atoms and their gradients are
+jointly continuous on $\mathbb S^d\times\overline D$. Uniform continuity
+on this compact set and $|D|<\infty$ give continuity of
+$K:\mathbb S^d\to H^1(D)$. Compactness of $\mathbb S^d$ implies
+$C_S<\infty$, and $K(0,1)\equiv1$ gives $C_S\ge|D|^{1/2}>0$.
 
-For any continuous $K:\mathbb S^d\to H^1(D)$, compactness gives
-$C_S<\infty$. For $\reluk$, $K(0,1)\equiv1$ gives
-$C_S\ge|D|^{1/2}>0$.
-Continuity also makes $K$ strongly measurable, and for every
-$\mu\in\mathcal M(\mathbb S^d)$,
-\begin{equation*}
-	\int_{\mathbb S^d}\|K(\omega)\|_{H^1(D)}\,d|\mu|(\omega)
-	\le C_S\|\mu\|_{\mathcal M(\mathbb S^d)}<\infty.
-\end{equation*}
-Hence the Bochner integral defining $\mathcal N\mu$ exists; linearity and
-the integral norm estimate give \eqref{eq:homogeneous-operator-bound}.
-Applying this bound to $\mu_m-\mu$ proves the strong $H^1(D)$ convergence.
-Continuity of $u\mapsto\frac12\|u-V\|_{H^1(D)}^2$ then gives the fidelity
-convergence.
+Since $K$ is continuous and bounded, the Bochner integral $\mathcal N\mu$
+exists for every $\mu\in\mathcal M(\mathbb S^d)$. Linearity and the integral
+norm estimate give \eqref{eq:homogeneous-operator-bound}.
 \end{proof}
-
-In the remainder of this section we assume $K:\mathbb S^d\to H^1(D)$ is
-continuous and use the constant $C_S$ from
-Theorem~\ref{thm:homogeneous-operator}.
 
 The following lemma extends the degree-one ReLU rescaling result
 \cite[Appendix~F, Proposition~3]{pieper2022nonconvex} to a
@@ -2102,14 +2061,14 @@ coefficient.
 \label{lem:homogeneous-penalty}
 Let Assumption~\ref{ass:k-homogeneous} hold, and let $\xi,\zeta>0$.
 For a fixed nonzero represented coefficient $\widetilde c$ and a unit direction
-$\widehat\omega\in\mathbb S^d$ with $K(\widehat\omega)\ne0$, minimize
+$\widehat\omega\in\mathbb S^d$, minimize
 \begin{equation*}
 	\frac{|c|^\xi}{\xi}+\frac{|\omega|^\zeta}{\zeta}
 \end{equation*}
 over radial representations
 \begin{equation*}
 	\omega=\lambda\widehat\omega,\qquad \lambda>0,\qquad
-	c\,K(\omega)=\widetilde c\,K(\widehat\omega).
+	c=\widetilde c\lambda^{-k}.
 \end{equation*}
 The minimum equals
 \begin{equation}
@@ -2121,21 +2080,21 @@ The minimum equals
 	C_{k,\xi,\zeta}:=
 	\frac1q\,k^{-k\xi/(k\xi+\zeta)}.
 \end{equation}
-Consequently, consider any finite representation and set
+Consequently, consider any finite representation with nonzero inner parameters
+and set
 \begin{equation*}
 	\widehat\omega_n:=\frac{\omega_n}{|\omega_n|},
 	\qquad
 	\widetilde c_n:=c_n|\omega_n|^k.
 \end{equation*}
-Among all independent radial rescalings that preserve each function
-$c_nK(\omega_n)$, the minimum total penalty is
+Among all independent radial rescalings of this form, the minimum total
+penalty is
 $C_{k,\xi,\zeta}\sum_n|\widetilde c_n|^q$.
 \end{lemma}
 \begin{proof}
 We follow the rescaling argument of
 \cite[Appendix~F, proof of Proposition~3]{pieper2022nonconvex}.
-Since $K(\widehat\omega)\ne0$, $k$-homogeneity gives
-$c=\widetilde c\lambda^{-k}$. Thus the radial penalty and its derivative are
+The radial penalty and its derivative are
 \begin{align*}
 	g(\lambda)
 	&=\frac{|\widetilde c|^\xi}{\xi\lambda^{k\xi}}
@@ -2154,7 +2113,7 @@ $g'$ changes sign exactly once, from negative to positive, at
 Thus $g$ has its unique global minimum at $\lambda_*$, and substitution gives
 $g(\lambda_*)=C_{k,\xi,\zeta}|\widetilde c|^q$.
 The radial variables are independent, so summing their minima proves the
-finite-network assertion.
+assertion for finite networks.
 \end{proof}
 
 \begin{remark}[The quadratic case and the meaning of $\alpha$]
@@ -2173,28 +2132,26 @@ $k$, equal nominal values of $\alpha$ in the penalty $\alpha\sum_n|c_n|^q$ for d
 penalty.
 \end{remark}
 
+In the remainder of this section, $K$ denotes the $\reluk$ dictionary of
+Lemma~\ref{lem:reluk-dictionary}.
 For $k\ge2$ define the scalar penalty
 \begin{equation*}
 	\psi_k(t):=t^q,
 	\qquad
 	q:=\frac2{k+1}\in(0,1),
-	\qquad t\ge0,
+	\qquad t\ge0.
 \end{equation*}
-which is the exponent of Lemma~\ref{lem:homogeneous-penalty} for
+Here $q$ is the exponent obtained in Lemma~\ref{lem:homogeneous-penalty} when
 $\xi=\zeta=2$.
-It is continuous and strictly increasing with $\psi_k(0)=0$ and
-$\psi_k'(0^+)=+\infty$, and it is subadditive:
+It is continuous, strictly increasing, and concave, with $\psi_k(0)=0$ and
+$\psi_k'(0^+)=+\infty$. By Lemma~\ref{firstorderestimate}(1),
 \begin{equation}
 \label{eq:psi-subadditive}
 	\psi_k(s+t)\le\psi_k(s)+\psi_k(t)
 	\qquad(s,t\ge0).
 \end{equation}
-Indeed, for $s+t>0$ the numbers $u:=s/(s+t)$ and $1-u=t/(s+t)$ lie in
-$[0,1]$, where $v^q\ge v$; hence
-$\psi_k(s)+\psi_k(t)=(s+t)^q\bigl(u^q+(1-u)^q\bigr)\ge(s+t)^q$. Iterating
-\eqref{eq:psi-subadditive} and passing to the limit in the finite partial
-sums gives, for every summable sequence $(t_j)_{j\ge1}$ of nonnegative
-numbers,
+Iterating~\eqref{eq:psi-subadditive} and using continuity gives, for every
+summable sequence $(t_j)_{j\ge1}$ of nonnegative numbers,
 \begin{equation}
 \label{eq:psi-countable-subadditive}
 	\psi_k\Bigl(\sum_{j\ge1}t_j\Bigr)\le\sum_{j\ge1}\psi_k(t_j).
@@ -2236,7 +2193,8 @@ For $\mu\in\mathcal M(\mathbb S^d)$ we now set
 \end{equation*}
 By Definition~\ref{def:homogeneous-penalty}, every measure with finite
 objective is purely atomic, possibly with countably infinitely many atoms.
-Since the empirical fidelity is also one half of a squared Hilbert-space norm and
+Since the empirical fidelity is also one half of a squared norm in a Hilbert
+space and
 its dictionary is continuous on the compact sphere, all results below hold
 with $L$ replaced by $l^M$ and the corresponding sampled norms and bounds.
 For $\reluk$ with $k\ge2$, the sampled atom values and gradients are
@@ -2263,7 +2221,7 @@ For a finite network on $\mathbb S^d$, the definition of $\Phi_{\psi_k}$ gives
 \subsection{Global existence and a uniform width bound}
 Local minimizers of \eqref{prob:homogeneous} are understood as in
 Definition~\ref{def:local_min}, applied to $J_{\psi_k}$ on
-$\mathcal M(\mathbb S^d)$, equipped with the total-variation norm.
+$\mathcal M(\mathbb S^d)$, equipped with the total variation norm.
 
 \begin{lemma}
 \label{lem:homogeneous_reduction}
@@ -2301,8 +2259,8 @@ $\mu=\sum_{j\in\mathcal I}c_j\delta_{\omega_j}$, $\mathcal I\subseteq\mathbb N$.
 The truncations $\mu_m:=\sum_{j\in\mathcal I,\,j\le m}c_j\delta_{\omega_j}$
 satisfy $\mu_m\to\mu$ in total variation and
 $\Phi_{\psi_k}(\mu_m)\to\Phi_{\psi_k}(\mu)$ by convergence of the
-total-variation and penalty series.
-Theorem~\ref{thm:homogeneous-operator} then gives $L(\mu_m)\to L(\mu)$.
+total variation and penalty series.
+The bound~\eqref{eq:homogeneous-operator-bound} then gives $L(\mu_m)\to L(\mu)$.
 Each $\mu_m$ is finitely supported, so the infimum over finitely supported
 measures is at most $J_{\psi_k}(\mu_m)$ for every $m$. Passing to the limit yields
 \begin{equation*}
@@ -2319,8 +2277,7 @@ inequality.
 
 \begin{theorem}[Stationarity and a lower bound on atom weights]
 \label{thm:homogeneous_optimality}
-Let $k\ge2$, $q=2/(k+1)\in(0,1)$, $\alpha>0$, $V\in H^1(D)$, and let
-$K:\mathbb S^d\to H^1(D)$ be continuous. Let
+Let $k\ge2$, $q=2/(k+1)\in(0,1)$, $\alpha>0$, and $V\in H^1(D)$. Let
 $\bar\mu\in\mathcal M(\mathbb S^d)$ satisfy $J_{\psi_k}(\bar\mu)<\infty$ and
 be optimal against perturbations of the weights of its own atoms: there is
 $\varepsilon>0$ such that
@@ -2349,8 +2306,7 @@ If $B(\bar\mu)=0$, then $\bar\mu=0$. If $B(\bar\mu)>0$, then
 	\qquad\text{for every }\omega_n\in\atom\bar\mu.
 \end{equation}
 Hypothesis \eqref{eq:atomwise-optimality-hypothesis} holds in particular if
-$\bar\mu$ is a local minimizer of \eqref{prob:homogeneous} in total variation
-in the sense specified above.
+$\bar\mu$ is a local minimizer of \eqref{prob:homogeneous}.
 \end{theorem}
 \begin{proof}
 The map $P_{\bar\mu}$ is continuous on $\mathbb S^d$, being the composition
@@ -2438,9 +2394,9 @@ unavailable for this penalty.
 \begin{theorem}[Existence and width bound]
 \label{thm:homogeneous_existence}
 Let $k\ge2$, $q=2/(k+1)\in(0,1)$, $\alpha>0$, let $V\in H^1(D)$ with
-$V\ne0$, and assume $C_S>0$. Then
+$V\ne0$. Then
 \eqref{prob:homogeneous} admits a global minimizer, and its minimum value
-equals the finite-network infimum on the right-hand side of
+equals the infimum over finite networks on the right-hand side of
 \eqref{eq:homogeneous-infima}. Every global minimizer $\bar\mu$ is a finite
 atomic measure satisfying
 \begin{equation*}
@@ -2455,20 +2411,14 @@ atomic measure satisfying
 \end{theorem}
 
 \begin{remark}
-The excluded cases are immediate. If $V=0$, then $\mu=0$ is the unique global
+If $V=0$, then $\mu=0$ is the unique global
 minimizer by the nonnegativity of the fidelity and the strict positivity of
-$\Phi_{\psi_k}$ away from zero. If $C_S=0$, then $K\equiv0$, so the fidelity
-is constant and the same penalty argument again makes $\mu=0$ the unique
-global minimizer. Thus the atom bound is zero in both cases. The assumptions
-$V\ne0$ and $C_S>0$ are needed only to ensure that
+$\Phi_{\psi_k}$ away from zero. Thus the atom bound is zero in this case.
+The assumption $V\ne0$ is needed only to ensure that
 $c_{\min,\mathrm{glob}}\in(0,\infty)$ and $N_{\max}<\infty$ are well defined.
 \end{remark}
 
 \begin{proof}
-We first obtain minimizers at each fixed width by compactness, then derive one
-width estimate for both the existence argument and arbitrary global
-minimizers.
-
 For $N\in\mathbb N_0$, set
 \begin{equation*}
 	F_N(\boldsymbol\omega,c)
@@ -2476,10 +2426,14 @@ For $N\in\mathbb N_0$, set
 	\qquad m_N:=\inf F_N,
 \end{equation*}
 with $F_0=m_0=\frac12\|V\|_{H^1(D)}^2$.
+
+
 For $N\ge1$, continuity of $K$, scalar multiplication, and finite addition
 show that
 $(\boldsymbol\omega,c)\mapsto\sum_{n=1}^Nc_nK(\omega_n)$ is continuous into
-$H^1(D)$; hence $F_N$ is continuous. A minimizing sequence for $F_N$ may be chosen
+$H^1(D)$; hence $F_N$ is continuous. 
+
+A minimizing sequence for $F_N$ may be chosen
 in the sublevel $F_N\le m_0+1$. Since the fidelity is nonnegative, this
 sublevel satisfies
 \begin{equation*}
@@ -2535,15 +2489,17 @@ therefore has at most $\lfloor N_{\max}\rfloor$ atoms. Hence
 	=\min_{\substack{N\in\mathbb N_0\\N\le\lfloor N_{\max}\rfloor}}m_N.
 \end{equation*}
 Since each $m_N$ is attained, Lemma~\ref{lem:homogeneous_reduction}
-gives a global minimizer of \eqref{prob:homogeneous} with the same value.
-Every global minimizer satisfies the hypotheses of the estimate above and
-therefore has at most $N_{\max}$ atoms.
+gives a global minimizer of \eqref{prob:homogeneous}.
+Every global minimizer $\mu$ satisfies $J_{\psi_k}(\mu)\le m_0$
+and \eqref{eq:atomwise-optimality-hypothesis}, so the bound derived
+above gives $\#\atom\mu\le N_{\max}$.
 \end{proof}
 
-\begin{corollary}[Finite support of total-variation local minimizers]
+\begin{corollary}[Finite support of local minimizers with respect to the total
+variation norm]
 \label{cor:homogeneous_local_support}
 Let the hypotheses of Theorem~\ref{thm:homogeneous_optimality} on
-$k,q,\alpha,V,K$ hold and let $\bar\mu\ne0$ be a local minimizer of
+$k,q,\alpha,V$ hold and let $\bar\mu\ne0$ be a local minimizer of
 \eqref{prob:homogeneous} in total variation. Then $B(\bar\mu)>0$, the measure
 $\bar\mu$ is finite atomic, and
 \begin{equation*}
@@ -2571,7 +2527,7 @@ Theorem~\ref{thm:homogeneous_existence} is uniform over all global minimizers an
 
 \section{Algorithms}
 This section describes the computational pipeline: the training data are
-generated via the open-loop problem, candidate neurons are inserted greedily,
+generated via the open-loop problem, candidate neurons are inserted,
 and different insertion methods are chosen given the problem setting.
 In the algorithms and numerical examples, $J_{\psi_k}$ uses the empirical
 fidelity $l^M$ from \eqref{eq:empirical-fidelity} in place of $L$.
@@ -2583,8 +2539,8 @@ state equation in \eqref{opt} has a unique solution $y(u)$ on $[t_0,T]$ and
 that the control-to-state map $u\mapsto y(u)$ is continuously Fr\'echet
 differentiable from $U$ into $C([t_0,T];\mathbb R^d)$. The objective of
 \eqref{opt} is then the reduced functional $u\mapsto\mathcal C(u;t_0,x)$ on
-$U$, and the standard adjoint (Lagrangian) calculus --- see, e.g.,
-\cite{hinze2009optimization} --- gives its gradient
+$U$, and standard adjoint (Lagrangian) calculus
+\cite{hinze2009optimization} gives its gradient
 \begin{align*}
 	\nabla_u\mathcal C(u;t_0,x)
 	=2\eta u+g(y(u))^\top p\quad\text{in }U,
@@ -2597,36 +2553,32 @@ equation, and the implicit derivative of $u\mapsto y(u)$ is never formed.
 
 \subsubsection*{The two algorithms}
 We use two algorithms of primal--dual active point (PDAP)
-type, in the sense of the accelerated conditional-gradient method for measure
+type, in the sense of the accelerated conditional gradient method for measure
 spaces of \cite{pieper2021linear}. Algorithm~\ref{alg:log} follows the
 nonconvex variant of \cite{pieper2022nonconvex}, whose scalar penalty
 satisfies $\phi'(0)<\infty$ as in Assumption~\ref{pen1}; Algorithm~\ref{alg:q}
 is an adaptation of it to the penalty $\psi_k$, whose infinite slope at the
 origin is explicitly excluded by that reference.
 
-In both algorithms the coefficient-correction step freezes the locations
-$\boldsymbol\omega$ and applies a semismooth Newton method to the resulting
-finite-dimensional coefficient problem. They are specified in
+In both algorithms, we hold the locations $\boldsymbol\omega$ fixed and
+optimize the outer weights using a semismooth Newton method. They are specified in
 their respective subsections below. In either case the method is local and its
-output is retained only when it does not increase the post-insertion objective.
+output is retained only when it does not increase the objective relative to its
+value immediately after insertion.
 
 For the sampled fidelity, write
 $P^M_\mu(\omega):=D l^M(\mu)[\delta_\omega]$, and let
-$\|K(\omega)\|_M$ denote the sampled value--gradient norm associated with
+$\|K(\omega)\|_M$ denote the empirical $H^1$ seminorm associated with
 $l^M$.
 
 For a joint insertion
 $\sum_{i=1}^rc_i\delta_{\omega_i}$ at new locations the penalty is
 additive, but the fidelity change contains pairwise cross terms between the
-inserted features, which no individual test controls. For
+inserted atoms, which no individual test controls. For
 $N_{\mathrm{ins}}=1$ the individual
 decrease statement applies to every accepted candidate, while
 Corollary~\ref{cor:certificate-rate} additionally requires an exact global
-maximizer. For $N_{\mathrm{ins}}>1$ the individual estimates do not compose,
-and neither a decrease per outer iteration nor monotonicity of the objective along the
-iterates is claimed. Restoring a batch decrease guarantee requires recomputing
-the residual after each insertion, or testing the joint increment of the whole
-batch.
+maximizer.
 
 \subsection{Algorithm~\ref{alg:log}: the log penalty on the normalized measure}
 
@@ -2653,11 +2605,11 @@ For $p>s_1$ and $\mu\in\mathcal M_p(\Omega)$, define
 	&:=\sup_{\omega\in\Omega}\Delta(\mu,\omega)
 	=\max\bigl\{\|P_{p,\mu}\|_\infty-\alpha L_\phi,0\bigr\}.
 \end{align*}
-The quantity $\Delta(\mu,\omega)$ measures the violation at one location;
-$\Delta(\mu)$ is its supremum over all locations. Thus $\Delta(\mu)=0$
-means that the necessary insertion inequality holds everywhere, but does not
-by itself establish local optimality.
-The following theorem converts a positive violation into an explicit
+We call $\Delta(\mu)$ the first-order optimality residual for atom insertion;
+$\Delta(\mu,\omega)$ is the corresponding residual at a single location.
+Thus $\Delta(\mu)=0$ means that the necessary insertion inequality holds
+everywhere, but does not by itself establish local optimality.
+The following theorem converts a positive residual into an explicit
 insertion coefficient and a guaranteed objective decrease. It also bounds
 the search region and proves that $|P_{p,\mu}|$ attains its maximum there
 whenever $\Delta(\mu)>0$.
@@ -2774,8 +2726,8 @@ Let $(\mu_k)_{k\ge0}$ be finite atomic iterates with $J(\mu_0)<\infty$, and
 write $\Delta_k:=\Delta(\mu_k)$. If $\Delta_k>0$, use
 Theorem~\ref{thm:quantitative-insertion} at $\mu_k$ to select an exact
 maximizer $\omega^*$ and insert $c(\omega^*)\delta_{\omega^*}$.
-Then correct the coefficients,
-accepting the corrected iterate only if it does not increase the objective. Then
+Then apply a monotone coefficient correction, which does not increase the
+objective relative to the iterate immediately after insertion. Then
 \begin{align*}
 	\sum_{k=0}^{\infty}\Delta_k^2
 	&\le 2B_p^2J(\mu_0),\\
@@ -2785,7 +2737,7 @@ accepting the corrected iterate only if it does not increase the objective. Then
 	\qquad(n\ge1).
 \end{align*}
 These conclusions do not assert convergence of $(\mu_k)$ to a global
-minimizer or an objective-gap rate.
+minimizer or an objective gap rate.
 \end{corollary}
 
 \begin{proof}
@@ -2821,7 +2773,7 @@ Its normalized insertion profile is
 	\frac{P^M_{\mu_t}(\omega)}{w_p(\omega)}.
 \end{equation*}
 For fixed nodes, introduce the normalized coefficients
-$u_n:=w_p(\omega_n)c_n$. The outer-weight correction then minimizes
+$u_n:=w_p(\omega_n)c_n$. The correction of the outer weights then minimizes
 \begin{equation*}
 	l^M\left(\sum_{n=1}^N
 	\frac{u_n}{w_p(\omega_n)}\delta_{\omega_n}\right)
@@ -2915,7 +2867,7 @@ $\Delta(\mu_t,\omega)$, warm-start outer weight by
 \eqref{eq:empirical-per-atom-warm-start}.
 \State Optimize the outer weights of the enlarged network by the semismooth
 Newton method. If the correction increases $J^M$, discard it and keep the
-post-insertion weights.
+weights obtained immediately after insertion.
 \State Remove nodes with $|c_n|\le\varepsilon_{\mathrm{prune}}$ (resulting in
 width $N(t+1)$).
 \State $t = t + 1$.
@@ -2926,10 +2878,15 @@ width $N(t+1)$).
 \subsection{Algorithm~\ref{alg:q}: the fractional-exponent penalty on the sphere}
 Algorithm~\ref{alg:q} uses $\psi_k(z)=z^q$, $q=2/(k+1)$, on the
 unit sphere. For $q<1$, insertion condition of Algorithm~\ref{alg:log} is unavailable
-(Remark~\ref{rem:homogeneous_singular_slope}). Furthermore, since the zero network is a local minimizer and the
-infinitesimal, we need good initialization method, which is provided by the Theorem~\ref{thm:homogeneous_optimality}
+(Remark~\ref{rem:homogeneous_singular_slope}). Since the zero network is a local
+minimizer, the bound on nonzero atom weights in
+Theorem~\ref{thm:homogeneous_optimality} can guide initialization away from zero.
+We use another approach: for each candidate atom, we globally minimize the
+objective change over its coefficient and accept the insertion only if this
+change is negative. This global minimization finds a decreasing nonzero
+coefficient whenever one exists for the chosen atom, allowing a finite jump
+out of the local minimum at zero.
 
-We therefore test the actual change produced by inserting one atom with a finite coefficient.
 We use the scalar proximal map
 \begin{equation}
 \label{eq:power-prox}
@@ -2976,7 +2933,8 @@ global minimizer directly:
 \end{equation}
 We accept the candidate precisely when
 $\Delta J_{\psi_k}(c^*(\omega);\omega)<0$. Thus the same coefficient both
-certifies the finite-step decrease and initializes the subsequent correction.
+certifies the decrease produced by the insertion and initializes the subsequent
+correction.
 
 After insertion, let $m_t$ be the smallest magnitude among the outer
 weights. For $q<1$, the correction fixes the proximal scale
@@ -2987,8 +2945,8 @@ weights. For $q<1$, the correction fixes the proximal scale
 	\frac{\rho_{\mathrm{prox}}m_t^{2-q}}{2(1-q)}\right\},
 	\qquad \rho_{\mathrm{prox}}=0.5,
 \end{equation}
-for the whole semismooth Newton solve. Every warm-start coefficient is
-strictly above the switching magnitude, since
+for the whole semismooth Newton solve. This choice ensures that every starting
+coefficient is a possible nonzero output of the proximal map, since
 $\bar z\le\rho_{\mathrm{prox}}^{1/(2-q)}m_t<m_t$. Define, coordinatewise,
 \begin{equation}
 \label{eq:algorithm2-normal-map}
@@ -3004,9 +2962,9 @@ under nonsingularity.
 
 The implementation uses $k\in\{2,3\}$, corresponding to
 $q\in\{2/3,1/2\}$. The ReLU--$\ell^1$ baseline reported alongside it is not this
-algorithm at $k=1$: it is the classical profile-threshold insertion with a
-coordinate-descent warm start and the convex penalty $\alpha\sum_i|c_i|$, run
-separately.
+algorithm at $k=1$. It is run separately and uses insertion when the profile
+magnitude exceeds $\alpha$, initialization by coordinate descent, and the convex
+penalty $\alpha\sum_i|c_i|$.
 
 \begin{algorithm}[htbp]
 \caption{Iterative node insertion for $J_{\psi_k}$}
@@ -3049,14 +3007,11 @@ For a fitted value function $\widehat V$, the relative errors are
 	&:=\frac{\|\widehat V-V\|_{L^2}}{\|V\|_{L^2}},\\
 	\mathrm{Err}_{H^1}
 	&:=\frac{\big(\|\widehat V-V\|_{L^2}^2
-	+\|\nabla\widehat V-\nabla V\|_{L^2}^2\big)^{1/2}}
-	{\big(\|V\|_{L^2}^2+\|\nabla V\|_{L^2}^2\big)^{1/2}}.
+	+\|\nabla_x\widehat V-\nabla_x V\|_{L^2}^2\big)^{1/2}}
+	{\big(\|V\|_{L^2}^2+\|\nabla_x V\|_{L^2}^2\big)^{1/2}}.
 \end{align*}
 Both norms are computed empirically on the validation or evaluation set
 specified for each experiment with the original scale before normalization.
-For a frontier, support sizes are sorted and the reported error is the
-smallest among recorded iterates with no more atoms; it is not an iteration
-trace.
 
 \subsection{Van der Pol Oscillator}
 \label{sec:vdp}
@@ -3108,23 +3063,20 @@ $90$ validation samples.
 \includegraphics[width=0.48\textwidth]{plot/v.png}
 \hfill
 \includegraphics[width=0.48\textwidth]{plot/dv.png}
-\caption{Van der Pol numerical value and gradient samples over $[-3,3]^2$. Left: value labels
-$v^m$. Right: $v^m$ (dot color) and costate labels $g^m$ (arrows); arrow color
+\caption{Van der Pol numerical value and gradient samples over $[-3,3]^2$. Left: values
+$v^m$. Right: $v^m$ (dot color) and costates $g^m$ (arrows); arrow color
 indicates $|g^m|$.}
 \label{fig:vdp_data}
 \end{figure}
 
-The Algorithm~\ref{alg:log}, Algorithm~\ref{alg:q} use at most $T_{\mathrm{out}} = 150$ outer iterations
+Algorithms~\ref{alg:log} and~\ref{alg:q} use at most $T_{\mathrm{out}} = 150$ outer iterations
 and $N_{\mathrm{trial}} = 50$ sampled candidate nodes per iteration.
 Each iteration inserts the single selected candidate ($N_{\mathrm{ins}} = 1$), so the
-one-candidate decrease statement applies.
-Corollary~\ref{cor:certificate-rate} remains conditional on the selected
-candidate being an exact global maximizer and is not claimed for the multistart
-search. The loop terminates when no candidate clears the insertion threshold.
+decrease statement for insertion of one candidate applies.
+The loop terminates when no candidate clears the insertion threshold.
 The separate traditional ReLU--$\ell^1$ comparators use $10$ outer iterations
 with batch insertion of at most $15$ candidates per iteration, from $50$
-candidate starts. Their insertion schedule therefore differs from the
-sequential nonconvex fits.
+candidate starts.
 
 \subsubsection*{Algorithm~\ref{alg:log}: the log penalty on the normalized measure}
 The moment order enters the objective through the weight
@@ -3142,34 +3094,15 @@ $\tanh$, the Gaussian and $\mathrm{GELU}^2$, over
 	p\in\{2.01,2.5,3,4\}.
 \end{equation*}
 
-\paragraph{1. The computable search radius:}
-Theorem~\ref{thm:quantitative-insertion} supplies the radius
-$R(\mu)$ outside which no candidate can satisfy
-the insertion condition. Its constants are available before the fit: the
-growth exponents $s_0,s_1$ and the constant $C_\rho$ of
-Assumption~\ref{ass:value-growth} are properties of the activation, and the
-remaining factor follows from the sample extent, so
-$C=C_\rho\bigl(A_M^{s_0}+A_M^{s_1-1}\bigr)$ with
-$A_M=\max\{1,\max_m\sqrt{1+|x^m|^2}\}$.
-The implementation also imposes the fixed bound $\lambda\le e^5$, so the
-theorem radius changes the search only when it is smaller than that bound.
 
-The recorded search-radius histories fall below $e^5$ in thirteen of the
-thirty-two Van der Pol moment-order runs: one at $p=2.5$, five at $p=3$,
-and seven at $p=4$. The $p=2.5$ case is the Gaussian at $\alpha=10^{-4}$.
-At $p=3$, both $\tanh$ and the Gaussian activate the smaller cap at both
-values of $\alpha$, as does softplus at $\alpha=10^{-4}$. At $p=4$, all
-three activate it at both values of $\alpha$, together with
-$\mathrm{GELU}^2$ at $\alpha=10^{-4}$.
-
+\paragraph{\textbf{1. Effect of gradient training:}}
 We investigate the effect of including gradient data for softplus, $\tanh$,
 and the Gaussian. Table~\ref{tab:alg1_gradient} compares fitting the values
 alone with fitting both values and gradients.
 
-\paragraph{2. Effect of the gradient training:}
-With the $H^1$ loss, all three relative gradient errors fall substantially:
-from $0.328$ to $0.0453$ for softplus, from $0.358$ to $0.0327$ for $\tanh$,
-and from $0.273$ to $0.0169$ for the Gaussian. Value accuracy improves as
+Switching from $L^2$ to $H^1$ training reduces the relative $H^1$ error
+from $0.223$ to $0.0311$ for softplus, from $0.241$ to $0.0218$ for $\tanh$,
+and from $0.182$ to $0.0111$ for the Gaussian. Value accuracy improves as
 well (Table~\ref{tab:alg1_gradient}). The Gaussian reaches relative $H^1$
 error $0.0111$ with $32$ atoms; $\tanh$ reaches $0.0218$ with $29$, and
 softplus $0.0311$ with $14$.
@@ -3214,11 +3147,11 @@ Gaussian & $1.82 \times 10^{-1}$ & $1.11 \times 10^{-2}$ \\
 \end{subtable}
 \end{table}
 
-\paragraph{3. Choice of activation function:}
+\paragraph{\textbf{2. Choice of activation function:}}
 We compare softplus, $\tanh$, and the Gaussian. Because the
 gradient-augmented loss contains both the value and gradient errors,
 $K(\omega)$ contributes to the approximation of $V$ and
-$\nabla K(\omega)$ contributes to the approximation of $\nabla V$.
+$\nabla K(\omega)$ contributes to the approximation of $\nabla_x V$.
 Figure~\ref{fig:activation_shapes} contrasts the three activations through
 their value, first derivative, and second derivative.
 The softplus derivative increases from $0$ to $1$, the derivative of $\tanh$
@@ -3229,10 +3162,9 @@ $a\,\rho'(a\cdot x+b)$ in the gradient fitting problem.
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=\textwidth]{../experiments/01_vdp/paper_log_penalty/figures/shape_softplus_tanh_gaussian.png}
-\caption{The three smooth profiles used by Algorithm~\ref{alg:log} --- softplus,
+\caption{The three smooth activation functions used by Algorithm~\ref{alg:log} --- softplus,
 $\tanh$, and the Gaussian $e^{-z^2}$ --- shown as $\rho$, $\rho'$, and
-$\rho''$. Under the gradient-augmented loss,
-the first derivative is the basis that reconstructs $\nabla V$.}
+$\rho''$.}
 \label{fig:activation_shapes}
 \end{figure}
 
@@ -3308,11 +3240,23 @@ Gaussian & 32 & $1.11 \times 10^{-2}$ \\
 \end{subtable}
 \end{table}
 
+\paragraph{\textbf{3. The computable search radius:}}
+The theoretical radius reduces the search region whenever $R(\mu_t)<e^5$,
+the fixed cap used in the implementation. In the experiments, the radius reduces the search region more often as $p$
+increases, from none of the eight runs at $p=2.01$ to seven of eight at $p=4$.
+
+The recorded search radii fall below $e^5$ in thirteen of the
+thirty-two Van der Pol runs with different moment orders $p$: one at $p=2.5$, five at $p=3$,
+and seven at $p=4$. The $p=2.5$ case is the Gaussian at $\alpha=10^{-4}$.
+At $p=3$, both $\tanh$ and the Gaussian activate the smaller cap at both
+values of $\alpha$, as does softplus at $\alpha=10^{-4}$. At $p=4$, all
+three activate it at both values of $\alpha$, together with
+$\mathrm{GELU}^2$ at $\alpha=10^{-4}$.
 
 
 \subsubsection*{Algorithm~\ref{alg:q}: $|c|^q$-penalty with $\reluk$ activation}
 
-Algorithm~\ref{alg:q} uses the profile
+Algorithm~\ref{alg:q} uses the activation function
 $\rho(z)=\mathrm{ReLU}(z)^k$ with the penalty $\psi_k$, namely
 $\alpha \sum_i |c_i|^q$ with $q = 2/(k+1)$.
 The swept parameter is the power $k$; all fits below use
@@ -3342,7 +3286,7 @@ the reported errors use the unclipped network outputs.}
 \end{figure}
 
 For these fixed-$\alpha$, single-seed fits, adding gradient data lowers the
-combined value--gradient error from $0.0813$ to $0.0114$ for $k=2$, and
+relative $H^1$ error from $0.0813$ to $0.0114$ for $k=2$, and
 from $0.0875$ to $0.0140$ for $k=3$, factors of about $7.13$ and $6.26$,
 respectively (Table~\ref{tab:alg2_gradient}). Value error also decreases,
 while the support becomes larger. This comparison alone does not establish
@@ -3350,7 +3294,7 @@ better closed-loop performance.
 
 \begin{table}[htbp]
 \centering
-\caption{Algorithm~2: network size and validation error vs.\ the atom power $k$ ($\alpha = 10^{-5}$).}
+\caption{Algorithm~2: network size and validation error vs.\ the homogeneity degree $k$ ($\alpha = 10^{-5}$).}
 \label{tab:alg2_gradient}
 \begin{subtable}{0.48\textwidth}
 \centering
@@ -3394,19 +3338,21 @@ atoms, respectively, with relative $H^1$ errors $0.0813$ and $0.0875$
 Figure~\ref{fig:summary_frontier} plots the best observed relative $H^1$ error
 at each support budget along the selected fits. At the shared Algorithm~1
 operating point, softplus uses $14$ atoms at error $0.0311$ and the Gaussian
-uses $32$ at $0.0111$. At $\alpha=10^{-6}$, the selected
-minimum-training-objective Algorithm~2 checkpoints use $70$ atoms at
-$0.00559$ for $\mathrm{ReLU}^2$ and $30$ atoms at $0.00860$ for
+uses $32$ at $0.0111$. At $\alpha=10^{-6}$, the Algorithm~2 checkpoints
+selected for having the smallest recorded training objective in each run use
+$70$ atoms at $0.00559$ for $\mathrm{ReLU}^2$ and $30$ atoms at $0.00860$ for
 $\mathrm{ReLU}^3$.
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=0.8\textwidth]{../experiments/01_vdp/paper_log_penalty/figures/frontier.png}
 \caption{Best observed relative $H^1$ validation error against support budget.
-Nonhomogeneous profiles use the parameter values stated in
-Table~\ref{tab:alg1_gradient}; homogeneous profiles use $\alpha\psi_k$ at
+Nonhomogeneous activation functions use the parameter values stated in
+Table~\ref{tab:alg1_gradient}; homogeneous activation functions use $\alpha\psi_k$ at
 $\alpha=10^{-6}$ for both $k=2$ and $k=3$.}
 \label{fig:summary_frontier}
 \end{figure}
+
+
 
 
 \subsubsection*{Feedback law.}
@@ -3448,10 +3394,11 @@ The same checkpoints supply the summary widths above.
 \caption{Van der Pol controls, state norms, and realized costs from
 $y_0=(2,1)$ over $T=3$. All three panels show the same five learned
 controllers and numerical open-loop reference (black).
-The accumulated cost $J(t)=\int_0^t\ell(y(s),u(s))\,ds$ uses the
-held-control RK4 stages for learned laws and three-point Gauss quadrature
-on the dense PMP solution for the reference, without a learned
-terminal-value contribution.}
+The accumulated cost $J(t)=\int_0^t[h(y(s))+\eta|u(s)|^2]\,ds$ uses the
+RK4 stages for the learned laws, with the control held constant during each time
+step, and three-point Gauss quadrature
+on the dense PMP solution for the reference, without adding a learned terminal
+value.}
 \label{fig:vdp_openloop_comparison}
 \end{figure}
 
@@ -3489,9 +3436,10 @@ sign and dot size the magnitude of the outer weight.}
 
 \subsection{Pendulum Swing-Up}
 \label{sec:pendulum}
-The question in this example is how a sparse gradient-trained network
+The question in this example is how a sparse network trained on values and
+gradients
 approximates a continuous value function whose gradient jumps across a
-switching set. We observe the pendulum example: we write the state as
+switching set. We consider the pendulum example: we write the state as
 \begin{equation*}
 	x = (x_1,x_2)^\top = (\theta,\dot{\theta})^\top,
 \end{equation*}
@@ -3513,11 +3461,11 @@ The target equilibria are
 $x_{U,j}:=(2j\pi,0)$, $j\in\mathbb Z$; for a selected target we write
 $x_U=x_{U,j}$. Here $m=1$ is the pendulum mass, $\ell=1$ the pole length,
 $b=0.1$ the damping coefficient, $g=9.8$ the gravitational acceleration,
-and $\eta=1$ the control-cost weight (denoted $r$ in
+and $\eta=1$ the weight on $u^2$ (denoted $r$ in
 \cite{han2024nonsmooth}); $u$ is the applied torque.
 
-The open loop algorithm follows from \cite{han2024nonsmooth}. The state-value-gradient triple
-is generated with discontinuous gradient.
+We follow the open-loop algorithm of \cite{han2024nonsmooth}. The state-value-gradient triple
+is generated for a value function with a discontinuous gradient.
 
 
 \begin{figure}[htbp]
@@ -3540,47 +3488,56 @@ is generated with discontinuous gradient.
 \begin{subfigure}[b]{0.32\textwidth}
 \centering
 \includegraphics[width=\textwidth]{plot/pendulum_regions.png}
-\caption{regions associated with the periodic targets.}
+\caption{Regions of attraction of the upright equilibria.}
 \label{fig:pendulum_data_regions}
 \end{subfigure}
 \caption{Numerical pendulum reference data over the $(\theta,\dot\theta)$
 plane. (a) Selected value samples from the PMP generator. (b) A periodic
-interpolation of those samples. (c) Target-region visualization obtained
-by assigning each grid point to the nearest sampled first-exit
-characteristic and its periodic copies. This coloring approximates the
-target regions; it does not compare branch costs at every grid point.}
+interpolation of those samples. (c) Regions of attraction of the upright
+equilibria.}
 \label{fig:pendulum_data}
 \end{figure}
 
 \subsubsection*{Approximation}
 
-For each model family, we first retain parameter combinations that satisfy
-the numerical stabilization criterion below from both $A$ and $B$ at
-$T=40$, then select the smallest global relative $H^1$ validation error
-among them. Each run contributes its minimum-training-objective checkpoint.
-If no combination passes, we show the lowest-global-error fit as a failed
-comparator. Thus $A$ and $B$ are selection states; their reported outcomes
-are not an independent evaluation of control generalization.
-We consider the existing $H^1$-trained fits on the same production dataset:
-$24$ runs per nonhomogeneous activation across the log-penalty and
-moment-order sweeps, four per rectified power, and five for the ReLU--$\ell^1$
-baseline. Gaussian and $\mathrm{ReLU}^{3}$ have no passing candidate;
-softplus, $\tanh$, $\mathrm{ReLU}^{2}$, and the baseline do.
+We use the same parameter grids as in the Van der Pol experiment.
+All networks are trained with the $H^1$ loss.
 
+We assess \emph{numerical stabilization} using the following criterion:
+at every recorded sample in
+$[T-2,T]$, the trajectory must satisfy
+\begin{equation*}
+\operatorname{dist}(\theta(t),2\pi\mathbb Z)<0.1,
+\qquad |\dot\theta(t)|<0.5.
+\end{equation*}
+This finite-horizon criterion does not establish asymptotic stability.
+For model selection, we use $T=40$.
+
+We select one representative network per model family for the plots below as follows:
+\begin{enumerate}
+\item Within each run, retain the iterate with the smallest
+training objective.
+\item Across parameter settings, select the network with the
+smallest relative validation  $H^1$ error set among those
+satisfying the stabilization criterion from both $A\approx(0.74,0.61)$
+and $B\approx(0.26,0.46)$.
+\item If none satisfies the criterion, select the network with
+the smallest validation error and report its stabilization failure.
+\end{enumerate}
+Thus $A$ and $B$ are used for both model selection and the feedback comparison.
 Figure~\ref{fig:rs_frontier} tracks the best observed relative $H^1$
 validation error at each support budget within each selected run.
-At the selected checkpoints the global errors are $0.200$ for
-$\mathrm{ReLU}^{2}$, $0.209$ for the Gaussian, $0.232$ for $\tanh$,
-$0.248$ for $\mathrm{ReLU}^{3}$, and $0.274$ for softplus.
+Among the selected fits, Gaussian and $\mathrm{ReLU}^{2}$ provide the best
+balance between accuracy and sparsity. $\mathrm{ReLU}^{2}$ achieves the
+highest accuracy, while Gaussian achieves comparable accuracy with fewer
+neurons. Both networks are smaller and more accurate than the selected
+$\tanh$, $\mathrm{ReLU}^{3}$, and softplus networks.
 
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=0.7\textwidth]{../experiments/02_pendulum/paper_log_penalty/figures/frontier.png}
 \caption{Best relative $H^{1}$ validation error against
-neuron count. The nonhomogeneous activations use
-\eqref{eq:empirical-log-objective}; the homogeneous activations use
-$J_{\psi_k}$. All curves use the selected runs and parameters in
-Table~\ref{tab:pendulum_feedback_a}.}
+neuron count }
 \label{fig:rs_frontier}
 \end{figure}
 
@@ -3627,12 +3584,7 @@ Figure~\ref{fig:pendulum_data_surface}. The network shows limitation in approxim
 \end{subfigure}
 \caption{Learned value surfaces $\widehat V(x)$ over the $(\theta,\dot\theta)$
 window $[-8,8]^{2}$. Predictions below $0$ or above $60$ are clipped to
-the respective boundary for visualization; errors and feedback use the
-unclipped fitted function.
-The $\reluk$ models are trained with the fractional-exponent penalty $\psi_k$,
-and the nonhomogeneous models with \eqref{eq:empirical-log-objective} using the
-parameter values reported in
-Figure~\ref{fig:neuron_h1_frontier}\subref{fig:frontier_pendulum}.}
+the respective boundary for visualization.}
 \label{fig:rs_surfaces}
 \end{figure}
 
@@ -3649,24 +3601,16 @@ switching curve, $A=(0.74,\,0.61)$ and $B=(0.26,\,0.46)$, integrating the
 dynamics up to $T=40$ with fixed-step RK4 ($\Delta t = 5\times10^{-3}$),
 zero-order-hold (ZOH) controls, and the numerical bound $|u|\le30$.
 
-We assess \emph{numerical stabilization} using the following criterion:
-at every recorded sample in
-$[T-2,T]$, the trajectory must satisfy
-\begin{equation*}
-\operatorname{dist}(\theta(t),2\pi\mathbb Z)<0.1,
-\qquad |\dot\theta(t)|<0.5.
-\end{equation*}
-This finite-horizon criterion does not establish asymptotic stability.
 We assess horizon sensitivity at $T\in\{10,20,40\}$ using the same
 checkpoints and initial states.
-
 From the harder start $A$, softplus, $\tanh$, $\mathrm{ReLU}^{2}$, and
 the ReLU--$\ell^1$ baseline satisfy the numerical stabilization criterion
 at all three horizons; Table~\ref{tab:pendulum_feedback_a} reports
 $T=10$ and $T=40$ for both starts.
 From $B$, all five selected nonconvex fits pass at all three horizons;
 the baseline passes at $T=20,40$ but not at $T=10$.
-Halving the integration and control-hold step preserves these classifications.
+Halving the time step for integration and control updates preserves these
+classifications.
 
 \begin{table}[htbp]
 \centering
@@ -3691,20 +3635,20 @@ $\mathrm{ReLU}^{3} + \psi_{3}$ & $105$ & $69306.3$ & no & no & $10.1$ & yes & ye
 \end{tabular}
 \caption{Pendulum feedback from starts $A=(0.74,0.61)$ and $B=(0.26,0.46)$.
 $N$ is the number of neurons.
-The cost $J(10)$ uses held-control RK4 stages over the first ten seconds. ``Stabilized'' means
+The cost $J(10)$ is accumulated over the first ten seconds using RK4 stages with
+the control held constant during each time step. ``Stabilized'' means
 $\operatorname{dist}(\theta,2\pi\mathbb Z)<0.1$ and $|\dot\theta|<0.5$
 at every recorded sample in $[T-2,T]$, assessed separately for each column.
-The reference is the sampled-PMP feedback heuristic.}
+The reference is a feedback heuristic using the costate at the nearest sampled
+PMP state.}
 \label{tab:pendulum_feedback_a}
 \end{table}
 
 Figures~\ref{fig:pendulum_openloop_comparison_a}
 and~\ref{fig:pendulum_openloop_comparison_b} compare all five learned
-controllers with numerical open-loop references from $A$ and $B$, respectively. As in
-the Van der Pol comparison, the reference for each start is the least-cost
-converged finite-horizon PMP solve initialized from the complete learned and
-dataset-feedback rollouts. It uses $T=40$, a free terminal state, and zero
-terminal cost.
+controllers with numerical open-loop references from $A$ and $B$, respectively.
+The reference problems use $T=40$, a free terminal state, and zero
+terminal cost for the open loop problem.
 
 \begin{figure}[htbp]
 \centering
@@ -3744,7 +3688,7 @@ terminal cost.
 
 
 \FloatBarrier
-\subsubsection*{Validation errors on gradient discontinuity}
+\subsubsection*{Validation errors near the gradient discontinuity}
 \label{sec:switching-comparison}
 Let $S$ denote the boundary across which the value function $V$ remains
 continuous but its gradient jumps. To study approximation error near this
@@ -3758,9 +3702,7 @@ on $S$ and copies shifted by $\pm2\pi$ in the angle coordinate.
 
 Figure~\ref{fig:rs_dumbbell} reports
 the relative $H^{1}$ error on a shared evaluation set of $994{,}558$ points.
-The union of training rows across the production and oversampling datasets
-is excluded, and for each run we use
-the recorded iterate with the smallest training objective. Errors are reported
+Errors are reported
 on the subsets inside and outside $S_{0.3}$. The $\mathrm{ReLU}^{2}$ fit has the
 smallest errors in both regions ($0.284$ and $0.155$). The corresponding
 values are $0.290$ and $0.175$ for the Gaussian, $0.331$ and $0.194$ for
@@ -3789,11 +3731,13 @@ networks for two activation classes that require different compactness
 arguments. For nonhomogeneous activations, normalization of the
 measure and dictionary controls escape on the unbounded parameter domain and,
 together with the concave penalty, yields existence, finite support,
-separation and width bounds, and a quantitative decay rate. 
+separation and width bounds.
+For the single-atom PDAP scheme with exact search and monotone correction,
+we prove an $O(n^{-1/2})$ best-iterate bound on the first-order optimality residual for atom insertion.
 For positively $k$-homogeneous activations,
 radial optimization instead reduces the problem to the unit sphere and
-induces a fractional-power penalty; the resulting formulation likewise admits
-global minimizers and explicit finite-width conclusions. These results give a
+induces a fractional-exponent penalty. For $\reluk$ with $k\ge2$, the resulting formulation likewise admits
+global minimizers and explicit bounds on network width. These results give a
 rigorous foundation for constructing sparse networks that approximate both a
 value function and its gradient.
 
@@ -3815,7 +3759,8 @@ assumes exact global candidate maximization, whereas the implementation uses a
 multistart local search. Developing certified or more reliable candidate
 searches would therefore bring the algorithm closer to the theoretical
 guarantee. A second direction is to complement the present approximation
-criteria with feedback-aware training or validation near switching sets, and
+criteria with training or validation that accounts for feedback performance near
+switching sets, and
 then to examine the resulting methods in higher-dimensional control problems.
 
 \newpage

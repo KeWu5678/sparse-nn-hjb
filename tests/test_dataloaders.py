@@ -5,7 +5,7 @@ import pytest
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 
-from src.data import full_batch, make_dataloader, make_dataloaders
+from src.data import ValueSamples, full_batch, make_dataloader, make_dataloaders
 
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
@@ -54,11 +54,11 @@ def test_loader_rejects_empty_or_misaligned_samples(samples, message):
 
 
 def test_train_and_validation_loaders_keep_the_seeded_split_and_sample_alignment():
-    samples = {
-        "x": np.arange(5.0).reshape(-1, 1),
-        "v": np.arange(10.0, 15.0).reshape(-1, 1),
-        "dv": np.arange(20.0, 25.0).reshape(-1, 1),
-    }
+    samples = ValueSamples(
+        x=np.arange(5.0).reshape(-1, 1),
+        v=np.arange(10.0, 15.0),
+        dv=np.arange(20.0, 25.0).reshape(-1, 1),
+    )
     random_state = np.random.get_state()
     try:
         np.random.seed(0)
@@ -82,7 +82,7 @@ def test_train_and_validation_loaders_keep_the_seeded_split_and_sample_alignment
 
 
 def test_validation_iteration_leaves_training_random_state_unchanged():
-    samples = {"x": np.ones((4, 2)), "v": np.ones((4, 1)), "dv": np.zeros((4, 2))}
+    samples = ValueSamples(x=np.ones((4, 2)), v=np.ones(4), dv=np.zeros((4, 2)))
     random_state = np.random.get_state()
     try:
         train_loader, valid_loader = make_dataloaders(samples, train_fraction=0.5, seed=7)

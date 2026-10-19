@@ -40,8 +40,7 @@ from src.OpenLoop.pendulum.solver import (  # noqa: E402
     PendulumPmpSolver,
     PendulumPmpSolverConfig,
 )
-from src.OpenLoop.value_samples import ValueSamples  # noqa: E402
-from src.data import DATA_DIR  # noqa: E402
+from src.data import DATA_DIR, ValueSamples  # noqa: E402
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 from run_pendulum_pmp_openloop_example import thin_value_samples  # noqa: E402

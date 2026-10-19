@@ -169,7 +169,6 @@ steps documented in [experiments/README.md](experiments/README.md).
 | `tests/` | pytest suite, including golden-output solver tests |
 | `docs/` | ADRs, MLflow guide, research notes |
 | `deploy/` | Containerized MLflow tracking server |
-| `vault/` | Deeper implementation notes |
 
 Generated run records, figures, and reports are written to ignored local paths.
 

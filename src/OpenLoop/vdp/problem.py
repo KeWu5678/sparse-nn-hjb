@@ -15,6 +15,9 @@ class VdpOptimalControlProblem:
     mu: float = 1.0
     state_weight: float = 1.0
     T_final: float = 3.0
+    # No analytic Jacobian: collocation estimates it by finite differences, as
+    # for the published VDP dataset.
+    pontryagin_jacobian = None
 
     def __post_init__(self) -> None:
         if self.beta <= 0.0:
@@ -25,6 +28,18 @@ class VdpOptimalControlProblem:
             raise ValueError("state_weight must be positive")
         if self.T_final <= 0.0:
             raise ValueError("T_final must be positive")
+
+    @property
+    def dimension(self) -> int:
+        return 2
+
+    def pontryagin_rhs(self, t: np.ndarray, z: np.ndarray) -> np.ndarray:
+        """State/costate equations after eliminating the stationary control."""
+        y, p = z[:2], z[2:]
+        return np.vstack((
+            self.dynamics(t, y, self.feedback_from_gradient(p)),
+            self.adjoint_rhs(t, y, p),
+        ))
 
     def dynamics(self, _t: float, y: np.ndarray, u: float) -> np.ndarray:
         y1, y2 = np.asarray(y, dtype=np.float64)
@@ -50,24 +65,22 @@ class VdpOptimalControlProblem:
             dtype=np.float64,
         )
 
-    def terminal_gradient(self, _y_terminal: np.ndarray) -> np.ndarray:
-        return np.zeros(2, dtype=np.float64)
-
-    def running_cost(self, y_values: np.ndarray, u_values: np.ndarray) -> np.ndarray:
-        y_values = np.asarray(y_values, dtype=np.float64)
-        u_values = np.asarray(u_values, dtype=np.float64)
-        state_cost = self.state_weight * np.sum(y_values * y_values, axis=0)
-        control_cost = self.beta * u_values * u_values
+    def running_cost(self, y: np.ndarray, u: np.ndarray) -> np.ndarray:
+        y = np.asarray(y, dtype=np.float64)
+        u = np.asarray(u, dtype=np.float64)
+        state_cost = self.state_weight * np.sum(y * y, axis=0)
+        control_cost = self.beta * u * u
         return state_cost + control_cost
 
-    def reduced_gradient(self, p_values: np.ndarray, u_values: np.ndarray) -> np.ndarray:
-        p_values = np.asarray(p_values, dtype=np.float64)
-        u_values = np.asarray(u_values, dtype=np.float64)
-        return p_values[1, :] + 2.0 * self.beta * u_values
+    def reduced_gradient(self, p: np.ndarray, u: np.ndarray) -> np.ndarray:
+        p = np.asarray(p, dtype=np.float64)
+        u = np.asarray(u, dtype=np.float64)
+        return p[1, :] + 2.0 * self.beta * u
 
-    def feedback_from_gradient(self, gradient: np.ndarray) -> float:
+    def feedback_from_gradient(self, gradient: np.ndarray) -> np.ndarray:
+        """Stationary control ``-p2 / (2 beta)`` for ``(2,)`` or ``(2, n)`` costates."""
         gradient = np.asarray(gradient, dtype=np.float64)
-        return float(-gradient[1] / (2.0 * self.beta))
+        return -gradient[1] / (2.0 * self.beta)
 
     def rk4_rollout(self, u_of_x, x0, *, T: float | None = None, dt: float = 0.01,
                     u_clip: float = 50.0):
@@ -104,8 +117,8 @@ class VdpOptimalControlProblem:
         would make the gradient piecewise-constant and the control spuriously bang-bang.
         Returns a ``u_of_x`` closure."""
         from scipy.interpolate import CloughTocher2DInterpolator, NearestNDInterpolator
-        smooth = CloughTocher2DInterpolator(samples["x"], samples["dv"][:, 1])
-        nearest = NearestNDInterpolator(samples["x"], samples["dv"][:, 1])  # fill outside hull
+        smooth = CloughTocher2DInterpolator(samples.x, samples.dv[:, 1])
+        nearest = NearestNDInterpolator(samples.x, samples.dv[:, 1])  # fill outside hull
 
         def u(x):
             x = np.asarray(x).reshape(1, 2)

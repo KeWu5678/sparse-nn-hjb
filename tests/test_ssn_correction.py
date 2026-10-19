@@ -22,7 +22,7 @@ def test_correction_runs_the_configured_budget(iterations):
 
     assert diagnostics["ssn_iterations"] == iterations
     assert diagnostics["ssn_failed_steps"] == 0
-    assert diagnostics["correction_accepted"]
+    assert diagnostics["ssn_refinement_accepted"]
     assert float(fitting(coefficient).detach()) <= .5
     assert coefficient.item() == pytest.approx(1. if iterations == 0 else 0., abs=1e-11)
 
@@ -42,7 +42,7 @@ def test_final_guard_rejects_a_worsening_trial_allowed_by_local_tolerance(guard)
     )
 
     assert optimizer.last_step_success
-    assert diagnostics["correction_accepted"] is not guard
+    assert diagnostics["ssn_refinement_accepted"] is not guard
     assert coefficient.item() == pytest.approx(1. if guard else 0., abs=1e-11)
     assert float(fitting(coefficient).detach()) == pytest.approx(1.5 if guard else 2.)
 
@@ -67,7 +67,7 @@ def test_nonfinite_final_loss_restores_starting_coefficients(guard):
         iterations=1, correction_guard=guard,
     )
 
-    assert not diagnostics["correction_accepted"]
+    assert not diagnostics["ssn_refinement_accepted"]
     assert coefficient.item() == 1.
     assert fitting(coefficient).item() == .5
 
@@ -124,6 +124,6 @@ def test_complete_trust_region_correction_continues_after_a_rejected_trial():
     assert calls == 1 + 2 * 4
     assert diagnostics["ssn_iterations"] == 4
     assert diagnostics["ssn_failed_steps"] == 1
-    assert optimizer.last_step_success and diagnostics["correction_accepted"]
+    assert optimizer.last_step_success and diagnostics["ssn_refinement_accepted"]
     assert coefficient.item() == pytest.approx(.78)
     assert optimizer.state[coefficient]["sigma"] == pytest.approx(.16)

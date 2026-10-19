@@ -1,28 +1,22 @@
 """Synthetic objectives for solver isolation, including indefinite quadratics.
 
-Production problems are built from samples. These tests supply fitting directly
+Production networks are built from samples. These tests supply fitting directly
 so that negative curvature, additive constants, and historical losses remain
 exactly as originally tested.
 """
 
 import torch
 
-from src.config import resolve_model, validate_model_config
+from src.config import make_penalty, resolve_model, validate_model_config
 from src.config.schema import TrainingConfig
-from src.models import SparseModel, make_penalty
 from src.PDAP import PDAP
 from src.SSN import SSN
-
-
-def penalty_for(config, problem):
-    """The penalty of a resolved configuration, with q supplied by its problem."""
-    return make_penalty(config["alpha"], config["gamma"], problem.penalty_exponent)
 
 
 def synthetic_correction(fitting, hess_obj, **specifications):
     config = resolve_model(specifications, hess_obj.shape[0])
     validate_model_config(config)
-    penalty = penalty_for(config, SparseModel(config))
+    penalty = make_penalty(config)
     return penalty, fitting, hess_obj
 
 
@@ -42,10 +36,10 @@ def closure_for(optimizer, coefficient, fitting):
     return closure
 
 
-def coefficient_problem(problem, penalty, loader):
+def coefficient_problem(network, penalty, loader):
     """The objective SSN minimizes, its fitting Hessian and the starting coefficients, without a solve.
 
     The objective is PDAP's coefficient fitting term plus the penalty SSN adds.
     """
-    fitting, hess_obj, moment_weight = PDAP(TrainingConfig(), penalty).coefficient_fitting(problem, loader)
-    return (lambda u: fitting(u) + penalty.value(u)), hess_obj, problem.c.detach() * moment_weight
+    fitting, hess_obj, moment_weight = PDAP(TrainingConfig(), penalty, network, loader).fit_obj_with_outerweights()
+    return (lambda u: fitting(u) + penalty.value(u)), hess_obj, network.c.detach() * moment_weight

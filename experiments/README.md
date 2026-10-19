@@ -53,11 +53,12 @@ make sweep EXPERIMENT=oversampling_gaussian
 make sweep EXPERIMENT=oversampling_relu2
 ```
 
-`make sweep` refuses to run when that experiment already has records under
-`rawdata/logs/multirun/`. Existing artifacts must be deliberately archived
-before a replacement sweep. Records are stored at
-`rawdata/logs/multirun/<dataset>/<experiment>/<axis>/<job>/`, with a run-adjacent
-`result_<run_id>.pkl` fit. Every run uses seed 42 and a 90% training split.
+`make sweep` refuses to run when that experiment already has job folders under
+`rawdata/logs/multirun/`. Existing folders must be deliberately archived
+before a replacement sweep. Each job is recorded as an MLflow run (ADR 0016) with
+its fit as the `history.pt` artifact; the job folder
+`rawdata/logs/multirun/<dataset>/<experiment>/<axis>/<job>/` keeps the Hydra
+config and `run.jsonl`. Every run uses seed 42 and a 90% training split.
 The runner records training-data and evaluation-input SHA-256 hashes before
 fitting and reports errors in physical coordinates.
 
@@ -68,13 +69,12 @@ must not be substituted with Algorithm 2 at power one.
 
 ## Validate and generate the manuscript figures
 
-The following paper scripts are local/ignored and require the datasets,
-completed records, and fit files above:
+The following paper scripts are local/ignored and require the datasets and the
+finished MLflow runs above (`MLFLOW_TRACKING_URI` set):
 
 ```sh
 uv run python scripts/paper/preflight.py
 make openloop
-uv run python experiments/01_vdp/paper_log_penalty/p_study_figure.py
 uv run python scripts/paper/vdp_full_scope.py --homogeneous-alpha 1e-6
 uv run python scripts/paper/pendulum_selection.py
 uv run python scripts/paper/pendulum_full_scope.py
@@ -101,7 +101,6 @@ and reports under their benchmark's `paper_log_penalty/` and
 `paper_frac_exp_penalty/` output directories. Those names identify report
 locations; the training record roots are `log_penalty` and `frac_exp_penalty`.
 The local `analysis.py` wrappers delegate to the same benchmark generators.
-The joint moment-order plot reads the two `moment_order_study` record roots.
 
 Signed-control and cumulative-cost comparisons use each controller's own
 trajectory: all VDP evaluations have horizon 3; pendulum has horizon 40 for

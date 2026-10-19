@@ -79,9 +79,6 @@ class AllenCahnProblem:
         """Stationarity residual; it vanishes by construction for eliminated controls."""
         return self.control_matrix.T @ np.asarray(p, dtype=np.float64) + 2.0 * self.beta * np.asarray(u, dtype=np.float64)
 
-    def terminal_gradient(self, y_terminal: np.ndarray) -> np.ndarray:
-        return np.zeros_like(y_terminal, dtype=np.float64)
-
     def _uncontrolled_dynamics(self, y: np.ndarray) -> np.ndarray:
         y = np.asarray(y, dtype=np.float64)
         return self._linear_state @ y - y**3

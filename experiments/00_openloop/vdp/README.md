@@ -21,8 +21,8 @@ From the repository root:
 uv run python scripts/generate_vdp_data.py --grid-size 30 --tag 20260924
 ```
 
-A new dated run directory contains the sample NPZ, solver metadata, and failure
-record. The metadata includes the data hash, generator source hashes, and
+A new dated run directory contains the sample NPZ and solver metadata. The
+metadata includes the data hash, generator source hashes, and
 collocation residuals. A new generation receives its own directory identifier;
 point `conf/data/vdp.yaml` at that exact output before starting a replacement
 sweep. The superseded dataset and old results are in the ignored

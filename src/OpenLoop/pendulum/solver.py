@@ -12,6 +12,7 @@ from uuid import uuid4
 
 import numpy as np
 
+from src.data import ValueSamples
 from src.OpenLoop.pendulum.nonsmooth import (
     NonsmoothCurve,
     compute_nonsmooth_curve,
@@ -24,7 +25,6 @@ from src.OpenLoop.pendulum.trajectories import (
     integrate_pmp_trajectory,
     uniform_boundary_angles,
 )
-from src.OpenLoop.value_samples import ValueSamples
 
 
 @dataclass(frozen=True)
@@ -276,7 +276,8 @@ class PendulumPmpSolver:
             discarded += count
 
         samples = ValueSamples.concatenate([
-            ValueSamples(tr.state, tr.value, tr.costate) for tr in restricted
+            ValueSamples.empty(self.problem.dimension),
+            *(ValueSamples(tr.state, tr.value, tr.costate) for tr in restricted),
         ])
         screened = self.screen_body_samples(samples, trajectories)
         discarded += samples.size - screened.size
@@ -366,7 +367,7 @@ class PendulumPmpSolver:
 
         basin = curve.basin_polygon()
         if self.config.collar_width <= 0.0 or basin is None or curve.points.shape[0] == 0:
-            empty = ValueSamples.concatenate([])
+            empty = ValueSamples.empty(self.problem.dimension)
             return empty, empty
 
         x0 = np.vstack([tr.state for tr in raw])
@@ -423,7 +424,8 @@ class PendulumPmpSolver:
             if keep.any():
                 chunk = ValueSamples(x=xc[keep], v=v0[idx][keep], dv=dv0[idx][keep])
                 (pad_chunks if tile == 0 else collar_chunks).append(chunk)
-        return ValueSamples.concatenate(pad_chunks), ValueSamples.concatenate(collar_chunks)
+        empty = ValueSamples.empty(self.problem.dimension)
+        return ValueSamples.concatenate([empty, *pad_chunks]), ValueSamples.concatenate([empty, *collar_chunks])
 
     def _integrate_angle(self, angle: float, trajectory_id: int) -> PmpTrajectory:
         return integrate_pmp_trajectory(

@@ -5,15 +5,18 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_sweep_refuses_to_mix_with_existing_records(tmp_path: Path) -> None:
-    # Records land in <sweep_dir>/<data>/<EXPERIMENT>/<job>/.
+@pytest.mark.parametrize("existing", ["run.jsonl", "legacy_record.json"])
+def test_sweep_refuses_to_mix_with_existing_records(tmp_path: Path, existing: str) -> None:
+    # Job outputs land in <sweep_dir>/<data>/<EXPERIMENT>/<job>/.
     sweep_dir = tmp_path / "records"
     job_dir = sweep_dir / "vdp" / "log_penalty" / "0"
     job_dir.mkdir(parents=True)
-    (job_dir / "existing.json").write_text("{}", encoding="utf-8")
+    (job_dir / existing).write_text("{}", encoding="utf-8")
 
     result = subprocess.run(
         [

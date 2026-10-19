@@ -27,7 +27,7 @@ PDAP.step() — one complete paper iteration:
   4. Prune coefficients at or below the amplitude tolerance.
 ```
 
-The plain `PDAP` class updates `SparseModel` using the insertion strategy from
+The plain `PDAP` class updates `SparseNetwork` using the insertion strategy from
 `src/PDAP/insertion.py`. `run_training` in `src/training.py` repeats the steps,
 evaluates their results, and records History. Its explicit historical
 `correction_first` branch preserves initialization, correction/pruning,
@@ -60,7 +60,7 @@ must remain identified separately from these manuscript procedures.
 "Candidate-profile evaluation" in the refactor discussion means evaluating the
 fitting-loss derivative for a supplied candidate neuron at zero inserted
 coefficient (lines 2613–2616). It is one signed value; Algorithm 1 uses its
-normalized version (lines 2636–2645 and 2818–2822). SparseModel supplies this
+normalized version (lines 2636–2645 and 2818–2822). SparseNetwork supplies this
 problem-specific calculation. PDAP searches over candidates and applies the
 relevant acceptance and initialization rules. The derivative alone is neither
 the full regularized objective increment nor an insertion decision.
@@ -82,7 +82,7 @@ Reference implementation: `/Users/ruizhechao/Documents/NonConvexSparseNN/`
 | `PDAPmultisemidiscrete.m` | `src/PDAP/pdap.py` | Main PDAP loop (NOT `PDAPsemidiscrete.m`) |
 | `SSN.m` | `src/SSN/optimizer.py` | Semismooth Newton optimizer (package) |
 | `SSN_TR.m` | `src/SSN/strategies.py` (`steihaug_cg`) | Trust-region globalization |
-| `setup_problem_NN_2d_from_xhat.m` | `src/models/sparse_model.py` + `src/PDAP/insertion.py` | Kernel/loss evaluation and candidate search, respectively |
+| `setup_problem_NN_2d_from_xhat.m` | `src/models/sparse_network.py` + `src/PDAP/insertion.py` | Kernel/loss evaluation and candidate search, respectively |
 | `run_vdp_2d_from_mat.m` | `notebook/pdpa_vdp.ipynb` | Experiment runner |
 
 ### Known differences from MATLAB
@@ -139,28 +139,28 @@ search's L-BFGS optimizer.
 
 The implemented ownership and its verification are recorded in
 [REFACTOR_HANDOFF.md](../REFACTOR_HANDOFF.md). PDAP owns insertion acceptance and
-warm-start selection; SparseModel and the Penalty supply their mathematical evaluations.
+warm-start selection; SparseNetwork and the Penalty supply their mathematical evaluations.
 
 - `models/` — the network, its fitting and its proximal penalty:
-  - `sparse_model.py` — `SparseModel(nn.Module)` reads resolved configuration
+  - `sparse_network.py` — `SparseNetwork(nn.Module)` reads resolved configuration
     and registers `inner_weight` and
     `inner_bias` as buffers and `c` as its parameter. `forward` returns network
     values and input gradients; `kernel` supplies the kernel matrices of the
     current or supplied atoms, i.e. their coefficient Jacobians, and
     `moment_weight_of_atoms` their moment weights w_p. `obj`, `jac_obj`,
-    and `hess_obj` supply fitting and its coefficient derivatives; the problem
-    also supplies the penalty exponent q = 2/(power+1). `PDAP.train_ssn_outerweights`
+    and `hess_obj` supply fitting and its coefficient derivatives; it reads the
+    penalty exponent q = 2/(power+1) from the resolved configuration. `PDAP.train_ssn_outerweights`
     prepares the coefficient loss, Hessian and normalization for one correction.
     There is no objective-carrier class or persistent feature cache.
-  - `penalty.py` — `make_penalty(alpha, gamma, penalty_exponent)` selects
-    `LogPenalty(alpha, gamma)` (q = 1) or `FractionalPenalty(alpha, q)`. Their
-    base `Penalty` holds the penalty αΦ, its split into the nonsmooth term
+  - `penalty.py` — `LogPenalty(alpha, gamma)` (q = 1) and
+    `FractionalPenalty(alpha, q)`; `src.config.make_penalty(config)` selects
+    one from a validated model configuration. Their base `Penalty` holds the penalty αΦ, its split into the nonsmooth term
     α·Σ|u|^q and a smooth correction, and the vector and scalar proximal maps
     (taking the proximal constant λ). Shared by PDAP, SSN and evaluation. The
     scalar formulas sit below the classes, grouped by family.
 - `PDAP/` — candidate search/acceptance, warm-start, support changes, and correction scheduling:
-  - `pdap.py` — plain `PDAP` with `step(problem, train_loader)` for one complete
-    paper iteration, configured by `insertion=` ("profile" or "finite_step").
+  - `pdap.py` — plain `PDAP(training, penalty, network, train_loader)` with
+    `step()` for one complete paper iteration, configured by `insertion=` ("profile" or "finite_step").
     Returns solver facts and an algorithmic stop reason; evaluation and History
     are outside the class.
   - `insertion.py` — profile-threshold and finite-step candidate selection and
@@ -183,8 +183,10 @@ warm-start selection; SparseModel and the Penalty supply their mathematical eval
     (`prox_scale`, `proximal_step`).
   - `strategies.py` — Levenberg–Marquardt and Steihaug CG globalization.
   - `mpcg.py` — projected/trust-region CG inner solve.
-- `data.py` — reading, normalization, splitting, standard DataLoader factories,
-  and complete-sample assembly. Loaders and samples remain external to the model.
+- `data.py` — the single `ValueSamples` type shared by open-loop generation and
+  training (ADR 0018), its `.npz` file format, normalization, splitting, tensor
+  conversion, standard DataLoader factories, and complete-sample assembly.
+  Loaders and samples remain external to the model.
 - `eval.py` — relative errors and metric/report assembly, using the problem's
   canonical `obj` and the Penalty's sparsity functional for its objective mathematics.
 - `training.py` — external `run_training` loop, timing, evaluation, recording
@@ -196,14 +198,17 @@ warm-start selection; SparseModel and the Penalty supply their mathematical eval
 - `config/` — Hydra structured configuration for PDAP training:
   - `schema.py` — typed model/training/data/env config objects, activation and
     geometry resolution, and training compatibility validation. Setup resolves
-    and validates configuration before constructing `SparseModel`; the model
+    and validates configuration before constructing `SparseNetwork`; the network
     and optimizers do not initiate those configuration operations. Raw Hydra
     settings remain unchanged for serialization.
   - `activations.py` — canonical activation registry used by configs and scripts.
   - `scripts/train.py` registers the Hydra `config_schema` before composition.
-- Open-loop data subsystem: `src/OpenLoop/` — shared `ValueSamples`, VDP smooth
-  data generation under `src/OpenLoop/vdp/`, and paper-backed infinite-horizon
-  pendulum data generation under `src/OpenLoop/pendulum/`.
+- Open-loop data subsystem: `src/OpenLoop/` — the shared finite-horizon
+  Pontryagin collocation solver `collocation.py`, initial-state designs
+  `sampling.py`, the VDP and
+  Allen–Cahn problem definitions under `src/OpenLoop/vdp/` and
+  `src/OpenLoop/allen_cahn/`, and paper-backed infinite-horizon pendulum data
+  generation under `src/OpenLoop/pendulum/`.
 
 ## Script index (`scripts/`)
 
@@ -220,24 +225,25 @@ warm-start selection; SparseModel and the Penalty supply their mathematical eval
 
 ```
 VDP / pendulum samples -> external preprocessing -> DataLoaders
-SparseModel + Penalty + PDAP + DataLoaders -> run_training -> History -> saved-run evaluation
+SparseNetwork + Penalty + PDAP + DataLoaders -> run_training -> History -> saved-run evaluation
 ```
 
 ```python
-pdap = PDAP(cfg.training, insertion=model_config["insertion"])
+pdap = PDAP(cfg.training, make_penalty(model_config), network, train_loader,
+            insertion=model_config["insertion"])
 history = run_training(
-    pdap, problem, train_loader, valid_loader,
+    pdap, valid_loader,
     num_iterations=cfg.training.num_iterations,
-    reporting_normalizer=normalizer,
+    normalizer=normalizer,
 )
 ```
 
-The runner passes any reporting normalizer directly to evaluation. History
-receives the resulting scalar values and never initiates data loading or metric
-evaluation. Existing quality keys and best-checkpoint selection stay unchanged.
-`iterations` remains the historical checkpoint-row count; explicit execution
-counters describe searches and coefficient corrections, including a terminal
-failed search or the legacy final insertion. No-candidate termination and budget
+The runner passes any normalizer directly to evaluation. History receives one
+row of `src.metrics` checkpoint metrics per checkpoint and never initiates data
+loading or metric evaluation; the selected checkpoint is the first least
+training objective. Explicit execution counters describe searches and
+coefficient corrections, including a terminal failed search or the legacy final
+insertion. No-candidate termination and budget
 exhaustion are distinct from a mathematical convergence guarantee.
 
 Runtime fields distinguish wall time spent in solver operations from evaluation.

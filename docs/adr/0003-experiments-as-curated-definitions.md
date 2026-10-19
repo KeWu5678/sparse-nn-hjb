@@ -52,7 +52,7 @@ Performance-evaluation functions that become reusable should live in `src`, but
 the current model-level relative errors may remain in the model/PDAP training
 path until there is a concrete extraction need. Experiments select,
 parameterize, aggregate, and present metrics; table helpers such as
-`src/metric.py` remain reporting utilities, not the owner of performance
+`src/tables.py` remain reporting utilities, not the owner of performance
 evaluation. Plot function implementations are centralized in `src/plots.py`;
 experiments may call those functions but should not own local plotting logic.
 Normalization, multi-dataset comparisons, plot invocation, report generation,
