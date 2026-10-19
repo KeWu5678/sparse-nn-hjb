@@ -235,7 +235,7 @@ l^M(\mu_{\boldsymbol\omega,c}):=
 +|g^m-\nabla\mathcal N_{\boldsymbol\omega,c}(x^m)|^2
 \right).
 \end{equation*}
-Fix a bounded Lipschitz domain $D\subset\mathbb R^d$.
+Fix a bounded Lipschitz domain $D\subset\mathbb R^d$, 
 Section~3 introduces the corresponding population fidelity $L$ with respect
 to Lebesgue measure on $D$.
 
@@ -421,7 +421,7 @@ We reserve $p$ for the moment order.
 \subsection{The value operator and the gradient-augmented loss}
 The finite network $\mathcal N_{\boldsymbol\omega,c}$ corresponds to the
 finite atomic measure $\mu_{\boldsymbol\omega,c}$. This motivates the integral
-formulation below, which agrees exactly with the finite sum on atomic
+formulation in \eqref{eq:integral-representation}, which agrees exactly with the finite sum on atomic
 measures.
 
 \begin{assumption}[Regularity and polynomial growth of $\rho$]
@@ -459,9 +459,10 @@ For $\mu\in\mathcal M(\Omega)$ satisfying
 	\int_\Omega\|K(\omega)\|_{H^1(D)}\,d|\mu|(\omega)<\infty,
 \end{equation}
 define the $H^1(D)$-valued Bochner integral
-\begin{equation*}
+\begin{equation}
+\label{eq:integral-representation}
 	\mathcal N\mu:=\int_\Omega K(\omega)\,d\mu(\omega).
-\end{equation*}
+\end{equation}
 By \eqref{eq:H1-growth}, condition~\eqref{eq:H1-Bochner-condition} holds for
 $\mu\in\mathcal M_p(\Omega)$ when $p>s_1$. For
 $\psi\in C_c^\infty(D)$ and $i\in\{1,\ldots,d\}$, the growth bound permits
@@ -479,15 +480,14 @@ Consequently,
 	\quad\text{in }L^2(D;\mathbb R^d).
 \end{equation*}
 For measures satisfying only
-$\int_\Omega\|K(\omega)\|_{L^2(D)}\,d|\mu|(\omega)<\infty$, the same
-definition is valid as an $L^2(D)$-valued Bochner integral. By
+$\int_\Omega\|K(\omega)\|_{L^2(D)}\,d|\mu|(\omega)<\infty$, the integral in
+\eqref{eq:integral-representation} is well defined as an $L^2(D)$-valued Bochner integral. By
 \eqref{eq:atom-L2-growth}, this includes $\mathcal M_p(\Omega)$ when
 $p>s_0$. In particular,
 $\mathcal N\mu_{\boldsymbol\omega,c}=\mathcal N_{\boldsymbol\omega,c}$.
 
 Whenever $\mathcal N\mu\in H^1(D)$, set $r_\mu:=\mathcal N\mu-V$.
-The fidelity term is the gradient-augmented loss with the distributional
-gradient convention. If the $L^2(D)$-valued integral defining
+If the $L^2(D)$-valued integral defining
 $\mathcal N\mu$ does not exist, we set $L(\mu)=+\infty$:
 \begin{equation*}
 	L(\mu) :=
@@ -551,8 +551,10 @@ following conditions:
 The lower curvature control in Assumption~\ref{pen3}(1) is local and does not
 follow from global concavity. For example,
 $\phi(z)=z-\frac23z^{3/2}$ near the origin has
-$\phi''(z)=-\frac12z^{-1/2}$; it can be extended linearly after a small
-positive point so as to remain nondecreasing, concave, and coercive.
+$\phi''(z)=-\frac12z^{-1/2}$.
+Choose $0<\delta<1$, retain this formula on $[0,\delta]$, and use its
+tangent line at $\delta$ for $z>\delta$. The resulting function is
+nondecreasing, concave, and coercive.
 \end{remark}
 
 The following result follows from standard concavity estimates; see \cite{pieper2022nonconvex}.
@@ -991,11 +993,11 @@ for the unnormalized problem on the parameter domain.
 
 \subsubsection*{Escape on the unbounded parameter domain}
 \label{sec:escape}
-For positively homogeneous profiles the radial scale of $\omega$ is absorbed by
+For positively homogeneous activation functions the radial scale of $\omega$ is absorbed by
 the outer coefficient, and the parameter can be restricted to the unit sphere
 $\mathbb{S}^d$ (Section~4). But in general the domain is
 $\Omega = \mathbb{R}^{d+1}$, which is not compact.
-The regularizer $\Phi_\phi$ depends on the sizes of the
+The regularizer $\Phi_\phi$ depends on the sizes of the outer
 coefficients but not on the locations of the atoms. Along a sequence with
 $|\omega|\to\infty$, the fidelity need not be lower
 semicontinuous.
@@ -1022,7 +1024,7 @@ under the corresponding polynomial growth gap.
 
 \begin{example}[Nonattainment for softplus]
 \label{ex:softplus_escape}
-For the profile $\rho(z) = \log(1 + e^z)$ (softplus), let $b_n\to\infty$.
+For the activation function $\rho(z) = \log(1 + e^z)$ (softplus), let $b_n\to\infty$.
 The measures
 $\mu_n = \rho(b_n)^{-1}\delta_{(0, b_n)}$ fit $V \equiv 1$ exactly for every
 $n$ at penalty $\alpha\,\phi(1/\rho(b_n)) \to 0$, so $\inf J_0 = 0$ is not
@@ -1058,8 +1060,7 @@ with inverse $d\mu=w_p^{-1}d\mu_p$, and
 \end{equation}
 Moreover, $\mu_n$ converges weak-* to $\mu$ in
 $C_{w_p^{-1}}(\Omega)^*$ if and only if
-$(\mu_n)_p\overset{*}{\rightharpoonup}\mu_p$ in $C_0(\Omega)^*$.
-The multiplication preserves the atom set and the polar sign, and
+$(\mu_n)_p\overset{*}{\rightharpoonup}\mu_p$ in $C_0(\Omega)^*$ and
 \begin{equation}
 \label{eq:normalization-decomposition}
 	(\mu_p)_{\atom}=w_p\mu_{\atom},
@@ -1191,13 +1192,9 @@ Since $D$ is bounded and $\supp\chi_R$ is compact,
 	M_R:=\sup_{\omega\in\supp\chi_R,\ x\in D}
 	|[K_p(\omega)](x)|<\infty.
 \end{equation*}
-The absolute values of both truncated integrals are bounded by $CM_R$.
-The integrand $(\omega,x)\mapsto\chi_R(\omega)[K_p(\omega)](x)$ is jointly
-Borel measurable and bounded by $M_R$; Fubini's theorem therefore identifies
-the pointwise integrals above, almost everywhere in $x$, with representatives
-of the $L^2(D)$-valued Bochner integrals below.
-The constant function $2CM_R$ belongs to $L^2(D)$ because $D$ is bounded.
-Dominated convergence therefore yields
+The truncated integrals converge for every $x\in D$ and are bounded in
+absolute value by $CM_R$. Since $D$ is bounded, the constant function
+$CM_R$ belongs to $L^2(D)$. Dominated convergence then yields
 \begin{equation*}
 	\int_\Omega\chi_RK_p\,d(\mu_n)_p
 	\longrightarrow
@@ -1237,9 +1234,7 @@ Assumption~\ref{ass:value-growth}(1). If $p>s_0$ and $\alpha>0$, then
 admits at least one global minimizer.
 \end{theorem}
 \begin{proof}
-We use the direct method in the normalized measure coordinate. Only the stated
-continuity and growth bound for $\rho$ are needed. Since
-$V\in H^1(D)$,
+Since $V\in H^1(D)$,
 \begin{equation*}
 	J(0)=\frac12\|V\|_{H^1(D)}^2=:C<\infty.
 \end{equation*}
@@ -1269,8 +1264,8 @@ The fidelity bound gives
 	\sup_n\|\nabla(\mathcal N\mu_n)\|_{L^2(D)}
 	\le\|\nabla_x V\|_{L^2(D)}+\sqrt{2(C+1)}.
 \end{equation*}
-After another subsequence,
-$\nabla(\mathcal N\mu_n)\rightharpoonup g$ weakly in $L^2(D)^d$.
+After another subsequence, we have
+$\nabla(\mathcal N\mu_n)\rightharpoonup g$ weakly in $L^2(D)^d$ for some $g$.
 For every $\psi\in C_c^\infty(D)^d$,
 \begin{align*}
 	\int_D g \cdot \psi \, dx
@@ -1282,8 +1277,18 @@ the last step by \eqref{eq:value-strong}. Hence
 $g = \nabla(\mathcal{N}\bar{\mu})$ distributionally and
 $\mathcal{N}\bar{\mu} \in H^1(D)$.
 
-The value part of the fidelity is continuous by \eqref{eq:value-strong}, and
-the gradient part is weakly lower semicontinuous. Hence
+The preceding argument shows that the gradients converge weakly in
+$L^2(D)^d$ to $\nabla(\mathcal N\bar\mu)$. By weak lower semicontinuity of
+the squared $L^2$ norm,
+\begin{equation*}
+	\frac12\|\nabla(\mathcal N\bar\mu)-\nabla_x V\|_{L^2(D)}^2
+	\le\liminf_{n\to\infty}
+	\frac12\|\nabla(\mathcal N\mu_n)-\nabla_x V\|_{L^2(D)}^2.
+\end{equation*}
+Thus the gradient part of the fidelity is lower semicontinuous along the
+chosen weak-* convergent subsequence of normalized measures. Together with
+the strong $L^2$ convergence of the values in \eqref{eq:value-strong}, this
+yields
 \begin{equation*}
 	L(\bar\mu)\le\liminf_{n\to\infty}L(\mu_n).
 \end{equation*}
@@ -1313,7 +1318,7 @@ The corresponding derivative profile is
 	P_\mu(\omega):=DL(\mu)[\delta_\omega]
 	=\langle r_\mu,K(\omega)\rangle_{H^1(D)}.
 \end{equation*}
-Define its normalized form and the uniform normalized feature bound by
+Define its normalized form and the uniform normalized bound by
 \begin{equation*}
 	P_{p,\mu}(\omega):=\frac{P_\mu(\omega)}{w_p(\omega)}
 	=\langle r_\mu,K_p(\omega)\rangle_{H^1(D)},
@@ -1529,21 +1534,18 @@ Theorem~\ref{opt_cdt} and monotonicity of $\phi'$ now give
 	=\alpha\phi'(t_\omega)
 	\geq\alpha\phi'\bigl(T(\bar\mu)\bigr).
 \end{equation*}
-Thus every atom lies in $\mathcal K(\bar\mu)$.
-
-On the continuous part, Theorem~\ref{opt_cdt} gives
+Thus every atom lies in $\mathcal K(\bar\mu)$. On the continuous part, Theorem~\ref{opt_cdt} gives
 \begin{equation*}
 	|\bar P_p(\omega)|=\alpha L_\phi
 	\geq\alpha\phi'\bigl(T(\bar\mu)\bigr)
 	\qquad |(\bar\mu_p)_{\cont}|\text{-almost everywhere}.
 \end{equation*}
 Hence $(\bar\mu_p)_{\cont}$ is concentrated on the closed set
-$\mathcal K(\bar\mu)$.  Theorem~\ref{thm:normalization} preserves the
-atomic and continuous decompositions.  Since $w_p$ is strictly positive,
-each component of $\bar\mu_p=w_p\bar\mu$ has the same null sets, and hence
-the same support, as the corresponding component of $\bar\mu$.  Taking
-closures for the atomic part and supports for the continuous part proves
-\eqref{eq:localized-support}.
+$\mathcal K(\bar\mu)$.  
+
+By \eqref{eq:normalization-decomposition} and $w_p>0$, both
+components of $\bar\mu$ are concentrated on the closed set
+$\mathcal K(\bar\mu)$, which proves \eqref{eq:localized-support}.
 \end{proof}
 
 \begin{theorem}[Finite support and separation of local minimizers]
@@ -1580,11 +1582,6 @@ where the covering number $N_{\mathrm{cov}}(A,r)$ is the least number of
 balls of radius $r$ needed to cover $A$.
 \end{theorem}
 \begin{proof}
-We use the isometry of Theorem~\ref{thm:normalization}, the first-order
-identities of Theorem~\ref{opt_cdt}, and local
-coefficient variations to prove the assertions. Concavity, coercivity, and
-$L_\phi>0$ imply that $\phi(t)>0$ for $t>0$.
-
 The zero objective case is immediate:
 \begin{equation*}
 	J(\bar\mu)=0
@@ -1595,7 +1592,7 @@ The zero objective case is immediate:
 	\quad\Longrightarrow\quad
 	\bar\mu=0,
 \end{equation*}
-where the middle implication follows from $L_\phi>0$ and
+where the second implication follows from $L_\phi>0$ and
 $\phi(t)>0$ for $t>0$. We may therefore suppose $J(\bar\mu)>0$.
 Lemma~\ref{lem:support-bound}
 gives the compact set $\mathcal K$ and already localizes the atomic and
@@ -1603,10 +1600,8 @@ continuous supports.  Every normalized atom magnitude
 \begin{equation*}
 	t_i:=|\bar\mu_p(\{\omega_i\})|
 \end{equation*}
-	satisfies $t_i\leq T$ by Lemma~\ref{lem:support-bound}. The curvature
-assumption gives $\phi''(t)\leq-\gamma_T$ for $0<t\leq T$.
-Integrating this inequality from the origin, using
-$\phi'(0+)=L_\phi$, and then integrating once more gives
+satisfies $t_i\leq T$ by Lemma~\ref{lem:support-bound}. 
+Proposition~\ref{secondorderestimate}(2), applied with $A=T$, gives
 \begin{equation}
 \label{eq:curvature-linear-gap}
 	L_\phi t-\phi(t)\geq\frac{\gamma_T}{2}t^2
@@ -1644,25 +1639,26 @@ minimum there.  Its second derivative satisfies
 \end{align*}
 This proves \eqref{eq:normalized-atom-separation}.
 
-We next rule out the continuous part by concentrating a local piece.
+We next rule out the continuous part by concentrating a local piece,
+following Pieper and Petrosyan~\cite[Appendix~C]{pieper2022nonconvex}.
 Suppose $(\bar\mu_p)_{\cont}\neq0$ and write
 \begin{equation*}
 	d(\bar\mu_p)_{\cont}=\sigma\,d\lambda,
 	\qquad
 	\lambda:=|(\bar\mu_p)_{\cont}|,
 \end{equation*}
-where $\sigma$ takes the values $-1$ and $1$ $\lambda$-almost everywhere.
-Choose $\sigma_0\in\{-1,1\}$ such that the restriction of $\lambda$ to
-$\{\sigma=\sigma_0\}$ is nonzero, and denote that restriction again by
-$\lambda$. Theorem~\ref{opt_cdt} gives
-$\bar P_p=-\alpha L_\phi\sigma_0$ on a set of full $\lambda$-measure. The
-support of a Radon measure has full measure, while the countable set
-$\atom\bar\mu$ has zero $\lambda$-measure because $\lambda$ is nonatomic.
-The intersection of these three full $\lambda$-measure sets is nonempty, so choose
+where $\sigma\in\{-1,1\}$ $\lambda$-almost everywhere.
+Without loss of generality, assume $\lambda(\{\sigma=1\})>0$,
+and restrict $\lambda$ to this set.
+
+By Theorem~\ref{opt_cdt}, $\bar P_p=-\alpha L_\phi$ holds
+$\lambda$-almost everywhere. Since $\lambda$ is nonatomic, the
+countable set of existing atoms has zero $\lambda$-measure.
+We can therefore choose
 \begin{equation*}
 	\bar\omega\in\supp\lambda\setminus\atom\bar\mu
 	\qquad\text{such that}\qquad
-	\bar P_p(\bar\omega)=-\alpha L_\phi\sigma_0.
+	\bar P_p(\bar\omega)=-\alpha L_\phi.
 \end{equation*}
 For $\delta>0$, put
 \begin{equation*}
@@ -1680,8 +1676,8 @@ $\mu_\delta$ through its normalized coordinate by
 \begin{equation*}
 	(\mu_\delta)_p
 	:=\bar\mu_p
-	-\sigma_0\lambda|_{B_\delta(\bar\omega)}
-	+\sigma_0r_\delta\delta_{\bar\omega}.
+	-\lambda|_{B_\delta(\bar\omega)}
+	+r_\delta\delta_{\bar\omega}.
 \end{equation*}
 The target point is not an atom, and Theorem~\ref{thm:normalization} gives
 \begin{equation*}
@@ -1691,10 +1687,10 @@ If $e_\delta:=\mathcal N(\mu_\delta-\bar\mu)$, then
 \begin{align*}
 	\|e_\delta\|_{H^1(D)}
 	&\leq\varepsilon_\delta r_\delta,
-	&&\text{\shortstack[l]{by the triangle inequality\\for the Bochner integral}},\\
+	&&\text{by the Cauchy--Schwarz inequality},\\
 	\langle r_{\bar\mu},e_\delta\rangle_{H^1(D)}
-	&=\sigma_0r_\delta\bar P_p(\bar\omega)
-	-\sigma_0\int_{B_\delta(\bar\omega)}\bar P_p\,d\lambda
+	&=r_\delta\bar P_p(\bar\omega)
+	-\int_{B_\delta(\bar\omega)}\bar P_p\,d\lambda
 	=0,
 	&&\text{by Theorem~\ref{opt_cdt}}.
 \end{align*}
@@ -1772,11 +1768,6 @@ $\mathcal K_0$, and the following a priori bound holds:
 If $V=0$, then the zero measure is the unique global minimizer.
 \end{corollary}
 \begin{proof}
-Existence, finite atomicity, and \eqref{eq:data-dependent-neuron-bound} follow
-from Theorems~\ref{thm:existence} and~\ref{thm:finite_support}. The
-representation as a finite network of a global minimizer then yields
-\eqref{eq:attained-finite-network}, including attainment.
-
 Suppose $V\neq0$.  Then a global minimizer $\mu_*$ has positive objective,
 because Theorem~\ref{thm:finite_support} would otherwise give
 $\mu_*=0$, whose fidelity is positive.  By comparison with the zero measure,
@@ -1963,20 +1954,13 @@ exponents satisfy the pointwise bounds on a bounded domain.
 \tanh z              &0&1&p>1\\
 e^{-z^2}             &0&1&p>1\\
 \log(1+e^z)          &1&1&p>1\\
-\bigl(z\Phi(z)\bigr)^2 &2&2&p>2\\
-(z_+)^k              &k&k&p>k\\
+\mathrm{GELU}(z)^2    &2&2&p>2\\
 \bottomrule
 \end{array}
 \end{equation*}
 For bounded activations such as $\tanh$ and the Gaussian, existence alone
 requires only $p > 0$; the condition $p > 1$ in the table is the one that also
-dominates the elementary global $H^1$ growth estimate. The fourth row is the
-squared Gaussian error linear unit, written $\mathrm{GELU}^2$ below, with
-$\Phi$ the standard normal distribution function; since $\Phi$ takes values in
-$(0,1)$ we have $|z\Phi(z)|\le|z|$, and its derivative
-$2z\Phi(z)\bigl(\Phi(z)+z\varphi(z)\bigr)$ grows linearly, which gives
-$s_0=s_1=2$. The last row is listed for comparison with the positively
-homogeneous formulation of Section~4.
+dominates the elementary global $H^1$ growth estimate.
 
 
 
@@ -2322,8 +2306,7 @@ If $B(\bar\mu)=0$, then $\bar\mu=0$. If $B(\bar\mu)>0$, then
 	\qquad\text{for every }\omega_n\in\atom\bar\mu.
 \end{equation}
 Hypothesis \eqref{eq:atomwise-optimality-hypothesis} holds in particular if
-$\bar\mu$ is a local minimizer of \eqref{prob:homogeneous} in total variation
-in the sense specified above.
+$\bar\mu$ is a local minimizer of \eqref{prob:homogeneous}.
 \end{theorem}
 \begin{proof}
 The map $P_{\bar\mu}$ is continuous on $\mathbb S^d$, being the composition
@@ -2436,11 +2419,6 @@ $c_{\min,\mathrm{glob}}\in(0,\infty)$ and $N_{\max}<\infty$ are well defined.
 \end{remark}
 
 \begin{proof}
-We first obtain minimizers at each fixed width by compactness. A uniform
-bound on their number of atoms then reduces the global minimization to
-finitely many widths. Finally, we show that every global minimizer satisfies
-the same bound.
-
 For $N\in\mathbb N_0$, set
 \begin{equation*}
 	F_N(\boldsymbol\omega,c)
@@ -2448,10 +2426,14 @@ For $N\in\mathbb N_0$, set
 	\qquad m_N:=\inf F_N,
 \end{equation*}
 with $F_0=m_0=\frac12\|V\|_{H^1(D)}^2$.
+
+
 For $N\ge1$, continuity of $K$, scalar multiplication, and finite addition
 show that
 $(\boldsymbol\omega,c)\mapsto\sum_{n=1}^Nc_nK(\omega_n)$ is continuous into
-$H^1(D)$; hence $F_N$ is continuous. A minimizing sequence for $F_N$ may be chosen
+$H^1(D)$; hence $F_N$ is continuous. 
+
+A minimizing sequence for $F_N$ may be chosen
 in the sublevel $F_N\le m_0+1$. Since the fidelity is nonnegative, this
 sublevel satisfies
 \begin{equation*}
@@ -2507,9 +2489,10 @@ therefore has at most $\lfloor N_{\max}\rfloor$ atoms. Hence
 	=\min_{\substack{N\in\mathbb N_0\\N\le\lfloor N_{\max}\rfloor}}m_N.
 \end{equation*}
 Since each $m_N$ is attained, Lemma~\ref{lem:homogeneous_reduction}
-gives a global minimizer of \eqref{prob:homogeneous} with the same value.
-Every global minimizer satisfies the hypotheses of the estimate above and
-therefore has at most $N_{\max}$ atoms.
+gives a global minimizer of \eqref{prob:homogeneous}.
+Every global minimizer $\mu$ satisfies $J_{\psi_k}(\mu)\le m_0$
+and \eqref{eq:atomwise-optimality-hypothesis}, so the bound derived
+above gives $\#\atom\mu\le N_{\max}$.
 \end{proof}
 
 \begin{corollary}[Finite support of local minimizers with respect to the total
@@ -2544,7 +2527,7 @@ Theorem~\ref{thm:homogeneous_existence} is uniform over all global minimizers an
 
 \section{Algorithms}
 This section describes the computational pipeline: the training data are
-generated via the open-loop problem, candidate neurons are inserted greedily,
+generated via the open-loop problem, candidate neurons are inserted,
 and different insertion methods are chosen given the problem setting.
 In the algorithms and numerical examples, $J_{\psi_k}$ uses the empirical
 fidelity $l^M$ from \eqref{eq:empirical-fidelity} in place of $L$.
@@ -2556,8 +2539,8 @@ state equation in \eqref{opt} has a unique solution $y(u)$ on $[t_0,T]$ and
 that the control-to-state map $u\mapsto y(u)$ is continuously Fr\'echet
 differentiable from $U$ into $C([t_0,T];\mathbb R^d)$. The objective of
 \eqref{opt} is then the reduced functional $u\mapsto\mathcal C(u;t_0,x)$ on
-$U$, and the standard adjoint (Lagrangian) calculus --- see, e.g.,
-\cite{hinze2009optimization} --- gives its gradient
+$U$, and standard adjoint (Lagrangian) calculus
+\cite{hinze2009optimization} gives its gradient
 \begin{align*}
 	\nabla_u\mathcal C(u;t_0,x)
 	=2\eta u+g(y(u))^\top p\quad\text{in }U,
@@ -2591,7 +2574,7 @@ $l^M$.
 For a joint insertion
 $\sum_{i=1}^rc_i\delta_{\omega_i}$ at new locations the penalty is
 additive, but the fidelity change contains pairwise cross terms between the
-inserted features, which no individual test controls. For
+inserted atoms, which no individual test controls. For
 $N_{\mathrm{ins}}=1$ the individual
 decrease statement applies to every accepted candidate, while
 Corollary~\ref{cor:certificate-rate} additionally requires an exact global
@@ -3179,7 +3162,7 @@ $a\,\rho'(a\cdot x+b)$ in the gradient fitting problem.
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=\textwidth]{../experiments/01_vdp/paper_log_penalty/figures/shape_softplus_tanh_gaussian.png}
-\caption{The three smooth profiles used by Algorithm~\ref{alg:log} --- softplus,
+\caption{The three smooth activation functions used by Algorithm~\ref{alg:log} --- softplus,
 $\tanh$, and the Gaussian $e^{-z^2}$ --- shown as $\rho$, $\rho'$, and
 $\rho''$.}
 \label{fig:activation_shapes}
@@ -3273,7 +3256,7 @@ $\mathrm{GELU}^2$ at $\alpha=10^{-4}$.
 
 \subsubsection*{Algorithm~\ref{alg:q}: $|c|^q$-penalty with $\reluk$ activation}
 
-Algorithm~\ref{alg:q} uses the profile
+Algorithm~\ref{alg:q} uses the activation function
 $\rho(z)=\mathrm{ReLU}(z)^k$ with the penalty $\psi_k$, namely
 $\alpha \sum_i |c_i|^q$ with $q = 2/(k+1)$.
 The swept parameter is the power $k$; all fits below use
@@ -3363,8 +3346,8 @@ $\mathrm{ReLU}^3$.
 \centering
 \includegraphics[width=0.8\textwidth]{../experiments/01_vdp/paper_log_penalty/figures/frontier.png}
 \caption{Best observed relative $H^1$ validation error against support budget.
-Nonhomogeneous profiles use the parameter values stated in
-Table~\ref{tab:alg1_gradient}; homogeneous profiles use $\alpha\psi_k$ at
+Nonhomogeneous activation functions use the parameter values stated in
+Table~\ref{tab:alg1_gradient}; homogeneous activation functions use $\alpha\psi_k$ at
 $\alpha=10^{-6}$ for both $k=2$ and $k=3$.}
 \label{fig:summary_frontier}
 \end{figure}
