@@ -15,6 +15,9 @@ class VdpOptimalControlProblem:
     mu: float = 1.0
     state_weight: float = 1.0
     T_final: float = 3.0
+    # No analytic Jacobian: collocation estimates it by finite differences, as
+    # for the published VDP dataset.
+    pontryagin_jacobian = None
 
     def __post_init__(self) -> None:
         if self.beta <= 0.0:
@@ -62,17 +65,17 @@ class VdpOptimalControlProblem:
             dtype=np.float64,
         )
 
-    def running_cost(self, y_values: np.ndarray, u_values: np.ndarray) -> np.ndarray:
-        y_values = np.asarray(y_values, dtype=np.float64)
-        u_values = np.asarray(u_values, dtype=np.float64)
-        state_cost = self.state_weight * np.sum(y_values * y_values, axis=0)
-        control_cost = self.beta * u_values * u_values
+    def running_cost(self, y: np.ndarray, u: np.ndarray) -> np.ndarray:
+        y = np.asarray(y, dtype=np.float64)
+        u = np.asarray(u, dtype=np.float64)
+        state_cost = self.state_weight * np.sum(y * y, axis=0)
+        control_cost = self.beta * u * u
         return state_cost + control_cost
 
-    def reduced_gradient(self, p_values: np.ndarray, u_values: np.ndarray) -> np.ndarray:
-        p_values = np.asarray(p_values, dtype=np.float64)
-        u_values = np.asarray(u_values, dtype=np.float64)
-        return p_values[1, :] + 2.0 * self.beta * u_values
+    def reduced_gradient(self, p: np.ndarray, u: np.ndarray) -> np.ndarray:
+        p = np.asarray(p, dtype=np.float64)
+        u = np.asarray(u, dtype=np.float64)
+        return p[1, :] + 2.0 * self.beta * u
 
     def feedback_from_gradient(self, gradient: np.ndarray) -> np.ndarray:
         """Stationary control ``-p2 / (2 beta)`` for ``(2,)`` or ``(2, n)`` costates."""

@@ -50,7 +50,7 @@ def test_zero_initial_state_has_zero_value_and_free_terminal_adjoint(dimension):
 def test_value_gradient_matches_independent_initial_state_differences(dimension):
     solver = CollocationSolver(
         AllenCahnProblem(dimension=dimension),
-        CollocationConfig(collocation_tol=1e-8),
+        CollocationConfig(tol=1e-8),
     )
     initial = np.random.default_rng(41).uniform(-.7, .7, dimension)
     reference = solver.solve_sample(initial)
@@ -67,7 +67,7 @@ def test_value_gradient_matches_independent_initial_state_differences(dimension)
 def test_collocation_state_and_cost_match_independent_ivp_rollout(dimension):
     problem = AllenCahnProblem(dimension=dimension)
     solver = CollocationSolver(problem, CollocationConfig(
-        collocation_tol=1e-8, store_trajectories=True,
+        tol=1e-8, store_trajectories=True,
     ))
     initial = np.linspace(-.6, .8, dimension)
     result = solver.solve_sample(initial)

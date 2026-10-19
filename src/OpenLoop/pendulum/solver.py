@@ -276,7 +276,7 @@ class PendulumPmpSolver:
             discarded += count
 
         samples = ValueSamples.concatenate([
-            ValueSamples.empty(2),
+            ValueSamples.empty(self.problem.dimension),
             *(ValueSamples(tr.state, tr.value, tr.costate) for tr in restricted),
         ])
         screened = self.screen_body_samples(samples, trajectories)
@@ -367,7 +367,7 @@ class PendulumPmpSolver:
 
         basin = curve.basin_polygon()
         if self.config.collar_width <= 0.0 or basin is None or curve.points.shape[0] == 0:
-            empty = ValueSamples.empty(2)
+            empty = ValueSamples.empty(self.problem.dimension)
             return empty, empty
 
         x0 = np.vstack([tr.state for tr in raw])
@@ -424,7 +424,7 @@ class PendulumPmpSolver:
             if keep.any():
                 chunk = ValueSamples(x=xc[keep], v=v0[idx][keep], dv=dv0[idx][keep])
                 (pad_chunks if tile == 0 else collar_chunks).append(chunk)
-        empty = ValueSamples.empty(2)
+        empty = ValueSamples.empty(self.problem.dimension)
         return ValueSamples.concatenate([empty, *pad_chunks]), ValueSamples.concatenate([empty, *collar_chunks])
 
     def _integrate_angle(self, angle: float, trajectory_id: int) -> PmpTrajectory:

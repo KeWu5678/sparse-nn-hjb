@@ -71,6 +71,10 @@ class PendulumSwingUpProblem:
         object.__setattr__(self, "local_lqr_matrix", lqr)
         object.__setattr__(self, "local_lqr_eigvecs", np.linalg.eigh(lqr)[1])
 
+    @property
+    def dimension(self) -> int:
+        return 2
+
     @staticmethod
     def wrap_angle(theta: np.ndarray | float) -> np.ndarray | float:
         return (np.asarray(theta) + np.pi) % (2.0 * np.pi) - np.pi

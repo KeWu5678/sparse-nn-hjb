@@ -12,9 +12,9 @@ from src.OpenLoop.sampling import grid_initial_states
 from src.OpenLoop.vdp import VdpOptimalControlProblem
 
 ROOT = Path(__file__).resolve().parents[1]
-# The VDP dataset settings in scripts/generate_vdp_data.py.
-VDP_REFERENCE = CollocationConfig(
-    collocation_tol=1e-8, collocation_max_nodes=20000,
+# Tight settings for checking labels against independent finite differences.
+ACCURATE = CollocationConfig(
+    tol=1e-8, max_nodes=20000,
     initial_mesh_points=151, quadrature_order=3,
 )
 
@@ -70,10 +70,10 @@ def test_zero_initial_state_has_zero_value_and_free_terminal_adjoint() -> None:
 
 
 def test_value_gradient_matches_independent_initial_state_differences() -> None:
-    solver = CollocationSolver(VdpOptimalControlProblem(), VDP_REFERENCE)
+    solver = CollocationSolver(VdpOptimalControlProblem(), ACCURATE)
     initial = np.array([3.0, 3.0])
     result = solver.solve_sample(initial)
-    assert result.diagnostics.collocation_residual <= VDP_REFERENCE.collocation_tol
+    assert result.diagnostics.collocation_residual <= ACCURATE.tol
     assert result.value == pytest.approx(18.516597, abs=1e-6)
     epsilon = 1e-4
     differences = []

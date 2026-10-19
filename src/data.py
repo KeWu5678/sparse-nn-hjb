@@ -87,86 +87,18 @@ class ValueSamples:
         return output_path
 
 
-def to_tensors(samples: ValueSamples, rows: Any = slice(None)) -> TensorSamples:
-    """Float64 tensors ``(x, v, dv)`` of the selected rows, with ``v`` shaped ``(N, 1)``."""
-    return (
-        torch.tensor(samples.x[rows], dtype=torch.float64),
-        torch.tensor(samples.v[rows], dtype=torch.float64).reshape(-1, 1),
-        torch.tensor(samples.dv[rows], dtype=torch.float64),
-    )
+def load_value_samples(path: str | Path) -> ValueSamples:
+    """Load a ``.npy``/``.npz`` value-sample file.
 
+    ``path`` resolves under :data:`src.data.DATA_DIR`; an absolute ``path`` is
+    used unchanged (``DATA_DIR / abs`` returns ``abs``). This is the single place
+    data paths are resolved — callers pass a bare filename, not a built path.
 
-def full_batch(loader: DataLoader) -> TensorSamples:
-    """Assemble one complete loader pass for full-data mathematical evaluation.
-
-    This deliberately materializes the supplied samples. A single delivered
-    batch is reused directly; smaller batches are concatenated in delivery order.
+    ``allow_pickle=True`` supports trusted legacy ``.npy`` files containing a
+    dictionary. New project datasets use plain arrays in ``.npz`` files.
     """
-    if loader.batch_sampler is None or loader.drop_last or getattr(loader.batch_sampler, "drop_last", False):
-        raise ValueError("full-data evaluation requires batching without dropping samples")
-    batches = list(loader)
-    if not batches:
-        raise ValueError("full-data evaluation requires nonempty batches")
-    if len(batches) == 1:
-        x, v, dv = batches[0]
-    else:
-        x, v, dv = (torch.cat(fields) for fields in zip(*batches, strict=True))
-    return x, v, dv
-
-
-def make_dataloaders(
-    samples: ValueSamples,
-    train_fraction: float = 0.9,
-    *,
-    batch_size: int | None = None,
-    num_workers: int = 0,
-    seed: int = 0,
-) -> tuple[DataLoader, DataLoader]:
-    """Split prepared samples and construct independent train/validation loaders.
-
-    The split uses the existing global NumPy RNG. ``seed`` controls only each
-    loader's private PyTorch generator; normalization stays an explicit transform
-    before this function is called.
-    """
-    train, valid = split_value_samples(samples, train_fraction)
-    return (
-        make_dataloader(train, batch_size=batch_size, num_workers=num_workers, seed=seed),
-        make_dataloader(valid, batch_size=batch_size, num_workers=num_workers, seed=seed),
-    )
-
-
-def make_dataloader(
-    samples: TensorSamples,
-    *,
-    batch_size: int | None = None,
-    num_workers: int = 0,
-    seed: int = 0,
-) -> DataLoader:
-    """Deliver aligned value samples in stable order, retaining every sample.
-
-    By default the entire split is one batch. The dataset retains the supplied
-    tensors without transforming or copying them. A private generator prevents
-    iterator creation and worker seeding from consuming the optimizer's global
-    PyTorch random stream.
-    """
-    x, v, dv = samples
-    if x.ndim != 2:
-        raise ValueError(f"x must have shape (N, d), got {x.shape}")
-    if x.shape[0] == 0:
-        raise ValueError("value samples must be non-empty")
-    if v.shape != (x.shape[0], 1):
-        raise ValueError(f"v must have shape ({x.shape[0]}, 1), got {v.shape}")
-    if dv.shape != x.shape:
-        raise ValueError(f"dv must have shape {x.shape}, got {dv.shape}")
-    return DataLoader(
-        TensorDataset(*samples),
-        batch_size=x.shape[0] if batch_size is None else batch_size,
-        shuffle=False,
-        drop_last=False,
-        num_workers=num_workers,
-        pin_memory=False,
-        generator=torch.Generator().manual_seed(seed),
-    )
+    raw = np.load(DATA_DIR / path, allow_pickle=True)
+    return _as_value_samples(raw)
 
 
 def _as_value_samples(raw: Any) -> ValueSamples:
@@ -187,24 +119,16 @@ def _as_value_samples(raw: Any) -> ValueSamples:
     return ValueSamples(arrays["x"], arrays["v"], arrays["dv"])
 
 
-def load_value_samples(path: str | Path) -> ValueSamples:
-    """Load a ``.npy``/``.npz`` value-sample file.
-
-    ``path`` resolves under :data:`src.data.DATA_DIR`; an absolute ``path`` is
-    used unchanged (``DATA_DIR / abs`` returns ``abs``). This is the single place
-    data paths are resolved — callers pass a bare filename, not a built path.
-
-    ``allow_pickle=True`` supports trusted legacy ``.npy`` files containing a
-    dictionary. New project datasets use plain arrays in ``.npz`` files.
-    """
-    raw = np.load(DATA_DIR / path, allow_pickle=True)
-    return _as_value_samples(raw)
-
-
 def file_sha256(path: str | Path) -> str:
     """SHA-256 of a file's bytes, the identity recorded for datasets and generator sources."""
     with Path(path).open("rb") as source:
         return hashlib.file_digest(source, "sha256").hexdigest()
+
+
+def normalize_value_samples(samples: ValueSamples) -> tuple[ValueSamples, ValueSampleNormalizer]:
+    """Fit a normalizer and return normalized value samples plus the transform."""
+    normalizer = ValueSampleNormalizer.fit(samples)
+    return normalizer.normalize(samples), normalizer
 
 
 @dataclass(frozen=True)
@@ -243,10 +167,25 @@ class ValueSampleNormalizer:
         return {"x_scale": self.x_scale.tolist(), "v_scale": self.v_scale}
 
 
-def normalize_value_samples(samples: ValueSamples) -> tuple[ValueSamples, ValueSampleNormalizer]:
-    """Fit a normalizer and return normalized value samples plus the transform."""
-    normalizer = ValueSampleNormalizer.fit(samples)
-    return normalizer.normalize(samples), normalizer
+def make_dataloaders(
+    samples: ValueSamples,
+    train_fraction: float = 0.9,
+    *,
+    batch_size: int | None = None,
+    num_workers: int = 0,
+    seed: int = 0,
+) -> tuple[DataLoader, DataLoader]:
+    """Split prepared samples and construct independent train/validation loaders.
+
+    The split uses the existing global NumPy RNG. ``seed`` controls only each
+    loader's private PyTorch generator; normalization stays an explicit transform
+    before this function is called.
+    """
+    train, valid = split_value_samples(samples, train_fraction)
+    return (
+        make_dataloader(train, batch_size=batch_size, num_workers=num_workers, seed=seed),
+        make_dataloader(valid, batch_size=batch_size, num_workers=num_workers, seed=seed),
+    )
 
 
 def split_value_samples(
@@ -270,3 +209,64 @@ def split_value_samples(
         )
     perm = np.random.permutation(n)
     return to_tensors(samples, perm[:split]), to_tensors(samples, perm[split:])
+
+
+def to_tensors(samples: ValueSamples, rows: np.ndarray | slice = slice(None)) -> TensorSamples:
+    """Float64 tensors ``(x, v, dv)`` of the selected rows, with ``v`` shaped ``(N, 1)``."""
+    return (
+        torch.tensor(samples.x[rows], dtype=torch.float64),
+        torch.tensor(samples.v[rows], dtype=torch.float64).reshape(-1, 1),
+        torch.tensor(samples.dv[rows], dtype=torch.float64),
+    )
+
+
+def make_dataloader(
+    samples: TensorSamples,
+    *,
+    batch_size: int | None = None,
+    num_workers: int = 0,
+    seed: int = 0,
+) -> DataLoader:
+    """Deliver aligned value samples in stable order, retaining every sample.
+
+    By default the entire split is one batch. The dataset retains the supplied
+    tensors without transforming or copying them. A private generator prevents
+    iterator creation and worker seeding from consuming the optimizer's global
+    PyTorch random stream.
+    """
+    x, v, dv = samples
+    if x.ndim != 2:
+        raise ValueError(f"x must have shape (N, d), got {x.shape}")
+    if x.shape[0] == 0:
+        raise ValueError("value samples must be non-empty")
+    if v.shape != (x.shape[0], 1):
+        raise ValueError(f"v must have shape ({x.shape[0]}, 1), got {v.shape}")
+    if dv.shape != x.shape:
+        raise ValueError(f"dv must have shape {x.shape}, got {dv.shape}")
+    return DataLoader(
+        TensorDataset(*samples),
+        batch_size=x.shape[0] if batch_size is None else batch_size,
+        shuffle=False,
+        drop_last=False,
+        num_workers=num_workers,
+        pin_memory=False,
+        generator=torch.Generator().manual_seed(seed),
+    )
+
+
+def full_batch(loader: DataLoader) -> TensorSamples:
+    """Assemble one complete loader pass for full-data mathematical evaluation.
+
+    This deliberately materializes the supplied samples. A single delivered
+    batch is reused directly; smaller batches are concatenated in delivery order.
+    """
+    if loader.batch_sampler is None or loader.drop_last or getattr(loader.batch_sampler, "drop_last", False):
+        raise ValueError("full-data evaluation requires batching without dropping samples")
+    batches = list(loader)
+    if not batches:
+        raise ValueError("full-data evaluation requires nonempty batches")
+    if len(batches) == 1:
+        x, v, dv = batches[0]
+    else:
+        x, v, dv = (torch.cat(fields) for fields in zip(*batches, strict=True))
+    return x, v, dv

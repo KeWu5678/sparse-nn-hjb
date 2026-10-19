@@ -9,6 +9,7 @@ from typing import Callable, Protocol
 import numpy as np
 from numpy.polynomial.legendre import leggauss
 from scipy.integrate import solve_bvp
+from scipy.optimize import OptimizeResult
 
 from src.data import ValueSamples
 
@@ -19,13 +20,15 @@ class PontryaginProblem(Protocol):
     ``pontryagin_rhs`` maps stacked state/costate arrays ``(2 * dimension, n)``
     to their time derivatives after substituting the stationary control
     ``feedback_from_gradient(p)``. Control arrays have shape ``(m, n)``, or
-    ``(n,)`` for a single control. A problem may also define
-    ``pontryagin_jacobian(t, z)`` with shape ``(2d, 2d, n)``; without it, the
-    collocation Jacobian is estimated by finite differences.
+    ``(n,)`` for a single control. ``pontryagin_jacobian(t, z)`` returns the
+    analytic derivative of ``pontryagin_rhs`` with shape ``(2d, 2d, n)``; a
+    problem without one sets it to ``None`` and collocation estimates the
+    Jacobian by finite differences.
     """
 
     dimension: int
     T_final: float
+    pontryagin_jacobian: Callable[[np.ndarray, np.ndarray], np.ndarray] | None
 
     def pontryagin_rhs(self, t: np.ndarray, z: np.ndarray) -> np.ndarray: ...
 
@@ -38,22 +41,22 @@ class PontryaginProblem(Protocol):
 
 @dataclass(frozen=True)
 class CollocationConfig:
-    collocation_tol: float = 1e-6
-    collocation_max_nodes: int = 10000
+    tol: float = 1e-6
+    max_nodes: int = 10000
     initial_mesh_points: int = 81
     initial_guess_decays: tuple[float, ...] = (1.0, 0.0)
     quadrature_order: int = 5
     store_trajectories: bool = False
 
     def __post_init__(self) -> None:
-        if not np.isfinite(self.collocation_tol) or self.collocation_tol <= 0:
-            raise ValueError("collocation_tol must be finite and positive")
-        for name in ("initial_mesh_points", "collocation_max_nodes", "quadrature_order"):
+        if not np.isfinite(self.tol) or self.tol <= 0:
+            raise ValueError("tol must be finite and positive")
+        for name in ("initial_mesh_points", "max_nodes", "quadrature_order"):
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, (int, np.integer)) or value < 2:
                 raise ValueError(f"{name} must be an integer at least 2")
-        if self.collocation_max_nodes < self.initial_mesh_points:
-            raise ValueError("collocation_max_nodes must be at least initial_mesh_points")
+        if self.max_nodes < self.initial_mesh_points:
+            raise ValueError("max_nodes must be at least initial_mesh_points")
         decays = tuple(float(decay) for decay in self.initial_guess_decays)
         if not decays or not all(np.isfinite(decay) and decay >= 0 for decay in decays):
             raise ValueError("initial_guess_decays must contain finite nonnegative values")
@@ -205,8 +208,8 @@ class CollocationSolver:
         residual = float(np.max(solved.rms_residuals))
         valid = (
             solved.success and np.all(np.isfinite(solved.y))
-            and np.isfinite(residual) and residual <= self._config.collocation_tol
-            and np.isfinite(boundary_residual) and boundary_residual <= self._config.collocation_tol
+            and np.isfinite(residual) and residual <= self._config.tol
+            and np.isfinite(boundary_residual) and boundary_residual <= self._config.tol
         )
         if not valid:
             raise self._convergence_error(initial, solved, residual, boundary_residual, str(solved.message))
@@ -218,7 +221,7 @@ class CollocationSolver:
             )
         return _CollocationCandidate(value, solved, residual, boundary_residual)
 
-    def _collocate(self, initial: np.ndarray, decay: float):
+    def _collocate(self, initial: np.ndarray, decay: float) -> tuple[OptimizeResult, float]:
         d = self._problem.dimension
 
         def boundary(left, right):
@@ -232,15 +235,15 @@ class CollocationSolver:
         guess[:d] = initial[:, None] * np.exp(-decay * self._time_grid)[None, :]
         solved = solve_bvp(
             self._problem.pontryagin_rhs, boundary, self._time_grid, guess,
-            fun_jac=getattr(self._problem, "pontryagin_jacobian", None),
+            fun_jac=self._problem.pontryagin_jacobian,
             bc_jac=lambda _left, _right: (left_jac, right_jac),
-            tol=self._config.collocation_tol, bc_tol=self._config.collocation_tol,
-            max_nodes=self._config.collocation_max_nodes,
+            tol=self._config.tol, bc_tol=self._config.tol,
+            max_nodes=self._config.max_nodes,
         )
         boundary_residual = float(np.max(np.abs(boundary(solved.y[:, 0], solved.y[:, -1]))))
         return solved, boundary_residual
 
-    def _value(self, solution) -> float:
+    def _value(self, solution: OptimizeResult) -> float:
         widths = np.diff(solution.x)
         midpoints = (solution.x[:-1] + solution.x[1:]) / 2.0
         points = midpoints[:, None] + widths[:, None] * self._quadrature_nodes[None, :] / 2.0
@@ -263,12 +266,11 @@ class CollocationSolver:
         solved = candidate.solution
         d = self._problem.dimension
         control = self._problem.feedback_from_gradient(solved.y[d:])
-        reduced_gradient = np.atleast_2d(self._problem.reduced_gradient(solved.y[d:], control))
         diagnostics = SolveDiagnostics(
             message=f"lowest cost among {converged_count} converged Pontryagin candidates",
             iterations=int(solved.niter), collocation_residual=candidate.collocation_residual,
             boundary_residual=candidate.boundary_residual, nodes=int(solved.x.size),
-            reduced_gradient_norm=float(np.sqrt(np.trapezoid(np.sum(reduced_gradient**2, axis=0), solved.x))),
+            reduced_gradient_norm=self._reduced_gradient_norm(solved, control),
             attempts=len(self._config.initial_guess_decays),
         )
         trajectory = None
@@ -282,11 +284,17 @@ class CollocationSolver:
             gradient=solved.y[d:, 0].copy(), diagnostics=diagnostics, trajectory=trajectory,
         )
 
+    def _reduced_gradient_norm(self, solved: OptimizeResult, control: np.ndarray) -> float:
+        """Time-L2 norm of the stationarity residual along the collocation solution."""
+        d = self._problem.dimension
+        residual = np.atleast_2d(self._problem.reduced_gradient(solved.y[d:], control))
+        return float(np.sqrt(np.trapezoid(np.sum(residual**2, axis=0), solved.x)))
+
 
 @dataclass(frozen=True)
 class _CollocationCandidate:
     value: float
-    solution: object
+    solution: OptimizeResult
     collocation_residual: float
     boundary_residual: float
 

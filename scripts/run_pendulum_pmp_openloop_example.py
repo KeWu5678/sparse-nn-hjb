@@ -117,8 +117,9 @@ def main() -> None:
             "harvest are no-ops. No dataset has been emitted."
         )
     raw_sample_count = solution.value_samples.size
-    collar_pool = solution.collar_samples or ValueSamples.empty(2)
-    pad_pool = solution.pad_samples or ValueSamples.empty(2)
+    empty = ValueSamples.empty(problem.dimension)
+    collar_pool = solution.collar_samples or empty
+    pad_pool = solution.pad_samples or empty
     # Thin the in-basin body, near-side pad, and far-side collar pools separately
     # so the emitted dataset hits the requested near-switch shares (uniform
     # thinning would give the band only its pool proportion).
@@ -132,12 +133,12 @@ def main() -> None:
     collar_samples = (
         thin_value_samples(collar_pool, collar_target)
         if collar_target > 0
-        else ValueSamples.empty(2)
+        else empty
     )
     pad_samples = (
         thin_value_samples(pad_pool, pad_target)
         if pad_target > 0
-        else ValueSamples.empty(2)
+        else empty
     )
     value_samples = ValueSamples.concatenate([basin_samples, pad_samples, collar_samples])
     if value_samples.size != args.level_set_samples:

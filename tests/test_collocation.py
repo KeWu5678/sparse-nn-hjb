@@ -13,7 +13,7 @@ from src.OpenLoop.collocation import (
     SampleResult,
 )
 
-UNSOLVABLE = CollocationConfig(initial_mesh_points=2, collocation_max_nodes=2, collocation_tol=1e-10)
+UNSOLVABLE = CollocationConfig(initial_mesh_points=2, max_nodes=2, tol=1e-10)
 
 
 def test_failed_collocation_raises_with_initial_state_and_diagnostics():
@@ -63,7 +63,7 @@ def test_parallel_batch_matches_sequential_values_gradients_and_order(dimension)
         np.testing.assert_array_equal(getattr(parallel.value_samples, name), getattr(sequential.value_samples, name))
 
 
-@pytest.mark.parametrize("kwargs", [{"collocation_tol": np.nan}, {"initial_mesh_points": 1}, {"collocation_max_nodes": 4}, {"quadrature_order": 2.5}, {"initial_guess_decays": ()}, {"initial_guess_decays": (np.inf,)}])
+@pytest.mark.parametrize("kwargs", [{"tol": np.nan}, {"initial_mesh_points": 1}, {"max_nodes": 4}, {"quadrature_order": 2.5}, {"initial_guess_decays": ()}, {"initial_guess_decays": (np.inf,)}])
 def test_solver_rejects_invalid_configuration(kwargs):
     with pytest.raises(ValueError):
         CollocationConfig(**kwargs)

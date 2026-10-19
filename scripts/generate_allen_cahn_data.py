@@ -39,7 +39,7 @@ def main(argv=None) -> None:
         dimension=args.dimension, nu=args.diffusion, beta=args.beta, T_final=args.horizon,
     )
     config = CollocationConfig(
-        collocation_tol=args.tol, collocation_max_nodes=args.max_nodes,
+        tol=args.tol, max_nodes=args.max_nodes,
         initial_mesh_points=args.mesh_points,
     )
     states = sobol_initial_states(args.samples, args.dimension, bound=args.bound, seed=args.seed)

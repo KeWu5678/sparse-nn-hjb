@@ -30,7 +30,7 @@ def main() -> None:
     solver = CollocationSolver(
         VdpOptimalControlProblem(T_final=3.0),
         CollocationConfig(
-            collocation_tol=1e-8, collocation_max_nodes=20000,
+            tol=1e-8, max_nodes=20000,
             initial_mesh_points=151, quadrature_order=3,
         ),
     )
