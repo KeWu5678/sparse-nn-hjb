@@ -1,11 +1,11 @@
 import numpy as np
 
+from src.data import ValueSamples, load_value_samples
 from src.OpenLoop.pendulum.nonsmooth import (
     NonsmoothCurve,
     restrict_trajectory_to_curve,
 )
 from src.OpenLoop.pendulum.problem import PendulumSwingUpProblem
-from src.OpenLoop.pendulum.samples import ValueSamples
 from src.OpenLoop.pendulum.solver import PendulumPmpSolver, PendulumPmpSolverConfig
 from src.OpenLoop.pendulum.trajectories import (
     PmpTrajectory,
@@ -171,19 +171,17 @@ def test_backward_pmp_value_matches_forward_ode_constrained_cost() -> None:
     assert np.isclose(cost, trajectory.value[-1], rtol=2e-6, atol=2e-8)
 
 
-def test_value_samples_are_pdap_compatible_and_npz_roundtrip(tmp_path) -> None:
+def test_value_samples_npz_roundtrip(tmp_path) -> None:
     samples = ValueSamples(
         x=np.array([[0.0, 1.0], [2.0, 3.0]]),
         v=np.array([4.0, 5.0]),
         dv=np.array([[6.0, 7.0], [8.0, 9.0]]),
     )
 
-    pdap_data = samples.to_pdap_dict()
     path = samples.save_npz(tmp_path / "pendulum_samples.npz")
-    loaded = ValueSamples.load_npz(path)
+    loaded = load_value_samples(path)
 
-    assert set(pdap_data) == {"x", "v", "dv"}
-    assert pdap_data["x"].dtype == np.float64
+    assert loaded.x.dtype == np.float64
     assert np.allclose(loaded.x, samples.x)
     assert np.allclose(loaded.v, samples.v)
     assert np.allclose(loaded.dv, samples.dv)
@@ -301,7 +299,7 @@ def test_pendulum_solution_save_dataset_uses_run_folder(tmp_path) -> None:
     assert paths["data"].parent == paths["run_dir"]
     assert paths["meta"].parent == paths["run_dir"]
     assert paths["failed"].parent == paths["run_dir"]
-    loaded = ValueSamples.load_npz(paths["data"])
+    loaded = load_value_samples(paths["data"])
     assert loaded.x.shape[1] == 2
     assert paths["meta"].exists()
     assert paths["failed"].exists()

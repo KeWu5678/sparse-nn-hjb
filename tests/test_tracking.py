@@ -14,7 +14,7 @@ import torch
 from omegaconf import OmegaConf
 
 from src.config.schema import ExperimentConfig
-from src.data import ValueSampleNormalizer, split_value_samples
+from src.data import ValueSampleNormalizer, ValueSamples, split_value_samples
 from src.eval import distance_binned_error, region_metrics, region_split_errors, relative_errors
 from src.metrics import CATALOG, TRACE_PREFIX
 from src.PDAP import History
@@ -71,13 +71,14 @@ def test_training_records_its_fit_in_mlflow_and_reloads_it(
     tmp_path, monkeypatch, caplog, capsys, tracking_store, normalize,
 ):
     train = load_train_module()
-    samples = {
+    arrays = {
         "x": np.array([[2.0, -4.0], [1.0, 3.0], [-1.0, 2.0], [0.0, 1.0]]),
         "v": np.array([[8.0], [4.0], [2.0], [1.0]]),
         "dv": np.array([[3.0, 5.0], [2.0, 1.0], [1.0, 1.0], [0.0, 1.0]]),
     }
+    samples = ValueSamples(**arrays)
     dataset = tmp_path / "samples.npz"
-    np.savez(dataset, **samples)
+    np.savez(dataset, **arrays)
     run_dir = tmp_path / "run"
     hydra_cfg = OmegaConf.create({"runtime": {"output_dir": str(run_dir)}})
     monkeypatch.setattr(train.HydraConfig, "get", lambda: hydra_cfg)
@@ -153,11 +154,12 @@ def test_training_records_its_fit_in_mlflow_and_reloads_it(
 @pytest.mark.parametrize("normalize", [True, False])
 def test_region_reporting_scores_original_value_units(tmp_path, normalize):
     train = load_train_module()
-    samples = {
+    arrays = {
         "x": np.array([[2.0, -4.0], [1.0, 3.0], [-1.0, 2.0], [0.0, 1.0]]),
         "v": np.array([[8.0], [4.0], [2.0], [1.0]]),
         "dv": np.array([[3.0, 5.0], [2.0, 1.0], [1.0, 1.0], [0.0, 1.0]]),
     }
+    samples = ValueSamples(**arrays)
     distance = np.array([0.0, 0.1, 0.3, 0.4])
     cfg = OmegaConf.structured(ExperimentConfig())
     network = train.SparseNetwork(train.resolve_model(cfg.model, input_dim=2))
@@ -169,15 +171,15 @@ def test_region_reporting_scores_original_value_units(tmp_path, normalize):
     normalizer = ValueSampleNormalizer.fit(samples) if normalize else None
     data = normalizer.normalize(samples) if normalizer is not None else samples
 
-    got = region_metrics(network, normalizer, {**samples, "distance": distance}, tube_radius=0.2,
+    got = region_metrics(network, normalizer, {**arrays, "distance": distance}, tube_radius=0.2,
                          samples=samples, distance=distance)
 
-    vp, dvp = network(torch.as_tensor(data["x"], dtype=torch.float64))
+    vp, dvp = network(torch.tensor(data.x, dtype=torch.float64))
     if normalizer is not None:
         # Independent chain-rule calculation, not the reporting implementation.
         vp = vp * normalizer.v_scale
         dvp = dvp * torch.as_tensor(normalizer.v_scale / normalizer.x_scale)
-    target = torch.as_tensor(samples["v"]), torch.as_tensor(samples["dv"])
+    target = torch.as_tensor(arrays["v"]), torch.as_tensor(arrays["dv"])
     expected = region_split_errors(vp, dvp, *target, torch.from_numpy(distance <= 0.2))
     expected.update(distance_binned_error(vp, dvp, *target, torch.from_numpy(distance)))
     assert got == pytest.approx(expected, nan_ok=True)

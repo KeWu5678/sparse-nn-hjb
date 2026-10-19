@@ -187,13 +187,8 @@ integration helpers.
 This module owns the Shapely dependency and converts geometry results back to
 plain NumPy arrays.
 
-`samples.py`: `ValueSamples`, PDAP dictionary conversion, and `.npz` save/load
-helpers.
-
-The pendulum module should not depend on the generic `sample_sets.py` helpers.
-Those helpers mix rectangular state-space sampling with file persistence and are
-not central to the infinite-horizon PMP algorithm. Pendulum should expose its
-own `ValueSamples` data object and pendulum-specific save/load helpers.
+Value samples are the shared `src.data.ValueSamples` type (ADR 0018); the
+pendulum package does not define its own sample object.
 
 Internally, `ValueSamples` should store separate plain NumPy arrays:
 `x`, `v`, and `dv`, all coerced to `float64`. Its PDAP-facing output should be a

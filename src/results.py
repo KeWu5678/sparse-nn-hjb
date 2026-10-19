@@ -7,7 +7,6 @@ does not select experiments, change the objective, or write artifacts.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
@@ -20,7 +19,7 @@ import numpy as np
 import torch
 
 from .config import resolve_model
-from .data import DATA_DIR, ValueSampleNormalizer
+from .data import DATA_DIR, ValueSampleNormalizer, file_sha256
 from .eval import physical_prediction
 from .models import SparseNetwork
 from .PDAP import History
@@ -116,9 +115,8 @@ def load_mlflow_run(run_id: str) -> SavedRun:
                       if transform.is_file() else None)
     if config["data"]["normalize"] != (normalizer is not None):
         raise ValueError(f"normalization artifact contradicts data.normalize: MLflow run {run_id}")
-    with (DATA_DIR / config["data"]["path"]).open("rb") as stream:
-        if hashlib.file_digest(stream, "sha256").hexdigest() != run.data.tags["data_sha256"]:
-            raise ValueError(f"dataset differs from the bytes used for training: MLflow run {run_id}")
+    if file_sha256(DATA_DIR / config["data"]["path"]) != run.data.tags["data_sha256"]:
+        raise ValueError(f"dataset differs from the bytes used for training: MLflow run {run_id}")
     return SavedRun(run_id, config, dict(run.data.metrics), history,
                     _network(config, history), normalizer)
 

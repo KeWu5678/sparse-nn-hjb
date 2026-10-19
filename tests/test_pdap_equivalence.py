@@ -31,7 +31,7 @@ import torch
 
 from src.config import make_penalty, resolve_model, validate_model_config
 from src.config.schema import EnvConfig, ExperimentConfig, ModelConfig, TrainingConfig
-from src.data import make_dataloaders
+from src.data import ValueSamples, make_dataloaders
 from src.models import SparseNetwork
 from src.PDAP import PDAP
 from src.training import run_training
@@ -57,7 +57,7 @@ def _cfg(name: str) -> ExperimentConfig:
     )
 
 
-def _make_data(n: int = 60, seed: int = 0) -> dict:
+def _make_data(n: int = 60, seed: int = 0) -> ValueSamples:
     """Synthetic target V = log(1 + ||x||^2), dV = 2x/(1+||x||^2).
 
     Genuinely nonlinear so both variants insert atoms non-trivially.
@@ -67,7 +67,7 @@ def _make_data(n: int = 60, seed: int = 0) -> dict:
     r2 = (x * x).sum(1, keepdim=True)
     v = torch.log(1 + r2)
     dv = 2 * x / (1 + r2)
-    return {"x": x.numpy(), "v": v.numpy(), "dv": dv.numpy()}
+    return ValueSamples(x=x.numpy(), v=v.numpy(), dv=dv.numpy())
 
 
 def _run_summary(name: str) -> np.ndarray:
@@ -76,7 +76,7 @@ def _run_summary(name: str) -> np.ndarray:
     np.random.seed(SEED)
     cfg = _cfg(name)
     data = _make_data()
-    model_config = resolve_model(cfg.model, input_dim=data["x"].shape[1])
+    model_config = resolve_model(cfg.model, input_dim=data.x.shape[1])
     validate_model_config(model_config)
     network = SparseNetwork(model_config)
     train_loader, valid_loader = make_dataloaders(data, cfg.data.train_fraction)

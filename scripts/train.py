@@ -15,7 +15,6 @@ MLflow run, so ``MLFLOW_TRACKING_URI`` must name a reachable tracking store.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import random
 import re
@@ -47,6 +46,7 @@ from src.config import make_penalty, resolve_model, validate_model_config, valid
 from src.config.schema import ExperimentConfig
 from src.data import (
     DATA_DIR,
+    file_sha256,
     load_arrays,
     load_value_samples,
     make_dataloaders,
@@ -113,7 +113,7 @@ def _run_experiment(cfg: DictConfig) -> None:
     # configuration and returns a History.
     samples = load_value_samples(cfg.data.path)
     data, normalizer = normalize_value_samples(samples) if cfg.data.normalize else (samples, None)
-    input_dim = data["x"].shape[1]
+    input_dim = data.x.shape[1]
     logger.info("data_loaded", path=cfg.data.path, input_dim=input_dim)
     model_config = resolve_model(cfg.model, input_dim)
     validate_model_config(model_config)
@@ -211,10 +211,10 @@ def provenance_tags(cfg: DictConfig) -> dict[str, str]:
     Hashes of the files training and evaluation read; ``src.results`` refuses a
     dataset whose bytes changed.
     """
-    tags = {"data_sha256": _sha256(DATA_DIR / cfg.data.path)}
+    tags = {"data_sha256": file_sha256(DATA_DIR / cfg.data.path)}
     if cfg.eval.kind == "region_split":
         for name in ("eval_pool", "distance_cache"):
-            tags[f"{name}_sha256"] = _sha256(DATA_DIR / cfg.eval[name])
+            tags[f"{name}_sha256"] = file_sha256(DATA_DIR / cfg.eval[name])
     return tags
 
 
@@ -222,11 +222,6 @@ def set_seed(seed: int) -> None:
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
-
-
-def _sha256(path: Path) -> str:
-    with path.open("rb") as source:
-        return hashlib.file_digest(source, "sha256").hexdigest()
 
 
 def _slug(value: object) -> str:

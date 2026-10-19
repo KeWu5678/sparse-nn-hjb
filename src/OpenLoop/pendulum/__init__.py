@@ -9,7 +9,6 @@ from src.OpenLoop.pendulum.solver import (
     SolverDiagnostics,
 )
 from src.OpenLoop.pendulum.trajectories import PmpTrajectory
-from src.OpenLoop.value_samples import ValueSamples
 
 __all__ = [
     "NonsmoothCurve",
@@ -19,5 +18,4 @@ __all__ = [
     "PendulumValueSolution",
     "PmpTrajectory",
     "SolverDiagnostics",
-    "ValueSamples",
 ]

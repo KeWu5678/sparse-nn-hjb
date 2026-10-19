@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any, Dict, Mapping, Tuple
 import numpy as np
 import torch
 
-from .data import full_batch
+from .data import ValueSamples, full_batch, to_tensors
 from .metrics import DISTANCE_BINS
 
 if TYPE_CHECKING:
@@ -141,7 +141,7 @@ def physical_prediction(
 def region_metrics(
     network: SparseNetwork, normalizer: ValueSampleNormalizer | None,
     pool: Mapping[str, np.ndarray], *, tube_radius: float,
-    samples: Mapping[str, np.ndarray] | None = None, distance: np.ndarray | None = None,
+    samples: ValueSamples | None = None, distance: np.ndarray | None = None,
 ) -> Dict[str, float]:
     """Switching-tube and rest errors on the pool, and the distance-binned profile.
 
@@ -159,14 +159,12 @@ def region_metrics(
         torch.from_numpy(pool["distance"] <= tube_radius),
     )
     if distance is not None:
-        if samples is None or distance.shape[0] != samples["x"].shape[0]:
+        if samples is None or distance.shape[0] != samples.size:
             raise ValueError("the distance cache is not aligned to the dataset")
-        v_pred, dv_pred = physical_prediction(network, samples["x"], normalizer)
+        x, v, dv = to_tensors(samples)
+        v_pred, dv_pred = physical_prediction(network, x, normalizer)
         values.update(distance_binned_error(
-            v_pred, dv_pred,
-            torch.as_tensor(samples["v"], dtype=torch.float64).reshape(-1, 1),
-            torch.as_tensor(samples["dv"], dtype=torch.float64),
-            torch.as_tensor(distance, dtype=torch.float64),
+            v_pred, dv_pred, v, dv, torch.as_tensor(distance, dtype=torch.float64),
         ))
     return values
 

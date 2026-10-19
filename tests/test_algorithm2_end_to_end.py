@@ -8,7 +8,7 @@ import torch
 
 from src.config import make_penalty, resolve_model, validate_model_config
 from src.config.schema import EnvConfig, ExperimentConfig, ModelConfig, TrainingConfig
-from src.data import make_dataloaders
+from src.data import ValueSamples, make_dataloaders
 from src.models import SparseNetwork
 from src.PDAP import PDAP
 from src.training import run_training
@@ -23,7 +23,7 @@ def test_algorithm2_fits_an_exact_relu_power_atom(power: float) -> None:
     value = torch.relu(preactivation).pow(power)
     gradient = torch.zeros_like(x)
     gradient[:, :1] = power * torch.relu(preactivation).pow(power - 1.0)
-    data = {"x": x.numpy(), "v": value.numpy(), "dv": gradient.numpy()}
+    data = ValueSamples(x=x.numpy(), v=value.numpy(), dv=gradient.numpy())
     cfg = ExperimentConfig(
         model=ModelConfig(
             kind="signed",

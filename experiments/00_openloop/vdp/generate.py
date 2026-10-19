@@ -44,7 +44,7 @@ def main() -> int:
     dataset = load_value_samples(DATA)
 
     fig, ax = plot_value_scatter3d(dataset, title="", show=False, colorbar=False, azim=-105.0)
-    style_vdp_reference_axes(ax, np.asarray(dataset["x"]))
+    style_vdp_reference_axes(ax, np.asarray(dataset.x))
     save_figure(fig, FIG / "v.png", tight=False, bbox_inches="tight")
 
     fig, ax = plot_vdp_value_with_gradient_arrows2d(dataset, title="", show=False)

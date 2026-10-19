@@ -5,9 +5,9 @@ from pathlib import Path
 
 import numpy as np
 
+from src.data import ValueSamples
 from src.OpenLoop.pendulum.solver import PendulumPmpSolver
 from src.OpenLoop.pendulum.trajectories import PmpTrajectory
-from src.OpenLoop.value_samples import ValueSamples
 
 additional_samples = runpy.run_path(
     str(Path(__file__).resolve().parents[1] / "scripts/investigation/make_twosided_oversampling_sets.py")
