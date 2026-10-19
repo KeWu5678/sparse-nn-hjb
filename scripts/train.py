@@ -14,7 +14,6 @@ defaults reproduce a single VDP signed-profile run.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import os
 import pickle
 import random
@@ -46,6 +45,7 @@ from src.config import resolve_model, validate_model_config, validate_optimizer_
 from src.config.schema import ExperimentConfig
 from src.data import (
     DATA_DIR,
+    file_sha256,
     load_value_samples,
     make_dataloaders,
     normalize_value_samples,
@@ -240,13 +240,11 @@ def _run_experiment(cfg: DictConfig, hydra_cfg, run_dir: Path, run_id: str) -> P
 
     # Data preprocessing is external to the problem. The trainer holds only
     # configuration and returns a History.
-    with (DATA_DIR / cfg.data.path).open("rb") as source:
-        data_sha256 = hashlib.file_digest(source, "sha256").hexdigest()
+    data_sha256 = file_sha256(DATA_DIR / cfg.data.path)
     evaluation_data_sha256 = {}
     if cfg.eval.kind == "region_split":
         for name in ("eval_pool", "distance_cache"):
-            with (DATA_DIR / cfg.eval[name]).open("rb") as source:
-                evaluation_data_sha256[name] = hashlib.file_digest(source, "sha256").hexdigest()
+            evaluation_data_sha256[name] = file_sha256(DATA_DIR / cfg.eval[name])
     data = load_value_samples(cfg.data.path)
     normalizer = None
     if cfg.data.normalize:

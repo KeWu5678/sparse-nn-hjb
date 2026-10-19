@@ -20,6 +20,7 @@ consistent: if ``x_norm = x / s_x`` and ``v_norm = v / s_v``, then
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -198,6 +199,12 @@ def load_value_samples(path: str | Path) -> ValueSamples:
     """
     raw = np.load(DATA_DIR / path, allow_pickle=True)
     return _as_value_samples(raw)
+
+
+def file_sha256(path: str | Path) -> str:
+    """SHA-256 of a file's bytes, the identity recorded for datasets and generator sources."""
+    with Path(path).open("rb") as source:
+        return hashlib.file_digest(source, "sha256").hexdigest()
 
 
 @dataclass(frozen=True)

@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 import platform
@@ -23,7 +22,7 @@ sys.path.insert(0, str(ROOT))
 import numpy as np
 import scipy
 
-from src.data import DATA_DIR
+from src.data import DATA_DIR, file_sha256
 from src.OpenLoop.allen_cahn import AllenCahnProblem
 from src.OpenLoop.collocation import (
     BatchError,
@@ -97,7 +96,7 @@ def _generation_metadata(problem, config, args) -> dict:
                      "scipy": scipy.__version__},
         "requested_samples": args.samples, "retained_samples": 0, "complete": False,
         "generator_sha256": {
-            str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest()
+            str(path.relative_to(ROOT)): file_sha256(path)
             for path in sources
         },
     }
@@ -183,7 +182,7 @@ def _save_validated_samples(destination, solution, metadata) -> None:
     path = samples.save_npz(destination / "value_samples.npz")
     metadata.update(
         complete=True, retained_samples=samples.size, failed_samples=0,
-        data_sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
+        data_sha256=file_sha256(path),
         max_collocation_residual=max(r.diagnostics.collocation_residual for r in solution.sample_results),
         max_boundary_residual=max(r.diagnostics.boundary_residual for r in solution.sample_results),
     )

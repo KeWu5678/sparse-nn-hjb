@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import sys
 import time
@@ -17,7 +16,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from src.data import DATA_DIR, ValueSamples  # noqa: E402
+from src.data import DATA_DIR, ValueSamples, file_sha256  # noqa: E402
 from src.OpenLoop.pendulum import (  # noqa: E402
     PendulumPmpSolver,
     PendulumPmpSolverConfig,
@@ -154,7 +153,7 @@ def main() -> None:
         "source_paper": "https://arxiv.org/pdf/2312.17467",
         "description": "Backward-PMP infinite-horizon pendulum ValueSamples.",
         "data_path": str(paths["data"]),
-        "data_sha256": hashlib.sha256(paths["data"].read_bytes()).hexdigest(),
+        "data_sha256": file_sha256(paths["data"]),
         "curve_path": str(paths["curve"]),
         "failed_path": str(paths["failed"]),
         "run_dir": str(paths["run_dir"]),

@@ -8,7 +8,6 @@ Pickles are trusted local Run Artifacts, as in the existing experiment loader.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import pickle
@@ -21,7 +20,14 @@ import numpy as np
 import torch
 
 from .config import resolve_model
-from .data import DATA_DIR, TensorSamples, ValueSampleNormalizer, load_value_samples, to_tensors
+from .data import (
+    DATA_DIR,
+    TensorSamples,
+    ValueSampleNormalizer,
+    file_sha256,
+    load_value_samples,
+    to_tensors,
+)
 from .eval import relative_errors
 from .models import SparseModel
 
@@ -146,9 +152,7 @@ def _restore_run(
         raise ValueError(f"unsupported metric_coordinates={metric_coordinates!r} in {path}")
     cfg = record["config"]
     if "data_sha256" in record:
-        with (DATA_DIR / cfg["data"]["path"]).open("rb") as source:
-            actual_hash = hashlib.file_digest(source, "sha256").hexdigest()
-        if actual_hash != record["data_sha256"]:
+        if file_sha256(DATA_DIR / cfg["data"]["path"]) != record["data_sha256"]:
             raise ValueError(f"dataset differs from the bytes used for training: {path}")
     model_cfg = cfg["model"]
     if model_cfg["kind"] != "signed":

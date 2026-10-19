@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import sys
 from dataclasses import asdict
@@ -15,7 +14,7 @@ from uuid import uuid4
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from src.data import DATA_DIR
+from src.data import DATA_DIR, file_sha256
 from src.OpenLoop.collocation import CollocationConfig, CollocationSolution, CollocationSolver
 from src.OpenLoop.sampling import grid_initial_states
 from src.OpenLoop.vdp import VdpOptimalControlProblem
@@ -62,14 +61,14 @@ def save_dataset(
         "solver": asdict(solution.config),
         "requested_samples": len(solution.sample_results),
         "retained_samples": solution.value_samples.size,
-        "data_sha256": hashlib.sha256(data_path.read_bytes()).hexdigest(),
+        "data_sha256": file_sha256(data_path),
         "collocation_residuals": [
             result.diagnostics.collocation_residual for result in solution.sample_results
         ],
         "generator_sha256": {
-            str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest()
-            for path in (Path(__file__), ROOT / "src/OpenLoop/vdp/problem.py",
-                         ROOT / "src/OpenLoop/collocation.py")
+            str(path.relative_to(ROOT)): file_sha256(path)
+            for path in (Path(__file__), ROOT / "src/data.py", ROOT / "src/OpenLoop/collocation.py",
+                         ROOT / "src/OpenLoop/sampling.py", ROOT / "src/OpenLoop/vdp/problem.py")
         },
     }
     meta_path.write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
