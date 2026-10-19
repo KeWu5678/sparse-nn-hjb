@@ -14,14 +14,15 @@ equation, and the stationarity residual `p2 + 2 beta u`. Defaults are
 
 ## Solver
 
-`VdpOpenLoopSolver` solves the free-terminal Pontryagin boundary-value problem
-with the control eliminated, `u = -p2 / (2 beta)`, and boundary conditions
-`y(0) = x`, `p(T) = 0`. It uses SciPy `solve_bvp` from two initial guesses
-(state decaying as `exp(-t)`, and constant) and retains the least-cost
-converged solution. The value is integrated with three-point Gauss–Legendre
-quadrature on the collocation mesh; the gradient label is `dV(x) = p(0)`. The
-result is a numerical stationary reference, not a certificate of global
-optimality.
+The shared `CollocationSolver` (`src/OpenLoop/collocation.py`, also used by
+Allen–Cahn) solves the free-terminal Pontryagin boundary-value problem with the
+control eliminated, `u = -p2 / (2 beta)`, and boundary conditions `y(0) = x`,
+`p(T) = 0`. VDP supplies `pontryagin_rhs` but no analytic Jacobian. The solver
+uses SciPy `solve_bvp` from two initial guesses (state decaying as `exp(-t)`,
+and constant) and retains the least-cost converged solution. The VDP dataset
+integrates the value with three-point Gauss–Legendre quadrature on the
+collocation mesh; the gradient label is `dV(x) = p(0)`. The result is a
+numerical stationary reference, not a certificate of global optimality.
 
 Collocation is the only VDP open-loop method; the reduced-gradient profiles
 (Barzilai–Borwein and L-BFGS-B) were retired in ADR 0017.

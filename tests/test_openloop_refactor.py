@@ -81,15 +81,11 @@ def test_pendulum_pmp_dataset_script_has_help() -> None:
 
 
 def test_vdp_solver_public_imports_are_available() -> None:
-    from src.OpenLoop.vdp import (
-        VdpOpenLoopSolver,
-        VdpOpenLoopSolverConfig,
-        VdpOptimalControlProblem,
-    )
+    from src.OpenLoop.collocation import CollocationConfig, CollocationSolver
+    from src.OpenLoop.vdp import VdpOptimalControlProblem
 
     problem = VdpOptimalControlProblem(T_final=0.1)
-    config = VdpOpenLoopSolverConfig(num_time_points=11)
-    solver = VdpOpenLoopSolver(problem=problem, config=config)
+    solver = CollocationSolver(problem, CollocationConfig(initial_mesh_points=11))
 
-    assert solver.problem.T_final == 0.1
-    assert solver.time_grid.shape == (11,)
+    assert problem.dimension == 2
+    assert solver.solve_sample(np.zeros(2)).value == 0.0

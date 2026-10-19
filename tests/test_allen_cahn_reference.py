@@ -4,11 +4,8 @@ import numpy as np
 import pytest
 from scipy.integrate import solve_ivp
 
-from src.OpenLoop.allen_cahn import (
-    AllenCahnOpenLoopSolver,
-    AllenCahnProblem,
-    AllenCahnSolverConfig,
-)
+from src.OpenLoop.allen_cahn import AllenCahnProblem
+from src.OpenLoop.collocation import CollocationConfig, CollocationSolver
 
 
 @pytest.mark.parametrize("dimension", [6, 10])
@@ -36,9 +33,9 @@ def test_small_state_value_and_costate_match_finite_horizon_riccati_solution(dim
     assert reference.success
     p = reference.y[:, -1].reshape(dimension, dimension)
     initial = 1e-4 * np.linspace(-.6, 1., dimension)
-    result = AllenCahnOpenLoopSolver(
+    result = CollocationSolver(
         AllenCahnProblem(dimension=dimension),
-        AllenCahnSolverConfig(collocation_tol=1e-10),
+        CollocationConfig(collocation_tol=1e-10),
     ).solve_sample(initial)
     # The cubic drift changes these small-state labels only at higher order.
     assert result.value == pytest.approx(initial @ p @ initial, rel=2e-7, abs=1e-16)

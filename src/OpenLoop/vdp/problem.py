@@ -26,6 +26,18 @@ class VdpOptimalControlProblem:
         if self.T_final <= 0.0:
             raise ValueError("T_final must be positive")
 
+    @property
+    def dimension(self) -> int:
+        return 2
+
+    def pontryagin_rhs(self, t: np.ndarray, z: np.ndarray) -> np.ndarray:
+        """State/costate equations after eliminating the stationary control."""
+        y, p = z[:2], z[2:]
+        return np.vstack((
+            self.dynamics(t, y, self.feedback_from_gradient(p)),
+            self.adjoint_rhs(t, y, p),
+        ))
+
     def dynamics(self, _t: float, y: np.ndarray, u: float) -> np.ndarray:
         y1, y2 = np.asarray(y, dtype=np.float64)
         return np.array(
@@ -50,9 +62,6 @@ class VdpOptimalControlProblem:
             dtype=np.float64,
         )
 
-    def terminal_gradient(self, _y_terminal: np.ndarray) -> np.ndarray:
-        return np.zeros(2, dtype=np.float64)
-
     def running_cost(self, y_values: np.ndarray, u_values: np.ndarray) -> np.ndarray:
         y_values = np.asarray(y_values, dtype=np.float64)
         u_values = np.asarray(u_values, dtype=np.float64)
@@ -65,9 +74,10 @@ class VdpOptimalControlProblem:
         u_values = np.asarray(u_values, dtype=np.float64)
         return p_values[1, :] + 2.0 * self.beta * u_values
 
-    def feedback_from_gradient(self, gradient: np.ndarray) -> float:
+    def feedback_from_gradient(self, gradient: np.ndarray) -> np.ndarray:
+        """Stationary control ``-p2 / (2 beta)`` for ``(2,)`` or ``(2, n)`` costates."""
         gradient = np.asarray(gradient, dtype=np.float64)
-        return float(-gradient[1] / (2.0 * self.beta))
+        return -gradient[1] / (2.0 * self.beta)
 
     def rk4_rollout(self, u_of_x, x0, *, T: float | None = None, dt: float = 0.01,
                     u_clip: float = 50.0):

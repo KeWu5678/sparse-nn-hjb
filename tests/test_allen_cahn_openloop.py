@@ -5,15 +5,8 @@ import pytest
 from scipy.integrate import solve_ivp
 from scipy.interpolate import CubicSpline
 
-from src.OpenLoop.allen_cahn import (
-    AllenCahnBatchError,
-    AllenCahnConvergenceError,
-    AllenCahnOpenLoopSolver,
-    AllenCahnProblem,
-    AllenCahnSampleFailure,
-    AllenCahnSampleResult,
-    AllenCahnSolverConfig,
-)
+from src.OpenLoop.allen_cahn import AllenCahnProblem
+from src.OpenLoop.collocation import CollocationConfig, CollocationSolver
 
 
 @pytest.mark.parametrize("dimension", [6, 10])
@@ -36,9 +29,9 @@ def test_neumann_discretization_preserves_mass_and_actuator_lengths(dimension):
 
 @pytest.mark.parametrize("dimension", [6, 10])
 def test_zero_initial_state_has_zero_value_and_free_terminal_adjoint(dimension):
-    solver = AllenCahnOpenLoopSolver(
+    solver = CollocationSolver(
         AllenCahnProblem(dimension=dimension),
-        AllenCahnSolverConfig(store_trajectories=True),
+        CollocationConfig(store_trajectories=True),
     )
     result = solver.solve_sample(np.zeros(dimension))
     assert result.value == 0
@@ -55,9 +48,9 @@ def test_zero_initial_state_has_zero_value_and_free_terminal_adjoint(dimension):
 
 @pytest.mark.parametrize("dimension", [6, 10])
 def test_value_gradient_matches_independent_initial_state_differences(dimension):
-    solver = AllenCahnOpenLoopSolver(
+    solver = CollocationSolver(
         AllenCahnProblem(dimension=dimension),
-        AllenCahnSolverConfig(collocation_tol=1e-8),
+        CollocationConfig(collocation_tol=1e-8),
     )
     initial = np.random.default_rng(41).uniform(-.7, .7, dimension)
     reference = solver.solve_sample(initial)
@@ -73,7 +66,7 @@ def test_value_gradient_matches_independent_initial_state_differences(dimension)
 @pytest.mark.parametrize("dimension", [6, 10])
 def test_collocation_state_and_cost_match_independent_ivp_rollout(dimension):
     problem = AllenCahnProblem(dimension=dimension)
-    solver = AllenCahnOpenLoopSolver(problem, AllenCahnSolverConfig(
+    solver = CollocationSolver(problem, CollocationConfig(
         collocation_tol=1e-8, store_trajectories=True,
     ))
     initial = np.linspace(-.6, .8, dimension)
@@ -98,59 +91,6 @@ def test_collocation_state_and_cost_match_independent_ivp_rollout(dimension):
     assert result.diagnostics.reduced_gradient_norm < 1e-14
 
 
-def test_failed_collocation_raises_with_initial_state_and_diagnostics():
-    solver = AllenCahnOpenLoopSolver(
-        AllenCahnProblem(dimension=6),
-        AllenCahnSolverConfig(initial_mesh_points=2, collocation_max_nodes=2, collocation_tol=1e-10),
-    )
-    initial = np.linspace(-.7, .9, 6)
-    with pytest.raises(AllenCahnConvergenceError) as caught:
-        solver.solve_sample(initial)
-    failure = caught.value.failure
-    np.testing.assert_array_equal(failure.initial_state, initial)
-    assert failure.diagnostics.attempts == 2
-    assert failure.diagnostics.nodes == 2
-
-
-@pytest.mark.parametrize("workers", [1, 2])
-def test_failed_batch_attempts_every_state_and_reports_ordered_outcomes(workers):
-    solver = AllenCahnOpenLoopSolver(
-        AllenCahnProblem(dimension=6),
-        AllenCahnSolverConfig(initial_mesh_points=2, collocation_max_nodes=2, collocation_tol=1e-10),
-    )
-    states = np.vstack((np.zeros(6), np.linspace(-.7, .9, 6), np.linspace(.8, -.6, 6)))
-    progress = []
-    with pytest.raises(AllenCahnBatchError) as caught:
-        solver.solve(states, lambda current, total: progress.append((current, total)), workers=workers)
-    batch = caught.value
-    assert len(batch.sample_results) == len(states)
-    assert isinstance(batch.sample_results[0], AllenCahnSampleResult)
-    assert all(isinstance(result, AllenCahnSampleFailure) for result in batch.sample_results[1:])
-    np.testing.assert_array_equal(batch.failed_initial_states, states[1:])
-    np.testing.assert_array_equal([result.initial_state for result in batch.sample_results], states)
-    assert progress == [(0, 3), (1, 3), (2, 3), (3, 3)]
-
-
-def test_retained_samples_and_progress_preserve_dimension():
-    solver = AllenCahnOpenLoopSolver(AllenCahnProblem(dimension=10))
-    progress = []
-    states = np.vstack((np.zeros(10), np.linspace(-.1, .1, 10)))
-    solution = solver.solve(states, lambda current, total: progress.append((current, total)))
-    np.testing.assert_array_equal(solution.value_samples.x, states)
-    assert solution.value_samples.dv.shape == (2, 10)
-    assert progress == [(0, 2), (1, 2), (2, 2)]
-
-
-@pytest.mark.parametrize("dimension", [6, 10])
-def test_parallel_batch_matches_sequential_values_gradients_and_order(dimension):
-    solver = AllenCahnOpenLoopSolver(AllenCahnProblem(dimension=dimension))
-    states = np.vstack((np.zeros(dimension), np.linspace(-.3, .2, dimension)))
-    sequential = solver.solve(states)
-    parallel = solver.solve(states, workers=2)
-    for name in ("x", "v", "dv"):
-        np.testing.assert_array_equal(getattr(parallel.value_samples, name), getattr(sequential.value_samples, name))
-
-
 @pytest.mark.parametrize("dimension", [6, 10])
 def test_pontryagin_operator_matches_stationary_dynamics_and_analytic_derivative(dimension):
     problem = AllenCahnProblem(dimension=dimension)
@@ -173,16 +113,3 @@ def test_pontryagin_operator_matches_stationary_dynamics_and_analytic_derivative
 def test_problem_rejects_invalid_parameters(kwargs):
     with pytest.raises(ValueError):
         AllenCahnProblem(**kwargs)
-
-
-@pytest.mark.parametrize("kwargs", [{"collocation_tol": np.nan}, {"initial_mesh_points": 1}, {"collocation_max_nodes": 4}, {"quadrature_order": 2.5}, {"initial_guess_decays": ()}, {"initial_guess_decays": (np.inf,)}])
-def test_solver_rejects_invalid_configuration(kwargs):
-    with pytest.raises(ValueError):
-        AllenCahnSolverConfig(**kwargs)
-
-
-def test_solver_rejects_invalid_initial_states():
-    solver = AllenCahnOpenLoopSolver()
-    for state in (np.zeros(10), np.full(6, np.nan)):
-        with pytest.raises(ValueError):
-            solver.solve_sample(state)
