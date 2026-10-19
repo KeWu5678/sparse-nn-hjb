@@ -1,139 +1,58 @@
-# Experiment workflow
+# Running experiments
 
-The two current manuscript datasets were generated on September 24, 2026. Their paths are selected
-by `conf/data/*.yaml`; training settings and sweep axes live in
-`conf/experiment/*.yaml`. All 588 configured fits and the 31 manuscript image panels
-have been regenerated. Numerical conclusions in the current paper use these runs.
+An experiment is a preset in `conf/experiment/`: one algorithm, its settings,
+and a grid of hyperparameters and datasets. Running a preset trains every cell
+of its grid and records each fit in MLflow.
 
-Datasets, run records, fits, reports, and figures are local, ignored artifacts.
-The manuscript source and compiled PDF are tracked under `paper/`.
+## 1. Prepare
 
-## Generate and configure the data
+```sh
+scripts/init.sh
+```
 
-| Input | Current location under `rawdata/data/` | Generator |
-| --- | --- | --- |
-| Van der Pol | `VDP_20260924_62305c7ac2534952a7c85d6c4656a491/` | `scripts/generate_vdp_data.py` |
-| Pendulum production data, raw paths, and switching curve | `Pendulum_20260924_ebf42e75ab9748aa855f44aa2387b6df/` | `scripts/run_pendulum_pmp_openloop_example.py` |
-| Pendulum sampling variants | `Pendulum_2sided_oversample_20260924/` | `scripts/investigation/make_twosided_oversampling_sets.py` |
+This installs the Python environment with `uv` and starts the local MLflow
+server in Docker; Docker Desktop must be running. It is safe to repeat. Nothing
+trains without MLflow.
 
-The [VDP](00_openloop/vdp/README.md) and
-[pendulum](00_openloop/pendulum/README.md) guides describe the objectives,
-generation commands, and reference-data plots. A new generation creates a new
-run directory. Update the data configurations to those exact artifacts before
-training; changing a date in a filename does not regenerate data.
-
-For pendulum, build the four sampling variants, their distance caches, and one
-shared evaluation pool before training. Exclude the union of the production
-set and all four variants from that pool. `conf/eval/region_split.yaml` selects
-the common pool; each data configuration selects its own aligned distance
-cache. The switching tube is distance at most 0.3 from the tiled switching-set
-points.
-
-## Train the current grids
-
-The six current-manuscript presets define 588 experiment cells:
-
-| Preset | VDP runs | Pendulum runs, including variants |
-| --- | ---: | ---: |
-| `log_penalty` | 224 | 224 |
-| `frac_exp_penalty` | 16 | 16 |
-| `moment_order_study` | 32 | 32 |
-| `relu_l1_baseline` | 10 | 10 |
-| `oversampling_gaussian` | 0 | 12 |
-| `oversampling_relu2` | 0 | 12 |
-
-Start the local [MLflow service](../deploy/README.md), then run each preset once:
+## 2. Run a preset
 
 ```sh
 make sweep EXPERIMENT=log_penalty
-make sweep EXPERIMENT=frac_exp_penalty
-make sweep EXPERIMENT=moment_order_study
-make sweep EXPERIMENT=relu_l1_baseline
-make sweep EXPERIMENT=oversampling_gaussian
-make sweep EXPERIMENT=oversampling_relu2
 ```
 
-`make sweep` refuses to run when that experiment already has job folders under
-`rawdata/logs/multirun/`. Existing folders must be deliberately archived
-before a replacement sweep. Each job is recorded as an MLflow run (ADR 0016) with
-its fit as the `history.pt` artifact; the job folder
-`rawdata/logs/multirun/<dataset>/<experiment>/<axis>/<job>/` keeps the Hydra
-config and `run.jsonl`. Every run uses seed 42 and a 90% training split.
-The runner records training-data and evaluation-input SHA-256 hashes before
-fitting and reports errors in physical coordinates.
+`make help` lists the presets. Optional: `JOBS=8` parallel jobs,
+`VERBOSE=true` to stream progress.
 
-Algorithms 1 and 2, the moment-order study, and the oversampling studies use
-150 outer iterations with sequential insertion. The traditional ReLU–L1
-baseline has its own correction-first, batch-insertion settings; its preset
-must not be substituted with Algorithm 2 at power one.
+| Preset | Runs | Study |
+| --- | ---: | --- |
+| `log_penalty` | 448 | Algorithm 1, VDP and pendulum |
+| `frac_exp_penalty` | 32 | Algorithm 2, VDP and pendulum |
+| `moment_order_study` | 64 | Algorithm 1 moment order, VDP and pendulum |
+| `relu_l1_baseline` | 20 | traditional ReLU–L1 comparator, VDP and pendulum |
+| `oversampling_gaussian` | 12 | pendulum sampling variants |
+| `oversampling_relu2` | 12 | pendulum sampling variants |
+| `higher_dim_*` | 500 | [Allen–Cahn at 6 and 10 dimensions](03_high_dimensional/README.md) |
 
-## Validate and generate the manuscript figures
+A preset reads its datasets from `rawdata/data/`, at the paths in
+`conf/data/*.yaml`. To generate a missing dataset, follow the open-loop guide
+for [VDP](00_openloop/vdp/README.md),
+[pendulum](00_openloop/pendulum/README.md), or
+[Allen–Cahn](00_openloop/allen_cahn/README.md).
 
-The following paper scripts are local/ignored and require the datasets and the
-finished MLflow runs above (`MLFLOW_TRACKING_URI` set):
+## 3. Read the results
 
-```sh
-uv run python scripts/paper/preflight.py
-make openloop
-uv run python scripts/paper/vdp_full_scope.py --homogeneous-alpha 1e-6
-uv run python scripts/paper/pendulum_selection.py
-uv run python scripts/paper/pendulum_full_scope.py
-uv run python scripts/paper/pendulum_stability.py
-uv run python scripts/paper/preflight.py --require-figures --write-manifest
-```
+Open the dashboard at <http://127.0.0.1:5000>. Each job is one MLflow run with
+its configuration, dataset hashes, errors in physical coordinates, and the fit
+as `history.pt`. Every run uses seed 42 and a 90/10 training/validation split.
+Hydra configurations and logs are kept under
+`rawdata/logs/multirun/<dataset>/<experiment>/<axis>/<job>/`.
 
-Preflight derives the expected cells from the current Hydra presets. It rejects
-missing or duplicate cells, obsolete dataset paths, mismatched recorded input
-hashes, incomplete runs, missing fit files, and incompatible training settings.
-It requires physical-coordinate metrics and the configured shared pendulum
-pool. A partial benchmark check is available with `--problem vdp` or
-`--problem pendulum`; publication manifest creation requires both benchmarks.
+To run a preset again, first move its folders out of `rawdata/logs/multirun/`;
+`make sweep` refuses to mix new runs with existing ones.
 
-The final command writes `scripts/paper/current_run_manifest.json`, recording
-SHA-256 hashes for records, fit files, datasets, evaluation inputs, and included
-figures. The figure allowlist is derived from `paper/paper_0805.tex`; missing
-included PNGs and unreferenced PNGs in `experiments/` or `paper/plot/` fail the
-check. Provenance checks do not establish numerical correctness by themselves.
+## Analysis and paper figures
 
-The two open-loop plotters write five reference PNGs to `paper/plot/`.
-`vdp_full_scope.py` and `pendulum_full_scope.py` write the learned-model figures
-and reports under their benchmark's `paper_log_penalty/` and
-`paper_frac_exp_penalty/` output directories. Those names identify report
-locations; the training record roots are `log_penalty` and `frac_exp_penalty`.
-The local `analysis.py` wrappers delegate to the same benchmark generators.
-
-Signed-control and cumulative-cost comparisons use each controller's own
-trajectory: all VDP evaluations have horizon 3; pendulum has horizon 40 for
-both starts. Rollout arrays and final costs are preserved beside the reports
-as NPZ and CSV files. See
-[plotting and evaluation](../docs/plotting.md) for the numerical and rendering
-contracts.
-
-The [pendulum stability protocol](../docs/pendulum_stability.md) replaces the
-terminal-only upright test with a two-second numerical stabilization check and
-evaluates horizon sensitivity at 10, 20, and 40 seconds. Its numerical report
-and full traces are saved as `stability.md`, `stability.json`, and
-`stability_rollouts.npz` beside the pendulum reports.
-Controller selection first requires stabilization from both starts at T = 40,
-then minimizes global H1 validation error within each family. The selection
-audit is saved as `controller_selection.json`; downstream generators reject
-stale selections. Families with no passing combination retain an explicitly
-failed comparator with the lowest global error.
-
-## Higher-dimensional extension
-
-The [Allen–Cahn study](03_high_dimensional/README.md) adds six- and
-ten-dimensional finite-volume adaptations of an example from Kunisch,
-Vásquez-Varas, and Walter (2023). Its three `higher_dim_*` presets inherit the
-existing algorithm settings and define a separate 500-cell grid. The guide
-covers data generation and restricted smoke runs; analysis is local, as for
-VDP. These new definitions do not change the current manuscript study.
-
-## Archive boundary
-
-Superseded datasets, run records, reports, figures, obsolete pipeline files,
-and the old `00_openloop/DIAGNOSIS.md` are preserved under the ignored
-`outdated/experiment-refresh-20260924/` directory. Its JSON manifests record
-original paths and SHA-256 hashes. Retired report directories are no longer
-active paths under `experiments/`, and the current generators do not read the
-archive. Archived artifacts are not distributed with a clean checkout.
+Analysis is local and git-ignored. The figure pipeline and its checks are
+described in [plotting and evaluation](../docs/plotting.md). Superseded
+datasets, runs, and reports are kept under the ignored
+`outdated/experiment-refresh-20260924/`.

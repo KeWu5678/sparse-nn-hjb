@@ -27,6 +27,9 @@ container's restart policy cannot fire until the Docker daemon is up.
 
 ## Run
 
+`scripts/init.sh` runs the start command below, syncs the Python environment,
+and waits until the server answers. To start only the server:
+
 ```bash
 docker compose -f deploy/docker/compose.yaml up -d
 export MLFLOW_TRACKING_URI=http://127.0.0.1:5000
