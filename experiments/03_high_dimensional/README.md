@@ -78,30 +78,31 @@ reimplemented in an experiment-specific trainer.
 
 ## Smoke runs and restricted pilots
 
-These six small fits check both dimensions and all three training paths
-without a tracking service. They deliberately reduce the optimization budget
-and write outside the production sweep directories:
+These six small fits check both dimensions and all three training paths. They
+deliberately reduce the optimization budget and write outside the production
+sweep directories. Like every training job, they are recorded in MLflow, so
+start the local service first:
 
 ```sh
 uv run python scripts/train.py -m +experiment=higher_dim_log_penalty \
   +model=profile +data=allen_cahn6,allen_cahn10 model.activation=tanh \
   model.alpha=1e-4 model.gamma=1 'model.loss_weights=[1.0,1.0]' \
-  training.num_iterations=3 training.num_insertion=5 training.lbfgs_steps=10 \
-  training.fit_outer_iterations=5 env.require_mlflow=false env.verbose=false \
+  training.num_iterations=3 training.num_of_initial_pts=5 training.lbfgs_steps=10 \
+  training.fit_outer_iterations=5 env.verbose=false \
   hydra.sweep.dir=rawdata/logs/allen_cahn_smoke
 
 uv run python scripts/train.py -m +experiment=higher_dim_frac_exp_penalty \
   +model=finite_step +data=allen_cahn6,allen_cahn10 model.activation=relu \
   model.power=2 model.alpha=1e-4 model.gamma=0 'model.loss_weights=[1.0,1.0]' \
-  training.num_iterations=3 training.num_insertion=5 training.lbfgs_steps=10 \
-  training.fit_outer_iterations=5 env.require_mlflow=false env.verbose=false \
+  training.num_iterations=3 training.num_of_initial_pts=5 training.lbfgs_steps=10 \
+  training.fit_outer_iterations=5 env.verbose=false \
   hydra.sweep.dir=rawdata/logs/allen_cahn_smoke
 
 uv run python scripts/train.py -m +experiment=higher_dim_relu_l1_baseline \
   +model=profile +data=allen_cahn6,allen_cahn10 model.activation=relu \
   model.power=1 model.alpha=1e-4 model.gamma=0 'model.loss_weights=[1.0,1.0]' \
-  training.num_iterations=3 training.num_insertion=5 training.lbfgs_steps=10 \
-  training.fit_outer_iterations=5 env.require_mlflow=false env.verbose=false \
+  training.num_iterations=3 training.num_of_initial_pts=5 training.lbfgs_steps=10 \
+  training.fit_outer_iterations=5 env.verbose=false \
   hydra.sweep.dir=rawdata/logs/allen_cahn_smoke
 ```
 
@@ -109,51 +110,14 @@ Hydra command-line axes replace the corresponding preset axes. Pin every
 listed model axis when repeating these commands; removing one can expand
 the multirun unexpectedly. For a scientific pilot, keep the normal training
 budget and restrict only the parameter grid, writing to a fresh output root.
-Keep repeated runs in separate roots so reports do not mix duplicate cells.
 
-The six smoke fits above completed on October 12, 2026, using the generated
-2,048-row datasets. Their saved models were reloaded and scored successfully;
-the local report is
-[`rawdata/reports/allen_cahn_smoke/results.md`](../../rawdata/reports/allen_cahn_smoke/results.md).
-These three-iteration runs validate the workflow. The full 500-cell study has
-not been run, and the report correctly counts zero completed full-grid cells.
+Six such smoke fits completed on October 12, 2026, before runs were recorded
+only in MLflow. The full 500-cell study has not been run.
 
-The subsequent `refactor.md` review separated report validation, checkpoint
-scoring, summary selection, frontier preparation, and exports. Re-running the
-six saved fits through the refactored reporter reproduced all seven report
-artifacts byte for byte (CSV, coverage, Markdown, two NPZ files, and two PNGs).
-The local evidence is `rawdata/reports/allen_cahn_audit/report_refactor_equivalence.json`.
+## Analysis
 
-## Analyze saved fits
-
-```sh
-uv run python experiments/03_high_dimensional/report.py \
-  --records rawdata/logs/allen_cahn_smoke \
-  --output rawdata/reports/allen_cahn_smoke
-
-uv run python experiments/03_high_dimensional/report.py --require-complete
-```
-
-The first command produces a report explicitly labeled as a partial study or
-pilot. The second requires every configured cell in the full 500-run grid.
-It defaults to `rawdata/logs/multirun` and writes under
-`rawdata/reports/allen_cahn`. This keeps unpromoted figures outside the
-manuscript's figure allowlist. The report writes:
-
-- `results.md`: coverage, selected-fit metrics, and figure captions.
-- `runs.csv`: every run's settings, value/gradient/H1 errors, width, timing,
-  validation size, record path, and dataset hash.
-- `coverage.json`: completed and expected configured cells.
-- Separate PNG neuron/H1 frontiers and their exact NPZ arrays for each
-  dimension, loss, and configured/pilot category.
-
-The report verifies current dataset paths and hashes, recorded normalization,
-state dimension, and consistent holdouts before rescoring through
-`src.results`. It uses the shared `src.plots` frontier renderer. A table's
-checkpoint minimizes the training objective; the frontier is the smallest
-observed validation H1 error at a given neuron budget, pooled across
-checkpoints and tuning choices. These are different summaries and neither
-replaces an independent test set.
+Analysis is local and ignored, as for VDP. It reuses the VDP paper pipeline and
+its fixed operating points, and skips figures that need a two-dimensional state.
 
 These experiments evaluate a fixed finite-horizon value slice `V(0,x)`.
 Reusing its gradient as feedback would define a receding-horizon controller

@@ -126,9 +126,8 @@ The [Allen–Cahn study](03_high_dimensional/README.md) adds six- and
 ten-dimensional finite-volume adaptations of an example from Kunisch,
 Vásquez-Varas, and Walter (2023). Its three `higher_dim_*` presets inherit the
 existing algorithm settings and define a separate 500-cell grid. The guide
-includes data generation, restricted smoke runs, and a dimension-independent
-saved-fit report. Generated data, runs, and unpromoted figures remain under
-`rawdata/`; these new definitions do not change the current manuscript study.
+covers data generation and restricted smoke runs; analysis is local, as for
+VDP. These new definitions do not change the current manuscript study.
 
 ## Archive boundary
 
