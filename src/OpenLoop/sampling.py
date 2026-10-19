@@ -1,9 +1,22 @@
-"""Full-dimensional initial states for the finite-volume Allen–Cahn benchmark."""
+"""Initial-state designs for open-loop value-sample generation."""
 
 from __future__ import annotations
 
 import numpy as np
 from scipy.stats import qmc
+
+
+def grid_initial_states(
+    n_first: int,
+    n_second: int,
+    first_range: tuple[float, float] = (-3.0, 3.0),
+    second_range: tuple[float, float] = (-3.0, 3.0),
+) -> np.ndarray:
+    """Tensor grid of two-dimensional states, ``n_first * n_second`` rows."""
+    first_values = np.linspace(first_range[0], first_range[1], n_first)
+    second_values = np.linspace(second_range[0], second_range[1], n_second)
+    first_grid, second_grid = np.meshgrid(first_values, second_values)
+    return np.column_stack((first_grid.ravel(), second_grid.ravel())).astype(np.float64)
 
 
 def sobol_initial_states(
@@ -22,3 +35,6 @@ def sobol_initial_states(
         raise ValueError("bound must be positive and finite")
     unit = qmc.Sobol(d=dimension, scramble=True, seed=seed).random_base2(count.bit_length() - 1)
     return bound * (2.0 * unit - 1.0)
+
+
+__all__ = ["grid_initial_states", "sobol_initial_states"]

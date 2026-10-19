@@ -25,13 +25,13 @@ import scipy
 
 from src.data import DATA_DIR
 from src.OpenLoop.allen_cahn import AllenCahnProblem
-from src.OpenLoop.allen_cahn.sampling import sobol_initial_states
 from src.OpenLoop.collocation import (
     BatchError,
     CollocationConfig,
     CollocationSolver,
     SampleFailure,
 )
+from src.OpenLoop.sampling import sobol_initial_states
 
 
 def main(argv=None) -> None:
@@ -77,7 +77,7 @@ def _parse_args(argv):
 
 def _generation_metadata(problem, config, args) -> dict:
     sources = [Path(__file__), ROOT / "src/data.py",
-               ROOT / "src/OpenLoop/collocation.py",
+               ROOT / "src/OpenLoop/collocation.py", ROOT / "src/OpenLoop/sampling.py",
                *sorted((ROOT / "src/OpenLoop/allen_cahn").glob("*.py"))]
     return {
         "created_utc": datetime.now(timezone.utc).isoformat(),

@@ -8,7 +8,8 @@ import pytest
 
 from src.data import load_value_samples
 from src.OpenLoop.collocation import CollocationConfig, CollocationSolver
-from src.OpenLoop.vdp import VdpOptimalControlProblem, grid_initial_states
+from src.OpenLoop.sampling import grid_initial_states
+from src.OpenLoop.vdp import VdpOptimalControlProblem
 
 ROOT = Path(__file__).resolve().parents[1]
 # The VDP dataset settings in scripts/generate_vdp_data.py.

@@ -204,7 +204,8 @@ warm-start selection; SparseModel and the Penalty supply their mathematical eval
   - `activations.py` — canonical activation registry used by configs and scripts.
   - `scripts/train.py` registers the Hydra `config_schema` before composition.
 - Open-loop data subsystem: `src/OpenLoop/` — the shared finite-horizon
-  Pontryagin collocation solver `collocation.py`, the VDP and
+  Pontryagin collocation solver `collocation.py`, initial-state designs
+  `sampling.py`, the VDP and
   Allen–Cahn problem definitions under `src/OpenLoop/vdp/` and
   `src/OpenLoop/allen_cahn/`, and paper-backed infinite-horizon pendulum data
   generation under `src/OpenLoop/pendulum/`.

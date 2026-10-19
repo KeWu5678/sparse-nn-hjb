@@ -17,7 +17,8 @@ sys.path.insert(0, str(ROOT))
 
 from src.data import DATA_DIR
 from src.OpenLoop.collocation import CollocationConfig, CollocationSolution, CollocationSolver
-from src.OpenLoop.vdp import VdpOptimalControlProblem, grid_initial_states
+from src.OpenLoop.sampling import grid_initial_states
+from src.OpenLoop.vdp import VdpOptimalControlProblem
 
 
 def main() -> None:

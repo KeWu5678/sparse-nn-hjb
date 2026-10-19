@@ -4,18 +4,14 @@ import sys
 import numpy as np
 
 
-def test_vdp_sampling_helpers_create_grid_and_random_points() -> None:
-    from src.OpenLoop.vdp import grid_initial_states, random_initial_states
+def test_grid_initial_states_span_both_ranges() -> None:
+    from src.OpenLoop.sampling import grid_initial_states
 
     grid = grid_initial_states(2, 3, (-1.0, 1.0), (-2.0, 2.0))
-    random_a = random_initial_states(4, (-1.0, 1.0), (-2.0, 2.0), seed=7)
-    random_b = random_initial_states(4, (-1.0, 1.0), (-2.0, 2.0), seed=7)
 
     assert grid.shape == (6, 2)
     assert np.allclose(grid[0], [-1.0, -2.0])
     assert np.allclose(grid[-1], [1.0, 2.0])
-    assert random_a.shape == (4, 2)
-    assert np.allclose(random_a, random_b)
 
 
 def test_pendulum_solver_public_imports_are_available() -> None:

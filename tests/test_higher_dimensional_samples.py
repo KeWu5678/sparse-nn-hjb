@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from src.data import ValueSamples, load_value_samples, normalize_value_samples
-from src.OpenLoop.allen_cahn.sampling import sobol_initial_states
+from src.OpenLoop.sampling import sobol_initial_states
 
 
 @pytest.mark.parametrize("dimension", [2, 6, 10])
