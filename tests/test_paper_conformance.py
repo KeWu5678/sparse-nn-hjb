@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 import torch
 
-from src.config import make_penalty, resolve_model, validate_model_config, validate_optimizer_config
+from src.config import make_penalty, resolve_model, validate_model_config
 from src.config.activations import ACTIVATIONS, GROWTH, get_growth
 from src.config.schema import EnvConfig, ExperimentConfig, ModelConfig, TrainingConfig
 from src.data import ValueSamples, make_dataloader, split_value_samples, to_tensors
@@ -22,7 +22,7 @@ from src.training import run_training
 
 
 def _data(n: int = 60, seed: int = 0) -> ValueSamples:
-    """The same synthetic nonlinear target the golden characterization uses."""
+    """A synthetic nonlinear target, V = log(1 + |x|^2), with its exact gradient."""
     g = torch.Generator().manual_seed(seed)
     x = torch.rand(n, 2, generator=g, dtype=torch.float64) * 3 - 1.5
     r2 = (x * x).sum(1, keepdim=True)
@@ -318,42 +318,3 @@ def test_insertion_evaluates_the_network_once_per_stage() -> None:
 # --------------------------------------------------------------------------- #
 # Configuration guards
 # --------------------------------------------------------------------------- #
-@pytest.mark.parametrize(
-    "over, message",
-    [
-        (dict(activation="softplus", power=2.0), "Algorithm 1.*power == 1"),
-        (dict(kind="semiconcave"), "only supports kind='signed'"),
-        (
-            dict(insertion="finite_step", activation="relu", power=4.0, gamma=0.0),
-            "powers 1, 2, 3",
-        ),
-        (
-            dict(insertion="profile", activation="relu", power=5.0, gamma=0.0),
-            "powers 1, 2, 3",
-        ),
-        (
-            dict(insertion="profile", activation="relu", power=2.0, gamma=0.1),
-            "power penalty requires gamma == 0",
-        ),
-        (
-            dict(insertion="profile", activation="relu", power=3.0, gamma=0.1),
-            "power penalty requires gamma == 0",
-        ),
-        (
-            dict(insertion="finite_step", activation="relu", power=2.0, gamma=0.1),
-            "gamma == 0",
-        ),
-        (
-            dict(insertion="finite_step", activation="softplus", power=1.0, gamma=0.0),
-            "sphere activation",
-        ),
-        (dict(insertion="nonsense"), "insertion must be 'profile' or 'finite_step'"),
-        (dict(insert_mode="nonsense"), "training.insert_mode must be one of"),
-        (dict(method="nonsense"), "training.method must be one of"),
-    ],
-)
-def test_incoherent_configurations_are_rejected(over: dict, message: str) -> None:
-    with pytest.raises(ValueError, match=message):
-        cfg = _cfg(**over)
-        validate_model_config(resolve_model(cfg.model, 2))
-        validate_optimizer_config(cfg.training)

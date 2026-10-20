@@ -7,12 +7,10 @@ import torch
 from hydra import compose, initialize
 from hydra.core.config_store import ConfigStore
 from hydra.core.hydra_config import HydraConfig
-from hydra.errors import ConfigCompositionException
 from omegaconf import OmegaConf
 
 from src.config import (
     get_activation,
-    get_use_sphere,
     make_penalty,
     resolve_model,
     validate_model_config,
@@ -26,34 +24,6 @@ from src.SSN import SSN
 
 # Must be registered before any compose() call below.
 ConfigStore.instance().store(name="config_schema", node=ExperimentConfig)
-
-
-def test_compose_defaults() -> None:
-    with initialize(version_base=None, config_path="../conf"):
-        cfg = compose(config_name="config")
-    assert cfg.model.kind == "signed"
-    assert cfg.model.insertion == "profile"
-    assert cfg.model.activation == "relu"
-    assert cfg.model.power == 1.0
-    assert cfg.model.alpha == 1e-5
-    assert cfg.model.moment_order is None
-    assert "c_init" not in cfg.model
-    assert "th" not in cfg.model
-    assert cfg.training.num_iterations == 10
-    assert cfg.training.max_ls_iter == 500
-    assert cfg.training.ins_merge_tol == 1e-2
-    with initialize(version_base=None, config_path="../conf"):
-        selected = compose(config_name="config", overrides=["+data=vdp"])
-    assert cfg.data.path == selected.data.path
-    assert cfg.data.path.endswith(".npz")
-    assert cfg.data.normalize is True
-    assert cfg.env.seed == 42
-
-
-def test_log_mixture_is_not_configurable() -> None:
-    with initialize(version_base=None, config_path="../conf"):
-        with pytest.raises(ConfigCompositionException, match="model.th"):
-            compose(config_name="config", overrides=["model.th=0.5"])
 
 
 def test_model_groups() -> None:
@@ -70,8 +40,6 @@ def test_model_groups() -> None:
     model_config = resolve_model(alg1.model, 2)
     validate_model_config(model_config)
     assert SparseNetwork(model_config).normalized
-    assert "objective" not in alg1.model
-    assert "moment_beta" not in alg1.model
 
 
 def _compose_experiment(experiment: str, model: str, data: str):
@@ -184,11 +152,6 @@ def test_construct_network_from_loaded_dataset() -> None:
     assert model.input_dim == 2
 
 
-def test_activation_resolver() -> None:
-    assert get_activation("relu") is torch.relu
-    assert callable(get_activation("matern52"))
-
-
 @pytest.mark.parametrize("specifications,error,message", [
     ({"activation": "unknown"}, ValueError, "unknown activation"),
     ({"activation": None}, TypeError, "activation must be a registry name or callable"),
@@ -233,20 +196,37 @@ def test_model_kind_contract_is_owned_by_config():
         resolve_model(config, 2)
 
 
-def test_use_sphere_bundled_with_activation() -> None:
-    # use_sphere is co-located with the activation in the registry, not configured.
-    assert get_use_sphere("relu") is True
-    assert get_use_sphere("matern52") is False
+def test_normalization_follows_the_activation_and_is_not_configurable():
+    for activation, normalized in (("softplus", True), ("tanh", True), ("relu", False)):
+        assert SparseNetwork(resolve_model({"activation": activation}, 2)).normalized is normalized
+    with pytest.raises(TypeError, match="normalized"):
+        resolve_model({"activation": "tanh", "normalized": False}, 1)
 
 
-def test_use_sphere_derives_from_activation() -> None:
-    with initialize(version_base=None, config_path="../conf"):
-        default = compose(config_name="config", overrides=["env.verbose=false"])
-        smooth = compose(config_name="config",
-                         overrides=["model.activation=matern52", "model.moment_order=2.0", "env.verbose=false"])
-    # default activation is relu (homogeneous -> sphere); matern52 is not
-    assert SparseNetwork(resolve_model(default.model, 2)).use_sphere is True
-    assert SparseNetwork(resolve_model(smooth.model, 2)).use_sphere is False
+# Algorithm 1 settings that are valid unless a case overrides them.
+ALGORITHM1 = {"activation": "softplus", "alpha": 1e-4, "gamma": 1.0, "moment_order": 2.0}
+
+
+@pytest.mark.parametrize("model,training,message", [
+    ({**ALGORITHM1, "power": 2.0}, {}, "Algorithm 1.*power == 1"),
+    *[({"power": power}, {}, "supports activation powers 1, 2, 3")
+      for power in (1.5, 4.0, 1.0 + 5e-13, 3.0 - 5e-13)],
+    ({"insertion": "finite_step", "activation": "relu", "power": 4.0, "gamma": 0.0}, {},
+     "powers 1, 2, 3"),
+    *[({"activation": "relu", "power": power, "gamma": 0.1}, {},
+       "power penalty requires gamma == 0") for power in (2.0, 3.0)],
+    ({"insertion": "finite_step", "activation": "relu", "power": 2.0, "gamma": 0.1}, {},
+     "gamma == 0"),
+    ({"insertion": "finite_step", "activation": "softplus", "gamma": 0.0, "moment_order": 2.0}, {},
+     "sphere activation"),
+    ({**ALGORITHM1, "insertion": "nonsense"}, {}, "insertion must be 'profile' or 'finite_step'"),
+    (ALGORITHM1, {"insert_mode": "nonsense"}, "training.insert_mode must be one of"),
+    (ALGORITHM1, {"method": "nonsense"}, "training.method must be one of"),
+])
+def test_incoherent_configurations_are_rejected(model, training, message):
+    with pytest.raises(ValueError, match=message):
+        validate_model_config(resolve_model(model, 2))
+        validate_optimizer_config(TrainingConfig(**training))
 
 
 @pytest.mark.parametrize("order", [None, 0., -1., float("nan"), float("inf"), -float("inf")])

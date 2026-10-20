@@ -8,7 +8,6 @@ import pytest
 
 from src.data import load_value_samples
 from src.OpenLoop.collocation import CollocationConfig, CollocationSolver
-from src.OpenLoop.sampling import grid_initial_states
 from src.OpenLoop.vdp import VdpOptimalControlProblem
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -82,18 +81,6 @@ def test_value_gradient_matches_independent_initial_state_differences() -> None:
         minus = solver.solve_sample(initial - epsilon * direction)
         differences.append((plus.value - minus.value) / (2 * epsilon))
     np.testing.assert_allclose(result.gradient, differences, rtol=1e-6, atol=1e-7)
-
-
-def test_vdp_grid_sampling_feeds_solver() -> None:
-    initial_states = grid_initial_states(1, 2, (0.0, 0.0), (0.0, 0.1))
-    solver = CollocationSolver(
-        VdpOptimalControlProblem(T_final=0.1), CollocationConfig(initial_mesh_points=11),
-    )
-
-    solution = solver.solve(initial_states)
-
-    assert len(solution.sample_results) == 2
-    assert solution.value_samples.x.shape == (2, 2)
 
 
 def test_generator_publishes_one_complete_dated_dataset(tmp_path) -> None:

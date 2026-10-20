@@ -87,10 +87,10 @@ maps for the fractional penalties $q\in\{1/2,\ 2/3,\ 1\}$. It follows the
 budget and discards a correction which increases the objective — the property
 that keeps the outer loop monotone.
 
-**Golden-output tests.** Refactors of the numerical core are checked against
-stored reference solutions, not just unit assertions. A change in solver
-behaviour shows up as a diff in neuron counts and errors, not as a silently
-different answer. The suite runs in CI alongside `ruff`.
+**Golden-output tests.** Refactors of the SSN optimizer are checked against
+stored reference iterates, not just unit assertions. A change in solver
+behaviour shows up as a diff in those iterates, not as a silently different
+answer. The suite runs in CI alongside `ruff`.
 
 **MLflow is the system of record.** Every training job is one MLflow run holding
 its resolved config, dataset hashes, errors in physical units, per-checkpoint

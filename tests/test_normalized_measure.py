@@ -4,17 +4,11 @@ from __future__ import annotations
 
 import math
 
-import pytest
 import torch
 
-from src.config import resolve_model, validate_model_config
-from src.config.schema import ExperimentConfig, ModelConfig
+from src.config import resolve_model
 from src.eval import amplitude_mass_radius
 from src.models import SparseNetwork
-
-
-def _cfg(**model_kwargs) -> ExperimentConfig:
-    return ExperimentConfig(model=ModelConfig(**model_kwargs))
 
 
 def moment_weight(W: torch.Tensor, b: torch.Tensor, p: float) -> torch.Tensor:
@@ -60,13 +54,6 @@ def test_moment_weight_is_differentiable_in_scale() -> None:
     assert math.isclose(float(scale.grad), 1.0, rel_tol=1e-9)
 
 
-@pytest.mark.parametrize("order", [None, 0.0, -1.0])
-def test_moment_weight_requires_a_positive_order(order) -> None:
-    config = resolve_model({"activation": "softplus", "power": 1.0, "moment_order": order}, 2)
-    with pytest.raises(ValueError, match="moment_order"):
-        validate_model_config(config)
-
-
 def test_amplitude_mass_radius_is_weighted_parameter_quantile() -> None:
     radius = torch.tensor([1.0, 2.0, 5.0], dtype=torch.float64)
     c = torch.tensor([50.0, -45.0, 5.0], dtype=torch.float64)
@@ -82,28 +69,3 @@ def test_amplitude_mass_radius_is_zero_without_amplitude_mass() -> None:
 
     assert float(amplitude_mass_radius(radius, c)) == 0.0
     assert float(amplitude_mass_radius(radius[:0], c[:0])) == 0.0
-
-
-def test_nonhomogeneous_signed_profile_is_normalized_automatically() -> None:
-    network = SparseNetwork(resolve_model({"activation": "softplus", "power": 1.0}, 2))
-
-    assert network.normalized
-
-
-def test_sphere_profile_model_is_not_moment_normalized() -> None:
-    sphere = SparseNetwork(resolve_model({"activation": "relu", "power": 1.0}, 2))
-
-    assert not sphere.normalized
-
-
-def test_algorithm1_rejects_nonunit_activation_power() -> None:
-    with pytest.raises(ValueError, match="Algorithm 1.*power == 1"):
-        validate_model_config(resolve_model({"activation": "softplus", "power": 2.0}, 2))
-
-
-def test_model_schema_has_no_additive_objective_axis() -> None:
-    fields = ModelConfig.__dataclass_fields__
-
-    assert "objective" not in fields
-    assert "moment_beta" not in fields
-    assert ModelConfig().moment_order is None

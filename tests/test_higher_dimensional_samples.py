@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from src.data import ValueSamples, load_value_samples, normalize_value_samples
-from src.OpenLoop.sampling import sobol_initial_states
+from src.OpenLoop.sampling import grid_initial_states, sobol_initial_states
 
 
 @pytest.mark.parametrize("dimension", [2, 6, 10])
@@ -60,3 +60,10 @@ def test_sobol_sampling_reproducible_bounded_full_rank(dimension):
 def test_sobol_rejects_nonbalanced_sample_counts(count):
     with pytest.raises(ValueError, match="power of two"):
         sobol_initial_states(count, 6)
+
+
+def test_grid_initial_states_span_both_ranges():
+    grid = grid_initial_states(2, 3, (-1.0, 1.0), (-2.0, 2.0))
+    assert grid.shape == (6, 2)
+    np.testing.assert_allclose(grid[0], [-1.0, -2.0])
+    np.testing.assert_allclose(grid[-1], [1.0, 2.0])

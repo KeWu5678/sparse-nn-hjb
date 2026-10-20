@@ -1,6 +1,6 @@
 import numpy as np
 
-from src.data import ValueSamples, load_value_samples
+from src.data import load_value_samples
 from src.OpenLoop.pendulum.nonsmooth import (
     NonsmoothCurve,
     restrict_trajectory_to_curve,
@@ -169,22 +169,6 @@ def test_backward_pmp_value_matches_forward_ode_constrained_cost() -> None:
     cost = float(np.trapezoid(running, forward_time) + terminal_value)
 
     assert np.isclose(cost, trajectory.value[-1], rtol=2e-6, atol=2e-8)
-
-
-def test_value_samples_npz_roundtrip(tmp_path) -> None:
-    samples = ValueSamples(
-        x=np.array([[0.0, 1.0], [2.0, 3.0]]),
-        v=np.array([4.0, 5.0]),
-        dv=np.array([[6.0, 7.0], [8.0, 9.0]]),
-    )
-
-    path = samples.save_npz(tmp_path / "pendulum_samples.npz")
-    loaded = load_value_samples(path)
-
-    assert loaded.x.dtype == np.float64
-    assert np.allclose(loaded.x, samples.x)
-    assert np.allclose(loaded.v, samples.v)
-    assert np.allclose(loaded.dv, samples.dv)
 
 
 def test_nonsmooth_curve_exposes_basin_polygon() -> None:

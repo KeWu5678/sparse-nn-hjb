@@ -213,13 +213,6 @@ def test_algorithm1_optimizes_each_random_start_once(monkeypatch):
     assert len(fake.instances) == 2
 
 
-def test_nonhomogeneous_search_gets_normalization_from_the_network():
-    network = SparseNetwork(resolve_model({"activation": "tanh"}, 1))
-    assert network.normalized
-    with pytest.raises(TypeError, match="normalized"):
-        resolve_model({"activation": "tanh", "normalized": False}, 1)
-
-
 def test_algorithm1_deduplicates_by_absolute_parameter_distance(monkeypatch):
     a, b, n, _, _ = _generate(
         monkeypatch,

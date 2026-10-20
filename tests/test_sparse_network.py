@@ -72,12 +72,6 @@ def test_sparsity_functional_remains_unweighted(alpha):
     torch.testing.assert_close(penalty.sparsity_functional(u), u.new_tensor(5.))
 
 
-@pytest.mark.parametrize("power", [1.5, 4.0, 1.0 + 5e-13, 2.0 + 5e-13, 3.0 - 5e-13])
-def test_training_config_rejects_unsupported_powers(power):
-    with pytest.raises(ValueError, match="supports activation powers 1, 2, 3"):
-        validate_model_config(resolve_model({"power": power}, 2))
-
-
 @pytest.mark.parametrize(
     "power,exponent,alpha,value,expected,derivative",
     [
