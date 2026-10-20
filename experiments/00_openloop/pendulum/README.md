@@ -17,7 +17,7 @@ relative/absolute tolerances `1e-10`/`1e-12`.
 From the repository root:
 
 ```sh
-uv run python scripts/run_pendulum_pmp_openloop_example.py \
+uv run python scripts/generate_pendulum_data.py \
   --num-trajectories 2000 --contour-delta 0.05 --basin-value-max 70 \
   --level-set-samples 3900 --tag 20260924
 ```
