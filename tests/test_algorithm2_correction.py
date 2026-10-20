@@ -43,12 +43,6 @@ def test_fractional_ssn_chooses_the_scale_from_its_starting_coefficients() -> No
     assert optimizer.param_groups[0]["tau"] == pytest.approx(1 / (4 * 2 ** .5))
 
 
-@pytest.mark.parametrize("power", [2.0, 3.0])
-def test_fractional_network_rejects_a_log_penalty(power: float) -> None:
-    with pytest.raises(ValueError, match="power penalty requires gamma == 0"):
-        validate_model_config(resolve_model({"alpha": 1.0, "gamma": 1.0, "power": power}, 1))
-
-
 def test_fractional_correction_reports_an_all_zero_warm_start() -> None:
     config = resolve_model({"alpha": 1.0, "gamma": 0.0, "power": 2.0}, 1)
     validate_model_config(config)

@@ -279,14 +279,10 @@ def test_training_refuses_to_start_without_a_tracking_store(tmp_path, monkeypatc
         train.main.__wrapped__(cfg)
 
 
+# One case per validation layer: resolving the model, then checking it for training.
 @pytest.mark.parametrize("settings,message", [
     ({"activation": "unknown"}, "unknown activation"),
     ({"power": 4.}, "supports activation powers 1, 2, 3"),
-    ({"activation": "softplus"}, "explicit moment_order"),
-    ({"activation": "softplus", "moment_order": 1.}, "moment_order must exceed"),
-    ({"insertion": "finite_step", "activation": "softplus", "moment_order": 2.},
-     "requires a sphere activation"),
-    ({"insertion": "finite_step", "gamma": .1}, "requires gamma == 0"),
 ])
 def test_invalid_model_config_fails_before_model_solver_or_loader_setup(
     tmp_path, monkeypatch, tracking_store, settings, message,

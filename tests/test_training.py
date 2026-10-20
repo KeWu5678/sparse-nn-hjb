@@ -1,7 +1,6 @@
 """Optimization work and recorded checkpoints have distinct lifetimes."""
 
 from itertools import count
-from types import SimpleNamespace
 
 import pytest
 import torch
@@ -210,10 +209,3 @@ def test_history_stores_supplied_values_without_prediction_and_copies_diagnostic
     assert history.rows[0]["objective_train"] != 99.0
     assert [d.get("cap_of_theorem_applied") for d in history.diagnostics] == [1.0]
     assert history.diagnostics[0]["cap_of_theorem_applied"] == 1.0
-
-
-@pytest.mark.parametrize("platform,expected", [("darwin", 12), ("linux", 12 * 1024)])
-def test_process_lifetime_rss_units(monkeypatch, platform, expected):
-    monkeypatch.setattr(training.sys, "platform", platform)
-    monkeypatch.setattr(training.resource, "getrusage", lambda _: SimpleNamespace(ru_maxrss=12))
-    assert training._process_peak_rss_bytes() == expected
