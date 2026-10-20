@@ -47,7 +47,8 @@ compare network size and timing alongside errors.
 
 Analysis is local and git-ignored, as for VDP. It reuses the VDP paper pipeline
 and its fixed operating points, and skips figures that need a two-dimensional
-state.
+state. Each dimension's tables and frontier plots are written to
+`higher_dim_allen_cahn6/` and `higher_dim_allen_cahn10/` in this folder.
 
 ## Scope
 
