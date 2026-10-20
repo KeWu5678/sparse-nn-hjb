@@ -96,6 +96,8 @@ outputs/
 paper/*
 !paper/paper_0805.tex
 !paper/paper_0805.pdf
+# latexmk settings for building the paper locally.
+.latexmkrc
 
 # domain-language notes and agent instructions are local working docs
 CONTEXT.md
