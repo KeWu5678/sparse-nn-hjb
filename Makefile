@@ -6,6 +6,8 @@ EXPERIMENT ?= log_penalty
 # Every job records its results as an MLflow run; training refuses to start
 # when this tracking store is unreachable.
 MLFLOW_TRACKING_URI ?= http://127.0.0.1:5000
+# Probe run before a sweep; tests replace it with `true`.
+MLFLOW_HEALTH = curl -fsS "$(MLFLOW_TRACKING_URI)/health" >/dev/null 2>&1
 # One invocation writes a subtree per dataset; the layout is set by
 # hydra.sweep.subdir in each conf/experiment/<name>.yaml.
 SWEEP_DIR = rawdata/logs/multirun
@@ -32,7 +34,7 @@ openloop:
 	$(PY) "experiments/00_openloop/pendulum/generate.py"
 
 check-mlflow:
-	@curl -fsS "$(MLFLOW_TRACKING_URI)/health" >/dev/null 2>&1 || { \
+	@$(MLFLOW_HEALTH) || { \
 	  echo "MLflow is not reachable at $(MLFLOW_TRACKING_URI); run scripts/init.sh."; exit 2; }
 
 sweep: check-mlflow
