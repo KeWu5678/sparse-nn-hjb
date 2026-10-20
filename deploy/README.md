@@ -14,12 +14,6 @@ metrics, tags and artifacts (`config.json`, `normalization.json`, `history.pt`)
 to this server, and nothing else keeps a copy. Training refuses to start when
 the server is unreachable.
 
-See:
-
-- [`docs/adr/0016-mlflow-is-the-system-of-record.md`](../docs/adr/0016-mlflow-is-the-system-of-record.md)
-- [`docs/adr/0014-retire-the-ec2-mlflow-target.md`](../docs/adr/0014-retire-the-ec2-mlflow-target.md)
-- [`docs/adr/mlflow.md`](../docs/adr/mlflow.md) — operational guide
-
 ## Prerequisites
 
 Docker Desktop, with *Start Docker Desktop when you sign in* enabled — the
@@ -50,7 +44,7 @@ docker compose -f deploy/docker/compose.yaml down
 State lives in `deploy/docker/mlflow-data/` (gitignored) and survives
 `docker compose down`. The SQLite database and the artifacts (`mlartifacts/`)
 both use this bind mount. It is the only copy of every result and cannot be
-rebuilt, so back it up; see [`docs/adr/mlflow.md`](../docs/adr/mlflow.md).
+rebuilt, so back it up.
 
 The image tag in `compose.yaml` is pinned; keep it aligned with the resolved
 `mlflow` version in `uv.lock`.
@@ -58,8 +52,7 @@ The image tag in `compose.yaml` is pinned; keep it aligned with the resolved
 ## History
 
 An earlier target ran the server on a stoppable EC2 instance reached over an SSM
-tunnel. It was
-retired by [ADR 0014](../docs/adr/0014-retire-the-ec2-mlflow-target.md); the
+tunnel. It was retired; the
 `mlflow-deploy` / `mlflow-backfill` Makefile targets and
 `scripts/mlflow_backfill_session.sh` went with it.
 

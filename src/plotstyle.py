@@ -1,9 +1,8 @@
 """Publication house style — single source for all experiment figures.
 
-The conventions (palette, serif + cm mathtext, hidden top/right spines,
-frameless legends, PNG-only at 300 dpi, no in-figure titles) are documented in
-CLAUDE.md ("Plotting Style"). Experiment analysis/generate scripts import from
-here instead of carrying their own copy.
+The conventions: palette, serif + cm mathtext, hidden top/right spines,
+frameless legends, PNG-only at 300 dpi, no in-figure titles. Experiment
+analysis/generate scripts import from here instead of carrying their own copy.
 """
 
 import matplotlib as mpl

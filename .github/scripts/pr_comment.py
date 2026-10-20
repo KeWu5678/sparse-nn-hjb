@@ -3,7 +3,7 @@
 Usage: pr_comment.py <report.xml> <out.md>
 
 Kept deliberately dumb: it reports whether the suite is healthy and, when it is
-not, which tests failed. Coverage is out of scope by decision (docs/adr/0005).
+not, which tests failed. Coverage is out of scope by decision.
 """
 
 import os

@@ -14,9 +14,8 @@ finite-volume cell values, retaining the published diffusion `nu=0.1`,
 horizon `T=3`, three actuator intervals, and Neumann boundaries on `(-1,1)`.
 Cell averages preserve all three actuator channels on these coarse meshes.
 The control penalty `beta=0.01` and Sobol cube `[-1,1]^d` are explicit new
-choices. See the [source research](../../vault/higher_dimensional_benchmarks_research.md)
-and [open-loop guide](../00_openloop/allen_cahn/README.md) for the equations,
-provenance, solver diagnostics, and limitations.
+choices. See the [open-loop guide](../00_openloop/allen_cahn/README.md) for the
+equations, provenance, solver diagnostics, and limitations.
 
 ## Run
 
