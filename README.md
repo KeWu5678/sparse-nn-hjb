@@ -2,18 +2,6 @@
 
 [![CI](https://github.com/KeWu5678/sparse-nn-hjb/actions/workflows/ci.yml/badge.svg)](https://github.com/KeWu5678/sparse-nn-hjb/actions/workflows/ci.yml)
 
-**A 14-neuron softplus controller attains a Van der Pol running cost of
-6.419 over T=3, compared with 6.401 for a numerical open-loop reference.**
-
-Learning a value function is easy to score and easy to get wrong. This project
-learns one from trajectory data and then *flies* it — the reported result is the
-behaviour of the closed loop, not a regression error.
-
-All 588 configured experiments have been rerun on the September 24, 2026
-datasets. The [experiment workflow](experiments/README.md) identifies the
-current data, run configurations, and publication checks. The refreshed
-[paper](paper/paper_0805.pdf) contains the complete comparisons.
-
 ## The problem
 
 Optimal feedback control has a classical answer: solve the
@@ -104,12 +92,10 @@ stored reference solutions, not just unit assertions. A change in solver
 behaviour shows up as a diff in neuron counts and errors, not as a silently
 different answer. The suite runs in CI alongside `ruff`.
 
-**Runs are records.** Every completed training run writes a self-describing JSON
-record — full resolved config, summary metrics, artifact paths — next to its
-checkpoint. Per-iteration history stays in the checkpoint. Records are the
-source of truth; when tracking is configured, completed records are published
-to MLflow after they are written locally. The dashboard can be rebuilt from
-disk at any time. The tracking server is a container in [`deploy/`](deploy).
+**MLflow is the system of record.** Every training job is one MLflow run holding
+its resolved config, dataset hashes, errors in physical units, per-checkpoint
+traces, and the fit as `history.pt`. Training refuses to start when the
+tracking server is unreachable. The server is a container in [`deploy/`](deploy).
 
 **Experiments are configs, not scripts.** Each study is one tracked Hydra file
 declaring its own sweep axes and its own output layout, so a sweep is a single
@@ -119,10 +105,9 @@ command and the record tree is self-organizing:
 make sweep EXPERIMENT=log_penalty        # 448 runs across two datasets
 ```
 
-Records land under `rawdata/logs/multirun/<dataset>/<experiment>/<axis>/<job>/`.
-The target refuses to start if that subtree already holds records, and aborts
-immediately if the tracking server is unreachable rather than training for hours
-unpublished.
+Hydra configs and logs land under
+`rawdata/logs/multirun/<dataset>/<experiment>/<axis>/<job>/`. The target refuses
+to start if that subtree already exists or the tracking server is unreachable.
 
 **Reproducibility is checked, not assumed.** Runs are deterministic under a
 fixed seed — re-running a completed configuration reproduces its metrics to
@@ -132,31 +117,13 @@ seven digits. Solver changes that move results are recorded as ADRs in
 ## Reproduce
 
 ```bash
-uv sync --extra dev          # Python >= 3.12
-uv run pytest
-make help
+scripts/init.sh                       # Python environment + local MLflow server (Docker)
+make sweep EXPERIMENT=log_penalty     # `make help` lists the presets
 ```
 
-Training requires the existing benchmark datasets, which are not included in
-the repository. Place them under `rawdata/data/` at the paths specified by
-[`conf/data/`](conf/data). Pendulum runs also require the evaluation pool and
-distance caches named in [`conf/eval/region_split.yaml`](conf/eval/region_split.yaml).
-With those inputs available, a single run picks a model family and a dataset:
-
-```bash
-uv run python scripts/train.py +model=profile +data=vdp model.activation=softplus
-```
-
-With the existing benchmark data and pendulum raw PMP paths available,
-regenerate the reference-data figures with:
-
-```bash
-make openloop
-```
-
-This command reads existing data; it does not generate the datasets.
-Dataset generation, evaluation-pool construction, and plotting are separate
-steps documented in [experiments/README.md](experiments/README.md).
+Results appear in the dashboard at <http://127.0.0.1:5000>. Run the tests with
+`uv run pytest`. Presets, datasets, and re-runs are described in
+[experiments/README.md](experiments/README.md).
 
 ## Layout
 
@@ -164,15 +131,10 @@ steps documented in [experiments/README.md](experiments/README.md).
 | --- | --- |
 | `src/` | Library: shallow networks, `PDAP/` insertion, `SSN/` optimizer, data/eval/plotting |
 | `conf/` | Hydra configs — model families, datasets, evaluation, experiment sweeps |
-| `scripts/` | `train.py` entry point, dataset generators, MLflow importer |
+| `scripts/` | `train.py` entry point, dataset generators, `init.sh` |
 | `experiments/` | Current workflows, reference-data plotters, and local paper outputs |
 | `tests/` | pytest suite, including golden-output solver tests |
 | `docs/` | ADRs, MLflow guide, research notes |
 | `deploy/` | Containerized MLflow tracking server |
 
-Generated run records, figures, and reports are written to ignored local paths.
-
-Superseded data, records, scripts, and reports are preserved under the ignored
-`outdated/experiment-refresh-20260924/` archive. The current pipeline does not
-read them. Paper-support scripts, figures, and audit notes remain local under
-[ADR 0011](docs/adr/0011-track-only-the-manuscript-source-and-pdf.md).
+Hydra logs, figures, and reports are written to ignored local paths.

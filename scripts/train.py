@@ -94,9 +94,12 @@ def _tracked_experiment(cfg: DictConfig, hydra_cfg, run_name: str) -> str:
     raises is kept, marked FAILED, with what it was attempting.
     """
     require_tracking_store()
-    mlflow.set_experiment(cfg.name)
+    # Pass the ID: when parallel jobs race to create the experiment, MLflow
+    # returns it without activating it, and start_run would use a stale one.
+    experiment = mlflow.set_experiment(cfg.name)
     tags = {**git_tags(REPO_ROOT), **hydra_tags(hydra_cfg)}
-    with mlflow.start_run(run_name=run_name, tags=tags) as run:
+    with mlflow.start_run(experiment_id=experiment.experiment_id, run_name=run_name,
+                          tags=tags) as run:
         log_config(OmegaConf.to_container(cfg, resolve=True))
         mlflow.log_params(hydra_choice_params(hydra_cfg))
         _run_experiment(cfg)

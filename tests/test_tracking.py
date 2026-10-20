@@ -337,3 +337,21 @@ def _isolated_logging():
             structlog.configure(**config)
         structlog.contextvars.clear_contextvars()
         structlog.contextvars.bind_contextvars(**context)
+
+
+def test_run_lands_in_its_experiment_when_parallel_jobs_race_to_create_it(
+    tmp_path, monkeypatch, tracking_store,
+):
+    """MLflow's set_experiment returns, without activating, an experiment that
+    another process created first; the run must still land in that experiment."""
+    train = load_train_module()
+    stale = tracking_store.create_experiment("stale", artifact_location=(tmp_path / "s").as_uri())
+    target = tracking_store.create_experiment("target", artifact_location=(tmp_path / "t").as_uri())
+    monkeypatch.setattr(mlflow.tracking.fluent, "_active_experiment_id", stale)
+    monkeypatch.setattr(train.mlflow, "set_experiment", tracking_store.get_experiment_by_name)
+    monkeypatch.setattr(train, "_run_experiment", lambda cfg: None)
+    hydra_cfg = OmegaConf.create({"runtime": {"output_dir": str(tmp_path)}})
+
+    run_id = train._tracked_experiment(OmegaConf.create({"name": "target"}), hydra_cfg, "race")
+
+    assert tracking_store.get_run(run_id).info.experiment_id == target

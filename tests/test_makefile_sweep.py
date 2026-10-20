@@ -24,6 +24,7 @@ def test_sweep_refuses_to_mix_with_existing_records(tmp_path: Path, existing: st
             "sweep",
             f"SWEEP_DIR={sweep_dir}",
             "PY=false",
+            "MLFLOW_HEALTH=true",
         ],
         cwd=REPO_ROOT,
         text=True,
@@ -38,7 +39,8 @@ def test_sweep_refuses_to_mix_with_existing_records(tmp_path: Path, existing: st
 
 def test_sweep_runs_only_training_without_analysis_scripts(tmp_path: Path) -> None:
     result = subprocess.run(
-        ["make", "--silent", "sweep", f"SWEEP_DIR={tmp_path / 'records'}", "PY=echo"],
+        ["make", "--silent", "sweep", f"SWEEP_DIR={tmp_path / 'records'}", "PY=echo",
+         "MLFLOW_HEALTH=true"],
         cwd=REPO_ROOT,
         text=True,
         capture_output=True,
@@ -49,3 +51,18 @@ def test_sweep_runs_only_training_without_analysis_scripts(tmp_path: Path) -> No
     commands = result.stdout.strip().splitlines()
     assert len(commands) == 1
     assert commands[0].startswith("scripts/train.py -m +experiment=log_penalty ")
+
+
+def test_sweep_stops_before_training_when_mlflow_is_unreachable(tmp_path: Path) -> None:
+    result = subprocess.run(
+        ["make", "--silent", "sweep", f"SWEEP_DIR={tmp_path / 'records'}", "PY=echo",
+         "MLFLOW_HEALTH=false"],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "run scripts/init.sh" in result.stdout
+    assert "scripts/train.py" not in result.stdout

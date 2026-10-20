@@ -78,6 +78,7 @@ experiments/moment_refinement_common.py
 experiments/moment_followup_common.py
 experiments/*/paper_log_penalty/
 experiments/*/paper_frac_exp_penalty/
+experiments/03_high_dimensional/*/
 experiments/algorithm2_rho_pilot.md
 scripts/paper/
 tests/test_paper_artifact_preflight.py
