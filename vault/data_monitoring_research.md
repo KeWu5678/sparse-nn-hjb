@@ -52,17 +52,6 @@ fields. Ordinary standard-library logging uses the same outputs and preserves
 `extra` fields. Exceptions retain tracebacks in both outputs. Reconfiguration
 closes and replaces root handlers; files use append mode.
 
-Run [the standalone demo](../scripts/logging_demo.py) with
-`uv run --frozen python -m scripts.logging_demo --log-file /tmp/demo.jsonl`.
-The demo includes an intentional caught exception to show traceback formatting;
-add `--level DEBUG` to see the otherwise filtered debug event.
-
-Verification: **23 tests passed** across `tests/test_logging.py` and the existing
-`tests/test_experiment_logging.py`; Ruff and whitespace checks passed. An
-independent review found no material findings and reran the three new tests.
-Separate INFO/DEBUG demo checks confirmed event counts, fields, and exceptions.
-Tests use subprocesses to isolate global logging configuration.
-
 This established the standalone foundation, subsequently integrated below.
 
 ## Hydra integration and old setup retirement

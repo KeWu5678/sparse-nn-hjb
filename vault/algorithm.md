@@ -217,7 +217,7 @@ warm-start selection; SparseNetwork and the Penalty supply their mathematical ev
 | `train.py` | Hydra entry point for PDAP training on key-based value/gradient datasets |
 | `run_activation_experiment.py` | base activation registry + VDP-HJB activation search |
 | `run_discontinuous_activation_experiment.py` | discontinuous-gradient activation search (extends `ACTIVATIONS`, `set_seed`) |
-| `run_pendulum_pmp_openloop_example.py` | generate PMP backward-sampler pendulum dataset (infinite-horizon) |
+| `generate_pendulum_data.py` | generate PMP backward-sampler pendulum dataset (infinite-horizon) |
 | `visualize_proximal_deadzone.py` | 3-panel global-prox switching diagnostic (see `power_q_penalty.md`) |
 | `append_pendulum_pilot_plots.py` | plotting helper |
 
