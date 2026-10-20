@@ -90,5 +90,5 @@ train on it.
 | `scripts/` | `train.py` entry point, dataset generators, `init.sh` |
 | `experiments/` | Current workflows, reference-data plotters, and local paper outputs |
 | `tests/` | pytest suite, including golden-output solver tests |
-| `docs/` | ADRs, research notes |
+| `docs/` | Figures shown in this README |
 | `deploy/` | Containerized MLflow tracking server |

@@ -52,7 +52,6 @@ To run a preset again, first move its folders out of `rawdata/logs/multirun/`;
 
 ## Analysis and paper figures
 
-Analysis is local and git-ignored. The figure pipeline and its checks are
-described in [plotting and evaluation](../docs/plotting.md). Superseded
-datasets, runs, and reports are kept under the ignored
+Analysis is local and git-ignored. Superseded datasets, runs, and reports are
+kept under the ignored
 `outdated/experiment-refresh-20260924/`.

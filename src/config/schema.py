@@ -112,7 +112,7 @@ class TrainingConfig:
     #                          the order of Algorithms 1 and 2.
     loop_order: str = "correction_first"
     # radial_cap -- upper bound on the radial candidate search (non-sphere only).
-    #   "fixed"     -- the exp(5) clamp (see docs/adr/0006).
+    #   "fixed"     -- the exp(5) clamp.
     #   "theorem"   -- min(R(mu_t), exp(5)) with R from the quantitative insertion
     #                  theorem; requires growth data for the activation, and falls
     #                  back to the clamp when the activation declares none.

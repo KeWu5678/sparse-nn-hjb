@@ -40,7 +40,8 @@ multirun/
 .DS_Store
 Thumbs.db
 
-# ---- Editor / AI tools  (.vscode/ is intentionally tracked) ----
+# ---- Editor / AI tools ----
+.vscode/
 .idea/
 .claude/
 .cursor/
@@ -66,8 +67,11 @@ autoresearch/**/runs/
 autoresearch/**/*.json
 autoresearch/**/*.log
 
-# ---- Private research notes (theory program) ----
-docs/research/
+# ---- Local notes: docs/ (ADRs, research, manuscript archive) and vault/ ----
+# Only the figures the README shows are tracked.
+docs/*
+!docs/figures/
+vault/
 
 # ---- Untracked locally: analysis scripts and experiment artifacts ----
 experiments/**/analysis.py
@@ -93,11 +97,9 @@ paper/*
 !paper/paper_0805.tex
 !paper/paper_0805.pdf
 
-# ---- superseded manuscript versions and their review record: local only ----
-docs/paper_archive/
-
-# domain-language notes are local working docs
+# domain-language notes and agent instructions are local working docs
 CONTEXT.md
+CLAUDE.md
 
 # ---- Local MLflow container state (deploy/docker/) ----
 deploy/docker/mlflow-data/

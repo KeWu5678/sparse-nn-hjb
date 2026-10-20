@@ -4,8 +4,6 @@ These coupled nonlinear systems adapt the controlled Allen–Cahn problem in
 Kunisch, Vásquez-Varas, and Walter, *Learning Optimal Feedback Operators and
 their Sparse Polynomial Approximations*, JMLR 24(301), 2023,
 [§9.3, Eq. (58)](https://jmlr.org/papers/volume24/22-1010/22-1010.pdf#page=20).
-The [research note](../../../vault/higher_dimensional_benchmarks_research.md)
-records the source, alternatives, equations, and all adaptations.
 
 The published diffusion `nu=0.1`, horizon `T=3`, Neumann boundaries on `(-1,1)`,
 and three actuator intervals are retained. The article uses 19 Chebyshev

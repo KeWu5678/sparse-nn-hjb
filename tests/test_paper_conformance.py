@@ -235,7 +235,7 @@ def test_sequential_adds_at_most_one_atom_per_iteration() -> None:
 # The search radius
 # --------------------------------------------------------------------------- #
 def test_search_radius_never_exceeds_the_fixed_clamp() -> None:
-    """The theorem radius only ever tightens the search (docs/adr/0006)."""
+    """The theorem radius only ever tightens the search."""
     for p in (2.01, 2.5, 3.0, 4.0):
         cfg = _cfg(moment_order=p, radial_cap="theorem")
         data = to_tensors(_data())
