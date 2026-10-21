@@ -108,25 +108,23 @@ def plot_feedback_trace(series, *, ylabel, time_limit, nonnegative=True):
 
 def plot_regional_dumbbell(series, *, threshold):
     """Draw caller-ordered physical-coordinate regional scores."""
-    from matplotlib.lines import Line2D
     apply_publication_style()
-    fig, ax = plt.subplots(figsize=(8.0, 4.2))
-    for y, item in enumerate(series):
-        color = item["color"]
-        ax.plot([item["rest"], item["tube"]], [y, y], color=color, lw=2.0, zorder=1)
-        ax.scatter([item["rest"]], [y], s=70, facecolor="white", edgecolor=color,
-                   lw=2.0, zorder=2)
-        ax.scatter([item["tube"]], [y], s=70, color=color, zorder=2)
-    ax.set_xscale("log")
-    ax.set_yticks(range(len(series)))
-    ax.set_yticklabels([item["label"] for item in series])
-    ax.set_xlabel(r"relative $H^1$ error")
-    ax.legend(handles=[
-        Line2D([], [], marker="o", ls="", markerfacecolor="0.3", color="0.3",
-               label=f"switching tube ($d\\leq{threshold:g}$)"),
-        Line2D([], [], marker="o", ls="", markerfacecolor="white",
-               markeredgecolor="0.3", color="0.3", label="rest"),
-    ], loc="lower left", fontsize=10)
+    fig, ax = plt.subplots(figsize=(6.6, 3.6))
+    positions = np.arange(len(series))
+    rest = np.array([item["rest"] for item in series])
+    tube = np.array([item["tube"] for item in series])
+    ax.hlines(positions, np.minimum(rest, tube), np.maximum(rest, tube),
+              color=PALETTE["neutral"], lw=2.5)
+    ax.scatter(rest, positions, color=PALETTE["blue_main"], marker="o", s=55,
+               label="rest", zorder=3)
+    ax.scatter(tube, positions, color=PALETTE["red_strong"], marker="D", s=45,
+               label=f"near switching set ($d\\leq{threshold:g}$)", zorder=3)
+    ax.set_yticks(positions, [item["label"] for item in series])
+    ax.set_xlim(0, 1.1 * max(rest.max(), tube.max()))
+    ax.set_xlabel(r"Relative $H^1$ evaluation error")
+    ax.grid(axis="x", color="0.9", lw=.6)
+    ax.set_axisbelow(True)
+    ax.legend(loc="lower left", fontsize=10)
     return fig, ax
 
 
