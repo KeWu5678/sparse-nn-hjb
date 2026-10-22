@@ -3758,8 +3758,8 @@ $\mathbf{1}_{\omega_3}$.
 We denote the discrete value function by $V_T(x)$, where
 $x\in\mathbb R^{10}$ is the initial state.
 Data generation and network fitting follow the same methods as the
-Van der Pol experiment in Section~\ref{sec:vdp}, with the same algorithmic
-iteration and candidate budgets. Here the data-generation residual tolerance
+Van der Pol experiment in Section~\ref{sec:vdp}.
+Here the data-generation residual tolerance
 is $10^{-6}$, and the dataset consists of $2048$ points in
 $[-1,1]^{10}$, giving $1843$ training and $205$ validation samples.
 
@@ -3818,10 +3818,7 @@ Gaussian & $1.29 \times 10^{-1}$ & $5.63 \times 10^{-2}$ \\
 Softplus combines the smallest network with the lowest $H^1$ error under
 gradient training (Table~\ref{tab:ac_alg1_sparsity}). Its $59$ neurons give
 error $0.0346$, whereas $\tanh$ uses $131$ neurons at $0.0710$ and the
-Gaussian uses $148$ at $0.0563$. This changes the accuracy ranking observed
-in the Van der Pol experiment, where the Gaussian was the most accurate
-smooth activation and softplus was the sparsest
-(Table~\ref{tab:alg1_sparsity}). Gradient training increases the support
+Gaussian uses $148$ at $0.0563$. Gradient training increases the support
 size for all three activations; for softplus, it grows from $29$ to $59$
 neurons while improving both reported errors.
 
@@ -3946,12 +3943,11 @@ integration and running-cost evaluation as in Section~\ref{sec:vdp} with
 \qquad \|y\|_{\Delta x}=\sqrt{\Delta x\,|y|^2}.
 \end{equation*}
 
-All five learned laws reduce the spatial state norm from $\sqrt{2}$ to
-between $0.0144$ and $0.0403$ by $T=3$. Their costs differ more clearly:
+Their costs differ slightly:
 $\mathrm{ReLU}^{2}$ reaches $0.702$, close to the PMP reference at $0.701$,
 followed by $\mathrm{ReLU}^{3}$ at $0.705$ and softplus at $0.706$.
 The corresponding costs for $\tanh$ and the Gaussian are $0.759$ and
-$0.772$.
+$0.772$. All the learned controller stabilize.
 
 \begin{figure}[htbp]
 \centering
@@ -3987,17 +3983,17 @@ Figure~\ref{fig:ac_summary_frontier} and the numerical open-loop PMP reference
 
 Next we test the performance of the models in different dimensions.
 We fits the models with data in dimension 6 and 10, repectively.
+The comparison selects the $H^1$-trained fit with the lowest
+validation error separately for each activation.
 As Figure~\ref{fig:ac_dimension_comparison} shows,
 softplus remains the most accurate activation and exhibits the smallest
-error increase from six to ten state dimensions. The comparison keeps the
-sample budget fixed and selects the $H^1$-trained fit with the lowest
-validation error separately for each activation and dimension over the
-tested parameter grids. The softplus error rises from $0.0144$ to
+error increase from six to ten state dimensions.
+The softplus error rises from $0.0144$ to
 $0.0226$, compared with $0.0240$ to $0.0422$ for $\mathrm{ReLU}^{2}$ and
 $0.0269$ to $0.0452$ for $\mathrm{ReLU}^{3}$. The Gaussian and $\tanh$
 errors more than double, from $0.0231$ to $0.0548$ and from $0.0277$ to
 $0.0676$, respectively. All five activations therefore lose accuracy at
-the higher dimension with this sample budget, and the Gaussian falls
+the higher dimension, and the Gaussian falls
 from second to fourth in the accuracy ranking, behind both homogeneous
 activations.
 
@@ -4031,12 +4027,11 @@ value function and its gradient.
 
 The experiments show that fitting both values and gradients improves the
 accuracy of sparse networks. For Van der Pol, the learned controllers
-achieve costs close to the numerical open-loop reference. For the pendulum,
+stabilize and achieve costs close to the numerical open-loop reference. For the pendulum,
 some of the learned controllers still fail to
 stabilize the system from the harder initial state. For Allen--Cahn,
 softplus gives the lowest approximation error and the smallest error
-increase from six to ten dimensions. The $\mathrm{ReLU}^{2}$ controller
-also achieves a cost close to the reference for the tested initial state.
+increase from six to ten dimensions.
 These results show that sparse networks can provide accurate approximation of the value function
 and effective feedback, including in higher dimensions.
 The pendulum example also highlights their limitations near discontinuities
